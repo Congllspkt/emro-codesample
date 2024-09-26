@@ -1,0 +1,179 @@
+<dom-module id="es-widget-notice-board-list">
+    <template>
+        <style>
+            :host {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+            }
+        </style>
+                 
+        <sc-ajax auto id="protocolGetSetting" url="../portal/findWidgetProperties.do" body$='{"wdgt_id":"[[widgetId]]"}'
+                 handle-as="json"
+                 last-response="{{_data}}" on-response="_onGetSetting" method="post"
+                 contentType="application/json"></sc-ajax>
+
+        <sc-ajax id="getList"
+                 url="../portal/widget/findNoticeBoardList.do"
+                 method="post"
+                 body="{{searchParam}}"
+                 on-response="completeFindNoticeBoardList">
+        </sc-ajax>
+
+       <div class="landing_widget list flex">
+			<h5 class="more">Notice</h5>
+			<div class="tab_content">
+				<ul id="noticont">
+					<li><a href=""><b>AXXX 공급사 선정 건</b><span class="date">2023/12/27</span></a></li>
+					<li><a href=""><b>'그룹웨어 신규 계약 건' 재요청</b><span class="date">2023/01/03</span></a></li>
+					<li><a href=""><b>oo에 대한 신사업부 구매요청 검토</b><span class="date">2023/12/27</span></a></li>
+					<li><a href=""><b>'그룹웨어 신규 계약 건' 재 요청</b><span class="date">2023/01/03</span></a></li>
+					<li><a href=""><b>oo에 대한 신사업부 구매요청 검토 구매요청 검토</b><span class="date">2023/12/27</span></a></li>
+				</ul>
+			</div>
+		</div>
+
+       	<!-- 게시판-->
+        <!--<div id="summary" class="list_wrap flex">
+            <div class="list_box" style="width: 100%;height: 300px">
+                <div class="title">
+                    <h5>Notice</h5>
+                </div>
+                <div class="list_group_total">
+                    <div class="list_group">
+                        <ul id="noticont" class="list">
+                            <li>
+                                <span class="article">
+                                    <a href="javascript:void(0);">이 미확인 슈트케이스는 알루미늄 수하물에 대한 기준을 높여줍니다.</a>
+                                </span>
+                                <span class="similarity low">low</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>-->
+        <!-- //게시판-->
+    </template>
+    <script>
+        Polymer({
+            is: "es-widget-notice-board-list",
+
+            properties: {
+                searchParam: {
+                    type: Object,
+                    value: {}
+                },
+                _opened: Boolean
+            },
+            //위젯 정보를 가져오고 난뒤 호출되는 함수
+            _onGetSetting: function () {
+                /* if (!this._data) {
+                    this._data = {
+                        widgetId: this.widgetId,
+                        count: '5'
+                    };
+                }else{
+                	this._data = JSON.parse(this._data);
+                } */
+                this.findNoticeBoardList();
+            },
+            // refresh-widget 시 호출되는 함수
+            refresh: function() {
+            	var me = this;
+                
+            	me.findNoticeBoardList();
+            },
+            findNoticeBoardList: function() {
+            	var me = this;
+            	
+            	me.searchParam = {
+                	bbd_uuid : "10001",
+                	_page    : {manualQuery: false, page: 1, size: 30, start: 1, end: 30}
+                };
+                me.$.getList.generateRequest();
+            },
+            completeFindNoticeBoardList: function(el, res) {
+            	var me = this,
+            		result = res.response;
+            	
+            	var noti = Polymer.dom(me.$.noticont);
+            	while(noti.firstChild) {
+            		var a = noti.firstChild.querySelector("a");
+            		if(a) me.unlisten(a, "tap", "onMoveBoardDetail");
+            		noti.removeChild(noti.firstChild);
+            	}
+            	if(UT.isNotEmpty(result)) {
+            		var rows = result.content;
+            		for(var i=0; i<rows.length; i++) {
+                		var row = rows[i];
+                		var li = document.createElement("li");
+                		var a = document.createElement("a");
+                        var b = document.createElement("b");
+                		a.data = row;
+                        a.appendChild(b);
+                        b.innerHTML = row.pst_tit;
+						/*a.addEventListener('click', function(event) {
+							event.preventDefault();
+							me.onMoveBoardDetail();
+						  });*/
+                		me.listen(a, "tap", "onMoveBoardDetail");
+                        a.appendChild(b);
+
+
+                        var span = document.createElement("span");
+                        span.className ="date";
+                        span.innerHTML = me.dateConvert(row.reg_dttm);
+                        a.appendChild(span);
+
+                		li.appendChild(a)
+                		Polymer.dom(me.$.noticont).appendChild(li);
+                	}
+            	}
+            },
+            
+            //게시글 리스트의 라벨 표시함수
+            onLabel : function(value, row) {
+                var me = this;
+            	if(row.ann_yn === "Y") {
+            	    var val = "<b>" + me.translate("공지") + "</b>";
+            	    val += value;
+            	    return val;
+				}
+				return value;
+			},
+			//게시글 작성일자 표시 컨버터 함수
+            dateConvert: function(value){
+            	//return UT.formatDate(value,"yyyy/MM/dd HH:mm");
+				return UT.formatDate(value,"yyyy/MM/dd");
+            },
+            _getMenuInfo : function(menuCd) {
+                var menuInfo = SCMenuManager.getMenuNode(menuCd);
+                return menuInfo;
+            },
+            //게시글 선택시 이동하는 함수 
+            onMoveBoardDetail: function(e){
+            	var me = this;
+				var target = event.target;
+				 var data = "";
+
+				if (target.tagName === 'A' || target.closest('a')) {
+				 var aTag = target.tagName === 'A' ? target : target.closest('a');
+				 	data = aTag.data;
+
+			 	}
+            	var bbd_uuid = data.bbd_uuid,
+            		pst_no  = data.pst_no;
+
+                var userType = SCSessionManager.userDetails.userInfo.usr_typ_ccd;
+                var menuCode = userType == 'VD'? "SCMT00010"  : "CMT10000";
+
+            	var menuInfo = me._getMenuInfo(menuCode),
+            		menuName = menuInfo.menu_nm,
+            		menuUrl = menuInfo.menu_url;
+            	
+            	MDIUT.createWindow(menuCode, menuName, menuUrl + '&widget=1&pst_no='+pst_no);
+            }
+        });
+    </script>
+</dom-module>

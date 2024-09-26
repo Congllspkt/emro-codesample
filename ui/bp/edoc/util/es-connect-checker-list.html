@@ -1,0 +1,165 @@
+
+<dom-module id="es-connect-checker-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+    	<!-- 조회 -->
+    	<sc-ajax id="selectIpList"
+    			 url="selectIpList.do"
+    			 last-response="{{ipList}}">
+    	</sc-ajax>
+    	
+    	<!-- 삭제 -->
+    	<sc-ajax id="deleteIpInfo"
+    			 url="deleteIpInfo.do"
+    			 on-response="completeDeleteIpInfo">
+    	</sc-ajax>
+    	
+    	<!-- 저장 -->
+    	<sc-ajax id="saveIpInfo"
+    			 url="saveIpInfo.do"
+    			 on-response="completeSaveIpInfo">
+    	</sc-ajax>
+    	
+    	<!-- 연결확인 -->
+    	<sc-ajax id="checkConnect"
+    			 url="checkConnect.do"
+    			 on-response="completeCheckConnect">
+    	</sc-ajax>
+        <cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		<cc-page-title-bar></cc-page-title-bar>
+		<sc-grid id="gridIpInfo" use-state="true" use-selection="true" data-provider="{{ipList}}" on-item-click="onItemClick" editable="true" class="flex">
+		    <cc-grid-toolbar>
+		    
+		        <sc-button text="연결 확인" on-click="onConnect" auth-r ></sc-button>
+		        <sc-button text="추가" on-click="onAdd"	auth-s></sc-button>
+		        <sc-button text="삭제" on-click="onDelete"	auth-s></sc-button>
+		        <sc-button text="저장" on-click="onSave"	auth-s></sc-button>
+		    </cc-grid-toolbar>
+		    <sc-grid-columns>
+				<sc-data-column		data-field="outsdparty_ip"			header-text="IP" width="120" editable="true" required="true" text-align="left" max-length="18"></sc-data-column>
+		        <sc-data-column 	data-field="outsdparty_port"		header-text="PORT"	width="60" editable="true" data-type="number" format-type="integer" required="true" max-length="5"></sc-data-column>
+		        <sc-data-column 	data-field="outsdparty_domain" 		header-text="DOMAIN" 		width="210" text-align="left" editable="true" max-length="30"></sc-data-column>
+		        <sc-data-column 	data-field="fw_ip_conn_sts" 		header-text="IP 연결 여부" 		width="130" text-align="center"></sc-data-column>
+		        <sc-data-column 	data-field="fw_domain_conn_sts" 	header-text="DOMAIN 연결 여부" 		width="170" text-align="center"></sc-data-column>
+		        <sc-date-column 	data-field="fw_confm_dt" 			header-text="연결 확인 일자" width="170" text-align="center"></sc-date-column>
+		        <sc-data-column 	data-field="fw_conn_fail_msg" 		header-text="연결 실패 메시지" width="450" text-align="left"></sc-data-column>
+		        <sc-data-column 	data-field="rmk" 					header-text="비고" width="170" text-align="left" editable="true" max-length="20"></sc-data-column>
+		    </sc-grid-columns>
+		    <sc-grid-fields>
+		    	<sc-grid-field data-field="outsdparty_fw_uuid"></sc-grid-field>
+		    </sc-grid-fields>
+		</sc-grid>
+       
+    </template>
+
+    <!-- 스크립트 -->
+
+    <script>
+        Polymer({
+            is: "es-connect-checker-list",
+
+            properties: {
+                ipList: {
+                    type: Object,
+                    value: function () {
+                        return [];
+                    }
+                },
+            },
+
+            //화면에 그려진 후 콜백 함수
+            initialized: function () {
+				var me = this;
+				me.onSearch();
+            },
+
+            onSearch: function(){
+            	var me = this;
+            	UT.request(me.$.selectIpList);
+            },
+            onAdd : function(){
+            	var me = this;
+            	me.$.gridIpInfo.getDataProvider().addItemAt(0,{});
+            },
+            onSave : function(){
+            	var me = this;
+            	var provider = me.$.gridIpInfo.getDataProvider();
+            	var newItems = provider.getNewItems();
+            	var updateItems = provider.getUpdateItems();
+            	
+            	if(!me.$.gridIpInfo.validate()){
+            		UT.alert("STD.E0000");	// 입력하신 정보를 다시 확인하여 주세요.
+            		return;
+            	}
+            	
+            	if(newItems.length + updateItems.length === 0) {
+                    UT.alert("STD.N1700");	// 변경된 내용이 없습니다.
+                    return;
+                }
+            	
+            	me.$.saveIpInfo.body = {
+            			insertList : newItems,
+            			updateList : updateItems
+            	};
+            	UT.request(me.$.saveIpInfo);
+            },
+            completeDeleteIpInfo : function(e,res){
+            	var me = this;
+            	me.onSearch();
+            },
+            completeSaveIpInfo : function(e,res){
+            	var me = this;
+            	UT.alert("STD.N1500"); //요청을 완료하였습니다.
+            	me.onSearch();
+            },
+            onDelete : function(){
+            	var me = this;
+            	var provider = me.$.gridIpInfo.getDataProvider();
+            	var checkedItems = provider.selectionCheckedItems();
+            	
+            	UT.confirm("STD.N1300", function () {	// 삭제 하시겠습니까?
+            		me.$.deleteIpInfo.body = {
+                			deleteList : checkedItems
+                	};
+                	UT.request(me.$.deleteIpInfo);		
+            	});
+            },
+            onConnect : function(e){
+            	var me = this;
+            	var hostCheck = e.target.dataset.args;
+            	
+            	var provider = me.$.gridIpInfo.getDataProvider();
+            	//저장 후 연결확인을 할 수 있도록 수정
+            	var created = provider.getNewItems(),
+            	updated = provider.getUpdateItems();
+            	if(created.length + updated.length > 0){
+            		UT.alert("STD.CNTR1031");//저장 후 연결확인을 할 수 있습니다.
+            		return;
+            	}
+            	
+            	var checkedItems = provider.selectionCheckedItems();
+            	
+            	if(checkedItems.length < 1){
+            		UT.alert("STD.N1600");	// 선택된 항목이 없습니다.
+            		return;
+            	}
+            	
+            	me.$.checkConnect.body = {
+            			connectList : checkedItems,
+            			hostCheck : hostCheck
+            	};
+            	UT.request(me.$.checkConnect);
+            },
+            completeCheckConnect: function(e,res){
+            	var me = this;
+            	me.onSearch();
+            }
+            
+        });
+    </script>
+</dom-module>

@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="vendor-improve">
+	<resultMap id="resultMap-findImp" type="map">
+		<!--<result property="improv_req_cont"      column="IMPROV_REQ_CONT"    jdbcType="CLOB"     javaType="string" />-->
+		<!--<result property="improv_plan_cont"     column="IMPROV_PLAN_CONT"   jdbcType="CLOB"     javaType="string" />-->
+		<!--<result property="improv_cmpld_cont"    column="IMPROV_CMPLD_CONT"  jdbcType="CLOB"     javaType="string" />-->
+	</resultMap>
+	<select id="findListImprove" resultType="map">
+		/* vendor-improve.findListImprove : 협력사 개선요청 목록 조회 */
+		SELECT
+				VDIP.TEN_ID         	    		/* 테넌트 아이디 */
+				, VDIP.VD_IMPROV_UUID          		/* 협력사 개선 uuid */
+			    , VDIP.PE_SUBJ_RES_UUID				/* 퍼포먼스평가 대상 결과 uuid */
+				, VDIP.VD_CD               			/* 협력사 코드 */
+				, VDIP.IMPROV_TYP_CCD         		/* 개선 유형 공통코드 */
+				, VDIP.IMPROV_STS_CCD              	/* 개선 상태 공통코드 */
+				, VDIP.IMPROV_REQ_TIT        		/* 개선 요청 제목 */
+			    , VDIP.IMPROV_REQR_ID				/* 개선 요청자 아이디 */
+				, VDIP.IMPROV_REQ_DT         		/* 개선 요청 일자 */
+		     	, VDIP.IMPROV_CMPLD_REQ_DT			/* 개선 요청 완료일자 */
+				, VDIP.IMPROV_REQ_ATHG_UUID			/* 개선요청 첨부그룹 uuid */
+				, VDIP.IMPROV_PLAN_ATHG_UUID		/* 개선계획 첨부그룹 uuid */
+				, VDIP.IMPROV_CMPLD_ATHG_UUID		/* 개선완료 첨부그룹 uuid */
+				, VDIP.RMK                 			/* 비고*/
+			    , VDIP.STS							/* 상태 */
+				, VDIP.REGR_ID              		/* 등록자 아이디 */
+				, VDIP.REG_DTTM              		/* 등록 일시 */
+				, VDIP.MODR_ID         				/* 수정자 아이디 */
+				, VDIP.MOD_DTTM        	 			/* 수정 일시 */
+				, US.USR_NM AS REG_NM
+				, VD.VD_NM							/* 협력사 명 */
+				, VD.ERP_VD_CD             			/* ERP 협력사 코드 */
+				, VDIP.IMPROV_PLAN_SUBM_DT				/* 개선 계획 제출 일자 */
+				, VDIP.IMPROV_CMPLD_SUBM_DT				/* 개선 완료 제출 일자 */
+				, CASE WHEN VDIP.IMPROV_CMPLD_REQ_DT IS NOT NULL  AND COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) <![CDATA[>]]> TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')  THEN
+						TO_CHAR(FLOOR(COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) - TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')))  ELSE ''
+				END DELAY_DAY
+			FROM VD_IMPROV VDIP         			/* (협력사 개선요청) */
+			LEFT OUTER JOIN USR US
+				ON US.TEN_ID = VDIP.TEN_ID
+				AND US.USR_ID = VDIP.REGR_ID
+			LEFT OUTER JOIN VD VD
+				ON VD.TEN_ID = VDIP.TEN_ID
+				AND VD.VD_CD = VDIP.VD_CD
+		   WHERE VDIP.TEN_ID = #{g.tenant}
+		<if test="p.improv_typ_ccd != null and p.improv_typ_ccd != ''">
+			AND VDIP.IMPROV_TYP_CCD = #{p.improv_typ_ccd}
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+			<bind name="erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+			AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erp_vd_cd})      		/* 협력사명 검색조건*/
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm != ''">
+			<bind name="vd_nm" value="'%' + p.vd_nm + '%'"/>
+			AND (UPPER(VD.VD_NM) LIKE UPPER(#{vd_nm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vd_nm}))      /* 협력사명 검색조건*/
+		</if>
+		<if test="p.fr_dt != null">
+			AND VDIP.IMPROV_REQ_DT &gt;= #{p.fr_dt}
+		</if>
+		<if test="p.to_dt != null">
+			AND VDIP.IMPROV_REQ_DT &lt;= #{p.to_dt}
+		</if>
+		<if test="p.improv_sts_ccd != null and p.improv_sts_ccd != ''">
+			AND VDIP.IMPROV_STS_CCD = #{p.improv_sts_ccd}
+		</if>
+		<if test="p.improv_req_tit != null and p.improv_req_tit != ''">
+			<bind name="improv_req_tit" value="'%' + p.improv_req_tit + '%'"/>
+			AND UPPER(VDIP.IMPROV_REQ_TIT) LIKE UPPER(#{improv_req_tit})
+		</if>
+		<if test="p.usr_id != null and p.usr_id != ''">
+			AND VDIP.REGR_ID = #{p.usr_id}
+		</if>
+		<if test="p.usr_nm != null and p.usr_nm != ''">
+			<bind name="usrNmPattern" value="'%'+ p.usr_nm + '%'"/>
+			AND UPPER(US.USR_NM) LIKE UPPER(#{usrNmPattern})
+		</if>
+		ORDER BY VDIP.MOD_DTTM DESC
+	</select>
+	<insert id="insertImproveReqInfo">
+		/* vendor-improve.insertImproveReqInfo : 협력사 개선요청관리 저장 */
+		INSERT INTO VD_IMPROV
+		(
+	          TEN_ID                   			/* 테넌트 아이디 */
+	        , VD_IMPROV_UUID                	/* 협력사 개선 uuid */
+	        , VD_CD                    			/* 협력사 코드 */
+	        , IMPROV_TYP_CCD               		/* 개선 유형 공통코드 */
+	        , IMPROV_STS_CCD                   	/* 개선 상태 공통코드 */
+	        , IMPROV_REQ_TIT              		/* 개선 요청 제목 */
+	        , IMPROV_REQR_ID					/* 개선 요청자 아이디 */
+	        , IMPROV_REQ_DT              		/* 개선 요청 일자 */
+	        , IMPROV_REQ_CONT	                /* 개선 요청 내용 */
+			, IMPROV_CMPLD_REQ_DT				/* 개선 완료 요청일자 */
+			, IMPROV_METH_PEP         			/* 개선방안 제안 */
+			, EXPD_IMPROV_EFF           		/* 개선예상 효과*/
+	        , IMPROV_REQ_ATHG_UUID              /* 개선요청 첨부그룹 uuid */
+	        , RMK                      			/* 비고 */
+	        , REGR_ID                   		/* 등록자 아이디 */
+	        , REG_DTTM                   		/* 등록 일시 */
+	        , MODR_ID                   		/* 수정자 아이디 */
+	        , MOD_DTTM                   		/* 수정 일시 */
+		)
+		VALUES
+		(
+		     #{g.tenant}               			/* 테넌트 아이디 */
+	       , #{p.vd_improv_uuid}           	/* 협력사 개선 uuid */
+	       , #{p.vd_cd}              	 		/* 협력사 코드 */
+	       , #{p.improv_typ_ccd}          		/* 개선 유형 공통코드 */
+	       , #{p.improv_sts_ccd}              	/* 개선 상태 공통코드 */
+	       , #{p.improv_req_tit}         		/* 개선 요청 제목 */
+	       , #{g.username}						/* 개선 요청자 아이디 */
+	       <bind name="getFormatNow" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+	       , #{getFormatNow}	        		/* 개선 요청 일자 */
+	       , #{p.improv_req_cont}            	/* 개선 요청 내용 */
+	       , #{p.improv_cmpld_req_dt}			/* 개선 완료 요청일자 */
+		   , #{p.improv_meth_pep}         		/* 개선방안 제안 */
+		   , #{p.expd_improv_eff}          		/* 개선예상 효과*/
+	       , #{p.improv_req_athg_uuid}          /* 개선요청 첨부그룹 uuid */
+	       , #{p.rmk}                 			/* 비고 */
+	       , #{g.username}            			/* 등록자 아이디 */
+	       , #{g.now}                 			/* 등록 일시 */
+	       , #{g.username}            			/* 수정자 아이디 */
+	       , #{g.now}                 			/* 수정 일시 */
+       )
+	</insert>
+	<update id="updateImproveReqInfo">
+		/* vendor-improve.updateImproveReqInfo : 협력사 개선요청관리 수정*/
+		UPDATE VD_IMPROV
+		SET IMPROV_STS_CCD = #{p.improv_sts_ccd} 	             /*상태 코드*/
+		<if test="p.req_type != null and p.req_type eq 'request'.toString()">
+			, VD_CD            		= #{p.vd_cd}
+			, IMPROV_TYP_CCD        = #{p.improv_typ_ccd}           	/* 개선 유형 공통코드 */
+			, IMPROV_REQ_TIT       = #{p.improv_req_tit}           		/* 개선 요청 제목 */
+			, IMPROV_REQ_DT        = #{p.improv_req_dt}            		/* 개선 요청일 */
+			, IMPROV_REQ_CONT      = #{p.improv_req_cont}           	/* 개선 요청 내용 */
+			, IMPROV_REQ_ATHG_UUID = #{p.improv_req_athg_uuid}   		/* 개선 요청 첨부그룹 uuid */
+			, IMPROV_CMPLD_REQ_DT = #{p.improv_cmpld_req_dt}     		/* 개선 완료 요청일자 */
+			, IMPROV_METH_PEP  = #{p.improv_meth_pep}      				/* 개선방식 제안 */
+			, EXPD_IMPROV_EFF    = #{p.expd_improv_eff}        			/* 예상 개선 효과 */
+			, RMK               = #{p.rmk}              				/*비고*/
+		</if>
+		, IMPROV_PLAN_SUPP_RSN = #{p.improv_plan_supp_rsn}
+		, IMPROV_CMPLD_SUPP_RSN = #{p.improv_cmpld_supp_rsn}
+		, MODR_ID            = #{g.username}         					/* 수정자 아이디*/
+		, MOD_DTTM            = #{g.now}              					/* 수정 일시*/
+		WHERE TEN_ID            = #{g.tenant}
+		AND VD_IMPROV_UUID = #{p.vd_improv_uuid}
+	</update>
+	<select id="findImproveDetail" resultMap="resultMap-findImp">
+		/* vendor-improve.findImproveDetail : 개선요청관리 정보 상세조회 */
+		SELECT VDIP.VD_IMPROV_UUID
+			 , VDIP.VD_CD
+			 , VDIP.IMPROV_TYP_CCD
+			 , VDIP.IMPROV_STS_CCD
+			 , VDIP.IMPROV_REQ_TIT
+		     , VDIP.IMPROV_REQ_CONT
+			 , VDIP.IMPROV_PLAN_CONT					/* 개선 계획 내용 */
+			 , VDIP.IMPROV_CMPLD_CONT					/* 개선 완료 내용 */
+			 , VDIP.IMPROV_REQ_DT
+			 , VDIP.IMPROV_CMPLD_REQ_DT
+			 , VDIP.IMPROV_REQ_ATHG_UUID				/* 개선요청 첨부그룹 uuid */
+			 /*, CASE WHEN VDIP.IMPROV_STS_CCD <![CDATA[>]]> 'IMPROV_PLAN_CRNG' THEN VDIP.IMPROV_PLAN_ATHG_UUID
+			        ELSE ''
+			END IMPROV_PLAN_ATHG_UUID  *//* 개선계획 임시저장 상태이면 내부에서 개선계획 관련 정보 확인 불가하도록 제어 */
+		     , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_REQ_CRNG', 'IMPROV_REQG', 'IMPROV_PLAN_CRNG') THEN ''
+		            ELSE VDIP.IMPROV_PLAN_ATHG_UUID
+		    		END IMPROV_PLAN_ATHG_UUID  /* 임시저장 or 개선요청 or 개선계획 임시저장 상태이면 내부에서 개선계획 관련 정보 확인 불가하도록 제어 */
+			 /*, CASE WHEN VDIP.IMPROV_STS_CCD <![CDATA[>]]> 'IMPROV_CMPLD_CRNG' THEN VDIP.IMPROV_CMPLD_ATHG_UUID
+			        ELSE ''
+			END IMPROV_CMPLD_ATHG_UUID  *//* 개선완료 임시저장 상태이면 내부에서 개선계획 관련 정보 확인 불가하도록 제어 */
+		     , CASE WHEN VDIP.IMPROV_STS_CCD IN('IMPROV_CMPLD_SUBM', 'IMPROV_CMPLD_SUPP_REQG', 'IMPROV_CMPLD') THEN VDIP.IMPROV_CMPLD_ATHG_UUID
+		     		ELSE ''
+					END IMPROV_CMPLD_ATHG_UUID
+			 , VDIP.RMK
+			 , VDIP.REGR_ID
+			 , VDIP.REG_DTTM
+			 , VDIP.MODR_ID
+			 , VDIP.MOD_DTTM
+-- 			 , VDIP.PIC_EMAIL
+			 /*, CASE WHEN VDIP.IMPROV_STS_CCD <![CDATA[>]]> 'IMPROV_PLAN_CRNG' THEN VDIP.IMPROV_PLAN_CONT
+			        ELSE NULL
+			END IMPROV_PLAN_CONT*/
+		     , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_REQ_CRNG', 'IMPROV_REQG', 'IMPROV_PLAN_CRNG') THEN NULL
+		            ELSE VDIP.IMPROV_PLAN_CONT
+		            END IMPROV_PLAN_CONT
+			 /*, CASE WHEN VDIP.IMPROV_STS_CCD <![CDATA[>]]> 'IMPROV_CMPLD_CRNG' THEN VDIP.IMPROV_CMPLD_CONT
+			        ELSE NULL
+			END IMPROV_CMPLD_CONT*/
+			 , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_CMPLD_SUBM', 'IMPROV_CMPLD_SUPP_REQG', 'IMPROV_CMPLD') THEN VDIP.IMPROV_CMPLD_CONT
+			        ELSE NULL
+					END IMPROV_CMPLD_CONT
+-- 			 , EVMA.EVAL_NM
+			 , VDIP.MODR_ID  AS IMPROV_ID
+			 , USR.USR_NM AS IMPROV_NM
+			 , USR.EML AS IMPROV_EMAIL
+			 , REG_USR.USR_NM AS REG_NM
+			 , CASE WHEN #{g.locale} = 'ko_KR' THEN VDGL.VD_NM ELSE COALESCE(VDGL.VD_NM_EN, VDGL.VD_NM) END AS VD_NM
+			 , VDGL.ERP_VD_CD
+			 , CASE WHEN VDIP.IMPROV_CMPLD_REQ_DT IS NOT NULL  AND COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) <![CDATA[>]]> TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')  THEN
+						TO_CHAR(FLOOR(COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) - TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')))  ELSE ''
+			END DELAY_DAY
+			 , VDIP.IMPROV_PLAN_SUPP_RSN   				/* 개선계획 반려사유 */
+			 , VDIP.IMPROV_CMPLD_SUPP_RSN 			/* 개선완료 반려사유 */
+		     , VDIP.IMPROV_METH_PEP						/* 개선방식 제안 */
+			 , VDIP.EXPD_IMPROV_EFF						/* 예상 개선 효과 */
+			 , VDIP.IMPROV_CMPLD_EXPT_DT				/* 개선 예상 완료 일자 */
+			 , VDIP.IMPROV_CMPLD_DT						/* 개선 완료 일자 */
+			 , VDIP.IMPROV_PLAN_SUBM_DT						/* 개선 계획 제출 일자 */
+			 , VDIP.IMPROV_CMPLD_SUBM_DT						/* 개선 완료 제출 일자 */
+			 , VDIP.IMPROV_EXEC_PIC_NM					/* 개선 실행 담당자 명 */
+			 , VDIP.IMPROV_EXEC_PIC_CTC					/* 개선 실행 담당자 연락처 */
+			 , VDIP.IMPROV_EXEC_PIC_EML					/* 개선 실행 담당자 이메일 */
+             <if test="g.existModule(&quot;SRM&quot;)">
+		     , VMG.VMG_UUID
+		     , VMG.VMG_CD
+		     , VMG.VMG_NM
+		     , VMG.VMG_NM_EN
+             , CASE WHEN #{g.locale} = 'ko_KR' THEN VMG.VMG_NM ELSE COALESCE(VMG.VMG_NM_EN, VMG.VMG_NM) END AS DISPLAY_VMG_NM
+		     , PEG.PEG_CD
+		     , PEG.PEG_NM
+		     , PSUBJ_RES.EVAL_SC
+		     , PSUBJ_RES.RANK
+		     , PSUBJ_RES.EVAL_GRD_CD
+		     , PE.EVAL_NM
+		     , PE.EVAL_SUBJ_YR
+		     , (SELECT CASE WHEN PE_GRD.EVAL_GRD_NM IS NOT NULL  THEN
+	              '[' || PSUBJ_RES.EVAL_GRD_CD ||'] ' || PE_GRD.EVAL_GRD_NM  ELSE PSUBJ_RES.EVAL_GRD_CD
+		               END
+		          FROM DUM_TBL
+		          LEFT OUTER JOIN PE_EVAL_GRD PE_GRD
+		            ON 1 = 1
+		         WHERE PPEG.TEN_ID = PE_GRD.TEN_ID
+		           AND PPEG.PE_PEG_UUID = PE_GRD.PE_PEG_UUID
+		           AND PE_GRD.STS != 'D'
+		           AND PE_GRD.EVAL_GRD_CD = PSUBJ_RES.EVAL_GRD_CD) AS EVAL_GRD_STR
+	        , (SELECT COUNT(*) FROM PE_SUBJ WHERE TEN_ID = PPEG.TEN_ID AND PE_PEG_UUID = PPEG.PE_PEG_UUID AND STS != 'D') AS PEG_SUBJ_CNT
+		     </if>
+		FROM VD_IMPROV VDIP
+	     LEFT OUTER JOIN VD VDGL
+	                     ON VDIP.TEN_ID = VDGL.TEN_ID
+		                AND VDIP.VD_CD = VDGL.VD_CD
+	     /*LEFT OUTER JOIN ESREVMA EVMA
+	                     ON VDIP.TEN_ID = EVMA.TEN_ID
+		                AND VDIP.EVAL_ID = EVMA.EVAL_ID*/
+	     LEFT OUTER JOIN USR REG_USR
+	                     ON VDIP.TEN_ID = REG_USR.TEN_ID
+		                AND VDIP.REGR_ID = REG_USR.USR_ID
+	     LEFT OUTER JOIN USR USR
+	                     ON VDIP.TEN_ID = USR.TEN_ID
+		                AND VDIP.IMPROV_REQR_ID = USR.USR_ID
+         <if test="g.existModule(&quot;SRM&quot;)">
+         LEFT OUTER JOIN PE_SUBJ_RES PSUBJ_RES   /* 퍼포먼스 평가대상 결과 */
+		   ON VDIP.TEN_ID = PSUBJ_RES.TEN_ID
+	      AND VDIP.PE_SUBJ_RES_UUID = PSUBJ_RES.PE_SUBJ_RES_UUID
+		 LEFT OUTER JOIN PE_SUBJ PSUBJ   /* 퍼포먼스 평가대상 */
+		   ON PSUBJ_RES.TEN_ID = PSUBJ.TEN_ID
+	      AND PSUBJ_RES.PE_SUBJ_UUID = PSUBJ.PE_SUBJ_UUID
+		 LEFT OUTER JOIN PE_PEG PPEG
+		   ON PSUBJ.TEN_ID = PPEG.TEN_ID
+		  AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+		 LEFT OUTER JOIN PE
+		   ON PPEG.TEN_ID = PE.TEN_ID
+		  AND PPEG.PE_UUID = PE.PE_UUID
+	     LEFT OUTER JOIN PEG
+	       ON PSUBJ.TEN_ID = PEG.TEN_ID
+	      AND PSUBJ.PEG_UUID = PEG.PEG_UUID
+         LEFT OUTER JOIN VMG_OORG VO
+           ON PSUBJ.TEN_ID = VO.TEN_ID
+          AND PSUBJ.VMG_OORG_UUID = VO.VMG_OORG_UUID
+          AND VO.STS != 'D'
+		 LEFT OUTER JOIN VMG    /* 협력사관리그룹 */
+		   ON VO.TEN_ID = VMG.TEN_ID
+		  AND VO.VMG_UUID = VMG.VMG_UUID
+          AND VMG.STS != 'D'
+         </if>
+		WHERE VDIP.TEN_ID = #{g.tenant}
+		  AND VDIP.VD_IMPROV_UUID = #{p.vd_improv_uuid}
+	</select>
+	<delete id="deleteImproveInfo">
+		/* vendor-improve.deleteImproveInfo : 협력사 개선요청관리 삭제 */
+		DELETE FROM VD_IMPROV
+		WHERE TEN_ID = #{g.tenant}
+		  AND VD_IMPROV_UUID = #{p.vd_improv_uuid}
+	</delete>
+    <select id="findListPeSubjVdImprove" resultMap="resultMap-findImp">
+    /* vendor-improve.findListPeSubjVdImprove : 퍼포먼스평가대상의 개선요청관리 정보 상세조회 */
+    SELECT VDIP.VD_IMPROV_UUID
+         , VDIP.VD_CD
+         , VDIP.IMPROV_TYP_CCD
+         , VDIP.IMPROV_STS_CCD
+         , VDIP.IMPROV_REQ_TIT
+         , VDIP.IMPROV_REQ_CONT
+         , VDIP.IMPROV_PLAN_CONT					/* 개선 계획 내용 */
+         , VDIP.IMPROV_CMPLD_CONT					/* 개선 완료 내용 */
+         , VDIP.IMPROV_REQ_DT
+         , VDIP.IMPROV_CMPLD_REQ_DT
+         , VDIP.IMPROV_REQ_ATHG_UUID				/* 개선요청 첨부그룹 uuid */
+         , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_REQ_CRNG', 'IMPROV_REQG', 'IMPROV_PLAN_CRNG') THEN ''
+                ELSE VDIP.IMPROV_PLAN_ATHG_UUID
+            END IMPROV_PLAN_ATHG_UUID  /* 임시저장 or 개선요청 or 개선계획 임시저장 상태이면 내부에서 개선계획 관련 정보 확인 불가하도록 제어 */
+         , CASE WHEN VDIP.IMPROV_STS_CCD IN('IMPROV_CMPLD_SUBM', 'IMPROV_CMPLD_SUPP_REQG', 'IMPROV_CMPLD') THEN VDIP.IMPROV_CMPLD_ATHG_UUID
+                ELSE ''
+           END IMPROV_CMPLD_ATHG_UUID
+         , VDIP.RMK
+         , VDIP.REGR_ID
+         , VDIP.REG_DTTM
+         , VDIP.MODR_ID
+         , VDIP.MOD_DTTM
+         , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_REQ_CRNG', 'IMPROV_REQG', 'IMPROV_PLAN_CRNG') THEN NULL
+                ELSE VDIP.IMPROV_PLAN_CONT
+            END IMPROV_PLAN_CONT
+         , CASE WHEN VDIP.IMPROV_STS_CCD IN ('IMPROV_CMPLD_SUBM', 'IMPROV_CMPLD_SUPP_REQG', 'IMPROV_CMPLD') THEN VDIP.IMPROV_CMPLD_CONT
+                ELSE NULL
+            END IMPROV_CMPLD_CONT
+         , VDIP.MODR_ID  AS IMPROV_ID
+         , USR.USR_NM AS IMPROV_NM
+         , USR.EML AS IMPROV_EMAIL
+         , REG_USR.USR_NM AS REG_NM
+         , CASE WHEN #{g.locale} = 'ko_KR' THEN VDGL.VD_NM ELSE COALESCE(VDGL.VD_NM_EN, VDGL.VD_NM) END AS VD_NM
+         , VDGL.ERP_VD_CD
+         , CASE WHEN VDIP.IMPROV_CMPLD_REQ_DT IS NOT NULL  AND COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) <![CDATA[>]]> TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')  THEN
+				    TO_CHAR(FLOOR(COALESCE(TO_DATE(VDIP.IMPROV_CMPLD_DT, 'YYYYMMDD'), SYSDATE) - TO_DATE(VDIP.IMPROV_CMPLD_REQ_DT, 'YYYYMMDD')))  ELSE ''
+            END DELAY_DAY
+         , VDIP.IMPROV_PLAN_SUPP_RSN   				/* 개선계획 반려사유 */
+         , VDIP.IMPROV_CMPLD_SUPP_RSN 			/* 개선완료 반려사유 */
+         , VDIP.IMPROV_METH_PEP						/* 개선방식 제안 */
+         , VDIP.EXPD_IMPROV_EFF						/* 예상 개선 효과 */
+         , VDIP.IMPROV_CMPLD_EXPT_DT				/* 개선 예상 완료 일자 */
+         , VDIP.IMPROV_CMPLD_DT						/* 개선 완료 일자 */
+         , VDIP.IMPROV_PLAN_SUBM_DT						/* 개선 계획 제출 일자 */
+         , VDIP.IMPROV_CMPLD_SUBM_DT						/* 개선 완료 제출 일자 */
+         , VDIP.IMPROV_EXEC_PIC_NM					/* 개선 실행 담당자 명 */
+         , VDIP.IMPROV_EXEC_PIC_CTC					/* 개선 실행 담당자 연락처 */
+         , VDIP.IMPROV_EXEC_PIC_EML					/* 개선 실행 담당자 이메일 */
+      FROM VD_IMPROV VDIP
+      LEFT OUTER JOIN VD VDGL
+        ON VDIP.TEN_ID = VDGL.TEN_ID
+       AND VDIP.VD_CD = VDGL.VD_CD
+      LEFT OUTER JOIN USR REG_USR
+        ON VDIP.TEN_ID = REG_USR.TEN_ID
+       AND VDIP.REGR_ID = REG_USR.USR_ID
+      LEFT OUTER JOIN USR USR
+        ON VDIP.TEN_ID = USR.TEN_ID
+       AND VDIP.MODR_ID = USR.USR_ID
+     WHERE VDIP.TEN_ID = #{p.ten_id}
+       AND VDIP.PE_SUBJ_RES_UUID = #{p.pe_subj_res_uuid}
+    </select>
+    <insert id="insertPeSubjVdImprove">
+    /* vendor-improve.insertPeSubjVdImprove : 퍼포먼스평가대상 결과 개선요청관리 저장 */
+    INSERT INTO VD_IMPROV (
+           TEN_ID                       /* 테넌트 아이디 */
+         , VD_IMPROV_UUID               /* 협력사 개선 uuid */
+         , PE_SUBJ_RES_UUID             /* 퍼포먼스 평가대상 결과 uuid */
+         , VD_CD                        /* 협력사 코드 */
+         , IMPROV_TYP_CCD               /* 개선 유형 공통코드 */
+         , IMPROV_STS_CCD               /* 개선 상태 공통코드 */
+         , IMPROV_REQ_TIT               /* 개선 요청 제목 */
+         , IMPROV_REQR_ID               /* 개선 요청자 아이디 */
+         , IMPROV_REQ_DT                /* 개선 요청 일자 */
+         , IMPROV_REQ_CONT              /* 개선 요청 내용 */
+         , IMPROV_CMPLD_REQ_DT          /* 개선 완료 요청일자 */
+         , IMPROV_METH_PEP              /* 개선방안 제안 */
+         , EXPD_IMPROV_EFF              /* 개선예상 효과*/
+         , IMPROV_REQ_ATHG_UUID         /* 개선요청 첨부그룹 uuid */
+         , RMK                          /* 비고 */
+         , REGR_ID                      /* 등록자 아이디 */
+         , REG_DTTM                     /* 등록 일시 */
+         , MODR_ID                      /* 수정자 아이디 */
+         , MOD_DTTM                     /* 수정 일시 */
+    )
+    SELECT PSUBJ_RES.TEN_ID
+         , #{p.new_vd_improv_uuid}
+         , PSUBJ_RES.PE_SUBJ_RES_UUID
+         , PSUBJ.VD_CD
+         , 'EVAL_RES_IMPROV'           /* [E912] 평가 결과 개선 */
+         , 'IMPROV_REQ_CRNG'           /* [E913] 작성 중*/
+         , '[' || PE.EVAL_NM || ']' ||  VD.VD_NM || '/'  || VMG.VMG_NM  || ' - 평가개선'     /* [평가명]협력사명/소싱그룹명 - 평가개선 */  , #{p.p_improv_reqr_id}
+         , NULL
+         , '[' || PE.EVAL_NM || ']' ||  VD.VD_NM || '/'  || VMG.VMG_NM  || ' - 평가개선'     /* [평가명]협력사명/소싱그룹명 - 평가개선 */  , NULL
+         , NULL
+         , NULL
+         , NULL
+         , NULL
+         , #{p.p_improv_reqr_id}
+         , #{g.now}
+         , #{p.p_improv_reqr_id}
+         , #{g.now}
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PE_SUBJ PSUBJ
+        ON PSUBJ.TEN_ID = PPEG.TEN_ID
+       AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+     INNER JOIN PE_SUBJ_RES PSUBJ_RES
+        ON PSUBJ.TEN_ID = PSUBJ_RES.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PSUBJ_RES.PE_SUBJ_UUID
+     INNER JOIN VD
+        ON PSUBJ.TEN_ID = VD.TEN_ID
+       AND PSUBJ.VD_CD = VD.VD_CD
+      LEFT OUTER JOIN VMG_OORG VO
+        ON PSUBJ.TEN_ID = VO.TEN_ID
+       AND PSUBJ.VMG_OORG_UUID = VO.VMG_OORG_UUID
+       AND VO.STS != 'D'
+      LEFT OUTER JOIN VMG
+        ON VO.TEN_ID = VMG.TEN_ID
+       AND VO.VMG_UUID = VMG.VMG_UUID
+       AND VMG.STS != 'D'
+     WHERE PSUBJ_RES.TEN_ID = #{p.ten_id}
+       AND PSUBJ_RES.PE_SUBJ_RES_UUID = #{p.pe_subj_res_uuid}
+    </insert>
+</mapper>

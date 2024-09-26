@@ -1,0 +1,164 @@
+<dom-module id="es-sp-catalog-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+        <!-- 목록 조회 -->
+        <sc-ajax id="findCatalogList"
+                 url="findCatalogList.do"
+                 body="{{searchParam}}">
+        </sc-ajax>
+        <sc-ajax id="deleteCatalog"
+                 url="deleteCatalog.do"
+                 on-response="completeDeleteCatalog">
+        </sc-ajax>
+
+        <!-- 공통코드 조회 -->
+        <sc-code-group>
+            <sc-code code="P255" value="{{codes.ctlgStsCcd}}"></sc-code>      <!-- 카탈로그 상태 -->
+        </sc-code-group>
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <cc-page-title-bar>
+        </cc-page-title-bar>
+
+        <cc-search-condition-panel on-search="onFindList" validation-group="search" auth-r>
+            <cc-fieldset column-span="2">
+                <sc-label text="품목분류"></sc-label>
+                <cc-cate-combobox-field id="itemCateField" itemcat-lvl1-cd="{{searchParam.itemcat_lvl_1_cd}}" itemcat-lvl2-cd="{{searchParam.itemcat_lvl_2_cd}}"
+                                        itemcat-lvl3-cd="{{searchParam.itemcat_lvl_3_cd}}" itemcat-lvl4-cd="{{searchParam.itemcat_lvl_4_cd}}"></cc-cate-combobox-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="카탈로그 명"></sc-label>
+                <sc-text-field value="{{searchParam.ctlg_nm}}" on-enter="onEnterSearch"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="모델 번호"></sc-label>
+                <sc-text-field value="{{searchParam.mod_no}}" on-enter="onEnterSearch"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="카탈로그 상태"></sc-label>
+                <sc-combobox-field value="{{searchParam.ctlg_sts_ccd}}" display-field="label" value-field="data" items="{{codes.ctlgStsCcd}}" placeholder="전체"></sc-combobox-field>
+            </cc-fieldset>
+        </cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="false"
+                 use-state="false"
+                 on-item-click="onItemClick"
+                 selection-able-function="onSelectionAble">
+            <cc-grid-toolbar>
+                <sc-button text="카탈로그 작성" on-click="onCreate" auth-s></sc-button>
+                <sc-button text="삭제" on-click="onDelete" auth-s></sc-button>
+            </cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-data-column data-field="ctlg_nm"            header-text="카탈로그 명"   width="350" style-name="link" text-align="left"></sc-data-column>
+                <sc-data-column data-field="itemcat_lvl_1_nm"   header-text="품목분류1 명"  width="250" text-align="left"></sc-data-column>
+                <sc-data-column data-field="itemcat_lvl_2_nm"   header-text="품목분류2 명"  width="250" text-align="left"></sc-data-column>
+                <sc-data-column data-field="itemcat_lvl_3_nm"   header-text="품목분류3 명"  width="250" text-align="left"></sc-data-column>
+                <sc-data-column data-field="itemcat_lvl_4_nm"   header-text="품목분류4 명"  width="250" text-align="left"></sc-data-column>
+                <sc-data-column data-field="mod_no"             header-text="모델 번호"      width="150" text-align="left"></sc-data-column>
+                <sc-data-column data-field="mfgr_nm"            header-text="제조사"       width="100" text-align="left"></sc-data-column>
+                <sc-data-column data-field="orgn_ctry"          header-text="원산지"       width="100" text-align="left"></sc-data-column>
+                <sc-combobox-column data-field="ctlg_sts_ccd"   header-text="상태"         width="100"
+                                    display-field="label" value-field="data" items="{{codes.ctlgStsCcd}}"></sc-combobox-column>
+                <!--<sc-image-column data-field="img_evaluator"     header-text="이력 정보"	  width="80"  text-align="center"
+                                 editable="false"   image-cls="search"></sc-image-column>-->
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field data-field="ctlg_uuid"></sc-grid-field>
+                <sc-grid-field data-field="cnt_of_applied"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-sp-catalog-list",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            ctlgStsCcd: []
+                        }
+                    },
+                    reset: false
+                },
+                searchParam: {
+                    type: Object,
+                    value: function() {
+                        return {}
+                    }
+                }
+            },
+            initialized: function() {
+                var me = this;
+            },
+            load: function() {
+                this.onFindList();
+            },
+
+            onCreate: function() {
+                var me = this;
+                me.fire("show-detail", {
+                    is_new: true
+                });
+            },
+            // 목록 조회
+            onFindList: function() {
+                var me = this;
+                if(!me.validate("search")) {
+                    UT.alert("STD.E0000");
+                    return;
+                }
+
+                UT.request(me.$.findCatalogList, function(e, res) {
+                    var result = res.response;
+                    me.$.gridPanel.setDataProvider(result);
+                });
+            },
+            // grid on-item-click
+            onItemClick: function(e) {
+                var me   = this,
+                    data = e.detail.data,
+                    item = e.detail.item;
+
+                // 송장번호 - 송장상세 조회
+                if(item.dataField === "preview") {
+                    var popup = UT.popup('ep-catalog-item-pr', me, "50%", "80%");
+                    popup.show();
+                    data.isPreview = true;
+                    popup.getWindowContent().load(data);
+                } else if(item.dataField === "ctlg_nm"){
+                    me.fire("show-detail", data);
+                }
+            },
+            onDelete: function(){
+                var me   = this;
+                var provider = me.$.gridPanel.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+
+                if(checked.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                } else {
+                    UT.confirm("STD.N1300", function() { // "삭제 하시겠습니까?"
+                        me.$.deleteCatalog.body = {
+                            deleteList : checked
+                        };
+                        UT.request(me.$.deleteCatalog, function(e, res){
+                           UT.alert("STD.N2500", function(){ // "삭제하였습니다."
+                               me.onFindList();
+                           });
+                        });
+                    });
+                }
+            },
+            onSelectionAble: function(data){
+                return data.cnt_of_applied < 1;
+            },
+        });
+    </script>
+</dom-module>

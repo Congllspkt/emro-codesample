@@ -1,0 +1,493 @@
+<sc-link rel="import" href="es-vendor-improve-request.html"></sc-link>
+<sc-link rel="import" href="es-vendor-improve-plan.html"></sc-link>
+<sc-link rel="import" href="es-vendor-improve-cmp.html"></sc-link>
+<dom-module id="es-vendor-improve-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		-->
+		<!-- 개선 정보 저장 -->
+		<sc-ajax id="saveImproveInfo"
+				 url="saveImproveInfo.do"
+				 on-response="completeSaveImproveInfo">
+		</sc-ajax>
+		
+		<!-- 개선 정보 삭제 -->
+		<sc-ajax id="deleteImproveInfo"
+				 url="deleteImproveInfo.do"
+				 on-response="completeDeleteImproveInfo">
+		</sc-ajax>
+		
+		<!-- 개선 상세 조회 -->
+		<sc-ajax id="findImproveDetail"
+				 url="findImproveDetail.do"
+				 on-response="completeFindImproveDetail">
+		</sc-ajax>
+		
+		<sc-code-group init>
+			<!-- 개선요청 등록구분 -->
+			<sc-code code="E912" value="{{codes.E912}}"></sc-code>
+			<!-- 개선요청 등록상태 -->
+			<sc-code code="E913" value="{{codes.E913}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<!-- 게시물 작성 폼 -->
+		<cc-page-title-bar>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel column="3">
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<cc-vendor-search value="{{improveInfo.vd_nm}}" link-typ="POEO" result-field="erp_vd_cd" result-value="{{improveInfo.erp_vd_cd}}" required="[[formula('isInitEditable')]]" disabled="[[!formula('isInitEditable')]]" hide-trigger="[[!formula('isInitEditable')]]" on-result="onSelectVendor" value-class="w-150" result-class="flex"></cc-vendor-search>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="개선 유형"></sc-label>
+				<sc-combobox-field value="{{improveInfo.improv_typ_ccd}}" items="{{codes.E912}}" display-field="label" value-field="data" readonly="[[!formula('isInitEditable')]]" required="[[formula('isInitEditable')]]" placeholder="선택" on-select="onSelectCombo"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청자"></sc-label>
+				<div class="field-box">
+					<sc-text-field class="flex" 	value="{{improveInfo.reg_nm}}" 		max-length="100" 	readonly="true"></sc-text-field>
+					<div class="hspace-10"></div>
+					<sc-date-field value="{{improveInfo.reg_dttm}}" 	max-length="8" 		readonly="true"  string-date="true"></sc-date-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{improveInfo.improv_req_tit}}" max-length="100" required="[[formula('isEditable')]]" readonly="[[!formula('isEditable')]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="개선 상태"></sc-label>
+				<sc-combobox-field value="{{improveInfo.improv_sts_ccd}}" items="{{codes.E913}}" display-field="label" value-field="data" readonly="true" on-select="onSelectCombo"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="지연 일수"></sc-label>
+				<sc-text-field value="{{improveInfo.delay_day}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="퍼포먼스평가그룹"></sc-label>
+				<sc-text-field value="[{{improveInfo.peg_cd}}] {{improveInfo.peg_nm}}"  readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="소싱그룹"></sc-label>
+				<sc-text-field value="[{{improveInfo.vmg_cd}}] {{improveInfo.display_vmg_nm}}"  readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="평가 점수"></sc-label>
+				<sc-text-field class="date" value="{{improveInfo.eval_sc}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="평가 등급"></sc-label>
+				<sc-text-field class="date" value="{{improveInfo.eval_grd_str}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="순위"></sc-label>
+				<sc-text-field value="{{improveInfo.rank}} / {{improveInfo.peg_subj_cnt}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isImpTypEval')]]">
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field value="{{improveInfo.eval_nm}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<sc-tab-navigation id="tabNavi" class="flex" selected-index="0" on-item-select="onItemSelectFunction">
+			<es-vendor-improve-request id="request" title-text="개선 요청" on-initialized="_onRequestInitialized" on-save="onRequestSave"></es-vendor-improve-request>
+			<template>
+				<es-vendor-improve-plan id="plan" title-text="개선 계획" on-initialized="_onPlanInitialized" on-save="onPlanSave"></es-vendor-improve-plan>
+			</template>
+			<template>
+				<es-vendor-improve-cmp id="complete" title-text="개선 완료" on-initialized="_onCompleteInitialized" on-save="onCompleteSave"></es-vendor-improve-cmp>
+			</template>
+		</sc-tab-navigation>
+	
+	</template>
+	
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-vendor-improve-detail",
+			properties : {
+				// 게시글 정보 조회 결과
+				improveInfo : {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				
+				// 게시글 조회 조건
+				searchParam: {
+					type: Object,
+					value: function(){
+						return {
+							vd_improv_uuid: ""
+						};
+					}
+				},
+				
+				//공통코드
+				codes: {
+					type: Object,
+					value:function(){
+						return {
+							E912 : [],	// 개선요청 등록구분
+							E913 : []	// 개선요청 등록상태
+						}
+					},
+					reset : false
+				},
+				requestInitialized : {
+					type : Boolean,
+					value : function() {
+						return false;
+					},
+					reset : false
+				},
+				planInitialized : {
+					type : Boolean,
+					value : function() {
+						return false;
+					},
+					reset : false
+				},
+				completeInitialized : {
+					type : Boolean,
+					value : function() {
+						return false;
+					},
+					reset : false
+				},
+				saveMessage : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				},
+				loadCompleted : {
+					type : Boolean,
+					value : function() {
+						return false;
+					}
+				},
+				oldImpTypCd : {
+					type : String,
+					value : null
+				},
+				curImpTypCd : {
+					type : String,
+					value : null
+				},
+				
+				// 아무 액션 없이 상세 화면을 닫았을 때 새로고침을 방지하는 목적
+				reloadable : {
+					type: Boolean,
+					value: false
+				}
+			},
+			
+			formulas : {
+				// 개선구분이 평가개선인 경우
+				isImpTypEval : function() {
+					return this.improveInfo.improv_typ_ccd === 'EVAL_RES_IMPROV';
+				},
+				isInitEditable : function() {
+					return UT.isEmpty(this.improveInfo) || UT.isEmpty(this.improveInfo.vd_improv_uuid);
+				},
+				// 요청이전 상태(새글이거나 임시저장이거나)
+				isEditable : function(){
+					return this.improveInfo.is_new === true || this.improveInfo.improv_sts_ccd === "IMPROV_REQ_CRNG";
+				},
+				
+				// 임시저장 상태
+				isTemp : function(){
+					return this.improveInfo.improv_sts_ccd === "IMPROV_REQ_CRNG";
+				},
+				// 개선요청 상태
+				isReq : function() {
+					return this.improveInfo.improv_sts_ccd === "IMPROV_REQG";
+				},
+				// 개선계획 확인요청 상태
+				isPlan : function() {
+					return this.improveInfo.improv_sts_ccd === "IMPROV_PLAN_SUBM";
+				},
+				// 개선완료 확인요청 상태
+				isCmp : function() {
+					return this.improveInfo.improv_sts_ccd === "IMPROV_CMPLD_SUBM";
+				}
+			},
+			
+			
+			/******************************
+			 * 초기화 설정
+			 ******************************/
+			
+			load: function(data) {
+				var me = this;
+				
+				if(!data.vd_improv_uuid){ // 글쓰기
+					me.onAddImprove();
+				} else { // 게시물 선택
+					me.set("searchParam", data);
+					me.onSearch();
+				}
+			},
+			onItemSelectFunction : function(e) {
+				var me = this;
+				var contentId = e.detail.item.id;
+				if(me.get(contentId+"Initialized")) {
+					e.detail.item.onSearch(me.improveInfo);
+				}
+			},
+			_onRequestInitialized : function(e) {
+				var me = this;
+				me.set("requestInitialized", true);
+				e.detail.onSearch(me.improveInfo);
+			},
+			_onPlanInitialized : function(e) {
+				var me = this;
+				me.set("planInitialized", true);
+				e.detail.onSearch(me.improveInfo);
+			},
+			_onCompleteInitialized : function(e) {
+				var me = this;
+				me.set("completeInitialized", true);
+				e.detail.onSearch(me.improveInfo);
+			},
+			onSelectVendor : function(e) {
+				var me =this;
+				var data = e.detail;
+				me.set("improveInfo.vd_cd", data.vd_cd);
+			},
+			// 글쓰기
+			onAddImprove: function(){
+				var me = this;
+				
+				var row = {
+					is_new : true
+				};
+				
+				// 초기화
+				me.set("improveInfo", row);
+				me.set("loadCompleted", true);
+				me.$.request.load(row);
+				me.applyFormula();
+			},
+			onSearch: function() {
+				var me = this;
+				me.$.findImproveDetail.body = me.searchParam;
+				UT.request(me.$.findImproveDetail);
+			},
+			completeFindImproveDetail : function(e, res) {
+				var me = this,
+					result = res.response;
+				me.set("improveInfo", result);
+				
+				me.$.request.onSearch(result);
+				if(me.planInitialized) {
+					me.$.plan.onSearch(result);
+				}
+				if(me.completeInitialized) {
+					me.$.complete.onSearch(result);
+				}
+				me.set("loadCompleted", true);
+				me.defaultSelectTab();
+				me.applyFormula();
+			},
+			defaultSelectTab : function() {
+				var me = this;
+				var selectedTab = "request";
+				if(UT.isEmpty(me.improveInfo) || ["IMPROV_REQ_CRNG", "IMPROV_REQG", "IMPROV_PLAN_CRNG"].indexOf(me.improveInfo.improv_sts_ccd) > -1) {
+					// 개선요청 등록상태(E913) : 임시저장 OR 개선요청 OR 개선계획 임시저장
+					selectedTab = "request";
+				} else if(["IMPROV_PLAN_SUBM", "IMPROV_PLAN_SUPP_REQG", "IMPROV_CMPLD_CRNG"].indexOf(me.improveInfo.improv_sts_ccd) > -1) {
+					// 개선요청 등록상태(E913) : 개선계획 확인요청 OR 개선계획 보완요청 OR 개선완료 임시저장
+					selectedTab = "plan";
+				} else {
+					selectedTab = "complete";
+				}
+				me.$.tabNavi.selectItem(me.$[selectedTab]);
+			},
+			onSelectCombo : function(e) {
+				var me = this,
+					detail = e.deatil,
+					oldValue = me.oldImpTypCd,
+					newValue = e.target.value;
+				
+				// 화면에서 개선구분[E912] - 평가개선 선택불가
+				if(me.loadCompleted && newValue === 'EVAL_RES_IMPROV') {
+					me.set("improveInfo.improv_typ_ccd", oldValue);
+					me.set("oldImpTypCd", oldValue);
+					me.set("curImpTypCd", oldValue);
+					UT.alert("STD.VS1127"); // 개선구분 '평가개선'은 정기평가 메뉴에서 등록 가능합니다.
+					return;
+				} else {
+					me.set("oldImpTypCd", newValue);
+					me.set("curImpTypCd", newValue);
+				}
+			},
+			onRequestSave : function(e, data){
+				var me = this;
+				data.info.improv_sts_ccd = me.improveInfo.improv_sts_ccd;
+				data.info.improv_req_tit = me.improveInfo.improv_req_tit;
+				var message = {};
+				if(data.saveType === "temp") {
+					message.confirm = "STD.N1200"; // 저장 하시겠습니까?
+					// message.result = "STD.N2400"; //저장 하였습니다.
+					message.actionName = "저장";
+				} else {
+					message.confirm = "STD.N1210"; // 요청 하시겠습니까?
+					// message.result = "STD.N1500"; // 요청을 완료 하였습니다.
+					message.actionName = "요청";
+				}
+				me.set("saveMessage", message);
+				me.onSave(data, e.target);
+			},
+			
+			onPlanSave : function(e, data){
+				var me = this;
+				me.set("data.info.improv_plan_subm_dt", UT.formatDate(new Date(), "yyyyMMdd"));
+				var message = {};
+				if(data.saveType === "approve") {
+					message.confirm = "STD.N1101"; // 확인하시겠습니까?
+					// message.result = "STD.N1105"; // 확인되었습니다.
+					message.actionName = "확인";
+				} else {	// saveType === "reject"
+					message.confirm = "STD.VS1301"; // 협력사가 제출한 개선 계획을 보완 요청하시겠습니까?
+					// message.result = "STD.N1500"; // 요청을 완료하였습니다.
+					message.actionName = "보완 요청";
+				}
+				me.set("saveMessage", message);
+				me.onSave(data, e.target);
+			},
+			
+			onCompleteSave : function(e, data){
+				var me = this;
+				me.set("improveInfo.improv_cmpld_subm_dt", UT.formatDate(new Date(), "yyyyMMdd"));
+				var message = {};
+				if(data.saveType === "approve") {
+					message.confirm = "STD.N1101"; // 확인하시겠습니까?
+					// message.result = "STD.N1105"; // 확인되었습니다.
+					message.actionName = "확인";
+				} else {
+					message.confirm = "STD.VS1301"; // 협력사가 제출한 개선 계획을 보완 요청하시겠습니까?
+					// message.result = "STD.N1500"; // 요청을 완료하였습니다.
+					message.actionName = "보완 요청";
+				}
+				me.set("saveMessage", message);
+				me.onSave(data, e.target);
+			},
+			
+			// 저장버튼 클릭
+			onSave: function(data, tab) {
+				var me = this;
+				
+				if(!me.validate()){
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+				
+				if(UT.isEmpty(me.get("improveInfo.vd_cd"))) {
+					UT.alert(me.translate("STD.E1001", null, me.translate("협력사 코드")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				UT.confirm(me.saveMessage.confirm, function() { //저장 하시겠습니까?
+					if(tab.$.uploadPanel.readonly) {
+						//tab.$.editorPanel.syncValue();
+						var improveInfo = data.info;
+						improveInfo.vd_cd = me.improveInfo.vd_cd;
+						improveInfo.improv_typ_ccd = me.improveInfo.improv_typ_ccd;
+						
+						me.$.saveImproveInfo.body = {
+							improveInfo : improveInfo,
+							saveType : data.saveType,
+							reqType : data.reqType,
+						};
+						UT.request(me.$.saveImproveInfo);
+					} else {
+						tab.$.uploadPanel.upload().then(function(){
+							//tab.$.editorPanel.syncValue();
+							var improveInfo = data.info;
+							improveInfo.vd_cd = me.improveInfo.vd_cd;
+							improveInfo.improv_typ_ccd = me.improveInfo.improv_typ_ccd;
+							
+							me.$.saveImproveInfo.body = {
+								improveInfo : improveInfo,
+								saveType : data.saveType,
+								reqType : data.reqType,
+							};
+							UT.request(me.$.saveImproveInfo);
+						});
+						
+					}
+				});
+			},
+			// 게시물 저장 완료
+			completeSaveImproveInfo: function(e, res){
+				var me = this;
+				var response = res.response;
+				
+				if(response.resultStatus === 'S') {
+					UT.completeAlert(me.saveMessage.actionName, function() {
+						me.set("reloadable", true); // 데이터가 변경되었으므로 es-vendor-improve-list 새로고침 설정
+						me.set("saveMessage", null);
+						me.onClose();
+					});
+				}
+			},
+			
+			// 게시물 삭제
+			onDeleteImprove : function(){
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() { // "삭제 하시겠습니까?"
+					me.$.deleteImproveInfo.body = {
+						improveInfo : me.improveInfo
+					};
+					UT.request(me.$.deleteImproveInfo);
+				});
+				
+			},
+			
+			// 게시물 삭제 완료
+			completeDeleteImproveInfo: function() {
+				var me = this;
+				UT.completeAlert("삭제", function() {
+					me.set("reloadable", true); // 데이터가 변경되었으므로 es-vendor-improve-list 새로고침 설정
+					me.onClose();
+				});
+			},
+			
+			// 목록
+			onClose: function(){
+				var me = this;
+				var reloadable = me.get("reloadable");
+				me.fire('show-improvelist', { reloadable: reloadable });
+				me.reset();
+			}
+		});
+	</script>
+
+</dom-module>

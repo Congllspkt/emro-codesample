@@ -1,0 +1,228 @@
+<sc-link rel="import" href="./ep-sp-guar-msgreturn.html"></sc-link>
+
+<dom-module id="ep-sp-sgic-guardetail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <!-- 보증 상세화면 조회 -->
+        <sc-ajax
+                id="getGuarDetail"
+                url="sgic/getGuarDetail.do"
+                on-response="completeGetGuarDetail">
+        </sc-ajax>
+        
+		<!-- 보증 승인 -->
+        <sc-ajax
+                id="approveGuar"
+                url="sgic/approveGuar.do"
+                last-response="{{guarInfo}}"
+                on-response="completeGuar">
+        </sc-ajax>
+       
+        <!-- 보증 반려 -->
+        <sc-ajax
+                id="rejectGuar"
+                url="sgic/rejectGuar.do"
+                on-response="completeGuar">
+        </sc-ajax>
+
+        <!-- 보증 파기 -->
+        <sc-ajax
+                id="destroyGuar"
+                url="sgic/destroyGuar.do"
+                on-response="completeGuar">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <!-- 툴바 -->
+        <cc-page-title-bar>
+            <!--<sc-button text="인쇄" on-click="onPrint"></sc-button>-->
+            <sc-button text="승인" on-click="onApprove" hidden="[[!formula('supplierCState')]]"></sc-button>
+            <sc-button text="반려" on-click="onReject" hidden="[[!formula('supplierCState')]]"></sc-button>
+            <sc-button text="파기" on-click="onDestroy" hidden="[[!formula('supplierFState')]]"></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <sc-container title="전자보증서" class="vbox flex">
+            <iframe width="820" height="700" id="executinoIf" name="executinoIf"></iframe>
+        </sc-container>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-sp-sgic-guardetail',
+
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "서울보증보험"
+				},
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                // 보증정보
+                guarInfo: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+
+            formulas: {
+            	supplierFState: function () {
+                    var me = this;
+                    var status = me.get("guarInfo").gur_sts_ccd;
+                    var gur_typ_ccd = me.get("guarInfo").gur_typ_ccd;
+                    return status === 'APVD' &&  gur_typ_ccd == "PAYINF";
+                },
+                supplierCState: function () {
+                    var me = this;
+                    var status = me.get("guarInfo").gur_sts_ccd;
+                    var gur_typ_ccd = me.get("guarInfo").gur_typ_ccd;
+                    return status === 'APVL_WTG' &&  gur_typ_ccd == "PAYINF";
+                }
+            },
+
+            load: function (data) {
+                var me = this;
+                me.set("searchParam", data);
+                me.loadDetail();
+            },
+
+            // form정보, maker정보 초기 설정
+            loadDetail: function () {
+                var me = this;
+				var iframe = me.$.executinoIf;
+				var gur_uuid = me.get("searchParam.gur_uuid");
+				iframe.src = "sgic/sgicBond.do?gur_uuid=" + gur_uuid +"&print=no";
+            },
+
+            // 보증 상세조회 결과
+            completeGetGuarDetail: function (e, res) {
+                var me = this;
+                var result = res.response;
+
+                if(result != null){
+                	if(UT.isEmpty(result.xml_path) || UT.isEmpty(result.guar_type)){
+                		UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                		return;
+                	}
+                	
+                    me.set("guarInfo", result);
+    				me.set("guarInfo.gur_insco_ccd","SGI"); //보증보험사 서울보증보험
+                    me.applyFormula();
+    				
+                    //보증 jsp 호출
+                    var iframe = me.$.executinoIf;
+                    var gur_uuid = me.get("guarInfo.gur_uuid");
+					iframe.src = "sp/edoc/guarantee/SpGuaranteeController/sgicBond.do?xml_path=" + xml_path + "&guar_type=" + guar_type+ "&print=no" + "&gur_uuid=" + gur_uuid ;
+                
+                }else{
+                	UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                	return;
+                }
+            },
+
+            onPrint: function (){
+            	var me = this;
+
+                //보증 jsp 호출
+                var iframe = me.$.executinoIf;
+                var xml_path = me.get("guarInfo.xml_path");
+                var guar_type = me.get("guarInfo.gur_typ_ccd");
+
+                var url = "bp/edoc/guarantee/GuaranteeController/sgicBond.do?xml_path=" + xml_path + "&guar_type=" + guar_type + "&print=yes";
+                UT.popupJsp(url,me,"820","80%");
+            },
+            
+            onApprove: function () {
+                var me = this;
+                var guarInfo = me.get("guarInfo");
+                
+                me.$.approveGuar.body = guarInfo;
+                UT.request(me.$.approveGuar);
+            },
+
+            onReject: function () {
+                var me = this;
+
+                me.set("guarInfo.prog_sts", "RCPT_RET");
+                me.eleMessagePopup("reject");
+            },
+
+            onDestroy: function () {
+                var me = this;
+
+                me.set("guarInfo.prog_sts", "DESTR");
+                me.eleMessagePopup("destroy");
+            },
+            
+            completeGuar: function (e, res) {
+                var me = this;
+            	var result = res.response;
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); //요청이 완료되었습니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+				me.fire("completeGuar");
+            },
+            
+            eleMessagePopup: function (param) {
+                var me = this;
+                var guarInfo = me.get("guarInfo");
+				var titleText = "";
+				
+				if(param == "reject"){
+					titleText = "반려 사유";
+				}else if(param == "destroy"){
+					titleText = "파기 사유";
+				}
+				
+           		var guarMsgReturn = UT.popup("ep-sp-guar-msgreturn", me, "500", "150", {
+	                "reject": function (popup, e) {
+	                    me.rejectGuar(e.detail, guarInfo);
+	                    popup.close();
+	                },
+	                "destroy": function (popup, e) {
+	                    me.destroyGuar(e.detail, guarInfo);
+	                    popup.close();
+	                }
+	            },{titleText : titleText});
+                guarMsgReturn.show();
+                guarMsgReturn.getWindowContent().load(param);
+            },
+            
+            rejectGuar: function (resp_mesg_text, guarInfo) {
+                var me = this;
+
+                me.set("guarInfo.resp_mesg_text", resp_mesg_text);
+                me.$.rejectGuar.body = guarInfo;
+                UT.request(me.$.rejectGuar);
+            },
+
+            destroyGuar: function (resp_mesg_text, guarInfo) {
+                var me = this;
+
+                me.set("guarInfo.resp_mesg_text", resp_mesg_text);
+                me.$.destroyGuar.body = guarInfo;
+                UT.request(me.$.destroyGuar);
+            },
+            
+            // 창 닫기
+            onClose: function () {
+                var me = this;
+                me.fire("close");
+            }
+        });
+    </script>
+</dom-module>

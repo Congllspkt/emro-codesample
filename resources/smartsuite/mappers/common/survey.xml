@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="survey">
+	<select id="findListSurvey" resultType="map">
+		SELECT SURV_UUID
+		     , SURV_TYP_CCD
+		     , FN_JSON_VALUE(SURV_NM, #{g.locale}) AS DISP_SURV_NM
+		     , STAT_METH_CCD
+		     , STAT_CRTRA_SC
+		     , LYT_CCD
+		     , SURV_ST_DTTM
+		     , SURV_ED_DTTM
+		     , SURV_PIC_ID
+		     , SURV_PRGS_STS_CCD
+		     , (
+		        SELECT SUM(CASE WHEN SURV_SUBJ.SURV_SUBJ_SUBM_DTTM IS NOT NULL THEN 1 ELSE 0 END)
+		          FROM SURV_SUBJ
+		         WHERE SURV_SUBJ.TEN_ID = SURV.TEN_ID
+		           AND SURV_SUBJ.SURV_UUID = SURV.SURV_UUID
+		       ) AS SUBM_CNT
+		     , (
+		        SELECT COUNT(SURV_SUBJ.SURV_SUBJ_UUID)
+		          FROM SURV_SUBJ
+		         WHERE SURV_SUBJ.TEN_ID = SURV.TEN_ID
+		           AND SURV_SUBJ.SURV_UUID = SURV.SURV_UUID
+		       ) AS TOT_CNT
+		  FROM SURV
+		 WHERE TEN_ID = #{g.tenant}
+		   <if test="p.surv_typ_ccd != null">
+		       AND SURV_TYP_CCD = #{p.surv_typ_ccd}
+		   </if>
+		   <if test="p.surv_nm != null and p.surv_nm != ''">
+		       <bind name="namePattern" value="'%' + p.surv_nm + '%'"/>
+		       AND UPPER(SURV_NM) LIKE #{namePattern}
+		   </if>
+		   <if test="p.surv_prgs_sts_ccd != null">
+		       AND SURV_PRGS_STS_CCD = #{p.surv_prgs_sts_ccd}
+		   </if>
+	</select>
+	<delete id="deleteSurveyAnsBySurveyUuid">
+		DELETE
+		  FROM SURV_ANS
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</delete>
+	<delete id="deleteSurveyQnBySurveyUuid">
+		DELETE
+		  FROM SURV_QN
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</delete>
+	<delete id="deleteSurveySectBySurveyUuid">
+		DELETE
+		  FROM SURV_SECT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</delete>
+	<delete id="deleteSurveySubjectBySurveyUuid">
+		DELETE
+		  FROM SURV_SUBJ
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</delete>
+	<delete id="deleteSurvey">
+		DELETE
+		  FROM SURV
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</delete>
+	<update id="directCloseSurveyBySurveyUuid">
+		UPDATE SURV
+		   SET SURV_PRGS_STS_CCD = 'ED'
+		     , SURV_ED_DTTM = #{g.now}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</update>
+	<resultMap id="resultMap-findSurveyByUuid" type="map">
+        <result column="FRONT_COVER_CONT" javaType="string" property="front_cover_cont" typeHandler="stringClob"/>
+        <result column="BACK_COVER_CONT" javaType="string" property="back_cover_cont" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="findSurveyByUuid" resultMap="resultMap-findSurveyByUuid">
+		SELECT SURV_UUID
+		     , SURV_TYP_CCD
+		     , SURV_NM
+		     , FN_JSON_VALUE(SURV_NM, #{g.locale}) AS DISP_SURV_NM
+		     , SURV_ST_DTTM
+		     , SURV_ED_DTTM
+		     , STAT_METH_CCD
+		     , STAT_CRTRA_SC
+		     , LYT_CCD
+		     , SECT_ORD_RAND_YN
+		     , QN_ORD_RAND_YN
+		     , ANS_ORD_RAND_YN
+		     , QN_NO_DSPY_YN
+		     , FRONT_COVER_YN
+		     , FRONT_COVER_CONT
+		     , BACK_COVER_YN
+		     , BACK_COVER_CONT
+		     , SURV_PIC_ID
+		     , SURV_PRGS_STS_CCD
+		     , RMK
+		  FROM SURV
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</select>
+	<select id="findListSurveySubjectsBySurveyUuid" resultType="map">
+		SELECT SURV_SUBJ.SURV_UUID
+		     , SURV_SUBJ.SURV_SUBJ_INFO_ID
+		     , CASE WHEN #{g.locale} = 'en_US' THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS DISP_SURV_SUBJ_INFO_NM
+		     , SURV_SUBJ.SURV_SUBJ_TYP_CCD
+		     , SURV_SUBJ.SURV_SUBJ_SUBM_DTTM
+		     , SURV_SUBJ.SURV_SUBJ_SC
+		  FROM SURV_SUBJ
+		 INNER JOIN USR
+		    ON USR.TEN_ID = SURV_SUBJ.TEN_ID
+		   AND USR.USR_ID = SURV_SUBJ.SURV_SUBJ_INFO_ID
+		 WHERE SURV_SUBJ.TEN_ID = #{g.tenant}
+		   AND SURV_SUBJ.SURV_UUID = #{p.surv_uuid}
+	</select>
+	<select id="findListSurveySectBySurveyUuid" resultType="map">
+		SELECT SURV_UUID
+		     , SURV_SECT_UUID
+		     , SURV_SECT_CD
+		     , SURV_SECT_NM
+		     , FN_JSON_VALUE(SURV_SECT_NM, #{g.locale}) AS DISP_SURV_SECT_NM
+		     , SURV_SECT_EXPLN
+		     , FN_JSON_VALUE(SURV_SECT_EXPLN, #{g.locale}) AS DISP_SURV_SECT_EXPLN
+		     , SURV_SECT_SORT
+		     , SURV_SECT_RAND_SORT
+		  FROM SURV_SECT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+		 <choose>
+		     <when test="p.sect_ord_rand_yn != null and &quot;Y&quot; eq p.sect_ord_rand_yn.toString()">
+		         ORDER BY SURV_SECT_RAND_SORT
+		     </when>
+		     <otherwise>
+		         ORDER BY SURV_SECT_SORT
+		     </otherwise>
+		 </choose>
+	</select>
+	<select id="findListSurveyQnBySurveyUuid" resultType="map">
+		SELECT SURV_UUID
+		     , SURV_SECT_UUID
+		     , SURV_QN_UUID
+		     , SURV_QN_CD
+		     , SURV_QN_NM
+		     , FN_JSON_VALUE(SURV_QN_NM, #{g.locale}) AS DISP_SURV_QN_NM
+		     , SURV_QN_EXPLN
+		     , FN_JSON_VALUE(SURV_QN_EXPLN, #{g.locale}) AS DISP_SURV_QN_EXPLN
+		     , SURV_QN_SORT
+		     , SURV_QN_RAND_SORT
+		     , CMNT_ADD_YN
+		     , ANS_MAND_YN
+		     , ANS_TYP_CCD
+		     , ATH_POSS_YN
+		     , ATH_MAND_YN
+		     , OTRS_ANS_YN
+		     , LNR_MIN_VAL_CCD
+		     , LNR_MAX_VAL_CCD
+		     , LNR_MIN_NM
+		     , FN_JSON_VALUE(LNR_MIN_NM, #{g.locale}) AS DISP_LNR_MIN_NM
+		     , LNR_MAX_NM
+		     , FN_JSON_VALUE(LNR_MAX_NM, #{g.locale}) AS DISP_LNR_MAX_NM
+		     , SHORTANS_INP_FORM_CCD
+		     , REGEXP
+		     , INP_LMT
+		     , MAX_SEL_CNT
+		     , ST_DT_LMT
+		     , ED_DT_LMT
+		     , GRID_RESP_YN
+		     , PAR_SURV_QN_UUID
+		     , PAR_SURV_ANS_OPT_UUID
+		     , (
+		        SELECT OPT_NM
+		          FROM SURV_ANS
+		         WHERE TEN_ID = SURV_QN.TEN_ID
+		           AND SURV_ANS_OPT_UUID = SURV_QN.PAR_SURV_ANS_OPT_UUID
+		       ) AS PAR_SURV_ANS_OPT_NM
+		  FROM SURV_QN
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+		 <choose>
+		     <when test="p.qn_ord_rand_yn != null and &quot;Y&quot; eq p.qn_ord_rand_yn.toString()">
+		         ORDER BY SURV_QN_RAND_SORT
+		     </when>
+		     <otherwise>
+		         ORDER BY SURV_QN_SORT
+		     </otherwise>
+		 </choose>
+	</select>
+	<select id="findListSurveyAnsBySurveyUuid" resultType="map">
+		SELECT SURV_UUID
+		     , SURV_SECT_UUID
+		     , SURV_QN_UUID
+		     , SURV_ANS_OPT_UUID
+		     , OPT_NM
+		     , FN_JSON_VALUE(OPT_NM, #{g.locale}) AS DISP_OPT_NM
+		     , OPT_SC
+		     , OPT_SORT
+		     , OPT_RAND_SORT
+		  FROM SURV_ANS
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+		 <choose>
+		     <when test="p.ans_ord_rand_yn != null and &quot;Y&quot; eq p.ans_ord_rand_yn.toString()">
+		         ORDER BY OPT_RAND_SORT
+		     </when>
+		     <otherwise>
+		         ORDER BY OPT_SORT
+		     </otherwise>
+		 </choose>
+	</select>
+	<insert id="insertSurvey">
+		INSERT INTO SURV (
+			TEN_ID
+			, SURV_UUID
+			, SURV_TYP_CCD
+			, SURV_NM
+			, SURV_ST_DTTM
+			, SURV_ED_DTTM
+			, STAT_METH_CCD
+			, STAT_CRTRA_SC
+			, LYT_CCD
+			, SECT_ORD_RAND_YN
+			, QN_ORD_RAND_YN
+			, ANS_ORD_RAND_YN
+			, QN_NO_DSPY_YN
+			, FRONT_COVER_YN
+			, FRONT_COVER_CONT
+			, BACK_COVER_YN
+			, BACK_COVER_CONT
+			, SURV_PRGS_STS_CCD
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.surv_uuid}
+			, #{p.surv_typ_ccd}
+			, #{p.surv_nm}
+			, #{p.surv_st_dttm}
+			, #{p.surv_ed_dttm}
+			, #{p.stat_meth_ccd}
+			, CAST(#{p.stat_crtra_sc} AS FLOAT  )
+			, #{p.lyt_ccd}
+			, #{p.sect_ord_rand_yn}
+			, #{p.qn_ord_rand_yn}
+			, #{p.ans_ord_rand_yn}
+			, #{p.qn_no_dspy_yn}
+			, #{p.front_cover_yn}
+			, #{p.front_cover_cont}
+			, #{p.back_cover_yn}
+			, #{p.back_cover_cont}
+			, #{p.surv_prgs_sts_ccd}
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateSurvey">
+		UPDATE SURV
+		   SET SURV_TYP_CCD = #{p.surv_typ_ccd}
+		     , SURV_NM = #{p.surv_nm}
+		     , SURV_ST_DTTM = #{p.surv_st_dttm}
+		     , SURV_ED_DTTM = #{p.surv_ed_dttm}
+		     , STAT_METH_CCD = #{p.stat_meth_ccd}
+		     , STAT_CRTRA_SC = CAST(#{p.stat_crtra_sc} AS FLOAT  )
+             , LYT_CCD = #{p.lyt_ccd}
+		     , SECT_ORD_RAND_YN = #{p.sect_ord_rand_yn}
+		     , QN_ORD_RAND_YN = #{p.qn_ord_rand_yn}
+		     , ANS_ORD_RAND_YN = #{p.ans_ord_rand_yn}
+		     , QN_NO_DSPY_YN = #{p.qn_no_dspy_yn}
+		     , FRONT_COVER_YN = #{p.front_cover_yn}
+		     , FRONT_COVER_CONT = #{p.front_cover_cont}
+		     , BACK_COVER_YN = #{p.back_cover_yn}
+		     , BACK_COVER_CONT = #{p.back_cover_cont}
+		     , SURV_PRGS_STS_CCD = #{p.surv_prgs_sts_ccd}
+		     , RMK = #{p.rmk}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</update>
+	<insert id="insertSurveySect">
+		INSERT INTO SURV_SECT (
+			TEN_ID
+			, SURV_UUID
+			, SURV_SECT_UUID
+			, SURV_SECT_CD
+			, SURV_SECT_NM
+			, SURV_SECT_EXPLN
+			, SURV_SECT_SORT
+			, SURV_SECT_RAND_SORT
+		) VALUES (
+			#{g.tenant}
+			, #{p.surv_uuid}
+			, #{p.surv_sect_uuid}
+			, #{p.surv_sect_cd}
+			, #{p.surv_sect_nm}
+			, #{p.surv_sect_expln}
+			, CAST(#{p.surv_sect_sort} AS INT)
+			, CAST(#{p.surv_sect_rand_sort} AS INT)
+		)
+	</insert>
+	<insert id="insertSurveyQn">
+		INSERT INTO SURV_QN (
+			TEN_ID
+			, SURV_UUID
+			, SURV_SECT_UUID
+			, SURV_QN_UUID
+			, SURV_QN_CD
+			, SURV_QN_NM
+			, SURV_QN_EXPLN
+			, CMNT_ADD_YN
+			, ANS_MAND_YN
+			, ANS_TYP_CCD
+			, ATH_POSS_YN
+			, ATH_MAND_YN
+			, OTRS_ANS_YN
+			, LNR_MIN_VAL_CCD
+			, LNR_MAX_VAL_CCD
+			, LNR_MIN_NM
+			, LNR_MAX_NM
+			, SHORTANS_INP_FORM_CCD
+			, REGEXP
+			, INP_LMT
+			, MAX_SEL_CNT
+			, ST_DT_LMT
+			, ED_DT_LMT
+			, GRID_RESP_YN
+			, PAR_SURV_QN_UUID
+			, PAR_SURV_ANS_OPT_UUID
+			, SURV_QN_SORT
+			, SURV_QN_RAND_SORT
+		) VALUES (
+			#{g.tenant}
+			, #{p.surv_uuid}
+			, #{p.surv_sect_uuid}
+			, #{p.surv_qn_uuid}
+			, #{p.surv_qn_cd}
+			, #{p.surv_qn_nm}
+			, #{p.surv_qn_expln}
+			, #{p.cmnt_add_yn}
+			, #{p.ans_mand_yn}
+			, #{p.ans_typ_ccd}
+			, #{p.ath_poss_yn}
+			, #{p.ath_mand_yn}
+			, #{p.otrs_ans_yn}
+			, #{p.lnr_min_val_ccd}
+			, #{p.lnr_max_val_ccd}
+			, #{p.lnr_min_nm}
+			, #{p.lnr_max_nm}
+			, #{p.shortans_inp_form_ccd}
+			, #{p.regexp}
+			, CAST(#{p.inp_lmt} AS FLOAT  )
+			, CAST(#{p.max_sel_cnt} AS FLOAT  )
+			, #{p.st_dt_lmt}
+			, #{p.ed_dt_lmt}
+			, #{p.grid_resp_yn}
+			, #{p.par_surv_qn_uuid}
+			, #{p.par_surv_ans_opt_uuid}
+			, CAST(#{p.surv_qn_sort} AS INT)
+			, CAST(#{p.surv_qn_rand_sort} AS INT)
+		)
+	</insert>
+	<insert id="insertSurveyAn">
+		INSERT INTO SURV_ANS (
+			TEN_ID
+			, SURV_UUID
+			, SURV_SECT_UUID
+			, SURV_QN_UUID
+			, SURV_ANS_OPT_UUID
+			, OPT_NM
+			, OPT_SC
+			, OPT_SORT
+			, OPT_RAND_SORT
+		) VALUES (
+			#{g.tenant}
+			, #{p.surv_uuid}
+			, #{p.surv_sect_uuid}
+			, #{p.surv_qn_uuid}
+			, #{p.surv_ans_opt_uuid}
+			, #{p.opt_nm}
+			, CAST(#{p.opt_sc} AS FLOAT  )
+			, CAST(#{p.opt_sort} AS INT)
+			, CAST(#{p.opt_rand_sort} AS INT)
+		)
+	</insert>
+	<delete id="deleteSurveySubject">
+		DELETE
+		  FROM SURV_SUBJ
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+		   AND SURV_SUBJ_UUID = #{p.surv_subj_uuid}
+	</delete>
+	<insert id="insertSurveySubject">
+		INSERT INTO SURV_SUBJ (
+			TEN_ID
+			, SURV_UUID
+			, SURV_SUBJ_UUID
+			, SURV_SUBJ_TYP_CCD
+			, SURV_SUBJ_INFO_ID
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			  #{g.tenant}
+			, #{p.surv_uuid}
+			, #{p.surv_subj_uuid}
+			, #{p.surv_subj_typ_ccd}
+			, #{p.surv_subj_info_id}
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updatePublishSurvey">
+		UPDATE SURV
+		   SET SURV_ST_DTTM = #{g.now}
+		     , SURV_PRGS_STS_CCD = 'PRGSG'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SURV_UUID = #{p.surv_uuid}
+	</update>
+</mapper>

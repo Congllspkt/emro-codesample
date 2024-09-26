@@ -1,0 +1,421 @@
+<!-- 
+/**
+ * @description : 협상 결과 상태 등록 및 재협상 요청
+ * @Since 2022. 9. 02.
+ * @변경이력 : [2022. 9. 02.]
+ */
+-->
+<dom-module id="es-nego-result">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 일반 정보 -->
+		<sc-ajax id="findNegoDetailInfo"
+				 url="findNegoDetailInfo.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindNegoDetailInfo">
+		</sc-ajax>
+
+		<sc-ajax id="negoSuccess"
+				 url="negoSuccess.do"
+				 on-response="completeResultNego"
+				 on-exception-response="exceptionHandler">
+		</sc-ajax>
+
+		<sc-ajax id="negoFailure"
+				 url="negoFailure.do"
+				 body="{{negoData}}"
+				 on-response="completeResultNego"
+				 on-exception-response="exceptionHandler">
+		</sc-ajax>
+
+		<sc-ajax id="requestReNego"
+				 body="{{negoData}}"
+				 url="requestReNego.do"
+				 on-exception-response="exceptionHandler">
+		</sc-ajax>
+
+		<sc-code-group>
+			<!-- 구매 유형 -->
+			<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+			<!-- RFX 목적 -->
+			<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>
+			<!-- RFX 유형 -->
+			<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+			<!-- 협상 유형  -->
+			<sc-code code="P209" value="{{codes.negoTypCcd}}"></sc-code>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+		</sc-code-group>
+
+		<cc-page-title-bar title-text="[[formula('getTitle')]]">
+			<sc-button text="타결" on-click="onSucceed" hidden="[[!formula('canControlButton')]]"></sc-button>
+			<sc-button text="결렬" on-click="onFail" hidden="[[!formula('canControlButton')]]"></sc-button>
+			<sc-button text="재협상 통보" on-click="onReRequestPopup" hidden="[[!formula('canReNego')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+
+		<div class="flex">
+			<cc-form-panel title-text="일반 정보" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field oper-unit-cd="PO" selected-index="0" value="{{rfxData.oorg_cd}}" readonly="true"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매 유형"></sc-label>
+					<sc-combobox-field value="{{rfxData.purc_typ_ccd}}" readonly="true" items="{{codes.p2pPurcTypCcd}}" display-field="label" value-field="data"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 번호/진행차수"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{rfxData.rfx_no}}" class="w-150" readonly="true"></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field value="{{rfxData.rfx_rnd}}" class="w-50" readonly="true"></sc-text-field>
+						<span style="margin-left:5px">[[translate('차')]]</span>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 제목"></sc-label>
+					<sc-text-field value="{{rfxData.rfx_tit}}" max-length="200" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 유형"></sc-label>
+					<sc-combobox-field value="{{rfxData.rfx_typ_ccd}}" items="{{codes.rfxTypCcd}}" display-field="label" value-field="data" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 목적"></sc-label>
+					<sc-combobox-field value="{{rfxData.rfx_purp_ccd}}" items="{{codes.rfxPurpCcd}}" display-field="label" value-field="data" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="협상 업체" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="협력사 정보"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{negoData.vd_cd}}" class="w-110" readonly="true"></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field value="{{negoData.vd_nm}}" readonly="true"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<sc-text-field value="{{negoData.cur_ccd}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+				
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협상 유형"></sc-label>
+					<sc-radio-group-field items="{{codes.negoTypCcd}}" value="{{negoData.nego_typ_ccd}}" value-field="data" label-field="label" readonly="true"></sc-radio-group-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 투찰 금액"></sc-label>
+					<sc-text-field class="align-right" value="{{negoData.rfx_bid_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협상 금액"></sc-label>
+					<sc-text-field class="align-right" value="{{negoData.nego_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="협상 요청사항"></sc-label>
+					<sc-textarea-field value="{{negoData.nego_cont}}" class="h-80" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel form-cls="label-column" title-text="첨부파일" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="투찰 첨부"></sc-label>
+					<sc-upload class="h-150" value="{{negoData.athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="투찰 첨부(변경)"></sc-label>
+					<sc-upload id="upload" class="h-150" value="{{negoData.nego_athg_uuid}}" editable="[[formula('canEditResult')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="gridPanel"
+					 class="h-300"
+					 data-provider="{{resultList}}"
+					 use-state="[[formula('canEditResult')]]"
+					 use-selection="false"
+					 aggregate="true"
+					 on-item-edit-end="onItemEditEnd"
+					 editable="[[formula('canEditResult')]]"
+					 validation-group="price">
+				<cc-grid-toolbar title-text="품목 정보"></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="rfx_lno"   header-text="RFX 항번"  width="90" data-type="number"></sc-data-column>
+					<sc-data-column data-field="item_cd"      header-text="품목 코드" width="100"></sc-data-column>
+					<sc-data-column data-field="item_nm"      header-text="품목 명"   width="250" text-align="left"></sc-data-column>
+					<sc-data-column data-field="item_spec"         header-text="품목 규격"     width="250" text-align="left"></sc-data-column>
+					<sc-combobox-column data-field="uom_ccd"  header-text="UOM"     width="60"
+					                    display-field="label" value-field="data" items="{{codes.uomCcd}}">
+					</sc-combobox-column>
+					<sc-data-column data-field="rfx_qty"     header-text="RFX 수량"       width="80" text-align="right" format-type="qty"></sc-data-column>
+					<sc-date-column data-field="req_dlvy_dt"      header-text="요청 납품 일자"   width="100"></sc-date-column>
+					<sc-data-column data-field="dlvy_plc"     header-text="납품 장소"   width="150" text-align="left"></sc-data-column>
+					<sc-data-column data-field="rfx_item_subm_uprc"   header-text="RFX 품목 제출 단가"   width="130" text-align="right" format-type="price"></sc-data-column>
+					<sc-data-column data-field="rfx_item_subm_amt"     header-text="RFX 품목 제출 금액"   width="140" text-align="right" format-type="amt"></sc-data-column>
+					<sc-data-column data-field="nego_item_uprc"   header-text="협상 품목 단가"   width="100" text-align="right" format-type="price" editable="[[formula('canEditResult')]]" required="true" data-type="number" editor-regex-function="onRegexFn"></sc-data-column>
+					<sc-data-column data-field="nego_item_amt"     header-text="협상 품목 금액"   width="140" text-align="right" format-type="amt" aggregate-function="onAmtAggregateFn" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="dlvy_ldtm"       header-text="납품 리드타임" width="90" text-align="right"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="rfx_uuid"></sc-grid-field>
+					<sc-grid-field data-field="nego_uuid"></sc-grid-field>
+					<sc-grid-field data-field="nego_item_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+
+		<sc-dialog id="dialog" title-text="재협상 통보" style="width:600px; height:330px" modal="true">
+			<cc-page-title-bar>
+				<sc-button text="재협상 통보" on-click="onReRequest"></sc-button>
+			</cc-page-title-bar>
+			<table class="tb-form" validation-group="sendValidate">
+				<colgroup>
+					<col style="width:120px">
+					<col>
+				</colgroup>
+				<tr>
+					<th>
+						<sc-label text="사유"></sc-label>
+					</th>
+					<td>
+						<sc-textarea-field id="negoCause" value="{{negoData.renego_rsn}}" class="h-200" max-length="500" required="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-nego-result',
+
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							rfxTypCcd: [],
+							rfxPurpCcd: [],
+							p2pPurcTypCcd: [],
+							negoTypCcd: [],
+							uomCcd: []
+						};
+					},
+					reset: false
+				},
+
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				negoData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+
+			formulas: {
+				getTitle: function() {
+					var titleText = "협상 결과 등록";
+
+					if(!this.formula('canEditResult')) {
+						titleText = '협상 결과 상태';
+					}
+					return titleText;
+				},
+
+				canEditResult: function() {
+					return ('NEGO_CMPLD' !== this.get("negoData.nego_sts_ccd")) && ('OFFLN' === this.get("negoData.nego_typ_ccd"));
+				},
+
+				canReNego: function() {
+					return ('NEGO_PRGSG' === this.get("rfxData.rfx_sts_ccd")) && ('NEGO_CMPLD' === this.get("negoData.nego_sts_ccd")) && ('N' === this.get("negoData.renego_yn"));
+				},
+				
+				canControlButton: function() {
+					return this.formula('canEditResult') || 'NEGO_CLSG' === this.get("negoData.nego_sts_ccd");
+				}
+			},
+
+			initialized: function() {
+			},
+			load: function(param) {
+				this.set("searchParam", param);
+				this.findNegoDetailInfo();
+			},
+
+			findNegoDetailInfo: function() {
+				UT.request(this.$.findNegoDetailInfo);
+			},
+
+			completeFindNegoDetailInfo: function(e, res) {
+				var result = res.response;
+				var negoData = UT.convertDtToDayHourMin(result.negoDataList[0]);
+
+				this.set("rfxData", result.rfxData);
+				this.set("negoData", negoData);
+				this.set("resultList", result.resultList);
+
+				this.applyFormula();
+			},
+			onSucceed: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				if(!me.validate("price")) {
+					var message = "STD.E9000"; //필수항목 입력여부를 확인해야 합니다.
+					
+					if('ONLN' === this.get("negoData.nego_typ_ccd")) {
+						//온라인인 경우 단가가 작성되어 있지 않으면 타결할 수 없음.
+						message = "STD.NG1030"; //업체가 협상단가를 제출하지 않아 타결할 수 없습니다.
+					}
+					
+					UT.alert(message);
+					return;
+				}
+				
+				UT.confirm("STD.NG1017", function() { //협상을 타결하시겠습니까?
+					me.$.upload.upload().then(function() {
+						me.$.negoSuccess.body = {
+							negoData: me.get("negoData"),
+							updateList: provider.getUpdateItems()
+						};
+						UT.request(me.$.negoSuccess);
+					});
+				});
+			},
+
+			onFail: function() {
+				var me = this;
+				UT.confirm("STD.NG1018", function() { //협상을 결렬하시겠습니까?
+					UT.request(me.$.negoFailure);
+				});
+			},
+
+			onReRequestPopup: function() {
+				var me = this;
+
+				this.$.dialog.show();
+			},
+
+			onReRequest: function() {
+				var me = this;
+
+				if(!me.$.negoCause.validate()) {
+					UT.alert("STD.E9000");
+					return;
+				}
+				UT.confirm("STD.NG1019", function() { //재협상 요청하시겠습니까?
+					UT.request(me.$.requestReNego, function(e, res) {
+						var result = res.response.resultData;
+						if(UT.isNotEmpty(result.error)) {
+							return;
+						}
+						me.$.dialog.close();
+						UT.alert("STD.NG1023"); //재협상 요청했습니다.
+						me.raiseSaveEvent();
+						me.fire("re-nego", result);
+					});
+				});
+			},
+
+			onClose: function() {
+				this.reset();
+				this.fire('close');
+			},
+
+			completeResultNego: function(e, res) {
+				var result = res.response;
+				if("negoSuccess" === e.target.id) {
+					UT.alert("STD.NG1028");   //협상이 타결되었습니다.
+					this.onClose();
+				} else {
+					UT.alert("STD.NG1029");   //협상이 결렬되었습니다.
+					this.findNegoDetailInfo();
+				}
+				this.raiseSaveEvent();
+			},
+
+			raiseSaveEvent: function() {
+				this.fire("save");
+			},
+
+			onItemEditEnd: function(event) {
+				var e        = event.detail,
+					data     = e.data,
+					item     = e.item,
+					newValue = e.newValue,
+					oldValue = e.oldValue,
+					provider = e.provider;
+
+				if(item.dataField === "nego_item_uprc") {
+					var curCcd = this.get("negoData.cur_ccd");
+					var price = new BigNumber(newValue || 0);
+					var qty = new BigNumber(data["rfx_qty"] || 0);
+
+					// 금액 계산 소수점처리
+					var amt = CCPrecManager.format("amt", price.mul(qty).toFixed(), curCcd);
+
+					provider.setItemAt(item.rowIndex, {"nego_item_amt": amt});
+				}
+			},
+
+			onAmtAggregateFn: function(dataField, datas) {
+				var result = new BigNumber('0');
+				var formatType = "amt";
+
+				for(var i = 0; i < datas.length; ++i) {
+					result = result.plus(new BigNumber(datas[i][dataField] || 0));
+				}
+
+				var curCcd = this.get("negoData.cur_ccd"),
+					value   = result.toFixed();
+
+				// 금액 소수점처리(value)
+				this.set("negoData.nego_amt", CCPrecManager.format(formatType, value, curCcd));
+				return value;
+			},
+
+			onRegexFn: function(data, item) {
+				var me        = this,
+					dataField = item.dataField;
+
+				if(dataField === "nego_item_uprc") {
+					return CCPrecManager.regex("price", me.get("negoData.cur_ccd"));
+				}
+			},
+
+			exceptionHandler: function() {
+				this.reset();
+				this.fire("find-list");
+			}
+		})
+	</script>
+</dom-module>

@@ -1,0 +1,176 @@
+<sc-link rel="import" href="ep-dlvy-sched-chg-req.html"></sc-link>
+<sc-link rel="import" href="ep-dlvy-sched-chg-req-list.html"></sc-link>
+
+<dom-module id="ep-dlvy-sched-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <!-- 코드 -->
+        <sc-code-group>
+            <sc-code code="P256" value="{{codes.schedStsCcd}}"></sc-code>
+        </sc-code-group>
+
+        <sc-ajax id="findDlvySchedByPoItemUuids"
+                 url="findDlvySchedByPoItemUuids.do"
+                 body="{{searchParam}}"
+                 on-response="completeFindDlvySchedByPoItemUuids">
+        </sc-ajax>
+
+        <!--            납품 일정 그리드-->
+        <div class="vbox flex">
+            <sc-grid id="schedGridPanel"
+                     use-dummy="false" column-fit-style="even"
+                     use-state="false"
+                     data-provider="{{schedItems}}"
+                     aggregate="false"
+                     aggregate-group="true"
+                     aggregate-group-columns='["po_no", "po_lno"]'
+                     aggregate-group-hidden-columns="['po_no']"
+                     aggregate-auto-sorting="false"
+                     use-selection="true">
+                <cc-grid-toolbar>
+                    <sc-button text="변경 요청" on-click="onReqScheChg" ></sc-button>
+                    <sc-button text="변경 요청 이력" on-click="onReqList" ></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column data-field="po_no" header-text="발주 번호" width="120" mergeable="true" merge-based-field="po_no"></sc-data-column>
+                    <sc-data-column data-field="po_lno" header-text="발주 항번" width="70" data-type="number" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                    <sc-data-column data-field="item_cd" header-text="품목 코드" width="100" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                    <sc-data-column data-field="disp_item_nm" header-text="품목 명" width="100" text-align="left" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                    <sc-data-column data-field="item_spec" header-text="품목 규격" width="150" text-align="left" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                    <sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right" data-type="number" format-type="qty"
+                                    mergeable="true"	merge-based-field="po_lno" aggregate-title="합계"></sc-data-column>
+                    <sc-data-column data-field="dlvy_qty" header-text="납품 예정 수량"  width="80" text-align="right" data-type="number" editor-regex-functio="onRegexFn"
+                                    format-type="qty" required aggregate-format="qty" aggregate-function="onQtyAggregateFn"></sc-data-column>
+                    <sc-date-column	data-field="dlvy_dt"	 header-text="납품 일자"		width="100" required></sc-date-column>
+                    <sc-combobox-column data-field="dlvy_sched_sts" header-text="상태" width="100"
+                                        display-field="label" value-field="data" items="[[codes.schedStsCcd]]" ></sc-combobox-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field data-field="ten_id"></sc-grid-field>
+                    <sc-grid-field data-field="dlvy_sched_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="rmk"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-dlvy-sched-list',
+            properties: {
+                titleText: {
+                    type: String,
+                    value: I18N.translate("납품 일정")
+                },
+
+                codes: {
+                    type: Object,
+                    value: function () {
+                        return {
+                            // schedStsCcd: [] // 납품 일정
+                        };
+                    }
+                },
+
+                schedItems: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+
+                searchParam: {
+                    type: Array,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+
+            load: function(param) {
+                var me = this;
+                if (UT.isNotEmpty(param.po_item_uuids)) {
+                    me.set("searchParam", param);
+                    me.onFindItems();
+                }
+            },
+
+            onFindItems: function() {
+                var me = this;
+                UT.request(me.$.findDlvySchedByPoItemUuids);
+            },
+
+            completeFindDlvySchedByPoItemUuids: function(e, res) {
+                var me = this;
+                var result = res.response.resultData;
+                me.set('schedItems', result.schedItems);
+                // me.placeSchedBySort();
+            },
+
+            onQtyAggregateFn: function(dataField, data) {
+                var me = this;
+
+                var result = new BigNumber('0');
+                for(var i = 0; i < data.length; ++i) {;
+                    result = result.plus(new BigNumber(data[i][dataField] || 0));
+                }
+                return result.toFixed();
+            },
+
+            onReqScheChg: function() {
+                var me = this;
+                var provider = me.$.schedGridPanel.getDataProvider();
+
+                var chgReqPopUP = UT.popup("ep-dlvy-sched-chg-req", me, "70%", "70%", {
+                    'close': function(popup, e){
+                        popup.close();
+                        me.onFindItems();
+                    }
+                }, {titleText: I18N.translate("변경 요청")});
+                var selected = provider.selectionCheckedItems();
+                if(selected.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                } else {
+                    chgReqPopUP.show();
+                    chgReqPopUP.getWindowContent().load(me.preparePopUpParam(selected));
+                }
+            },
+
+            preparePopUpParam: function(data) {
+                var ret = {
+                    "dlvy_sched_uuids" : [],
+                    "asnData" : this.searchParam.asnData
+                };
+                for(var i = 0; i < data.length; i++) {
+                    ret["dlvy_sched_uuids"].push(data[i].dlvy_sched_uuid);
+                }
+                return ret;
+            },
+
+            onReqList: function() {
+                var me = this;
+
+                var param = {
+                    dlvy_sched_uuids: me.schedItems.map(item => item.dlvy_sched_uuid),
+                    po_item_uuids: me.schedItems.map(item => item.po_item_uuid)
+                };
+
+                var reqListPopup = UT.popup("ep-dlvy-sched-chg-req-list", me, "80%", "80%", {
+                    'close': function(popup, e) {
+                        popup.close();
+                        me.onFindItems();
+                    }
+                }, {titleText: I18N.translate("변경 요청 이력")});
+
+                reqListPopup.show();
+                reqListPopup.getWindowContent().load(param);
+            }
+        });
+    </script>
+</dom-module>

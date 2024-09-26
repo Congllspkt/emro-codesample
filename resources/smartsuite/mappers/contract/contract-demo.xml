@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="contract-demo">
+	<select id="findListContractDemo" resultType="map">
+		/* contract-demo.findListContractDemo : 계약 목록 조회 */
+		SELECT T.*
+		, CASE WHEN T.VD_CNT &gt; 0 THEN T.VD_NM || ' 외 ' || T.VD_CNT
+		ELSE T.VD_NM
+		END AS DISP_VD_NM
+		FROM (
+		SELECT CT.CNTR_UUID
+		, CT.CNTR_REQ_RCPT_UUID
+		, CT.CNTR_CND_UUID
+		, CT.CNTR_NO
+		, CT.CNTR_REVNO
+		, CT.ORG_CD
+		, CT.OORG_CD
+		, CT.CNTR_NM
+		, CT.VD_CD
+		, VD.ERP_VD_CD
+		, CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+		, CT.CNTR_ST_DT
+		, CT.CNTR_EXP_DT
+		, CT.CNTR_DT
+		, CT.CNTR_STS_CCD
+		, CT.CNTRDOC_TYP_CCD
+		, CT.CNTR_SGNMETH_CCD
+		, CT.CNTR_TMPL_TYP_CCD
+		, CT.CNTR_PIC_ID
+		, CASE WHEN 'ko_KR' = #{g.locale} THEN US.USR_NM ELSE US.USR_NM_EN END AS CNTR_PIC_NM
+		, CT.CNTR_AMT
+		, CT.SUP_AMT
+		, CT.CUR_CCD
+		, CT.CNTRDOC_LGL_RV_UUID
+		, CT.CNTR_TRMN_DT
+		, CT.CNTR_TRMN_RSN
+		, CT.CNTRPD_AUTO_EXT_USE_YN
+		, CT.TMPL_UNUD_CNTRDOC_ATHG_UUID
+		, CT.TMPL_UNUD_APPX_ATHG_UUID
+		, CT.CNTRDOC_TMPL_UUID
+		, CT.SGNORD_TYP_CCD
+		, CT.PURC_GRP_CD
+		, CT.CNTR_RET_RSN
+		, CT.LOGIC_ORG_CD
+		, CT.CNTR_TYP_CCD
+		, (SELECT COUNT(Z.VD_CD)
+		FROM CNTRR Z
+		WHERE Z.TEN_ID = CT.TEN_ID
+		AND Z.CNTR_UUID = CT.CNTR_UUID
+		AND Z.CNTRR_TYP_CCD = 'VD'
+		AND Z.VD_CD != CT.VD_CD) AS VD_CNT
+		, TA.TASK_UUID AS APVL_TASK_UUID
+		, AP.APVL_STS_CCD
+		, AP.APVL_TYP_CCD
+		, CASE WHEN CT.CNTR_REVNO = (SELECT MAX(X.CNTR_REVNO)
+		FROM CNTR X
+		WHERE X.TEN_ID = CT.TEN_ID
+		AND X.CNTR_NO = CT.CNTR_NO)
+		THEN 'Y' ELSE 'N'
+		END AS FINAL_CNTR_YN
+		, CASE WHEN 'en_US' = #{g.locale} THEN LO.LOGIC_ORG_NM_EN
+		ELSE LO.LOGIC_ORG_NM
+		END AS OORG_NM
+		, CT.IF_STS_CCD
+		, CT.IF_MSG
+		FROM CNTR CT
+		INNER JOIN OORG OG
+		ON OG.TEN_ID = CT.TEN_ID
+		AND OG.OORG_CD = CT.OORG_CD
+		INNER JOIN LOGIC_ORG LO
+		ON LO.TEN_ID = OG.TEN_ID
+		AND LO.LOGIC_ORG_CD = OG.LOGIC_ORG_CD
+		LEFT OUTER JOIN USR US
+		ON US.TEN_ID = CT.TEN_ID
+		AND US.USR_ID = CT.CNTR_PIC_ID
+		LEFT OUTER JOIN VD VD
+		ON VD.TEN_ID = CT.TEN_ID
+		AND VD.VD_CD =  CT.VD_CD
+		LEFT OUTER JOIN TASK_APVL TA
+		ON TA.TEN_ID = CT.TEN_ID
+		AND TA.TASK_UUID = CT.CNTR_UUID
+		AND TA.USE_YN = 'Y'
+		LEFT OUTER JOIN APVL AP
+		ON AP.TEN_ID = TA.TEN_ID
+		AND AP.APVL_UUID = TA.APVL_UUID
+		WHERE CT.TEN_ID = #{g.tenant}
+		<if test="p.exp_from_date != null and p.exp_from_date !=''">
+			AND CT.CNTR_EXP_DT &gt;= #{p.exp_from_date}
+		</if>
+		<if test="p.exp_to_date != null and p.exp_to_date !=''">
+			AND CT.CNTR_EXP_DT <![CDATA[<=]]> #{p.exp_to_date}
+		</if>
+		<if test="p.cntr_sts_ccd !=null and p.cntr_sts_ccd !=''">
+			AND CT.CNTR_STS_CCD = #{p.cntr_sts_ccd}
+		</if>
+		<if test="p.cntr_typ_ccd != null and p.cntr_typ_ccd !=''">
+			AND CT.CNTR_TYP_CCD = #{p.cntr_typ_ccd}
+		</if>
+		<if test="p.cntrdoc_typ_ccd != null and p.cntrdoc_typ_ccd !=''">
+			AND CT.CNTRDOC_TYP_CCD = #{p.cntrdoc_typ_ccd}
+		</if>
+		<if test="p.cntr_nm != null and p.cntr_nm !=''">
+			<bind name="cntrNm" value="'%'+p.cntr_nm+'%'"/>
+			AND CT.CNTR_NM LIKE UPPER(#{cntrNm})
+		</if>
+		<if test="p.cntr_no != null and p.cntr_no !=''">
+			<bind name="cntrNo" value="'%'+p.cntr_no+'%'"/>
+			AND CT.CNTR_NO LIKE UPPER(#{cntrNo})
+		</if>
+		<if test="p.cntr_pic_id != null and p.cntr_pic_id !=''">
+			AND CT.CNTR_PIC_ID = #{p.cntr_pic_id}
+		</if>
+		<if test="p.cntr_pic_nm != null and p.cntr_pic_nm !=''">
+			<bind name="cntrPicNm" value="'%'+p.cntr_pic_nm+'%'"/>
+			AND (UPPER(US.USR_NM) LIKE UPPER(#{cntrPicNm}) OR UPPER(US.USR_NM_EN) LIKE UPPER(#{cntrPicNm}))
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd !=''">
+			<bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+			AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm !=''">
+			<bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+			AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm}))
+		</if>
+		) T
+		ORDER BY T.CNTR_NO DESC, T.CNTR_REVNO DESC
+	</select>
+	<update id="saveInfoCntrIfSts">
+		UPDATE CNTR
+		SET IF_STS_CCD = 'PASS'
+		WHERE TEN_ID = #{g.tenant}
+		  AND CNTR_UUID = #{p.cntr_uuid}
+	</update>
+	<select id="findInfoIfCntrDemo" resultType="map">
+		SELECT
+			'INTERFACE_CNTR_CREATE' AS IF_ID
+			 , 'Prod' AS IF_LVL_CCD
+			 , TO_CHAR(REG_DTTM, 'YYYY/MM/DD HH24:MI:SS') AS IF_ST_DTTM
+			 , TO_CHAR(REG_DTTM + 34/(24*60*60), 'YYYY/MM/DD HH24:MI:SS') AS IF_ED_DTTM
+			 , IF_STS_CCD
+			 , IF_MSG
+		FROM CNTR
+		WHERE TEN_ID = #{g.tenant}
+		  AND CNTR_UUID = #{p.cntr_uuid}
+	</select>
+	<select id="findInfoIfCntrHeaderDemo" resultType="map">
+		SELECT
+			*
+		FROM CNTR
+		WHERE TEN_ID = #{g.tenant}
+		  AND CNTR_UUID = #{p.cntr_uuid}
+	</select>
+</mapper>

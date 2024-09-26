@@ -1,0 +1,255 @@
+<sc-link rel="import" href="ep-vendor-totalinfo.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-basicinfo.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-job-pic.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-sts.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-orginfo.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-evalinfo.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-plant.html"></sc-link>
+<!-- <sc-link rel="import" href="ep-vendor-licenseinfo.html"></sc-link> -->
+
+<dom-module id="ep-vendor-profile-tab">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+		<sc-tab-navigation id="tabNavi" class="flex" selected="0" on-item-select="onItemSelectFunc">
+			<ep-vendor-totalinfo id="total" title-text="통합 정보"></ep-vendor-totalinfo>
+			<template>
+				<ep-vendor-basicinfo id="basic" title-text="기본 정보" on-initialized="_onBasicInfoInitialized" on-rest-vd-data="resetVdData" on-change-profile="onChangeVdInfo"></ep-vendor-basicinfo>
+			</template>
+			<template>
+				<ep-vendor-orginfo id="org" class="fit" title-text="운영조직" on-initialized="_onOrgInfoInitialized" on-change-profile="onChangeVdInfo"></ep-vendor-orginfo>
+			</template>
+			<template>
+				<ep-vendor-plant id="plt" title-text="공장 설비" on-initialized="_onPltInitialized"></ep-vendor-plant>
+			</template>
+			<template>
+				<ep-vendor-job-pic id="pic" title-text="담당자" on-initialized="_onPicInfoInitialized" style="overflow: hidden"></ep-vendor-job-pic>
+			</template>
+			<template>
+				<ep-vendor-sts id="sts" title-text="경영 현황" on-initialized="_onStsInfoInitialized" on-change-profile="onChangeVdInfo"></ep-vendor-sts>
+			</template>
+			<template>
+				<ep-vendor-evalinfo id="evalinfo" title-text="평가 결과" on-initialized="_onEvalInfoInitialized"></ep-vendor-evalinfo>
+			</template>
+			<!-- 면허정보 tab 주석처리 요청 2018.05.02 PJD BJ -->
+<!-- 			<template> -->
+<!--                 <ep-vendor-licenseinfo id="licenseinfo" title-text="면허정보"  on-initialized="_onLicenseInfoInitialized" on-change-profile="onChangeVdInfo"></ep-vendor-licenseinfo> -->
+<!--             </template> -->
+		</sc-tab-navigation>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "ep-vendor-profile-tab",
+
+            properties: {
+            	titleText:{
+                    type: String,
+    				value: "협력사 Profile"
+    			},
+    			
+                vendorData:{
+                    type: Object,
+					value: function(){
+                        return {};
+					}
+				},
+				vdInfoChanged : {
+					type : Boolean,
+					value : false
+				},
+                authInfo : {
+                    type : Object,
+                    reset: false,
+                    value : function(){
+                        return {
+                            menuCode : "",
+                            hasAuthVS : false
+                        }
+                    }
+                },
+                isLoadedPopup :{
+                    type : Boolean,
+                    value : false
+                },
+            },
+
+            setVendorAuth : function(){
+                var me = this;
+                var menuCd = SCMdiManager.getCurrentMenuId(me);
+                var hasAuth = !!me.get("authInfo.hasAuthVS");
+                var roles, authorities;
+
+                if (!me.authInfo || me.authInfo.menuCode != menuCd) {
+                    roles = SCRoleManager.userRoles || [];
+                    authorities = roles.filter(function (role) {
+                        if (role.menu_cd == menuCd && role.act_cd == "VS") {
+                            return true;
+                        }
+                    });
+                    hasAuth = UT.isNotEmpty(authorities);
+                }
+                
+                me.set("authInfo", { 
+                    menuCode : menuCd,
+                    hasAuthVS: hasAuth
+                });
+
+                if (me.$.basic.isInitialized) {
+                    me.$.basic.hasAuthVS = hasAuth;
+                }
+            },
+            
+            //basicInfo에서 데이타 변경시 데이타 리셋
+            resetVdData: function(e){
+            	var me = this;
+            	var data = e.detail;
+            	
+            	me.set('vendorData', data);
+
+                //vdData 리셋
+                if(me.$.plt.isInitialized){
+                    me.$.plt.load(data);
+                }
+                if(me.$.pic.isInitialized){
+                    me.$.pic.load(data);
+                }
+                if(me.$.sts.isInitialized){
+                    me.$.sts.load(data);
+                }
+
+                if(me.$.org.isInitialized){
+                    me.$.org.load(data);
+                }
+
+                if(me.$.evalinfo.isInitialized){
+                    me.$.evalinfo.load(data);
+                }
+                
+//                 if(me.$.licenseinfo.isInitialized){
+//                     me.$.licenseinfo.load(data);
+//                 }
+            },
+            // 데이터 setting
+            load: function(data){
+                var me = this;
+                me.set("vendorData", data);
+
+                me.$.total.load(data);
+
+                me.setVendorAuth();
+
+                if(me.$.basic.isInitialized){
+                    me.$.basic.load(data);
+                }
+				
+                if(me.$.plt.isInitialized){
+                    me.$.plt.load(data);
+                }
+				
+                if(me.$.pic.isInitialized){
+                    me.$.pic.load(data);
+                }
+
+                if(me.$.sts.isInitialized){
+                    me.$.sts.load(data);
+                }
+
+                if(me.$.org.isInitialized){
+                    me.$.org.load(data);
+                }
+
+                if(me.$.evalinfo.isInitialized){
+                    me.$.evalinfo.load(data);
+                }
+                
+//                 if(me.$.licenseinfo.isInitialized){
+//                     me.$.licenseinfo.load(data);
+//                 }
+                me.set("isLoadedPopup", true);
+            },
+
+            // 기본 정보 초기화 완료
+            _onBasicInfoInitialized: function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.basic.hasAuthVS = me.authInfo.hasAuthVS;
+                    me.$.basic.load(me.vendorData);
+                }
+            },
+			
+            // 공장 설비 초기화 완료
+            _onPltInitialized: function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.plt.load(me.vendorData);
+                }
+            },
+			
+            // 담당자 초기화 완료
+            _onPicInfoInitialized: function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.pic.load(me.vendorData);
+                }
+            },
+
+            // 경영 현황 초기화 완료
+            _onStsInfoInitialized: function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.sts.load(me.vendorData);
+                }
+            },
+
+            // 운영조직 초기화 완료
+            _onOrgInfoInitialized: function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.org.load(me.vendorData);
+                }
+            },
+
+            // 평가 결과 초기화 완료
+            _onEvalInfoInitialized:function(e){
+                var me = this;
+                if (me.isLoadedPopup) { // 팝업 load 함수 호출 후 initialized이면 load
+                    me.$.evalinfo.load(me.vendorData);
+                }
+            },
+
+// 			_onLicenseInfoInitialized:function(e){
+//                 var me = this;
+//                 if (me.isLoadedPopup) { // 팝업 load 후 initialized이면 load
+//                     me.$.licenseinfo.load(me.vendorData);
+//                 }
+// 			},
+			onChangeVdInfo : function(e){
+				var me = this;
+				me.set("vdInfoChanged", true);
+				me.fire("complete-save");
+			},
+			
+			onItemSelectFunc : function(e){
+				var me = this;
+				var contentId = e.detail.item.id;
+				
+				if(contentId == "total" || contentId == "basic"){
+					if(me.vdInfoChanged){
+						me.set("vdInfoChanged", false);
+						me.$.total.load(me.vendorData);
+						
+						if(me.$.basic.isInitialized){
+		                    me.$.basic.load(me.vendorData);
+		                }
+					}
+				}
+			}
+        });
+    </script>
+    
+</dom-module>

@@ -1,0 +1,200 @@
+<sc-link rel="import" href="es-rfx-list.html"></sc-link>
+<sc-link rel="import" href="es-rfx-detail.html"></sc-link>
+<sc-link rel="import" href="es-rfx-contest-detail.html"></sc-link>
+<sc-link rel="import" href="es-npe-setup.html"></sc-link>
+<sc-link rel="import" href="es-pri-fact-set-detail.html"></sc-link>
+<sc-link rel="import" href="es-bid-template-set-detail.html"></sc-link>
+<sc-link rel="import" href="../../pro/pr/es-pr-detail.html"></sc-link>
+<sc-link rel="import" href="../../pro/upcr/es-upcr-detail.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/rfx/shared/es-rfx-sr-detail.html"></sc-link>
+
+<dom-module id="em-rfx">
+<!-- 
+/**
+ *
+ *	@description : RFx 현황
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName : 
+ * @Since 2016. 5. 3.
+ * @변경이력 : [2016. 5. 3.] Yeon-u Kim 최초작성
+ */
+-->
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+
+	<template>
+		<sc-ajax id="findRfx" url="findRfx.do">
+		</sc-ajax>
+
+		<sc-pages id="pages" selected="0" class="fit">
+			<es-rfx-list id="list"
+						 on-show-detail="_onShowDetail"
+			>
+			</es-rfx-list>
+			<template>
+				<es-rfx-detail id="rfxDetail"
+							   on-show-non-pri-set-detail="onShowNonPriSetDetail"
+							   on-show-pri-fact-set-detail="onShowPriFactSetDetail"
+							   on-show-bid-template-set-detail="onShowBidTemplateSetDetail"
+							   on-show-pr-detail="onShowPrDetail"
+							   on-show-upcr-detail="onShowUpcrDetail"
+							   on-show-sr-detail="onShowSrDetail"
+							   on-show-result-detail="onShowRfxContestDetail"
+							   on-close="onShowList"
+				>
+				</es-rfx-detail>
+			</template>
+			<template>
+				<es-npe-setup id="nonPriSetDetail"
+							  on-show-detail="onShowRfxDetail"
+				>
+				</es-npe-setup>
+			</template>
+			<template>
+				<es-pri-fact-set-detail id="priFactSetDetail"
+										on-show-detail="onShowRfxDetail"
+										on-show-list="onShowList"
+				>
+				</es-pri-fact-set-detail>
+			</template>
+			<template>
+				<es-bid-template-set-detail id="bidTemplateSetDetail"
+											on-show-detail="onShowRfxDetail"
+											on-show-list="onShowList"
+				>
+				</es-bid-template-set-detail>
+			</template>
+			<template>
+				<es-rfx-contest-detail id="rfxContestDetail"
+									   on-show-detail="onShowRfxDetail"
+									   on-close="onShowList"
+				>
+				</es-rfx-contest-detail>
+			</template>
+			<template>
+				<es-pr-detail id="prDetail"
+							  on-close="onShowRfxDetail">
+				</es-pr-detail>
+			</template>
+			<template>
+				<es-upcr-detail id="upcrDetail"
+								on-close="onShowRfxDetail">
+				</es-upcr-detail>
+			</template>
+			<template>
+				<es-rfx-sr-detail id="srDetail"
+								on-close="onShowRfxDetail">
+				</es-rfx-sr-detail>
+			</template>
+		</sc-pages>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'em-rfx',
+			properties: {},
+			//최초 호출
+			initialized: function(e) {
+				var me = this;
+
+				// 타 모듈에서 mdi.createWindo 를 통해 화면 open 하는 경우
+				var param = me.params;
+
+				if(param.task_uuid) {					// mdi 를 통해 task_uuid 값이 넘어오는 경우
+					// 상세화면 조회
+					me._onShowDetail(e, {"rfx_uuid": param.task_uuid});
+				} else if(param.rfx_sts_ccd) {		// rfx_sts_ccd 값이 넘어오는 경우
+					// 목록화면 조회
+					me.$.list.load({rfx_sts_ccds: param.rfx_sts_ccd.split(",")});
+				}
+			},
+			_onShowDetail: function(e, data) {
+				var me = this;
+
+				if(UT.isEmpty(data.rfx_uuid)) {
+					me.onShowRfxDetail(e, data);
+				} else {
+					me.$.findRfx.body = data;
+
+					UT.request(me.$.findRfx, function(ele, res) {
+						var rfxInfo = res.response;
+
+						if(['CLSG', 'ED', 'SLCTN_APVL_PRGSG', 'NEGO_PRGSG'].indexOf(rfxInfo.rfx_sts_ccd) > -1) {
+							//마감 조회 화면 호출
+							me.onShowRfxContestDetail(e, data);
+						} else {
+							//상세 조회 화면 호출
+							me.onShowRfxDetail(e, data);
+						}
+					});
+				}
+			},
+			//RFx 현황 상세 화면 호출
+			onShowRfxDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.rfxDetail);
+
+				if(UT.isNotEmpty(data)) {
+					me.$.rfxDetail.load(data);
+				}
+			},
+			//RFx 낙찰자 선정기준 상세
+			onShowRfxContestDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.rfxContestDetail);
+				me.$.rfxContestDetail.load(data);
+			},
+			//비가격평가 설정
+			onShowNonPriSetDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.nonPriSetDetail);
+				me.$.nonPriSetDetail.load(data);
+			},
+			//원가구성항목 설정
+			onShowPriFactSetDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.priFactSetDetail);
+				me.$.priFactSetDetail.load(data);
+			},
+			//Template 입찰 설정
+			onShowBidTemplateSetDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.bidTemplateSetDetail);
+				me.$.bidTemplateSetDetail.load(data);
+			},
+			// 구매 요청 상세 화면 호출
+			onShowPrDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.prDetail);
+				me.$.prDetail.load(data);
+			},
+			// 단가계약요청 상세 화면 호출
+			onShowUpcrDetail : function(e, data) {
+				var me = this;
+				me.set("prevPage", e.target);
+				
+				me.$.pages.selectItem(me.$.upcrDetail);
+				me.$.upcrDetail.load(data);
+			},
+			// 소싱요청 상세 화면 호출
+			onShowSrDetail : function(e, data) {
+				var me = this;
+				if(SCModuleManager.exist("PCM")) {
+					me.$.pages.selectItem(me.$.srDetail);
+					me.$.srDetail.load(data);
+				}
+			},
+			//리스트 화면 호출
+			onShowList: function(e) {
+				var me = this;
+				me.$.pages.selectItem(me.$.list);
+				me.$.list.onFindList();
+			}
+		});
+	</script>
+</dom-module>

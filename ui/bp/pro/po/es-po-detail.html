@@ -1,0 +1,3585 @@
+<sc-link rel="import" href="../../shared/ep-user-list.html"></sc-link>
+<sc-link rel="import" href="../../shared/ep-job-list.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="ep-po-mod-history.html"></sc-link>
+<sc-link rel="import" href="ep-po-cs-detail.html"></sc-link>
+<sc-link rel="import" href="../../rfx/shared/ep-item-perform.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/contract/common/es-contract-detail.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/pro/po/es-po-chg-req-cntr.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/pro/po/es-po-terminate-req-cntr.html"></sc-link>
+<sc-link rel="import" href="../asn/ep-dlvy-sched-list.html"></sc-link>
+<dom-module id="es-po-detail">
+	<!--
+/**
+ *
+ *	@description : 계약 및 발주 현황 상세
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName :
+ * @Since 2016. 12. 26. renew 9.1
+ */
+-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		
+		.optionButtonStyle {
+			background-color: #5D3CB0;
+			color: #FFFFFF;
+		}
+		
+		.poButtonStyle {
+			border-color: #66afe9;
+			width: 130px;
+			height: 60px;
+			font-size: 15px;
+			align-content: center;
+			line-height: normal;
+			border-radius: 10px;
+		}
+		
+		.poButtonStyleWidth {
+			border-color: #66afe9;
+			width: 160px;
+			height: 60px;
+			font-size: 15px;
+			align-content: center;
+			line-height: normal;
+			border-radius: 10px;
+		}
+	
+	</style>
+	
+	<template>
+		
+		<!-- 상세정보 조회 -->
+		<sc-ajax id="findInfo"
+				 url="findPo.do"
+				 body="{{findInfo.param}}">
+		</sc-ajax>
+		
+		<!-- 발주 요청 접수 건으로 PO 정보 설정 -->
+		<sc-ajax id="findDefaultDataByPoReqRcpt"
+				 url="findDefaultDataByPoReqRcpt.do">
+		</sc-ajax>
+		<!-- 임시 저장 -->
+		<sc-ajax id="saveDraft"
+				 url="saveDraftPo.do"
+				 on-response="completeSaveInfo">
+		</sc-ajax>
+		<!-- 발주요청 저장 -->
+		<sc-ajax id="saveSubmit"
+				 url="saveSubmitPo.do"
+				 on-response="completeSaveInfo">
+		</sc-ajax>
+		<!-- 삭제 -->
+		<sc-ajax id="deleteInfo"
+				 url="deletePo.do"
+				 body="{{poData}}"
+				 on-response="completeDelete">
+		</sc-ajax>
+		<!-- 발주변경 및 해지 시 발주품목 상태 체크 -->
+		<sc-ajax id="checkPoItemState"
+				 url="checkPoItemState.do"
+				 body="{{poData}}">
+		</sc-ajax>
+		<!-- 계약서식 조회 -->
+		<sc-ajax id="findCntrdocFormList"
+				 url="/bp/edoc/largeFindListCntrForm.do"
+				 body="{{codes.cntrdocFormListParam}}"
+				 last-response="{{codes.cntrdocFormList}}">
+		</sc-ajax>
+		<!-- 출력 정보 조회 -->
+		<sc-ajax id="findInfoDocumentOutputPo"
+				 url="findInfoDocumentOutputPo.do">
+		</sc-ajax>
+		<!-- 코드 조회 -->
+		<sc-request-group init on-response="completeFindListCommonCodeAttributeCode">
+			<!-- 세금코드 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.taxTypCcdParam}}"
+					 last-response="{{codes.taxTypCcd}}">
+			</sc-ajax>
+			<!-- 계약 체결 유형 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.cntrSignParam}}"
+					 last-response="{{codes.cntrSgngTypCcd}}">
+			</sc-ajax>
+			<!-- 최상위 논리조직 정보 조회 -->
+			<sc-ajax id="findRootLogicOrganizationInfo"
+					 url="/org/logicorg/findRootLogicOrganizationInfo.do"
+					 on-response="completeFindRootLogicOrganizationInfo">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<!-- EDOC SETUP 사용여부 -->
+		<cc-code-constraint code-param="{{codes.setupParam}}" value="{{codes.setupInfo}}"></cc-code-constraint>
+		
+		<!-- 코드 -->
+		<sc-code-group>
+			<sc-code code="C007" value="{{codes.unitCd}}"></sc-code>       <!-- UOM -->
+			<sc-code code="C024" value="{{codes.domovrsDivCcd}}"></sc-code>  <!-- 내외자 구분 공통코드 -->
+			<sc-code code="P009" value="{{codes.pymtmethCcd}}"></sc-code>   <!-- 지급방법 -->
+			<sc-code code="P010" value="{{codes.delyTermsCd}}"></sc-code>  <!-- 납품방법 -->
+			<sc-code code="P011" value="{{codes.aprvSts}}"></sc-code>      <!-- 결재상태 -->
+			<sc-code code="P012" value="{{codes.vdPoStsCcd}}"></sc-code>    <!-- 협력사진행상태 -->
+			<sc-code code="P038" value="{{codes.poProgSts}}"></sc-code>    <!-- 발주진행상태 -->
+			<sc-code code="P045" value="{{codes.purcTypCcd}}"></sc-code>      <!-- 구매 유형 공통코드 -->
+			<sc-code code="P048" value="{{codes.maintBondTyp}}"></sc-code> <!-- 하자보증타입 -->
+			<sc-code code="P064" value="{{codes.bondCls}}"></sc-code>      <!-- 계약이행 보증구분/하자보증구분/선급금보증구분 -->
+			<sc-code code="P070" value="{{codes.modTyp}}"></sc-code>       <!-- 변경유형 -->
+			<sc-code code="E902" value="{{codes.regTyp}}"></sc-code>        <!-- 협력사 거래 유형 -->
+			<sc-code code="P091" value="{{codes.payClsCd}}"></sc-code>        <!-- 지급구분 (선급금/중도금/잔금) -->
+			<sc-code code="P100" value="{{codes.csTypCd}}"></sc-code>        <!-- 컨소시엄유형 -->
+			<sc-code code="P253" value="{{codes.poReturnReason}}"></sc-code>        <!-- 발주거부사유 -->
+			<sc-code code="P256" value="{{codes.schedStsCcd}}"></sc-code>
+		</sc-code-group>
+
+		<cc-auth-checker check-list="auth-r, auth-s, auth-a, auth-p"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="발주 상세">
+			<sc-button text="발주 변경 이력" on-click="onShowModHistory" hidden="[[!formula('showModHistory')]]" auth-r></sc-button>
+			<sc-button text="[[formula('geEvalSetBtnTxt')]]" on-click="onPoEvalSet" hidden="[[!formula('poEvalSetBtn')]]" auth-s></sc-button>
+			<sc-button text="저장" on-click="onSaveDraft" hidden="[[!formula('saveDraftBtn')]]" auth-s></sc-button>
+			<sc-button text="계약서 조회" on-click="onViewCntr" hidden="[[!formula('showEcntrViewBtn')]]" auth-s></sc-button>
+			<sc-button text="발주 요청" on-click="onSaveSubmit" hidden="[[!formula('saveSubmitBtn')]]" auth-s></sc-button>
+			<sc-button text="결재 요청" on-click="onApproval" hidden="[[!formula('approvalBtn')]]" auth-a></sc-button>
+			<sc-button text="계약 변경 요청" on-click="onModifyReqCntr" hidden="[[!formula('modifyReqCntrBtn')]]" auth-s></sc-button>
+			<sc-button text="발주 변경" on-click="onModifyCTyp" hidden="[[!formula('modifyCTypBtn')]]" auth-s></sc-button>
+			<sc-button text="계약 해지 요청" on-click="onTrmnReqCntr" hidden="[[!formula('trmnReqCntrBtn')]]" auth-s></sc-button>
+			<sc-button text="발주 해지" on-click="onTrmnPo" hidden="[[!formula('trmnPoBtn')]]" auth-s></sc-button>
+			<sc-button text="발주 반려 사유" on-click="onShowModal" hidden="[[!formula('isWorkplaceClicked')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('deleteBtn')]]" auth-s></sc-button>
+			<sc-button text="인쇄" on-click="onDocumentOutput" hidden="[[!formula('printAbleState')]]" auth-p></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-link-document param="{{poData}}" app-type="PO"></cc-link-document>
+		
+		<div class="flex page">
+			
+			<cc-approval-summary app-id="{{poData.po_uuid}}" aprv-typcd="{{poData.apvl_typ_ccd}}" auth-r></cc-approval-summary> <!-- PO_CHG: 발주변경품의, PO: 발주품의 -->
+			
+			<cc-form-panel title-text="요청 정보" collapsible="true" hidden="[[!formula('isModReq')]]" validation-group="poInfo">
+				<cc-fieldset>
+					<sc-label text="발주 변경 요청자"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{poData.mod_req_nm}}" readonly="true"></sc-text-field>
+						<sc-text-field value="{{poData.po_chg_reqr_id}}" class="w-150" readonly="true" hidden="true"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 변경 요청 부서"></sc-label>
+					<sc-text-field value="{{poData.po_chg_req_dept_cd}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 변경 유형"></sc-label>
+					<sc-combobox-field value="{{poData.po_chg_typ_ccd}}" items="{{codes.modTyp}}" display-field="label" value-field="data"
+									   readonly="true" placeholder="선택">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 변경 요청 일자"></sc-label>
+					<sc-date-field default-value="0d" value="{{poData.po_chg_req_dt}}" string-date="true" class="date" readonly="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="변경 사유"></sc-label>
+					<sc-textarea-field value="{{poData.po_chg_req_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="해지 정보" collapsible="true" hidden="[[!formula('isClosed')]]" validation-group="poInfo">
+				<cc-fieldset>
+					<sc-label text="발주 해지 담당자"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{poData.po_close_chr_nm}}" readonly="true"></sc-text-field>
+						<sc-text-field value="{{poData.po_trmn_pic_id}}" class="w-150" readonly="true" hidden="true"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 해지 일자"></sc-label>
+					<sc-date-field value="{{poData.po_trmn_dt}}" string-date="true" class="date" readonly="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="발주 해지 사유"></sc-label>
+					<sc-textarea-field value="{{poData.po_trmn_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="일반 정보" collapsible="true" validation-group="poInfo">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" selected-index="0" value="{{poData.oorg_cd}}"
+											   disabled="[[!formula('isNew')]]" on-change="onChangeOperOrgCd"
+											   placeholder="필수" required="true" validation-group="selectRequired">
+					</cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매 유형"></sc-label>
+					<sc-combobox-field class="w-150" value="{{poData.purc_typ_ccd}}" items="{{codes.purcTypCcd}}" display-field="label" value-field="data"
+									   selected-index="0" readonly="[[!formula('isNew')]]" on-change="changedPurcTyp" placeholder="선택"
+									   required="true" validation-group="selectRequired">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 번호/차수"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{poData.po_no}}" class="w-150" readonly="true"></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field value="{{poData.po_revno}}" class="w-50" readonly="true"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{poData.po_tit}}" required="true" readonly="[[!formula('editable')]]" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="단가계약 번호"></sc-label>
+					<sc-text-field value="{{poData.uprccntr_no}}" class="w-150" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="계약 기간"></sc-label>
+					<sc-period-date-field from-value="{{poData.cntr_st_dt}}" to-value="{{poData.cntr_exp_dt}}" class="w-300"
+										  readonly="[[!formula('isPurcTypMTEditable')]]" string-date="true" required="[[formula('isRequiredCntrDate')]]"></sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="내외자 구분"></sc-label>
+					<sc-combobox-field value="{{poData.domovrs_div_ccd}}" items="{{codes.domovrsDivCcd}}" display-field="label" value-field="data"
+									   readonly="[[!formula('editableShipperType')]]" selected-index="0" placeholder="필수" required="true">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 등록 일자"></sc-label>
+					<sc-date-field value="{{poData.po_crn_dt}}" default-value="0d" string-date="true" class="date" required="true" readonly="[[!formula('editable')]]"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사"></sc-label>
+					<cc-linked-vendor id="poVendor" vd-cd="{{poData.vd_cd}}" result-value="{{poData.erp_vd_cd}}" value="{{poData.vd_nm}}"
+									  oper-org-cd="{{poData.oorg_cd}}" link-typ="POEO" reg-typ="{{poData.obd_typ_ccd}}"
+									  required="true" readonly="[[!formula('editableVd')]]" hide-trigger="[[!formula('editableVd')]]">
+					</cc-linked-vendor>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 담당자"></sc-label>
+					<sc-text-field value="{{poData.vd_pic_nm}}" readonly="[[!formula('editable')]]" max-length="18"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<cc-cur-search value="{{poData.cur_ccd}}" required="true" readonly="true" on-change="changeCur" hide-trigger="[[!formula('editableCur')]]" result-hidden="true"></cc-cur-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 금액"></sc-label>
+					<sc-number-field value="{{poData.po_amt}}" input-cover="true" format-type="amt"
+									 class="align-right" readonly="true">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="거래기본계약 여부"></sc-label>
+					<div class="field-box">
+						<sc-checkbox-field input-value="{{poData.mstagt_yn}}" checked-value="Y" un-checked-value="N" readonly="[[!formula('checkableBasCntrYn')]]" on-click="changedBasCntrYn"></sc-checkbox-field>
+						<sc-text-field value="{{poData.mstagt_no}}" readonly="[[!formula('basCntrEditable')]]" max-length="20" placeholder="거래기본계약 번호"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="[[formula('purcTypTxt')]]평가 대상 여부"></sc-label>
+					<sc-radio-group-field value="{{poData.ge_subj_yn}}" readonly="[[!formula('editable')]]" on-change="changeGeUseYn">
+						<sc-radio-field label="예" input-value="Y"></sc-radio-field>
+						<sc-radio-field label="아니오" input-value="N"></sc-radio-field>
+					</sc-radio-group-field>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="계약 체결 유형"></sc-label>
+					<sc-combobox-field id="cntrSgngTypCcdCombo" readonly="true" value="{{poData.cntr_sgng_typ_ccd}}" items="{{codes.cntrSgngTypCcd}}" display-field="label" value-field="data"
+									   selected-index="0" placeholder="필수">
+					</sc-combobox-field>
+				</cc-fieldset>
+				
+				<cc-fieldset hidden="[[!formula('showCsTyp')]]" column-span="2">
+					<sc-label text="컨소시엄 유형"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field class="w-150" display-field="label" value-field="data" items="{{codes.csTypCd}}" value="{{poData.cstm_typ_ccd}}" readonly="true"></sc-combobox-field>
+						<sc-trigger-field style="margin-left:3px" trigger-cls="field-search" on-trigger-click="onShowCsPopup"></sc-trigger-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('showCsTyp')]]" column-span="2">
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field value="{{poData.po_rem}}" readonly="[[!formula('editable')]]" max-length="1000"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="첨부파일" collapsible="true" validation-group="poInfo" form-cls="label-column" label-width="300">
+				<cc-fieldset>
+					<sc-label text="내부참조용"></sc-label>
+					<sc-upload id="upload1" class="h-200" value="{{poData.athg_uuid}}" editable="{{formula('editable')}}"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="외부참조용(계약첨부)"></sc-label>
+					<sc-upload id="upload2" class="h-200" value="{{poData.cntr_athg_uuid}}" editable="{{formula('editable')}}"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<!-- <sc-panel title-text="지급 정보" collapsible="true" validation-group="poInfo"> -->
+			<cc-form-panel title-text="지급 정보" collapsible="true"><!-- 지급 정보 패널 내에 지불조건 그리드는 validation-group에 포함되면 안되므로 -->
+				<cc-fieldset>
+					<sc-label text="지급방법"></sc-label>
+					<div class="field-box" style="width:100%">
+						<!--<sc-checkbox-field class="w-120" input-value="{{poData.pymtmeth_use_yn}}" checked-value="Y" un-checked-value="N"
+										   label="계약서 표시" readonly="[[!formula('editable')]]">
+						</sc-checkbox-field>-->
+						<sc-combobox-field value="{{poData.pymtmeth_ccd}}" items="{{codes.pymtmethCcd}}" display-field="label" value-field="data"
+										   readonly="[[!formula('editable')]]" placeholder="선택">
+						</sc-combobox-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset row-span="6">
+					<!-- <td colspan="2" rowspan="6">-->
+					<sc-grid id="paymentPlanGrid" style="height:100%;min-height: 250px;" aggregate="true"
+							 editable="[[formula('editable')]]"
+							 sortable="false"
+							 use-dummy="false"
+							 column-fit-style="evenFill"
+							 use-state="[[formula('editable')]]"
+							 use-selection="[[formula('editable')]]"
+							 selection-able-function="onPaymentPlanSelectionAbleFn"
+							 on-item-edit-end="onPaymentPlanEditEnd">
+						<cc-grid-toolbar title-text="지급 조건">
+							<sc-button text="지급 추가" on-click="onAddPaymentPlan" auth-s hidden="[[!formula('editable')]]"></sc-button>
+							<sc-button text="삭제" on-click="onDeletePaymentPlan" auth-s hidden="[[!formula('editable')]]"></sc-button>
+						</cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column data-field="pymt_typ_ccd" header-text="지급 유형" width="100" required="true"
+												display-field="label" value-field="data" items="{{codes.payClsCd}}"
+												items-function="onItemsFn" item-editable-function="onPayPlanItemEditableFn"></sc-combobox-column>
+							<sc-data-column data-field="pymt_ro" header-text="지급 비율(%)" width="80" required="true" text-align="right"
+											data-type="number" format-type="decimal" item-editable-function="onPayPlanItemEditableFn" editor-regex-function="onPayPlanRegexFn"
+											validator-function="paymentPlanGridValidatorFn" validate-on-cell-paste="true"></sc-data-column>
+							<sc-data-column data-field="pymt_amt" header-text="지급 금액" width="180" editable="false" text-align="right"
+											data-type="number" format-type="amt" item-editable-function="onPayPlanItemEditableFn" editor-regex-function="onPayPlanRegexFn"
+											validator-function="paymentPlanGridValidatorFn" validate-on-cell-paste="true"
+											aggregate-function="onPayPlanAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+							<sc-date-column data-field="pymt_expt_dt" header-text="지급 예정 일자" width="100" editable="true" required="true"
+											value-format="yyyyMMdd" string-date="true"
+											validator-function="paymentPlanGridValidatorFn"></sc-date-column>
+						</sc-grid-columns>
+					</sc-grid>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="지급방법 설명"></sc-label>
+					<sc-text-field value="{{poData.pymtmeth_expln}}" readonly="[[!formula('editable')]]" max-length="128" validation-group="poInfo"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품방법"></sc-label>
+					<div class="field-box" style="width:100%">
+						<!--<sc-checkbox-field class="w-120" input-value="{{poData.dlvymeth_use_yn}}" checked-value="Y" un-checked-value="N"
+										   label="계약서 표시" readonly="[[!formula('editable')]]">
+						</sc-checkbox-field>-->
+						<sc-combobox-field value="{{poData.dlvymeth_ccd}}" items="{{codes.delyTermsCd}}" display-field="label" value-field="data"
+										   readonly="[[!formula('editable')]]" placeholder="선택">
+						</sc-combobox-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품방법 설명"></sc-label>
+					<sc-text-field value="{{poData.dlvymeth_expln}}" readonly="[[!formula('editable')]]" max-length="128" validation-group="poInfo"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="세금 유형"></sc-label>
+					<sc-combobox-field value="{{poData.tax_typ_ccd}}" items="{{codes.taxTypCcd}}" display-field="label" value-field="data"
+									   readonly="[[!formula('editable')]]" placeholder="선택" on-change="onChangeTaxCd">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="지급방법 조건"></sc-label>
+					<sc-textarea-field class="h-50" value="{{poData.pymtmeth_cnd}}" readonly="[[!formula('editable')]]" max-length="500" validation-group="poInfo"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="[[getCntrInfoTitleText(poData.cntr_sgng_typ_ccd)]]" collapsible="true" validation-group="poInfo" column="3" i18n-disabled>
+				<cc-fieldset>
+					<sc-label text="[[getCntrInfoCntrAmtTitleText(poData.cntr_sgng_typ_ccd)]]" i18n-disabled></sc-label>
+					<sc-number-field value="{{poData.cntr_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="true">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="공급 금액"></sc-label>
+					<sc-number-field value="{{poData.sup_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="true">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="VAT" i18n-disabled></sc-label>
+					<sc-number-field value="{{poData.vat_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="true">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="계약이행보증 금액" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-checkbox-field hidden="[[formula('isWithoutCntrPO')]]" input-value="{{poData.cpgur_use_yn}}" checked-value="Y" un-checked-value="N"
+										   readonly="[[!formula('editable')]]" on-click="changePerforbondYn"></sc-checkbox-field>
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" id="perforBondRate" value="{{poData.cpgur_ro}}" format-type="decimal" min-value="0" max-value="100"
+										 class="w-140 align-right" readonly="[[!formula('perforBondEditable')]]" required="[[formula('perforBondRequired')]]" validator="perforBondRateValidator">
+						</sc-number-field>&nbsp;%&nbsp;
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.cpgur_amt}}" input-cover="true" format-type="amt"
+										 class="align-right" readonly="true">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="계약이행보증 기간" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.cpgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"
+										   class="w-150" readonly="[[!formula('perforBondEditable')]]" placeholder="선택" required="[[formula('perforBondEssential')]]">
+						</sc-combobox-field>
+						<sc-period-date-field hidden="[[formula('isWithoutCntrPO')]]" id="perforBondPeriod" from-value="{{poData.cpgur_st_dt}}" to-value="{{poData.cpgur_exp_dt}}" string-date="true" style="margin-left:5px"
+											  readonly="[[!formula('perforBondEditable')]]" required="[[formula('perforBondRequired')]]"></sc-period-date-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="선급금이행보증 금액" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-checkbox-field hidden="[[formula('isWithoutCntrPO')]]" input-value="{{poData.apymtgur_use_yn}}" checked-value="Y" un-checked-value="N"
+										   readonly="[[!formula('editable')]]" on-click="changePrepaybondYn"></sc-checkbox-field>
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" id="prePayBondRate" value="{{poData.apymtgur_ro}}" format-type="decimal" min-value="0" max-value="100"
+										 class="w-140 align-right" readonly="[[!formula('prePayBondEditable')]]" required="[[formula('prePayBondRequired')]]" validator="prePayBondRateValidator">
+						</sc-number-field>&nbsp;%&nbsp;
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.apymtgur_amt}}" input-cover="true" format-type="amt"
+										 class="align-right" readonly="true">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="선급금 보증 기간" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.apymtgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"
+										   class="w-150" readonly="[[!formula('prePayBondEditable')]]" placeholder="선택" required="[[formula('prePayBondEssential')]]">
+						</sc-combobox-field>
+						<sc-period-date-field hidden="[[formula('isWithoutCntrPO')]]" id="prePayBondPeriod" from-value="{{poData.apymtgur_st_dt}}" to-value="{{poData.apymtgur_exp_dt}}" string-date="true" style="margin-left:5px"
+											  readonly="[[!formula('prePayBondEditable')]]" required="[[formula('prePayBondRequired')]]"></sc-period-date-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="하자이행보증 금액" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-checkbox-field hidden="[[formula('isWithoutCntrPO')]]" input-value="{{poData.defpgur_use_yn}}" checked-value="Y" un-checked-value="N"
+										   readonly="[[!formula('editable')]]" on-click="changeMaintbondYn"></sc-checkbox-field>
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" id="maintBondRate" value="{{poData.defpgur_ro}}" input-cover="true" format-type="decimal" min-value="0" max-value="100"
+										 class="w-140 align-right" readonly="[[!formula('maintBondEditable')]]" required="[[formula('maintBondRequired')]]" validator="maintBondRateValidator">
+						</sc-number-field>&nbsp;%&nbsp;
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.defpgur_amt}}" input-cover="true" format-type="amt"
+										 class="align-right" readonly="true">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[formula('isWithoutCntrPO')]]">
+					<sc-label text="하자보증기간" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field hidden="[[formula('isWithoutCntrPO')]]" value="{{poData.defpgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"
+										   class="w-150" readonly="[[!formula('maintBondEditable')]]" placeholder="선택" required="[[formula('maintBondEssential')]]">
+						</sc-combobox-field>
+						<sc-combobox-field hidden="[[formula('isWithoutCntrPO')]]" id="maintBondTyp" value="{{poData.defpgur_pd_typ_ccd}}" items="{{codes.maintBondTyp}}" display-field="label" value-field="data"
+										   class="w-150" readonly="[[!formula('maintBondEditable')]]" style="margin-left:5px" placeholder="선택" required="[[formula('maintBondRequired')]]">
+						</sc-combobox-field>
+						<sc-label text="로부터" style="margin:0 5px" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+						<sc-number-field hidden="[[formula('isWithoutCntrPO')]]" id="maintBondMon" value="{{poData.defpgur_pd}}" class="w-50 align-right" readonly="[[!formula('maintBondEditable')]]"
+										 min-value="0" max-length="5" required="[[formula('maintBondRequired')]]" validator="maintBondMonValidator"></sc-number-field>
+						<sc-label text="개월" style="margin:0 5px" hidden="[[formula('isWithoutCntrPO')]]"></sc-label>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="4">
+					<sc-label text="지체상금"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-number-field value="{{poData.dfrm_ro}}" input-cover="true" format-type="decimal" min-value="0" max-value="999"
+										 class="w-100" readonly="[[!formula('editable')]]" style="margin-left:5px">
+						</sc-number-field>
+						<sc-label text="/1000" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="gridPanel" class="h-500" collapsible="true" editable="[[formula('gridEditable')]]" aggregate="true"
+					 use-state="[[formula('gridEditable')]]" use-selection="[[formula('gridEditable')]]"
+					 calc-footer-include-invisible="true"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar title-text="품목 정보">
+					<sc-button text="무코드 품목 추가" on-click="onAddNoCdItem" hidden="[[!formula('noCdItemAddable')]]" auth-s></sc-button>
+					<sc-button text="품목 추가" on-click="onPopupItemSelect" hidden="[[!formula('itemBtn')]]" auth-s></sc-button>
+					<sc-button text="일괄 적용" on-click="onShowApplyDialog" hidden="[[!formula('gridEditable')]]" auth-s></sc-button>
+					<sc-button text="삭제" on-click="onDeleteItem" hidden="[[!formula('itemBtn')]]" auth-s></sc-button>
+					<sc-button text="납품 일정" on-click="onAsnSchedPopup" hidden="[[formula('gridEditable')]]" auth-r></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="po_lno" header-text="항번" data-type="number" width="50" editable="false"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100" editable="false"></sc-data-column>
+					<sc-group-column hide-child-headers="true" header-text="[[getItemNmHdText(poData.purc_typ_ccd)]]" width="280">
+						<sc-data-column data-field="disp_item_nm" width="250" text-align="left" item-editable-function="onItemEditableFn" max-length="500" required="true"></sc-data-column>
+						<sc-image-column data-field="img_item_cd" image-change-function="onImageChangeFn" width="30" text-align="center" editable="false"></sc-image-column>
+					</sc-group-column>
+					
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left" item-editable-function="onItemEditableFn" max-length="1000"
+									item-style-function="onItemStyleFn" validator-function="gridValidatorFn"></sc-data-column>
+					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="100" text-align="center" visible="[[formula('hasNoCdItem')]]"
+									 image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-checkbox-column data-field="df_yn" header-text="면세 여부" width="80"
+										display-checkbox="false" editable="true"></sc-checkbox-column>
+					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="60" required="[[formula('isModTypN')]]"
+										display-field="data" value-field="data" items="{{codes.unitCd}}"
+										editable="[[formula('unitCdEditable')]]"></sc-combobox-column>
+					<sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right" item-editable-function="onItemEditableFn"
+									data-type="number" format-type="qty" max-length="8"
+									editor-regex-function="onRegexFn" validate-on-cell-paste="true" validator-function="gridValidatorFn"
+									required="true"></sc-data-column>
+					<sc-data-column data-field="po_uprc" header-text="발주 단가" width="100" text-align="right" item-editable-function="onItemEditableFn"
+									data-type="number" format-type="price" max-length="13"
+									editor-regex-function="onRegexFn" validate-on-cell-paste="true" validator-function="gridValidatorFn"
+									aggregate-title="합계" required="true"></sc-data-column>
+					<sc-data-column data-field="po_amt" header-text="발주 금액" width="140" text-align="right" editable="false"
+									data-type="number" format-type="amt"
+									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-data-column data-field="item_vat" header-text="VAT" width="120" text-align="right" editable="false"
+									format-type="amt" converter="onVatConvert"
+									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-date-column data-field="const_st_dt" header-text="공사 시작 일자" width="150"
+									editable="true" required="[[formula('isPurcTypCT')]]" visible="[[formula('isPurcTypCT')]]"></sc-date-column>
+					<sc-date-column data-field="const_exp_dt" header-text="공사 종료 일자" width="150" validator-function="gridValidatorFn"
+									editable="true" required="[[formula('isPurcTypCT')]]" visible="[[formula('isPurcTypCT')]]"></sc-date-column>
+					<sc-date-column data-field="req_dlvy_dt" header-text="요청 납품 일자" width="150"
+									editable="[[formula('isPurcTypMTandRFXN')]]" required="false" visible="[[formula('isPurcTypMT')]]"></sc-date-column>
+					<sc-date-column data-field="dlvy_dt" header-text="납품 일자" width="120" validator-function="gridValidatorFn"
+									editable="true" required="[[formula('isPurcTypMT')]]" visible="[[formula('isPurcTypMT')]]"></sc-date-column>
+					<sc-group-column hide-child-headers="true" header-text="플랜트" width="180" text-align="center" editable="false">
+						<sc-data-column data-field="plt_cd" width="70" text-align="center" editable="false"></sc-data-column>
+						<sc-data-column data-field="plt_nm" width="70" text-align="center" editable="false"></sc-data-column>
+						<sc-image-column image-cls="search" data-field="img_plant_select" width="30" text-align="center"
+										 editable="false" visible="[[formula('noCdItemPlantAddable')]]" image-change-function="onImagePlantSelectShowFunction"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column data-field="dlvy_plc" header-text="[[getRdLocatHdText(poData.purc_typ_ccd)]]" width="150" text-align="left" editable="true" max-length="1000" required="true"></sc-data-column>
+					<sc-group-column hide-child-headers="true" header-text="구매 그룹" width="160" text-align="center">
+						<sc-data-column data-field="purc_grp_nm" header-text="구매 그룹" width="100" editable="[[formula('isModTypNEditable')]]" required="[[formula('isModTypN')]]"></sc-data-column>
+						<sc-image-column data-field="img_purc_grp" image-cls="search" width="30" visible="[[formula('isModTypNEditable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column hide-child-headers="true" header-text="구매요청 실수요자" width="160" text-align="center">
+						<sc-data-column data-field="pr_realusr_nm" header-text="구매요청 실수요자" width="100" editable="[[formula('isModTypNEditable')]]"></sc-data-column>
+						<sc-image-column data-field="img_pr_sug" image-cls="search" width="30" visible="[[formula('isModTypNEditable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column hide-child-headers="true" header-text="입고 담당자" width="160" text-align="center">
+						<sc-data-column data-field="gr_pic_nm" header-text="입고 담당자" width="100" editable="[[formula('isModTypNEditable')]]" required="[[formula('isModTypN')]]"></sc-data-column>
+						<sc-image-column data-field="img_gr_chr" image-cls="search" width="30" visible="[[formula('isModTypNEditable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column data-field="rfx_no" header-text="RFX 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="rfx_rnd" header-text="RFX 진행차수" width="90"></sc-data-column>
+					<sc-data-column data-field="rfx_bid_no" header-text="RFX 투찰 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="pr_no" header-text="구매요청 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="pr_lno" header-text="구매요청 항번" width="100" data-type="number"></sc-data-column>
+					<sc-data-column data-field="po_cmpld_conv_yn" header-text="발주 종료" converter="onPoCompleteYnConvert" width="80"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pr_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pr_revno" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="pr_realusr_id"></sc-grid-field>
+					<sc-grid-field data-field="pr_realusr_nm"></sc-grid-field>
+					<sc-grid-field data-field="rfx_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_item_lno"></sc-grid-field>
+					<sc-grid-field data-field="rfx_bid_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_bid_revno"></sc-grid-field>
+					<sc-grid-field data-field="rfx_bid_lno"></sc-grid-field>
+					<sc-grid-field data-field="purc_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="cost_typ"></sc-grid-field>
+					<sc-grid-field data-field="plt_cd"></sc-grid-field>
+					<sc-grid-field data-field="cust_ro" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="cust_amt" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="itemcat_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_oorg_cd"></sc-grid-field>
+					<sc-grid-field data-field="wh_ccd"></sc-grid-field>
+					<sc-grid-field data-field="purc_grp_cd"></sc-grid-field>
+					<sc-grid-field data-field="gr_pic_id"></sc-grid-field>
+					<sc-grid-field data-field="uprccntr_no"></sc-grid-field>
+					<sc-grid-field data-field="uprccntr_revno"></sc-grid-field>
+					<sc-grid-field data-field="uprccntr_lno"></sc-grid-field>
+					<sc-grid-field data-field="sg_cd"></sc-grid-field>
+					<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+					<sc-grid-field data-field="asn_qty"></sc-grid-field>
+					<sc-grid-field data-field="gr_qty"></sc-grid-field>
+					<sc-grid-field data-field="po_cmpld_yn"></sc-grid-field>
+					<sc-grid-field data-field="po_ery_ed_yn"></sc-grid-field>
+					<sc-grid-field data-field="po_ery_ed_dttm" data-type="datetime"></sc-grid-field>
+					<sc-grid-field data-field="df_yn"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+					<sc-grid-field data-field="tax_rate" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="po_req_item_rcpt_uuid"></sc-grid-field>
+					<sc-grid-field data-field="po_req_item_rcpt_qta_aloc_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<sc-dialog id="dialog" title-text="일괄 적용" title-align="left" style="width:450px; height:450px" modal="true">
+			<div style="display:flex; flex-direction:column; height:100%; width:100%;">
+				<cc-page-title-bar>
+					<sc-button text="일괄 적용" on-click="onApplyData" auth-s></sc-button>
+				</cc-page-title-bar>
+				<cc-form-panel column="1">
+					<cc-fieldset>
+						<sc-label text="면세 여부"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_duty_free_yn}}" on-checkchange="onCheckchange" data-args="df_yn"></sc-checkbox-field>&nbsp;
+							<sc-checkbox-field value="{{dialog.df_yn}}" checked-value="Y" un-checked-value="N" readonly="[[!dialog.check_duty_free_yn]]"></sc-checkbox-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('unitCdEditable')]]">
+						<sc-label text="UOM"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_unit_cd}}" on-checkchange="onCheckchange" data-args="uom_ccd"></sc-checkbox-field>&nbsp;
+							<sc-combobox-field value="{{dialog.uom_ccd}}"
+											   items="{{codes.unitCd}}" display-field="data" value-field="data"
+											   readonly="[[!dialog.check_unit_cd]]" placeholder="선택" on-change="onChangeDialogUnitCd">
+							</sc-combobox-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('itemQtyEditable')]]">
+						<sc-label text="발주 수량"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_item_qty}}" on-checkchange="onCheckchange" data-args="po_qty"></sc-checkbox-field>&nbsp;
+							<sc-number-field id="dialogItemQty" value="{{dialog.po_qty}}" class="w-150 align-right" min-value="0" max-length="9" readonly="[[!dialog.check_item_qty]]">
+							</sc-number-field>
+						</div>
+					</cc-fieldset>
+					<!--<cc-fieldset hidden="[[!formula('isPurcTypMT')]]">
+						<sc-label text="요청 납품 일자"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_req_dlvy_dt}}" on-checkchange="onCheckchange" data-args="req_dlvy_dt"></sc-checkbox-field>&nbsp;
+							<sc-date-field value="{{dialog.req_dlvy_dt}}" class="w-150" readonly="[[!dialog.check_req_dlvy_dt]]"></sc-date-field>
+						</div>
+					</cc-fieldset>-->
+					<cc-fieldset hidden="[[!formula('isPurcTypMT')]]">
+						<sc-label text="납품 일자"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_dlvy_dt}}" on-checkchange="onCheckchange" data-args="dlvy_dt"></sc-checkbox-field>&nbsp;
+							<sc-date-field value="{{dialog.dlvy_dt}}" class="w-150" readonly="[[!dialog.check_dlvy_dt]]"></sc-date-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="[[getRdLocatHdText(poData.purc_typ_ccd)]]"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_rd_locat}}" on-checkchange="onCheckchange" data-args="dlvy_plc"></sc-checkbox-field>&nbsp;
+							<sc-text-field value="{{dialog.dlvy_plc}}" readonly="[[!dialog.check_rd_locat]]"></sc-text-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('isPurcTypCT')]]">
+						<sc-label text="공사 시작 일자"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_prd_sd}}" on-checkchange="onCheckchange" data-args="const_st_dt"></sc-checkbox-field>&nbsp;
+							<sc-date-field value="{{dialog.const_st_dt}}" class="w-150" readonly="[[!dialog.check_prd_sd]]"></sc-date-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('isPurcTypCT')]]">
+						<sc-label text="공사 종료 일자"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_prd_ed}}" on-checkchange="onCheckchange" data-args="prd_de"></sc-checkbox-field>&nbsp;
+							<sc-date-field value="{{dialog.const_exp_dt}}" class="w-150" readonly="[[!dialog.check_prd_ed]]"></sc-date-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('isModTypNEditable')]]">
+						<sc-label text="구매 그룹"></sc-label>
+						<div class="field-box">
+							<sc-checkbox-field value="{{dialog.check_purc_grp_cd}}" on-checkchange="onCheckchange" data-args="purc_grp"></sc-checkbox-field>&nbsp;
+							<cc-purc-grp value="{{dialog.purc_grp_nm}}" result-value="{{dialog.purc_grp_cd}}" purc-grp-typ="PURC" disabled="[[!dialog.check_purc_grp_cd]]" hide-trigger="[[!dialog.check_purc_grp_cd]]"></cc-purc-grp>
+						</div>
+					</cc-fieldset>
+				</cc-form-panel>
+			</div>
+		</sc-dialog>
+		
+		
+		<sc-dialog id="poWorkplaceDialog" title-text="Vendor Notice" title-align="left" style="width:680px; height:450px" modal="true">
+			<cc-form-panel column="1">
+				<cc-fieldset>
+					<sc-label text="협력사 명"></sc-label>
+					<sc-text-field value="{{poData.vd_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발주 물품"></sc-label>
+					<sc-text-field value="{{poItemInfo.item_nm_en}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="수량"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{poItemInfo.po_qty}}" class="w-130" readonly="true"></sc-text-field>
+						<div class="hspace-10"></div>
+						<sc-label text="납품 일자"></sc-label>
+						<sc-date-field value="{{poItemInfo.req_dlvy_dt}}" class="w-130" readonly="true"></sc-date-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="거부 사유"></sc-label>
+					<sc-combobox-field value="{{poData.po_rcpt_rjct_rsn_ccd}}" items="{{codes.poReturnReason}}" display-field="label" value-field="data" readonly="true"
+									   placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset row-span="2">
+					<sc-label text="협력사 제안"></sc-label>
+					<div class="field-box">
+						<sc-label text="Option 1" class="box w-60 optionButtonStyle"></sc-label>
+						<div class="hspace-10"></div>
+						<sc-text-field value="Change the delivery date (2024/04/10)" readonly="true" style="width: 334px;"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label></sc-label>
+					<div class="field-box">
+						<sc-label text="Option 2" class="box  w-60 optionButtonStyle"></sc-label>
+						<div class="hspace-10"></div>
+						<sc-text-field value="Changing the order quantity (100)" readonly="true" style="width: 334px;"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset class="poButtonFieldset">
+					<sc-button veto-fixed-size class="poButtonStyle" text="Renew BPA" on-click="" auth-s></sc-button>
+					<sc-button veto-fixed-size class="poButtonStyle" text="Po Change" on-click="onClosePoWorkDialog" auth-s></sc-button>
+					<sc-button veto-fixed-size class="poButtonStyle" text="Po Again" on-click="" auth-s></sc-button>
+					<sc-button veto-fixed-size class="poButtonStyleWidth" text="Notice To Requester" on-click="" auth-s></sc-button>
+				</cc-fieldset>
+			</cc-form-panel>
+		</sc-dialog>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-po-detail",
+			properties: {
+				poData: {
+					type: Object,
+					value: function() {
+						return {
+							is_new: false,
+							po_typ_ccd: "URGPURC", // 긴급발주
+							cur_ccd: "KRW",
+							po_sts_ccd: "CRNG",		// 임시저장
+							po_chg_typ_ccd: "NEW",		// 신규
+							po_cmpld_yn: "N",		// 발주완료여부
+							apvl_typ_ccd: "PO",	// 결재 유형 (PO_CHG: 발주변경품의, PO: 발주품의)
+							cntr_st_dt: "",
+							cntr_exp_dt: "",
+							has_no_cd_item: "N",
+							cstm_yn: "N",
+							cpgur_use_yn: "N",
+							cpgur_ro: 0,
+							cpgur_typ_ccd: "",
+							apymtgur_use_yn: "N",
+							apymtgur_ro: 0,
+							apymtgur_typ_ccd: "",
+							defpgur_use_yn: "N",
+							defpgur_ro: 0,
+							defpgur_typ_ccd: "",
+							openedApproval: false,
+							saveAfterClose: false,
+							stagePayEval: false,
+							bypassApproval: false,
+							cntr_sgng_typ_ccd: 'NA'
+						};
+					}
+				},
+				findInfo: {
+					type: Object,
+					value: function() {
+						return {
+							param: {}
+						}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						var me = this;
+						return {
+							unitCd: [],
+							domovrsDivCcd: [],
+							taxTypCcd: [],
+							pymtmethCcd: [],
+							delyTermsCd: [],
+							payClsCd: [],
+							aprvSts: [],
+							voProgSts: [],
+							poProgSts: [],
+							purcTypCcd: [],
+							maintBondTyp: [],
+							bondCls: [],
+							modTyp: [],
+							regTyp: [],
+							purcGrpCdParam: {
+								purc_grp_typ_ccd: "PURC",
+								co_cd: SCSessionManager.currentUser.co_cd
+							},
+							csTypCd: [],
+							setupCd: [],
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+							setupInfo: {},
+							cntrdocFormListParam: {
+								cntr_typ_ccd: "PO_CNTRDOC"
+							},
+							cntrdocFormList: [],
+							taxTypCcdParam: {
+								ccd: "C031",
+								cstr_cnd_cd: "TAXN_RATE"
+							},
+							cntrSignParam: {
+								ccd: "P237",
+								cstr_cnd_cd: "PO"
+							},
+							cntrSgngTypCcd: [], /* 계약 체결 유형 */
+							poReturnReason: [],
+						}
+					},
+					reset: false
+				},
+				dialog: {
+					type: Object,
+					value: function() {
+						return {
+							check_duty_free_yn: true,
+							check_unit_cd: true,
+							check_item_qty: true,
+							check_req_dlvy_dt: true,
+							check_dlvy_dt: true,
+							check_rd_locat: true,
+							check_prd_sd: true,
+							check_prd_ed: true,
+							check_purc_grp_cd: true
+						}
+					}
+				},
+				/* popup */
+				userPopup: {
+					type: Object,
+					value: function() {
+						return null;
+					}
+				},
+				jobPopup: {
+					type: Object,
+					value: function() {
+						return null;
+					}
+				},
+				grid: {
+					type: Object,
+					value: function() {
+						return {
+							itemIndex: null,
+							fieldName: null
+						};
+					}
+				},
+				paymentDateCheckObj: {
+					type: Object,
+					value: function() {
+						return {
+							minApDt: null,
+							maxApDt: null,
+							minMpDt: null,
+							minMpDt: null,
+							bpDt: null
+						}
+					}
+				},
+				dupLnos: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				
+				// Url Copy
+				copyValue: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				taxRate: {
+					type: Number,
+					value: 0
+				},
+				
+				workplaceYn: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				poItemInfo: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				ctryCcd: {
+					type: String,
+					value: ""
+				},
+			},
+			getCntrInfoTitleText: function(cntrSgngTypCcd) {
+				var me = this;
+				return cntrSgngTypCcd === "NA" ? me.translate("발주 정보") : me.translate("계약 정보");
+			},
+			getCntrInfoCntrAmtTitleText: function(cntrSgngTypCcd) {
+				var me = this;
+				return cntrSgngTypCcd === "NA" ? me.translate("발주 금액(VAT포함)") : me.translate("계약 금액(VAT포함)");
+			},
+			getRdLocatHdText: function(purcTypCcd) {
+				var me = this;
+				var headerText = me.translate("납품 장소");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText = me.translate("수행 장소");
+				}
+				return headerText;
+			},
+			getItemNmHdText: function(purcTypCcd) {
+				var me = this;
+				var headerText = me.translate("품목 명");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText = me.translate("공사/용역명");
+				}
+				return headerText;
+			},
+			_getCodeName: function(code, value) {
+				var me = this;
+				var codes = me.get("codes." + code);
+				var filtered = codes.filter(function(code) {
+					return code["data"] === value;
+				});
+				if(filtered.length > 0) {
+					return filtered[0]["label"];
+				}
+				return null;
+			},
+			observers: [
+				"changedPerforBondRate(poData.cpgur_use_yn, poData.cpgur_ro, poData.cntr_amt)",
+				"changedPerforBondCls(poData.cpgur_typ_ccd)",
+				"changedPrePayBondRate(poData.apymtgur_use_yn, poData.apymtgur_ro, poData.apymt_amt)",
+				"changedPrePayBondCls(poData.apymtgur_typ_ccd)",
+				"changedMaintBondRate(poData.defpgur_use_yn, poData.defpgur_ro, poData.cntr_amt)",
+				"changedMaintBondCls(poData.defpgur_typ_ccd)"
+			],
+			
+			formulas: {
+				isNew: function() {
+					var me = this;
+					return UT.isEmpty(me.get("poData.po_uuid")) && (me.get("poData.is_new") === true);
+				}, // 신규
+				isModReq: function() {
+					var me = this;
+					var modReqTyp = me.get("poData.po_chg_req_typ_ccd");   // 계약변경 요청유형 - PURC_PIC: 계약변경, PURC_REQR: 계약변경요청
+					// 변경 요청 정보
+					// - 계약변경요청(PURC_REQR)
+					return (modReqTyp === "PURC_REQR");
+				}, // 변경요청
+				isModified: function() {
+					var me = this;
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					// - 변경(C)
+					return (modTyp === "CHG");
+				}, // 변경
+				isClosed: function() {
+					var me = this;
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					// 해지 사유 정보
+					// - 해지(R)
+					return (modTyp === "TRMN");
+				},
+				isViewMode: function() {
+					var me = this;
+					return (me.get("findInfo.param.is_view_mode") === true);
+				},
+				// 전체 수정 가능여부
+				editable: function() {
+					var me = this;
+					
+					var poRev = UT.toNumber(me.get("poData.po_revno")); // 차수
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					
+					// 1차수 또는 신규, 대기중(S),임시저장(T). 종료아님, 조회모드아님
+					return (poRev <= 1 && (poProgSts === "WTG" || poProgSts === "CRNG") && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 협력사 변경가능 여부
+				editableVd: function() {
+					var me = this;
+					var flag = true;
+					var poReqTyp = me.get("poData.po_req_typ_ccd"); // 발주 요청 유형 - PR: PR기준발주, PURC_REQR: 견적기준발주
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					
+					// 요청받은 발주
+					if(UT.isNotEmpty(poReqTyp)) {
+						flag = false;
+					} else if(UT.isNotEmpty(me.get("poData.uprccntr_no"))) { //단가구매
+						flag = false;
+					} else {
+						// 변경요청(R), 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = ((poProgSts === "CHG_REQ" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+					}
+					return flag;
+				},
+				// 내외자 변경가능 여부
+				editableShipperType: function() {
+					var me = this;
+					var flag = true;
+					var poReqTyp = me.get("poData.po_req_typ_ccd"); // 발주 요청 유형 - PR: PR기준발주, PURC_REQR: 견적기준발주
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					
+					// 요청받은 발주
+					if(UT.isNotEmpty(poReqTyp)) {
+						flag = false;
+					} else if(UT.isNotEmpty(me.get("poData.uprccntr_no"))) {	//단가구매
+						// 변경요청(R), 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = false;
+					} else {
+						// 변경요청(R), 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = ((poProgSts === "CHG_REQ" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+					}
+					return flag;
+				},
+				// 통화 변경가능 여부
+				editableCur: function() {
+					var me = this;
+					var flag = true;
+					var poReqTyp = me.get("poData.po_req_typ_ccd"); // 발주 요청 유형 - PR: PR기준발주, RFX: 견적기준발주
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					// 요청받은 발주
+					if(UT.isNotEmpty(poReqTyp)) {
+						flag = false;
+					} else if(UT.isNotEmpty(me.get("poData.uprccntr_no"))) {	//단가구매
+						flag = false;
+					} else {
+						// 변경요청(R), 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = ((poProgSts === "CHG_REQ" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+					}
+					return flag;
+				},
+				// 기본계약여부 체크가능여부
+				checkableBasCntrYn: function() {
+					var me = this;
+					
+					if(UT.isNotEmpty(me.get("poData.uprccntr_no"))) {	// 단가구매
+						return false;
+					}
+					return me.formula("editable");
+				},
+				
+				hasEdocModule: function() {
+					return SCModuleManager.exist("EDOC");
+				},
+				
+				// 전자계약 사용여부  readonly
+				checkableElecCntrYn: function() {
+					var me = this;
+					// 단가구매
+					if((UT.isNotEmpty(me.get("poData.uprccntr_no")) && me.formula('isExitEdocModuleAndEcntrDrtCrnY'))
+							|| me.formula('isWithoutCntrPO')) {
+						return false;
+					}
+					return me.formula("editable") && false;
+				},
+				//display 계약서 자동생성 여부 표시
+				isEcntrUseY: function() {
+					var me = this;
+					return me.get("poData.cntr_sgng_typ_ccd") === "ECNTR";
+				},
+				
+				// 계약 사용여부 (전자계약, 오프라인계약)
+				isCntrUseY: function() {
+					var me = this;
+					return (me.get("poData.cntr_sgng_typ_ccd") === "ECNTR" || me.get("poData.cntr_sgng_typ_ccd") === "OFFLN_CNTR");
+				},
+				// 전자계약 사용여부 화면 UI 설정 end
+				// 발주생성 임시저장 버튼
+				saveDraftBtn: function() {
+					var me = this;
+					
+					var poRev = UT.toNumber(me.get("poData.po_revno")); // 차수
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					
+					// 1차수 또는 신규, 대기중(S),임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+					return (poRev <= 1 && (poProgSts === "WTG" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 발주요청 버튼
+				saveSubmitBtn: function() {
+					var me = this;
+					
+					var poRev = UT.toNumber(me.get("poData.po_revno")); // 차수
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					
+					// 1차수 또는 신규, 대기중(S),임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+					return (poRev <= 1 && (poProgSts === "WTG" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 발주 결재요청 버튼
+				approvalBtn: function() {
+					var me = this;
+					
+					var poRev = UT.toNumber(me.get("poData.po_revno")); // 차수
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					
+					// 1차수 또는 신규, 대기중(S),임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+					return (poRev <= 1 && (poProgSts === "WTG" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 변경이력 버튼
+				showModHistory: function() {
+					var me = this;
+					var poId = me.get("poData.po_uuid");
+					var maxPoRev = UT.toNumber(me.get("poData.max_po_rev"));
+					
+					return UT.isNotEmpty(poId) && (maxPoRev > 1);
+				},
+				// 계약 변경 요청 버튼
+				modifyReqCntrBtn: function() {
+					var me = this;
+					
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var modifiableItemYn = me.get("poData.modifiable_item_yn"); // 내가 생성한 pr item 이고, 아직 종료되지 않은 건 있음. 변경 요청 가능(Y)
+					var maxRevYn = me.get("poData.max_rev_yn"); // 마지막 차수 여부
+					var cntrSgngTypCcd = me.get("poData.cntr_sgng_typ_ccd"); // 게약 체결 유형
+					var cntrReqStsCcd = me.get("poData.po_cntr_req_sts_ccd")
+					// - 변경/해지 요청 가능, 완료(C), 해지(R)아님. 종료아님, 검수/기성요청 건 없음, 조회모드아님
+					return (modifiableItemYn === "Y" && maxRevYn === "Y" && (poProgSts === "APVD" || (cntrReqStsCcd == "RET" && poProgSts === "CNTR_CHG_REQ")) && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode') && (cntrSgngTypCcd === "ECNTR" || cntrSgngTypCcd === "OFFLN_CNTR"));
+				},
+				// 변경요청 버튼
+				modifyCTypBtn: function() {
+					var me = this;
+					
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var modifiableItemYn = me.get("poData.modifiable_item_yn"); // 내가 생성한 pr item 이고, 아직 종료되지 않은 건 있음. 변경 요청 가능(Y)
+					var maxRevYn = me.get("poData.max_rev_yn"); // 마지막 차수 여부
+					// - 변경/해지 요청 가능, 완료(C), 해지(R)아님. 종료아님, 검수/기성요청 건 없음, 조회모드아님
+					return (modifiableItemYn === "Y" && maxRevYn === "Y" && poProgSts === "APVD" && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 계약 해지요청 버튼
+				trmnReqCntrBtn: function() {
+					var me = this;
+					
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var modifiableItemYn = me.get("poData.modifiable_item_yn"); // 내가 생성한 pr item 이고, 아직 종료되지 않은 건 있음. 변경 요청 가능(Y)
+					var maxRevYn = me.get("poData.max_rev_yn"); // 마지막 차수 여부
+					var cntrSgngTypCcd = me.get("poData.cntr_sgng_typ_ccd"); // 게약 체결 유형
+					// - 변경/해지 요청 가능, 완료(C), 해지(R)아님. 종료아님, 검수/기성요청 건 없음, 조회모드아님
+					return (modifiableItemYn === "Y" && maxRevYn === "Y" && (poProgSts === "APVD" || poProgSts === "CNTR_TRMN_REQ") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode') && (cntrSgngTypCcd === "ECNTR" || cntrSgngTypCcd === "OFFLN_CNTR"));
+				},
+				// 해지요청 버튼
+				trmnPoBtn: function() {
+					var me = this;
+					
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var modifiableItemYn = me.get("poData.modifiable_item_yn"); // 내가 생성한 pr item 이고, 아직 종료되지 않은 건 있음. 변경 요청 가능(Y)
+					var maxRevYn = me.get("poData.max_rev_yn"); // 마지막 차수 여부
+					// - 변경/해지 요청 가능, 완료(C), 해지(R)아님. 종료아님, 검수/기성요청 건 없음, 조회모드아님
+					return (modifiableItemYn === "Y" && maxRevYn === "Y" && poProgSts === "APVD" && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 삭제 버튼
+				deleteBtn: function() {
+					var me = this;
+					
+					var poId = me.get("poData.po_uuid");
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var modReqTyp = me.get("poData.po_chg_req_typ_ccd");   // 계약변경 요청유형 - PURC_PIC: 계약변경, PURC_REQR: 계약변경요청
+					var rfxNo = me.get("poData.rfx_no");
+					// - 임시저장(T), 계약변경요청(PURC_REQR)아님, poId 있음, 해지(R)아님. 종료아님, 조회모드아님, rfxId 없음
+					return (poProgSts === "CRNG" && modReqTyp !== "PURC_REQR" && UT.isNotEmpty(poId) && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+				},
+				// 품목추가 버튼
+				itemBtn: function() {
+					var me = this;
+					var flag = true;
+					var poReqTyp = me.get("poData.po_req_typ_ccd"); // 발주 요청 유형 - PR: PR기준발주, RFX: 견적기준발주
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					var poRev = UT.toNumber(me.get("poData.po_revno")); // 차수
+					// 요청받은 발주
+					if(UT.isNotEmpty(poReqTyp)) {
+						flag = false;
+					} else if(UT.isNotEmpty(me.get("poData.uprccntr_no"))) {	//단가구매
+						// 변경요청(R), 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = false;
+					} else {
+						// 1차수 또는 신규, 임시저장(T), 해지(R)아님. 종료아님, 조회모드아님
+						flag = (poRev <= 1 && poProgSts === "CRNG" && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula('isViewMode'));
+					}
+					return flag;
+				},
+				// 기본계약
+				basCntrEditable: function() {
+					var me = this;
+					return me.formula("editable") && me.get("poData.mstagt_yn") === "Y";
+				},
+				perforBondEditable: function() {
+					var me = this;
+					return me.formula("editable") && me.get("poData.cpgur_use_yn") === "Y";
+				},
+				perforBondRequired: function() {
+					var me = this;
+					// 계약이행보증 유형: 보증보험
+					return me.get("poData.cpgur_typ_ccd") === "GUR_INS";
+				},
+				maintBondEditable: function() {
+					var me = this;
+					return me.formula("editable") && me.get("poData.defpgur_use_yn") === "Y";
+				},
+				maintBondRequired: function() {
+					var me = this;
+					// 하자이행보증 유형: 보증보험
+					return me.get("poData.defpgur_typ_ccd") === "GUR_INS";
+				},
+				prePayBondEditable: function() {
+					var me = this;
+					return me.formula("editable") && me.get("poData.apymtgur_use_yn") === "Y";
+				},
+				prePayBondRequired: function() {
+					var me = this;
+					// 선급금이행보증 유형: 보증보험
+					return me.get("poData.apymtgur_typ_ccd") === "GUR_INS";
+				},
+				gridEditable: function() {
+					var me = this;
+					var poProgSts = me.get("poData.po_sts_ccd"); // 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+					var poCompYn = me.get("poData.po_cmpld_yn"); // 발주완료여부
+					var modTyp = me.get("poData.po_chg_typ_ccd");       // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+					// 대기중(S),변경요청(R),임시저장(T), 해지(R)아님, 종료아님, 조회모드아님
+					return ((poProgSts === "WTG" || poProgSts === "CHG_RET" || poProgSts === "CRNG") && modTyp !== "TRMN" && poCompYn !== "Y" && !me.formula("isViewMode"));
+				},
+				isModTypN: function() {
+					var me     = this,
+						modTyp = me.get("poData.po_chg_typ_ccd");
+					return (modTyp === "NEW");
+				},
+				isModTypNEditable: function() {
+					var me = this;
+					return me.formula("isModTypN") && me.formula("editable");
+				},
+				unitCdEditable: function() {
+					var me = this;
+					var rfxNo = me.get("poData.rfx_no");
+					return me.formula("isModTypNEditable") && UT.isEmpty(rfxNo);
+				},
+				noCdItemPlantAddable: function() {
+					var me = this;
+					return me.formula("editable") && me.formula("hasNoCdItem");
+				},
+				itemQtyEditable: function() {
+					var me = this;
+					var poReqTyp = me.get("poData.po_req_typ_ccd");
+					// 요청으로 받은 발주는 품목 수량 변경 불가
+					return (me.formula("gridEditable") && (UT.isEmpty(poReqTyp)));
+				},
+				isPurcTypMTandRFXN: function() {
+					var me = this;
+					return (me.formula('isPurcTypMT') && UT.isEmpty(me.get("poData.rfx_no")));
+				},
+				isPurcTypMT: function() {
+					var me = this;
+					var purcTypCcd = me.get("poData.purc_typ_ccd");
+					return (purcTypCcd === "QTY");
+				},
+				isPurcTypCT: function() {
+					var me = this;
+					var purcTyp = me.get("poData.purc_typ_ccd");
+					return (purcTyp === "CONSTSVC");
+				},
+				isPurcTypMTEditable: function() {
+					var me = this;
+					return me.formula("isPurcTypMT") && me.formula("editable");
+				},
+				noCdItemAddable: function() {
+					return this.formula("itemBtn");
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					return me.get("poData.has_no_cd_item") === "Y";
+				},
+				// 컨소시엄유형 보이기
+				showCsTyp: function() {
+					return this.get("poData.cstm_yn") === "Y";
+				},
+				showEcntrViewBtn: function() {
+					var me = this;
+					var poId = me.get("poData.po_uuid");
+					return (UT.isNotEmpty(poId) && UT.isNotEmpty(me.poData.cntr_uuid) && me.formula('isCntrUseY'));
+				},
+				resetBtn: function() {
+					var me = this;
+					return (me.poData.cntr_sts_ccd == "RJ" && me.formula('isEcntrUseY') && me.poData.po_sts_ccd === "PRGSG");
+				},
+				/* 계약이행보증기간 */
+				perforBondEssential: function() {
+					var me = this;
+					return (me.poData.cpgur_use_yn === "Y");
+				},
+				/* 선급금보증기간 */
+				prePayBondEssential: function() {
+					var me = this;
+					return (me.poData.apymtgur_use_yn === "Y");
+				},
+				/* 하자보증기간 */
+				maintBondEssential: function() {
+					var me = this;
+					return (me.poData.defpgur_use_yn === "Y");
+				},
+				/* 계약기간 필수 여부 (보증종류가 보증보험일 경우) */
+				isRequiredCntrDate: function() {
+					return this.get("poData.apymtgur_typ_ccd") === "GUR_INS"
+							|| this.get("poData.defpgur_typ_ccd") === "GUR_INS"
+							|| this.get("poData.cpgur_typ_ccd") === "GUR_INS";
+				},
+				/* 인쇄 가능 상태 */
+				printAbleState: function() {
+					var me = this;
+					var flag = true;
+					var po_sts_ccd = me.get("poData.po_sts_ccd");		// 발주진행상태(C:발주승인완료, M:발주변경)
+					// 발주승인완료 && 발주변경 상태건만 인쇄 가능
+					if(po_sts_ccd === "APVD" || po_sts_ccd === "CHG") {
+						return flag;
+					}
+				},
+				isWithoutCntrPO: function() {
+					var me = this;
+					return me.get("poData.cntr_sgng_typ_ccd") === "NA";
+				},
+				poEvalSetBtn: function() {
+					var me = this;
+					return me.get("poData.ge_subj_yn") === "Y" && !me.formula('isViewMode');
+				},
+				geEvalSetBtnTxt: function() {
+					var me = this;
+					var purcTypCcd = me.get("poData.purc_typ_ccd");
+					return purcTypCcd === "QTY" ? me.translate("입고평가 설정") : me.translate("기성평가 설정");
+				},
+				purcTypTxt: function() {
+					var me = this;
+					var poData = me.get("poData");
+					if(poData == null) {
+						return "";
+					}
+					return poData.purc_typ_ccd === "QTY" ? me.translate("입고") : me.translate("기성");
+				},
+				isWorkplaceClicked: function() {
+					var me = this;
+					return (me.get("workplaceYn") === 'Y');
+				},
+			},
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+				
+				me.$.dialogItemQty.regex = CCPrecManager.regex("qty");
+			},
+			// 기본 파라미터 설정
+			load: function(param) {
+				var me = this;
+				
+				//계약체결유형변경
+				me.$.cntrSgngTypCcdCombo.items = me.get("codes.cntrSgngTypCcd");
+				if(UT.isNotEmpty(param.po_uuid)) {
+					me.set("findInfo.param", UT.copy(param));
+					
+					if(UT.isNotEmpty(param.workplace_yn)) {
+						me.set("workplaceYn", param.workplace_yn);
+						me.onShowModal();
+					}
+					
+					// Url Copy Param Set
+					me.set("copyValue", {
+						app_id: param.po_uuid
+					});
+					me.onFindInfo();
+				} else if(UT.isNotEmpty(param.po_req_rcpt_uuid)) {
+					me.onFindDefaultDataByPoReqRcpt(param.po_req_rcpt_uuid);
+				} else {
+					me.set("poData.is_new", true);
+					me.set("poData.apvl_typ_ccd", "PO");	// 결재 유형 (PO_CHG: 발주변경품의, PO: 발주품의)
+					me.set("poData.eval_set_yn", "N");
+					me.set("poData.evaluator_set_yn", "N");
+					me.set("poData.ge_subj_yn", SCModuleManager.getModulePropertyValues("PRO", "po.eval.default.yn") || "N");
+					me.setDefaultPaymentPlans();
+					me.changedPurcTyp();
+					me.applyFormula();
+					//계약체결유형변경
+					var ccd = UT.copy(me.get("codes.cntrSgngTypCcd"));
+					me.$.cntrSgngTypCcdCombo.items = UT.arrayFilterChange(ccd, {key: "data", value: "NA"});
+				}
+			},
+			
+			// 신규 작성 시 지불조건 설정
+			setDefaultPaymentPlans: function() {
+				var me = this;
+				var provider = me.$.paymentPlanGrid.getDataProvider(),
+					poAmt    = me.get("poData.po_amt") || 0,
+					payClsCds;
+				
+				if(me.formula("isPurcTypMT")) {
+					payClsCds = [{data: "BAL"}];
+				} else {
+					payClsCds = me.get("codes.payClsCd");
+				}
+				payClsCds.forEach(function(code) {
+					var payCls = code["data"], rate = 0, amt = 0, exptDate = null;
+					
+					if(payCls === "BAL") {
+						rate = 100;
+						amt = poAmt;
+						// 구매유형이 물품인 경우, 임의로 잔금의 지급예정일을 1달 뒤로 함
+						if(me.formula("isPurcTypMT")) {
+							exptDate = new Date();
+							exptDate.setMonth(exptDate.getMonth() + 1);
+						}
+					}
+					provider.addItem({"pymt_typ_ccd": payCls, "pymt_ro": rate, "pymt_amt": amt, "pymt_expt_dt": exptDate});
+				});
+				me.afterLoadingPaymentPlans();
+			},
+			
+			// 지불조건 조회 후 처리
+			afterLoadingPaymentPlans: function() {
+				var me = this;
+				var provider = me.$.paymentPlanGrid.getDataProvider(),
+					plans    = provider.getItems();
+				
+				var apAmt = new BigNumber(0);
+				for(var i = 0, len = plans.length; i < len; i++) {
+					var plan = plans[i];
+					if(plan["pymt_typ_ccd"] === "APYMT") {			// 선급금
+						apAmt = apAmt.plus(new BigNumber(plan["pymt_amt"]));
+					}
+				}
+				me.set("poData.apymt_amt", new BigNumber(UT.toNumber(apAmt.toFixed())) || 0);
+			},
+			
+			// 상세정보 조회
+			onFindInfo: function() {
+				var me = this;
+				
+				UT.request(me.$.findInfo, function(e, res) {
+					var data = res.response;
+					if(data) {
+						data.po_crn_dt = data.po_crn_dt || me.get("poData.po_crn_dt");
+						me.set("poData", data);
+						me.set("poData.apvl_typ_ccd", (me.get("poData.po_chg_typ_ccd") === "CHG") ? "PO_CHG" : "PO"); // 결재 유형 (PO_CHG: 발주변경품의, PO: 발주품의)
+						
+						me.$.gridPanel.setDataProvider(data.items);
+						if(UT.isNotEmpty(data.items)) {
+							me.set("poItemInfo", data.items[0])
+						}
+						me.set("poData.items", undefined);
+						
+						me.$.paymentPlanGrid.setDataProvider(data.paymentPlans);
+						
+						me.changedPurcTyp();
+						me.afterLoadingPaymentPlans();
+						//재초기화
+						me.applyFormula();
+					}
+				});
+			},
+			
+			onFindDefaultDataByPoReqRcpt: function(poReqRcptUuid) {
+				var me = this;
+				
+				me.$.findDefaultDataByPoReqRcpt.body = {
+					po_req_rcpt_uuid: poReqRcptUuid
+				};
+				
+				UT.request(me.$.findDefaultDataByPoReqRcpt, function(e, res) {
+					var result = res.response;
+					
+					// 발주정보
+					me.set("poData", result.poData);
+					me.set("poData.apvl_typ_ccd", "PO");	// 결재 유형 (PO_CHG: 발주변경품의, PO: 발주품의)
+					me.set("poData.eval_set_yn", "N");
+					me.set("poData.evaluator_set_yn", "N");
+					me.set("poData.po_crn_dt", new Date());
+					
+					// 발주품목
+					var poItems = result.poItems;
+					if(UT.isNotEmpty(poItems)) {
+						/*var title = poItems[0].item_nm;
+						if(poItems.length > 1) {
+							title = me.translate("STD.N3100", null, title, poItems.length - 1);
+						}
+						me.set("poData.po_tit", title);*/
+						me.$.gridPanel.getDataProvider().addItems(poItems);
+					}
+					
+					var paymentPlans = result.paymentPlans;
+					if(paymentPlans != null && UT.isNotEmpty(paymentPlans)) {
+						me.$.paymentPlanGrid.getDataProvider().addItems(paymentPlans);
+					} else {
+						// 지불조건
+						me.setDefaultPaymentPlans();
+					}
+					
+					me.changedPurcTyp();
+					me.afterLoadingPaymentPlans();
+					me.applyFormula();
+				});
+			},
+			
+			// 데이터 유효성 검사
+			isValid: function(saveType) {
+				var me = this;
+				
+				if(!me.validate('poInfo')) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				if(me.get("poData.po_poss_yn") === "N") {
+					//"[협력사 명 : {0}] 발주 업체가 아니기 때문에 발주가 불가합니다."
+					UT.alert(me.translate("STD.PO1074", null, me.get("poData.vd_nm")), null, true);
+					return false;
+				}
+				
+				if(saveType !== "tempSave") {
+					var provider = me.$.gridPanel.getDataProvider();
+					if(!provider || provider.getItemSize() === 0) {
+						UT.alert("STD.PR1002"); //"품목 정보가 없습니다."
+						return false;
+					}
+					
+					// 컨소시엄 -
+					if(me.get("poData.cstm_yn") === "Y" && me.get("poData.set_cs_amt_yn") === "N") {
+						UT.alert("STD.CS1023");	// 공동수급 구성업체별 금액을 설정해야합니다.
+						return false;
+					}
+					
+					// 입고평가 대상 여부 Y인 경우 입고평가 설정 필요
+					if(me.get("poData.ge_subj_yn") === "Y") {
+						if(UT.isEmpty(me.get("poData.ge_uuid"))) {
+							//{0}평가 대상인 경우 저장 후 평가 설정을 먼저 진행하시기 바랍니다.
+							var message = me.translate("STD.PO1088", null, me.translate(me.formula("purcTypTxt")));
+							UT.alert(message);
+							return false;
+						}
+					}
+				}
+				
+				// 품목그리드 validate
+				if(!me.$.gridPanel.validate()) {	//실패
+					UT.alert("STD.N1102");
+					return false;
+				}
+				// PR/RFx 없이 생성한 경우, 품목 중복체크
+				if(UT.isEmpty(me.get("poData.po_req_typ_ccd")) && me.hasDupItems()) {
+					// 중복된 '{0}'(이)가 존재합니다.
+					var msg = me.translate("STD.E1042", null, this.translate("품목 정보"))
+							+ "<br/>[" + me.translate("항번") + "] " + me.dupLnos.toString();
+					UT.alert(msg, null, true);
+					return false;
+				}
+				
+				// 지급조건그리드 validate
+				me.calculatePaymentDate();
+				if(!me.$.paymentPlanGrid.validate()) {
+					UT.alert("STD.PO1064");	// 지불조건에 오류가 있습니다. 확인 바랍니다.
+					return false;
+				}
+				
+				var poTotAmt  = new BigNumber(me.get("poData.po_amt") || 0),
+					sumPayAmt = new BigNumber(0),
+					payPlans  = me.$.paymentPlanGrid.getDataProvider().getItems();
+				for(var i = 0, len = payPlans.length; i < len; i++) {
+					var payPlan = payPlans[i];
+					sumPayAmt = sumPayAmt.plus(new BigNumber(payPlan["pymt_amt"] || 0));
+				}
+				if(!sumPayAmt.eq(poTotAmt)) {
+					UT.alert("STD.PO1080"); // 총 지급액은 발주금액과 동일해야 합니다.
+					return false;
+				}
+				
+				// 선급금이행보증금에 대한 지불조건 validate
+				var provider = me.$.paymentPlanGrid.getDataProvider(),
+					Items    = provider.getItems();
+				var Item = [];
+				for(var i = 0, len = Items.length; i < len; i++) {
+					var Item = Items[i];
+					/* 지불조건그리드 선급금존재X 이고, 선급금이행보증금 체크박스의 check-value값이 "Y"일 경우 */
+					if(Item["pymt_typ_ccd"] !== "APYMT" && me.formula("prePayBondEssential")) {
+						UT.alert("STD.PO1084");	//선급금 이행보증금이 있는 경우, 선급금이 존재해야합니다. 지불조건을 확인하세요.
+						return false;
+					}
+					return true;
+				}
+				return true;
+			},
+			perforBondRateValidator: function(value) {
+				var me = this;
+				if(me.formula("perforBondRequired")) {
+					var rate = new BigNumber(value || 0);
+					if(rate.isZero()) {
+						return me.translate("STD.E1008", null, me.translate("계약이행보증 비율"), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+				}
+				return true;
+			},
+			prePayBondRateValidator: function(value) {
+				var me = this;
+				if(me.formula("prePayBondRequired")) {
+					var rate = new BigNumber(value || 0);
+					if(rate.isZero()) {
+						return me.translate("STD.E1008", null, me.translate("선급금이행보증 비율"), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+				}
+				return true;
+			},
+			maintBondRateValidator: function(value) {
+				var me = this;
+				if(me.formula("maintBondRequired")) {
+					var rate = new BigNumber(value || 0);
+					if(rate.isZero()) {
+						return me.translate("STD.E1008", null, me.translate("하자이행보증 비율"), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+				}
+				return true;
+			},
+			maintBondMonValidator: function(value) {
+				var me = this;
+				if(me.formula("maintBondRequired")) {
+					var rate = new BigNumber(value || 0);
+					if(rate.isZero()) {
+						return me.translate("STD.E1008", null, me.translate("하자이행보증 개월 수"), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+				}
+				return true;
+			},
+			// 품목 중복체크
+			hasDupItems: function() {
+				var me       = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					items    = provider.getItems(),
+					len      = items.length;
+				if(len > 1) {
+					// 중복체크 대상 컬럼
+					var cols = ["disp_item_nm", "item_spec", "uom_ccd"];
+					if(me.formula("isPurcTypMT")) {
+						cols.push("req_dlvy_dt", "dlvy_plc");
+					} else if(me.formula("isPurcTypCT")) {
+						cols.push("const_st_dt", "const_exp_dt", "dlvy_plc");
+					}
+					// 두 row 데이터 중복체크
+					var isEquals = function(row1, row2, cols) {
+						var eq = true;
+						for(var i = 0, colsLen = cols.length; i < colsLen; i++) {
+							var col = cols[i];
+							if(row1[col] !== row2[col]) {
+								eq = false;
+								break;
+							}
+						}
+						return eq;
+					};
+					// 중복체크
+					var hasDup = false, dupLnos = [];
+					for(var i = 0; i < len - 1; i++) {
+						var item = items[i];
+						for(var j = i + 1; j < len; j++) {
+							var compItem = items[j];
+							if(isEquals(item, compItem, cols)) {
+								hasDup = true;
+								if(dupLnos.indexOf(item["po_lno"]) === -1)
+									dupLnos.push(item["po_lno"]);
+								dupLnos.push(compItem["po_lno"]);
+							}
+						}
+						if(hasDup) break;	// item 기준으로 중복되는 compItem들을 dupLnos에 담음 (item도 포함)
+					}
+					me.dupLnos = dupLnos;
+					return hasDup;
+				}
+				return false;
+			},
+			// 지급예정일 validator 수행 전 min-max 날짜 계산
+			calculatePaymentDate: function() {
+				var me       = this,
+					provider = me.$.paymentPlanGrid.getDataProvider(),
+					plans    = provider.getItems(),
+					minApDt, maxApDt, minMpDt, maxMpDt;
+				
+				plans.forEach(function(plan) {
+					var payClsCd = plan["pymt_typ_ccd"],
+						exptDt   = plan["pymt_expt_dt"];
+					
+					if(payClsCd === "APYMT") {
+						if(UT.isEmpty(minApDt) || (minApDt > exptDt)) minApDt = exptDt;
+						if(UT.isEmpty(maxApDt) || (maxApDt < exptDt)) maxApDt = exptDt;
+					} else if(payClsCd === "IPYMT") {
+						if(UT.isEmpty(minMpDt) || (minMpDt > exptDt)) minMpDt = exptDt;
+						if(UT.isEmpty(maxMpDt) || (maxMpDt < exptDt)) maxMpDt = exptDt;
+					}
+				});
+				me.set("paymentDateCheckObj", {
+					"minApDt": minApDt,
+					"maxApDt": maxApDt,
+					"minMpDt": minMpDt,
+					"maxMpDt": maxMpDt
+				});
+			},
+			
+			onPayPlanRegexFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "pymt_ro") {
+					return CCPrecManager.regex("decimal");
+				}
+				return null;
+			},
+			// 지불조건 그리드 validator-function
+			paymentPlanGridValidatorFn: function(headerText, dataField, data) {
+				var me    = this,
+					value = data[dataField];
+				
+				if(dataField === "pymt_ro") {				// 지급율
+					if(UT.isEmpty(value) || value <= 0) {
+						return me.translate("STD.PO1066");		// 지급율을 0% 이상으로 설정해야합니다.
+					}
+					if(!CCPrecManager.validate("decimal", value)) {
+						return me.translate("STD.E1021", null, CCPrecManager.validateInfo("decimal").decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				} else if(dataField === "pymt_expt_dt") {	// 지급예정일
+					if(UT.isEmpty(value)) {
+						return me.translate("STD.E1001", null, me.translate(headerText));
+					}
+					
+					var payClsCd            = data["pymt_typ_ccd"],
+						paymentDateCheckObj = me.get("paymentDateCheckObj"),
+						minApDt             = paymentDateCheckObj.minApDt,	// MIN 선급금 지급예정일
+						maxApDt             = paymentDateCheckObj.maxApDt,	// MAX 선급금 지급예정일
+						minMpDt             = paymentDateCheckObj.minMpDt,	// MIN 중도금 지급예정일
+						maxMpDt             = paymentDateCheckObj.maxMpDt,	// MAX 중도금 지급예정일
+						nowDate             = UT.formatDate(new Date(), "yyyyMMdd");
+					
+					// 현재 데이터가 MIN 선급금 지급예정일인 경우,
+					if(payClsCd === "APYMT" && value == minApDt) {
+						// 현재일자와 비교
+						if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return me.translate("STD.E1013", null, me.translate("선급금 지급 예정 일자"), me.translate("금일"));
+						}
+					}
+					
+					// 현재 데이터가 MIN 중도금 지급예정일인 경우,
+					if(payClsCd === "IPYMT" && value == minMpDt) {
+						// 선급금 존재 시
+						if(UT.isNotEmpty(maxApDt)) {
+							// MAX 선급금 지급예정일과 비교
+							if(UT.isNotEmpty(value) && (maxApDt >= value)) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return me.translate("STD.E1013", null, me.translate("중도금 지급 예정 일자"), me.translate("선급금 지급 예정 일자"));
+							}
+							
+							// 선급금 미존재 시, 현재일자와 비교
+						} else if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return me.translate("STD.E1013", null, me.translate("중도금 지급 예정 일자"), me.translate("금일"));
+						}
+					}
+					
+					// 잔금 지급예정일인 경우 (잔금은 항상 1건임)
+					if(payClsCd === "BAL") {
+						// 중도금 존재 시
+						if(UT.isNotEmpty(maxMpDt)) {
+							// MAX 중도금 지급예정일과 비교
+							if(maxMpDt >= value) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return me.translate("STD.E1013", null, me.translate("잔금 지급 예정 일자"), me.translate("중도금 지급 예정 일자"));
+							}
+							// 중도금 미존재, 선급금 존재 시
+						} else if(UT.isNotEmpty(maxApDt)) {
+							// MAX 선급금 지급예정일과 비교
+							if((maxApDt >= value)) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return me.translate("STD.E1013", null, me.translate("잔금 지급 예정 일자"), me.translate("선급금 지급 예정 일자"));
+							}
+							// 선급금,중도금 미존재 시, 현재일자와 비교
+						} else if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return me.translate("STD.E1013", null, me.translate("잔금 지급 예정 일자"), me.translate("금일"));
+						}
+					}
+				} else if(dataField === "pymt_amt") {				// 지급액
+					if(UT.isEmpty(value) || value <= 0) {
+						return me.translate("STD.E1008", null, me.translate(headerText), "0");		// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					var cur = me.get("poData.cur_ccd");
+					if(!CCPrecManager.validate("amt", value, cur)) {
+						return me.translate("STD.E1021", null, CCPrecManager.validateInfo("amt", cur).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				}
+				return true;
+			},
+			
+			// 지불조건 그리드 selection-able-function
+			onPaymentPlanSelectionAbleFn: function(data) {
+				return (data["pymt_typ_ccd"] !== "BAL");	// 잔금 삭제 불가
+			},
+			
+			// 지불조건 그리드 item-edit-end
+			/*
+             * item-edit-begin에서 설정에 관한 오류 메시지 처리 및 변경이벤트 취소를 구현하려 했으나,
+             * 붙여넣기 시 제어가 불가하여 item-edit-end에서 모두 수행함
+             */
+			onPaymentPlanEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+				
+				if(item.dataField === "pymt_typ_ccd") {		// 지급구분코드 변경 시
+					if(oldValue === "APYMT" && newValue === "IPYMT") {		// 선급금 -> 중도금
+						var mpIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "IPYMT";
+						});
+						// 선급금은 항상 중도금 앞이었으므로 이동할 필요 없음
+						//provider.moveRow(item.rowIndex, mpIndexes[0]);		// 중도금의 첫 번째로 이동
+						
+					} else if(oldValue === "IPYMT" && newValue === "APYMT") {	// 중도금 -> 선급금
+						var apIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "APYMT";
+						});
+						if(apIndexes.length === 1) {						// 선급금이 지금 바꾼 데이터 하나뿐이면
+							provider.moveRow(item.rowIndex, 0);					// 제일 첫 번째로 이동
+						}/* else {											// 선급금이 지금 바꾼 데이터 외에도 존재하는 경우 -> onItemsFn에 의해 애초에 바꿀 수 없음
+            				//provider.setItemAt(item.rowIndex, {pymt_typ_ccd: oldValue});
+            			}*/
+					}
+				} else if(item.dataField === "pymt_ro") {	// 지급율 변경 시
+					newValue = UT.isNumber(newValue) ? newValue : 0;
+					oldValue = UT.isNumber(oldValue) ? oldValue : 0;
+					
+					if(data["pymt_typ_ccd"] !== "BAL") {			// 잔금 아닌 경우
+						var newPayRate = new BigNumber(newValue),
+							oldPayRate = new BigNumber(oldValue);
+						
+						if(newPayRate.isZero()) {
+							UT.alert("STD.PO1066");	// 지급율을 0% 이상으로 설정해야합니다.
+							provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+						}
+						
+						// 잔금 index 구하기
+						var bpIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "BAL";
+						});
+						if(bpIndexes.length > 0) {
+							var bpIndex = bpIndexes[0];	// 잔금은 항상 1개
+							var bpItem = provider.getItemAt(bpIndex),
+								bpRate = bpItem["pymt_ro"];
+							
+							var diff      = newPayRate.minus(oldPayRate),
+								calBpRate = (new BigNumber(bpRate)).minus(diff);	// 기존 잔금 지급율에서 수정된 지급율의 변경차를 빼줌
+							
+							if(calBpRate.comparedTo(new BigNumber(0)) < 0) {
+								UT.alert("STD.PO1063");	// 총 지급율은 100%로 설정해야 합니다.
+								provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+							} else if(calBpRate.isZero()) {
+								UT.alert("STD.PO1065");	// 잔금의 지급율은 0 이상이어야 합니다.
+								provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+							} else {
+								var cur = me.get("poData.cur_ccd");
+								
+								// 지급율에 따른 지급액 계산
+								var poTotAmt = new BigNumber(me.get("poData.po_amt") || 0);
+								var payAmt = poTotAmt.mul(newPayRate).div(new BigNumber(100)).toFixed();
+								provider.setItemAt(item.rowIndex, {"pymt_amt": CCPrecManager.format("amt", payAmt, cur)});	// 현재 수정한 지급율에 대한 지급액
+								
+								// 선급금
+								var apChanged = (data["pymt_typ_ccd"] === "APYMT"), apAmt = new BigNumber(0);
+								// 잔금 제외 금액(선급금+중도금 합산금액)
+								var sumAmtExBp = new BigNumber(0);
+								// 잔금 제외 지급율(선급금 지급율 + 중도금 지급율)
+								var sumRateExBp = new BigNumber(0);
+								
+								var items = provider.getItems();
+								for(var i = 0, len = items.length; i < len; i++) {
+									var item = items[i];
+									if(item["pymt_typ_ccd"] !== "BAL") {	// 잔금 제외
+										var amt = new BigNumber(item["pymt_amt"] || 0);
+										sumAmtExBp = sumAmtExBp.plus(amt);
+										
+										var rate = new BigNumber(item["pymt_ro"] || 0);
+										sumRateExBp = sumRateExBp.plus(rate);
+										
+										if(item["pymt_typ_ccd"] === "APYMT") {	// 선급금
+											apAmt = apAmt.plus(amt);
+										}
+									}
+								}
+								
+								// 잔금 계산
+								me.calculateBpAmt(sumAmtExBp, sumRateExBp);
+								
+								// 선급금 변경완료 시 : 선급금이행보증금 계산
+								if(apChanged) {
+									me.changedPrePayAmt(apAmt);
+								}
+							}
+						}
+					}
+				} else if(item.dataField === "pymt_expt_dt" && UT.isNotEmpty(newValue)) {	// 지급예정일 변경 시
+					if(provider.filterItems({"pymt_expt_dt": UT.formatDate(newValue, 'yyyyMMdd')}).length > 1) {
+						// 지급예정일은 중복이 불가합니다.
+						UT.alert("STD.PO1069");
+						provider.setItemAt(item.rowIndex, {"pymt_expt_dt": oldValue});
+					}
+				} else if(item.dataField === "pymt_amt") {	// 지급금 변경 시
+					var newPayAmt = new BigNumber(newValue || 0),
+						oldPayAmt = new BigNumber(oldValue || 0);
+					
+					if(newPayAmt.isZero()) {
+						UT.alert(me.translate("STD.E1008", null, me.translate(headerText), "0"), null, true);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+						provider.setItemAt(item.rowIndex, {"pymt_amt": oldValue});
+					} else {
+						var poTotAmt = new BigNumber(me.get("poData.po_amt") || 0);
+						if(poTotAmt.toFixed() === '0') {
+							UT.alert(me.translate("STD.E1008", null, me.translate("발주 금액"), "0"), null, true);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+							provider.setItemAt(item.rowIndex, {"pymt_amt": oldValue});
+						}
+					}
+				}
+			},
+			
+			// 지불조건 - 지급율 계산
+			calculatePaymentPlanRate: function() {
+				var me             = this,
+					poTotAmt       = new BigNumber(me.get("poData.po_amt") || 0),
+					provider       = me.$.paymentPlanGrid.getDataProvider(),
+					payPlans       = provider.getItems(),
+					sumPayAmt      = new BigNumber(0),
+					sumPayRateExBp = new BigNumber(0),
+					cur            = me.get("poData.cur_ccd");
+				
+				for(var i = 0, len = payPlans.length; i < len; i++) {
+					var payPlan = payPlans[i];
+					sumPayAmt = sumPayAmt.plus(new BigNumber(payPlan["pymt_amt"] || 0));
+					
+					if(payPlan["pymt_typ_ccd"] !== "BAL") {
+						sumPayRateExBp = sumPayRateExBp.plus(new BigNumber(payPlan["pymt_ro"]) || 0);
+					}
+				}
+				// 발주총액과 지급금액 합이 동일하게 입력되었다면
+				if(poTotAmt.eq(sumPayAmt)) {
+					// 잔금의 지급율을 100-[잔금 외 지급율 합]으로 한다. (소수점 절사에 의해 총 지급율 합이 100이 되지 않을 수 있기 때문)
+					payRate = CCPrecManager.format("decimal", (new BigNumber(100)).minus(sumPayRateExBp).toFixed());
+				}
+				
+				// 지급율 계산
+				provider.setItemAtBatch(true, function(nodeIndex, data) {
+					if(data["pymt_typ_ccd"] === "BAL" && poTotAmt.eq(sumPayAmt)) {
+						return {"pymt_ro": CCPrecManager.format("decimal", (new BigNumber(100)).minus(sumPayRateExBp).toFixed())};
+					} else {
+						return {"pymt_ro": CCPrecManager.format("decimal", (new BigNumber(100)).mul(new BigNumber(data["pymt_amt"] || 0)).div(poTotAmt).toFixed())};
+					}
+				});
+			},
+			
+			// 지불조건 - 지급액 계산 (발주금액 변경 후 재계산)
+			calculatePaymentPlanAmt: function() {
+				var me          = this,
+					poTotAmt    = me.get("poData.po_amt") || 0,
+					provider    = me.$.paymentPlanGrid.getDataProvider(),
+					sumAmtExBp  = new BigNumber(0),
+					sumRateExBp = new BigNumber(0),
+					apAmt       = new BigNumber(0),
+					cur         = me.get("poData.cur_ccd");
+				
+				// 잔금을 제외한 지급액 계산 (잔금은 따로 계산한다.)
+				provider.setItemAtBatch(true, function(nodeIndex, data) {
+					// 잔금을 제외한 지급액 계산
+					if(data["pymt_typ_ccd"] !== "BAL") {
+						var rate = data["pymt_ro"] || 0,
+							amt  = (new BigNumber(poTotAmt)).mul((new BigNumber(rate)).div(new BigNumber(100))).toFixed();
+						
+						// 통화 별 지급액 소수점 처리
+						var precAmt = new BigNumber(CCPrecManager.format("amt", amt, cur));
+						
+						if(data["pymt_typ_ccd"] === "APYMT") {	// 선급금인 경우
+							apAmt = apAmt.plus(precAmt);
+						}
+						sumAmtExBp = sumAmtExBp.plus(precAmt);
+						sumRateExBp = sumRateExBp.plus(rate);
+						
+						return {"pymt_amt": precAmt.toFixed()};
+					}
+				});
+				
+				// 잔금 계산 (소수점 처리 된 지급액을 sum하였으므로 따로 소수점 처리할 필요 없음)
+				me.calculateBpAmt(sumAmtExBp, sumRateExBp);
+				
+				// 선급금 변경완료 시 : 선급금이행보증금 계산
+				me.changedPrePayAmt(apAmt);
+			},
+			
+			// 잔금 계산
+			calculateBpAmt: function(sumAmtExBp, sumRateExBp) {
+				var me       = this,
+					poTotAmt = me.get("poData.po_amt") || 0;
+				
+				// 잔금 지급율 계산 = 100 - (선급금 지급율 + 중도금 지급율)
+				var bpRate = (new BigNumber(100)).minus(sumRateExBp);
+				
+				// 잔금 계산 = 발주총액 - (선급금+중도금)
+				var bpAmt = (new BigNumber(poTotAmt)).minus(sumAmtExBp);
+				
+				var provider = me.$.paymentPlanGrid.getDataProvider();
+				var bpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "BAL";
+				});
+				if(bpIndexes.length > 0) {
+					// 잔금은 항상 1개
+					provider.setItemAt(bpIndexes[0], {"pymt_amt": bpAmt.toFixed(), "pymt_ro": bpRate.toFixed()});
+				}
+			},
+			// 선급금 변경완료 시
+			changedPrePayAmt: function(apAmt) {
+				var me = this;
+				me.set("poData.apymt_amt", new BigNumber(UT.toNumber(apAmt.toFixed()) || 0));
+			},
+			
+			// 지급추가 버튼 클릭
+			onAddPaymentPlan: function() {
+				var me = this;
+				var provider = me.$.paymentPlanGrid.getDataProvider(),
+					items    = provider.getItems();
+				
+				var apIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "APYMT";
+				});
+				var mpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "IPYMT";
+				});
+				var bpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "BAL";
+				});
+				
+				var addPayPlan = function(index, payClsCd) {
+					provider.addItemAt(index, {
+						"pymt_typ_ccd": payClsCd,
+						"pymt_ro": 0,
+						"pymt_amt": 0
+					});
+				};
+				
+				if(apIndexes.length === 0) {
+					// 1. 그리드에 선급금 미존재 시 선급금 추가 (선급금은 0개 또는 1개 존재 가능)
+					addPayPlan(0, "APYMT");
+				} else {
+					// 2. 그리드에 선급금 존재 시, 잔금 앞에 중도금 추가 (잔금은 항상 1개 필수 존재해야 함)
+					addPayPlan(bpIndexes[0], "IPYMT");
+				}
+			},
+			
+			// 지급삭제 버튼 클릭
+			onDeletePaymentPlan: function() {
+				var me = this;
+				var provider = me.$.paymentPlanGrid.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+					// 선급금
+					var apChanged = false, apAmt = new BigNumber(me.get("poData.apymt_amt") || 0);
+					for(var i = 0, len = checked.length; i < len; i++) {
+						var item = checked[i],
+							amt  = new BigNumber(item["pymt_amt"] || 0);
+						
+						if(item["pymt_typ_ccd"] === "APYMT") {	// 선급금 삭제라면
+							apAmt = apAmt.minus(amt);			// 선급금 = 선급금 - 삭제할 금액
+							apChanged = true;
+						}
+					}
+					provider.removeItems(true);
+					
+					// 선급금 변경완료 시 : 선급금이행보증금 계산
+					if(apChanged) {
+						me.changedPrePayAmt(apAmt);
+					}
+					
+					var sumAmtExBp  = new BigNumber(0),
+						sumRateExBp = new BigNumber(0);
+					var plans = provider.getItems();
+					plans.forEach(function(data) {
+						if(data.pymt_typ_ccd !== "BAL") {
+							sumAmtExBp = sumAmtExBp.plus(new BigNumber(data.pymt_amt || 0));
+							sumRateExBp = sumRateExBp.plus(new BigNumber(data.pymt_ro || 0));
+						}
+					});
+					// 잔금 계산
+					me.calculateBpAmt(sumAmtExBp, sumRateExBp);
+				});
+			},
+			
+			// 지급구분 items-function
+			onItemsFn: function(data, item) {
+				var me       = this,
+					provider = me.$.paymentPlanGrid.getDataProvider();
+				
+				if(item.dataField === "pymt_typ_ccd") {
+					var items    = me.get("codes.payClsCd"),
+						payClsCd = data["pymt_typ_ccd"];
+					
+					if(payClsCd === "APYMT") {						// 1. 선급금
+						return items.filter(function(obj) {
+							return (obj["data"] !== "BAL");			// 잔금 제외: 선급금,중도금
+						});
+					} else if(payClsCd === "BAL") {				// 2. 잔금 (onPayPlanItemEditableFn에 의해 수정 불가)
+						return items.filter(function(obj) {
+							return (obj["data"] === "BAL");			// 잔금
+						});
+					} else {									// 3. 중도금 or 빈값
+						var aps = provider.filterItems({"pymt_typ_ccd": "APYMT"});
+						// 그리드의 선급금 데이터 미존재 시
+						if(aps.length === 0) {
+							return items.filter(function(obj) {
+								return (obj["data"] !== "BAL");		// 잔금 제외: 선급금,중도금
+							});
+						} else {	// 그리드의 선급금 데이터가 존재할 때
+							return items.filter(function(obj) {
+								return (obj["data"] === "IPYMT");		// 중도금
+							});
+						}
+					}
+				}
+			},
+			
+			onPayPlanAmtAggregateFn: UT.plusBigNumber,
+			
+			// 지불조건 item-editable-function
+			onPayPlanItemEditableFn: function(data, item) {
+				// 지급구분이 잔금인 경우: 지급구분, 지급율 수정 불가
+				if(data["pymt_typ_ccd"] === "BAL" && ["pymt_typ_ccd", "pymt_ro"].indexOf(item.dataField) > -1) {
+					return false;
+				}
+				return true;
+			},
+			
+			//그리드 데이터 에디팅 완료 함수
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider,
+					fieldName    = item.dataField,
+					itemIndex    = item.rowIndex;
+				
+				me.grid.itemIndex = itemIndex;
+				me.grid.fieldName = fieldName;
+				
+				if(fieldName === "pr_realusr_nm") {
+					provider.setItemAt(item.rowIndex, {'pr_realusr_id': ''});
+					
+					if(UT.isNotEmpty(newValue)) {
+						var param = {usr_nm: newValue};
+						var userPopup = me.createUserPopup();
+						userPopup.show();
+						userPopup.getWindowContent().load({singleSelect: true, autoComplete: true, defaultParam: param});
+					}
+				} else if(fieldName === "gr_pic_nm") {
+					provider.setItemAt(item.rowIndex, {'gr_pic_id': ''});
+					
+					if(UT.isNotEmpty(newValue)) {
+						var param = {usr_nm: newValue};
+						var userPopup = me.createUserPopup();
+						userPopup.show();
+						userPopup.getWindowContent().load({singleSelect: true, autoComplete: true, defaultParam: param});
+					}
+				} else if(fieldName === "purc_grp_nm") {
+					provider.setItemAt(item.rowIndex, {'purc_grp_id': ''});
+					
+					if(UT.isNotEmpty(newValue)) {
+						var param = UT.copy(me.codes.purcGrpCdParam);
+						param["purc_grp_nm"] = newValue;
+						
+						var jobPopup = me.createJobPopup();
+						jobPopup.show();
+						jobPopup.getWindowContent().load({singleSelect: true, autoComplete: true, defaultParam: param});
+					}
+				} else if(fieldName === "po_qty" || fieldName === "po_uprc") {
+					var unitCd = data["uom_ccd"],
+						qty    = data["po_qty"] || 0,
+						price  = data["po_uprc"] || 0;
+					
+					// UOM/수량 변경 시
+					if(item.dataField === "uom_ccd") {
+						// 수량 소수점처리
+						qty = CCPrecManager.format("qty", qty, unitCd);
+					}
+					
+					// 금액 계산 소수점처리
+					var amt = CCPrecManager.format("amt", (new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), me.get("poData.cur_ccd"));
+					
+					provider.setItemAt(item.rowIndex, {
+						"po_qty": qty,
+						"po_amt": amt
+					});
+					
+				} else if(fieldName === "df_yn") {
+					
+					// 공급가액, 세액, 계약금액 등 변경
+					me.changedPoTotAmt();
+					
+				} else if(fieldName === "const_st_dt" || fieldName === "const_exp_dt") {
+					me.computeCntrPrdDate(); // 계약기간 계산
+				}
+			},
+			//팝업생성함수
+			//사용자팝업
+			createUserPopup: function() {
+				var me = this;
+				return UT.popup("ep-user-list", me, '50%', '70%', {
+					"selected-items": function(popup, e) {
+						var selected = e.detail;
+						me.setColumnSearchedValue(selected[0]);
+						me.$.gridPanel.applyFocus();
+						popup.close();
+					}
+				}, {singleSelect: true});
+			},
+			//구매그룹팝업생성
+			createJobPopup: function() {
+				var me = this;
+				return UT.popup("ep-job-list", me, 780, 650, {
+					"selected-items": function(popup, e) {
+						var selected = e.detail;
+						me.setColumnSearchedValue(selected[0]);
+						me.$.gridPanel.applyFocus();
+						popup.close();
+					}
+				}, {singleSelect: true});
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var readonly = !me.formula('noCdItemAddable');
+				var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 240 : 260), {
+					"clear-dtl-spec": function(popup, e) {
+						me.setColumnSearchedValue({"item_spec_dtl": null});
+						popup.close();
+					},
+					"apply-dtl-spec": function(popup, e) {
+						var dtlSpec = e.detail.item_spec_dtl;
+						me.setColumnSearchedValue({"item_spec_dtl": dtlSpec});
+						popup.close();
+					}
+				});
+				popup.show();
+				popup.getWindowContent().load(data, readonly);
+			},
+			//그리드 데이터 클릭 함수
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item,
+					fieldName         = item.dataField,
+					itemIndex         = item.rowIndex;
+				
+				me.grid.itemIndex = itemIndex;
+				me.grid.fieldName = fieldName;
+				
+				if(fieldName === "img_pr_sug" || fieldName === "img_gr_chr") {
+					var userPopup = me.createUserPopup();
+					userPopup.show();
+					userPopup.getWindowContent().load({singleSelect: true});
+				} else if(fieldName === "img_purc_grp") {
+					var param = UT.copy(me.codes.purcGrpCdParam);
+					
+					var jobPopup = me.createJobPopup();
+					jobPopup.show();
+					jobPopup.getWindowContent().load({singleSelect: true, defaultParam: param});
+				} else if(fieldName === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					me.showItemContractHistory(data["item_cd"]);
+				}
+			},
+			// 그리드 item-style-function
+			onItemStyleFn: function(data, item) {
+				var me       = this,
+					styleObj = {};
+				
+				if(item.dataField === "item_spec" && me.onItemEditableFn(data, item)) {
+					styleObj = {
+						iconLocation: "leftSide",
+						iconOffset: 0,
+						iconPadding: 0,
+						paddingLeft: 0,
+						paddingTop: 0,
+						iconUrl: "bower_components/sc-grid/resources/img/icon_required.png"
+					};
+				}
+				return styleObj;
+			},
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					return "link";
+				}
+				return null;
+			},
+			// 품목그리드 item editable 제어
+			onItemEditableFn: function(data, item) {
+				var me = this;
+				var poData = me.get("poData");
+				if(item.dataField === "po_qty") {
+					// 구매요청 건인 경우 po_qty 수정 못함
+					return UT.isEmpty(poData.po_req_typ_ccd) && UT.isEmpty(data["pr_item_uuid"]);
+				} else if(item.dataField === "po_uprc") {
+					// 단가구매요청 기준발주이거나 RFx 기준발주인 경우 po_uprc 수정 못함
+					return UT.isEmpty(data["purc_cntr_item_uuid"]) && UT.isEmpty(data["rfx_bid_item_uuid"]);
+				} else if(["disp_item_nm", "item_spec"].indexOf(item.dataField) > -1) {
+					return this.formula("noCdItemAddable") && (data["item_cd_crn_typ_ccd"] === "CDLS") && (UT.isEmpty(data["po_item_uuid"]));
+				}
+				return false;
+			},
+			// grid column editor-regex-function
+			onRegexFn: function(data, item) {
+				var me        = this,
+					dataField = item.dataField;
+				
+				// 수량
+				if(dataField === "po_qty") {
+					return CCPrecManager.regex("qty", data["uom_ccd"]);
+					
+					// 단가
+				} else if(dataField === "po_uprc") {
+					return CCPrecManager.regex("price", me.get("poData.cur_ccd"));
+				}
+			},
+			// 발주종료 컬럼 converter
+			onPoCompleteYnConvert: function(rowIndex, fieldName, data) {
+				var crcYn = data["po_ery_ed_yn"] || "N"; // 강제종료
+				var compYn = data["po_cmpld_yn"] || "N"; // 완료
+				// 강제종료, 발주완료
+				return crcYn === "Y" || compYn === "Y" ? "Y" : "N";
+			},
+			// 그리드 validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me = this;
+				var value = data[dataField];
+				
+				if(dataField === "const_exp_dt") {
+					if(UT.isEmpty(value)) {
+						return true;
+					}
+					var p2pPurcTypCcd = me.get("poData.purc_typ_ccd");
+					
+					if(p2pPurcTypCcd === "CONSTSVC" && UT.isNotEmpty(value)) {
+						var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+						var compareValue = UT.toTime(UT.toDate(data['const_st_dt'], "yyyyMMdd"));
+						if(value === null || compareValue === null) {
+							return me.translate("STD.E0000");
+						}
+						if(value < compareValue) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return me.translate("STD.E1013", null, me.translate(headerText), UT.formatDate(compareValue));
+						}
+					}
+				} else if(dataField === "req_dlvy_dt") {
+					var p2pPurcTypCcd = me.get("poData.purc_typ_ccd");
+					if(p2pPurcTypCcd === "QTY") {
+						if(UT.isNotEmpty(value)) {
+							var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+							var geDate = new Date();
+							geDate.setHours(0, 0, 0, 0);
+							var compareValue = UT.toTime(geDate);
+							
+							if(value < compareValue) {
+								return me.translate("STD.E1013", null, me.translate("납품 일자"), UT.formatDate(compareValue));
+							}
+						}
+					}
+				} else if(["po_qty", "po_uprc"].indexOf(dataField) > -1) {
+					if((new BigNumber(value || 0)).isZero()) {
+						return me.translate("STD.E1008", null, me.translate(headerText), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					var formatterName, dtlCd;
+					if(dataField === "po_qty") {
+						// UOM 존재 시 단위별 수량 포맷유형, UOM 미존재 시 기본 수량 포맷유형
+						formatterName = "qty";
+						dtlCd = data["uom_ccd"];
+					} else {
+						formatterName = "amt";
+						dtlCd = me.get("poData.cur_ccd");
+					}
+					if(!CCPrecManager.validate(formatterName, value, dtlCd)) {
+						return me.translate("STD.E1021", null, CCPrecManager.validateInfo(formatterName, dtlCd).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				} else if(dataField === "item_spec") {
+					// 구매품목유형: 미등록(무코드) 인 경우 규격 필수 입력
+					if(data["item_cd_crn_typ_ccd"] === "CDLS" && UT.isEmpty(value)) {
+						// '{0}'은(는) 필수 입력 항목입니다.
+						return me.translate("STD.E1001", null, me.translate(headerText));
+					}
+				}
+				return true;
+			},
+			// 임시저장
+			onSaveDraft: function() {
+				var me = this;
+				if(me.isValid('tempSave') === false) {
+					return;
+				}
+				me.set("poData.openedApproval", false);
+				me.set("poData.saveAfterClose", false);
+				me.onSave(me.$.saveDraft);
+			},
+			
+			// 발주요청
+			onSaveSubmit: function() {
+				var me = this;
+				if(me.isValid('submit') === false) {
+					return;
+				}
+				//me.set("poData.openedApproval", false);
+				//me.set("poData.saveAfterClose", true);
+				me.set("poData.bypassApproval", true);
+				me.onSave(me.$.saveSubmit, "STD.PO1010");
+			},
+			
+			// 결재요청 - 데이터 저장후 결재 팝업
+			onApproval: function() {
+				var me = this;
+				if(me.isValid('approval') === false) {
+					return;
+				}
+				me.set("poData.openedApproval", true);
+				me.set("poData.saveAfterClose", false);
+				me.onSave(
+						me.$.saveDraft,
+						"STD.N2300", // 결재 상신하시겠습니까?
+						function() {
+							me.set("poData.openedApproval", false);
+						}
+				);
+			},
+			
+			// 저장
+			onSave: function(ajax, message, cancelCallback) {
+				var me              = this,
+					itemProvider    = me.$.gridPanel.getDataProvider(),
+					payPlanProvider = me.$.paymentPlanGrid.getDataProvider();
+				
+				UT.confirm(message || "STD.N1200", function() {
+					Promise.all([me.$.upload1.upload(), me.$.upload2.upload()]).then(function() {
+						ajax.body = {
+							poData: me.get("poData"),
+							insertItems: itemProvider.getNewItems(),		// 신규 추가된 데이터들을 가져온다.
+							updateItems: itemProvider.getUpdateItems(),	// 수정된 데이터들을 가져온다.
+							deleteItems: itemProvider.getRemoveItems(),	// 삭제된 데이터들을 가져온다.
+							prItemIds: UT.getArrayValuesByKey(itemProvider.getItems(), "pr_item_uuid"),
+							paymentPlans: payPlanProvider.getItems()		// 지불조건은 전체 데이터
+						};
+						UT.request(ajax);
+					}, cancelCallback);
+				}, cancelCallback); // 저장하시겠습니까?
+			},
+			
+			// 저장 완료
+			completeSaveInfo: function(e, res) {
+				var me = this;
+				var result     = res.response,
+					status     = result.resultStatus,
+					resultData = result.resultData;
+				
+				var poId = resultData.po_uuid;
+				if(status === "S") {
+					me.procAfterSave(poId);
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.onFindInfo();
+				} else if(status === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					me.onClose();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 발주 삭제
+			onDelete: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function() { // 삭제하시겠습니까?
+					UT.request(me.$.deleteInfo);
+				});
+			},
+			
+			// 삭제 완료
+			completeDelete: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+				
+				if(status === "S") {
+					UT.completeAlert(); // 요청을 완료 하였습니다
+					me.onClose();
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.onFindInfo();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			getNewItemLno: function(provider) {
+				var me = this;
+				var maxNo = 10;
+				if(provider.getItemSize() > 0) {
+					var allRows = provider.getItems();
+					
+					var maxRow = allRows.reduce(function(a, b) {
+						if(!a.po_lno) a.po_lno = 0;
+						if(!b.po_lno) b.po_lno = 0;
+						return (a.po_lno > b.po_lno) ? a : b;
+					});
+					
+					maxNo = parseInt(maxRow.po_lno, 10) + 10;
+				}
+				return maxNo;
+			},
+			// 무코드품목추가 버튼 클릭 시
+			onAddNoCdItem: function() {
+				var me = this;
+				
+				var poData = me.get('poData');
+				var provider = me.$.gridPanel.getDataProvider();
+				var poLno = me.getNewItemLno(provider);
+				var defaultUnit = me.codes.unitCd.length > 0 ? me.codes.unitCd[0].data : null;
+				
+				var addRow = {
+					po_lno: poLno,
+					oorg_cd: poData.oorg_cd,
+					purc_typ_ccd: poData.purc_typ_ccd,
+					cur_ccd: poData.cur_ccd,
+					uom_ccd: defaultUnit,		//UOM (기본단위)
+					po_uprc: 0,
+					po_amt: 0,
+					po_qty: 1,
+					pr_realusr_id: SCSessionManager.currentUser.usr_id, //구매요청 의뢰자
+					pr_realusr_nm: SCSessionManager.currentUser.disp_usr_nm, //구매요청 의뢰자
+					gr_pic_id: SCSessionManager.currentUser.usr_id, //검수 담당자
+					gr_pic_nm: SCSessionManager.currentUser.disp_usr_nm, //검수 담당자
+					//직접발주 생성시에는 단가계약 정보를 물지 않아야 함
+					//uprccntr_item_uuid  : selected.uprccntr_item_uuid,
+					//uprccntr_no       : selected.uprccntr_no,
+					//uprccntr_revno      : selected.uprccntr_revno,
+					//uprccntr_lno : selected.uprccntr_lno,
+					df_yn: "N",
+					item_cd_crn_typ_ccd: 'CDLS'						//구매품목유형: 미등록
+				};
+				provider.addItem(addRow);
+				me.set("poData.has_no_cd_item", "Y");
+				me.applyFormula("hasNoCdItem");
+				me.applyFormula("noCdItemPlantAddable");
+			},
+			//품목 리스트 추가
+			onAddItemList: function(selectedList) {
+				var me       = this,
+					poData   = me.get("poData"),
+					provider = me.$.gridPanel.getDataProvider();
+				
+				var created = [];
+				var poLno = me.getNewItemLno(provider);
+				for(var i = 0, len = selectedList.length; i < len; i++) { // 신규 데이터 가공
+					var selected = selectedList[i];
+					created.push({
+						po_lno: poLno,
+						oorg_cd: poData.oorg_cd,
+						purc_typ_ccd: poData.purc_typ_ccd,
+						plt_cd: selected.org_cd,
+						item_oorg_cd: selected.oorg_cd,
+						plt_nm: selected.logic_org_nm,
+						cur_ccd: poData.cur_ccd,
+						disp_item_cd: selected.item_cd,
+						item_cd: selected.item_cd,						//품목코드
+						disp_item_nm: selected.disp_item_nm,
+						item_nm: selected.item_nm,						//품목명
+						item_nm_en: selected.item_nm_en,            //품목명 영문
+						po_uprc: selected.uprccntr_uprc || 0,				//단가
+						po_amt: selected.uprccntr_uprc || 0,				//금액
+						po_qty: 1,										//수량
+						item_spec: selected.item_spec,							//규격
+						uom_ccd: selected.uom_ccd,					//UOM (기본단위)
+						sg_cd: selected.sg_cd,							//소싱그룹코드
+						purc_grp_cd: selected.purc_grp_cd,					//구매그룹코드
+						purc_grp_nm: selected.purc_grp_nm,					//구매그룹명
+						pr_realusr_id: SCSessionManager.currentUser.usr_id,	//구매요청 의뢰자
+						pr_realusr_nm: SCSessionManager.currentUser.disp_usr_nm,	//구매요청 의뢰자
+						gr_pic_id: SCSessionManager.currentUser.usr_id,	//검수 담당자
+						gr_pic_nm: SCSessionManager.currentUser.disp_usr_nm,	//검수 담당자
+						//직접발주 생성시에는 단가계약 정보를 물지 않아야 함
+						//uprccntr_item_uuid  : selected.uprccntr_item_uuid,
+						//uprccntr_no       : selected.uprccntr_no,
+						//uprccntr_revno      : selected.uprccntr_revno,
+						//uprccntr_lno : selected.uprccntr_lno,
+						df_yn: "N",
+						item_cd_crn_typ_ccd: 'ITEM_CD'						//구매품목유형: 등록
+					});
+					poLno += 10;
+				}
+				provider.addItems(created);
+			},
+			
+			// 품목 팝업
+			onPopupItemSelect: function() {
+				var me = this;
+				//구매운영조직 , 구매 유형 공통코드
+				if(!me.validate('selectRequired')) {
+					UT.alert("STD.E9000");
+					return;
+				}
+				var param = {
+					oorg_cd: me.get("poData.oorg_cd"),
+					purc_grp_typ_ccd: me.codes.purcGrpCdParam.purc_grp_typ_ccd,
+					purc_typ_ccd: me.get("poData.purc_typ_ccd")
+				};
+				
+				UT.popupItemSearch(me, param, function(selectedItems) {
+					// 품목정보 리스트 추가
+					me.onAddItemList(selectedItems);
+				});
+			},
+			
+			// 품목 삭제
+			onDeleteItem: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+						me.set("poData.has_no_cd_item", (provider.filterItem({item_cd_crn_typ_ccd: "CDLS"}) != null) ? "Y" : "N");
+						me.applyFormula("hasNoCdItem");
+						
+						if(UT.toNumber(me.get("poData.po_revno")) <= 1) {
+							var poLno = 0;
+							provider.setItemAtBatch(true, function(index, data) {
+								poLno += 10;
+								return {"po_lno": poLno}
+							});
+						}
+					});
+				}
+			},
+			
+			// 변경이력 버튼 클릭
+			onShowModHistory: function() {
+				var me = this;
+				var param = {po_no: me.get("poData.po_no")};
+				
+				var historyPopup = UT.popup("ep-po-mod-history", me, 1000, 600, null, {titleText: "발주 변경 이력"});
+				historyPopup.show();
+				historyPopup.getWindowContent().load(param);
+			},
+			
+			// 계약 변경 요청
+			onModifyReqCntr: function() {
+				var me = this;
+				var poData = me.get("poData");
+				
+				var popup = UT.popup("es-po-chg-req-cntr", me, "90%", "90%", {
+					"reload": function(popup, e) {
+						me.fire("close");
+					}
+				}, {titleText: "계약 변경 요청"});
+				popup.show();
+				popup.getWindowContent().load({
+					po_uuid: poData.po_uuid,
+					po_cntr_req_uuid: poData.po_cntr_req_uuid,
+					cntr_req_typ_ccd: "CHG"
+				});
+			},
+			
+			// 발주변경
+			onModifyCTyp: function() {
+				var me = this;
+				me.checkPoItemState(function() {
+					if(!me.formula('isWithoutCntrPO')) {
+						UT.messageBox("STD.PO1085", function(id, text, type) {
+							switch(id) {
+									//발주변경
+								case "발주 변경" :
+									//발주변경화면이동
+									me.onShowModifyPo();
+									break;
+									//계약변경
+								case "계약 변경 요청":
+									// 계약 변경 요청 호출
+									me.onModifyReqCntr();
+									break;
+								case "닫기":
+									break;
+							}
+						}, false, {buttons: "발주 변경" + "," + "계약 변경 요청" + ",닫기"});
+					} else {
+						me.onShowModifyPo();
+					}
+				});
+			},
+			//발주변경화면이동
+			onShowModifyPo: function() {
+				var me = this;
+				me.fire("modify-po", {
+					modify_type: "CHG", // 변경
+					requester_type: "PURC_PIC", // 담당자
+					po_uuid: me.get("poData.po_uuid")
+				});
+				me.reset();
+			},
+			// 계약 해지 요청
+			onTrmnReqCntr: function() {
+				var me = this;
+				var poData = me.get("poData");
+				
+				var height = "420";
+				if(poData.po_cntr_req_sts_ccd === "RET") {
+					height = "570";
+				}
+				var popup = UT.popup("es-po-terminate-req-cntr", me, "1000", height, {
+					"reload": function(popup, e) {
+						me.fire("close");
+					}
+				}, {titleText: "계약 해지 요청"});
+				popup.show();
+				popup.getWindowContent().load({
+					po_uuid: poData.po_uuid,
+					po_cntr_req_uuid: poData.po_cntr_req_uuid,
+					cntr_req_typ_ccd: "TRMN"
+				});
+			},
+			// 발주해지
+			onTrmnPo: function() {
+				var me = this;
+				
+				me.checkPoItemState(function() {
+					if(!me.formula('isWithoutCntrPO')) {
+						UT.messageBox("STD.PO1116", function(id, text, type) {
+							switch(id) {
+									//발주변경
+								case "발주 해지" :
+									//발주변경화면이동
+									me.onShowTrmnPo();
+									break;
+									//계약변경
+								case "계약 해지 요청":
+									// 계약 변경 요청 호출
+									me.onTrmnReqCntr();
+									break;
+								case "닫기":
+									break;
+							}
+						}, false, {buttons: "발주 해지" + "," + "계약 해지 요청" + ",닫기"});
+					} else {
+						me.onShowTrmnPo();
+					}
+				});
+			},
+			onShowTrmnPo: function() {
+				var me = this;
+				me.fire("modify-po", {
+					modify_type: "TRMN", // 해지
+					requester_type: "PURC_PIC", // 담당자
+					po_uuid: me.get("poData.po_uuid")
+				});
+				me.reset();
+			},
+			onShowModal: function() {
+				var me = this;
+				me.$.poWorkplaceDialog.show({});
+			},
+			onClosePoWorkDialog: function() {
+				var me = this;
+				me.$.poWorkplaceDialog.hide({});
+				me.onShowModifyPo();
+			},
+			
+			checkPoItemState: function(callbackFn) {
+				var me = this;
+				
+				UT.request(me.$.checkPoItemState, function(e, res) {
+					var result = res.response,
+						status = result.resultStatus;
+					
+					if(status === "S") {
+						if(UT.isFunction(callbackFn)) {
+							callbackFn.call();
+						}
+					} else if(status === "PO_STATE_ERR") {
+						var invalidList = result.resultList, msg = "";
+						
+						if(me.get("poData.purc_typ_ccd") === "QTY") {
+							for(var i = 0; i < invalidList.length; i++) {
+								if(UT.isNotEmpty(msg)) msg += '<br/>';
+								
+								var invalidPoItem = invalidList[i];
+								
+								if(invalidPoItem.check_result === "PO_COMPLETE") {				//발주종료
+									msg += me.translate("STD.PO1047", null, invalidPoItem.po_no);
+								} else if(invalidPoItem.check_result === "HAS_GR_ITEM") {			//납품예정/검수진행중인 품목 존재
+									msg += me.translate("STD.PO1041", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+								}
+							}
+						} else {
+							var invalidPoItem = invalidList[0];
+							if(invalidPoItem.check_result === "PO_COMPLETE") {				//발주종료
+								msg += me.translate("STD.PO1047", null, invalidPoItem.po_no);
+							} else if(invalidPoItem.check_result === "HAS_GR_ITEM") {			//기성요청/기성진행중인 품목 존재
+								msg += me.translate("STD.PO1050", null, invalidPoItem.po_no);
+							}
+						}
+						if(UT.isNotEmpty(msg)) {
+							UT.alert(msg, null, true);
+						}
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+			
+			// 구매 유형 공통코드
+			changedPurcTyp: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var purcTyp = me.get("poData.purc_typ_ccd");
+				var modTyp = me.get("poData.po_chg_typ_ccd"); // 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+				
+				me.applyFormula("isPurcTypMT");
+				me.applyFormula("isPurcTypCT");
+				me.applyFormula("isPurcTypMTEditable");
+				
+				me.set("dialog.check_req_dlvy_dt", purcTyp === "QTY");
+				me.set("dialog.check_prd_sd", purcTyp === "CONSTSVC");
+				me.set("dialog.check_prd_ed", purcTyp === "CONSTSVC");
+				
+				if(purcTyp === "CONSTSVC") {
+					me.computeCntrPrdDate(); // 계약기간 계산
+				}
+				me.applyFormula();
+			},
+			
+			// 운영단위
+			onChangeOperOrgCd: function() {
+				var me       = this,
+					provider = me.$.gridPanel.getDataProvider();
+				
+				if(!e.isTrusted) {
+					var provider = me.$.gridPanel.getDataProvider();
+					var operOrgCds = me.$.operorgcombobox.get("codes.operOrgCd");
+					var operOrgCd = me.get("poData.oorg_cd");
+					if(me.get('poData.is_new') === true && UT.isNotEmpty(operOrgCd)) {
+						var operOrgCdMap = UT.arrayFilterChange(operOrgCds, {key: 'oorg_cd', value: operOrgCd});
+						me.set("poData.cur_ccd", operOrgCdMap[0]['cur_ccd']);
+					}
+				}
+				// 품목 그리드 데이터 초기화
+				if(me.get('poData.is_new') === true && UT.isNotEmpty(provider) && provider.getItemSize() > 0) {
+					UT.alert("STD.CNTR1015");
+					provider.removeAll();
+					/*
+					 * removeAll(collectionRemoveItems=default:true)
+					 * -> removeItems에 담아두고 getRemoveItems()를 사용하여 DB에서 삭제할 데이터를 반환
+					 */
+				}
+			},
+			
+			// 발주금액 변경 시 처리 (공급가액, 세액, 계약금액, 지불조건 재계산)
+			changedPoTotAmt: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				
+				var cur = me.get("poData.cur_ccd");
+				
+				// 품목의 면세여부를 체크하여 VAT 및 계약 금액(VAT포함)을 계산하도록 함.
+				var vatAmt = new BigNumber(0);
+				var lists = provider.getItems();
+				
+				for(var i = 0; i < lists.length; i++) {
+					var item = lists[i];
+					
+					if(item.df_yn !== "Y") {
+						var itemAmt = new BigNumber(item.po_amt || 0);
+						
+						var dp = CCPrecManager.validateInfo('amt', cur).decimalprecision;
+						var rm = 1;	// ROUND_DOWN (절사하기로 함 - 2019.07.10)
+						var itemVat = itemAmt.mul(new BigNumber(me.get("taxRate"))).toFixed(dp, rm);
+						
+						vatAmt = vatAmt.plus(new BigNumber(itemVat));
+					}
+				}
+				
+				// VAT 금액
+				me.set("poData.vat_amt", vatAmt.toFixed());
+				
+				// 공급가액 = 발주금액
+				var supplyAmt = new BigNumber(me.get("poData.po_amt") || 0);
+				me.set("poData.sup_amt", supplyAmt.toFixed());
+				
+				// 계약 금액(VAT포함) = 공급가액 + VAT 금액
+				me.set("poData.cntr_amt", supplyAmt.plus(vatAmt).toFixed());
+				
+				// 지불조건 - 지급액 계산
+				me.calculatePaymentPlanAmt();
+			},
+			
+			// 기본계약여부
+			changedBasCntrYn: function() {
+				var me = this;
+				var basCntrYn = me.get("poData.mstagt_yn");
+				if("Y" !== basCntrYn) {
+					me.set("poData.mstagt_no", "");
+				}
+				me.applyFormula("basCntrEditable");
+			},
+			/* 계약이행보증기간 on-click 이벤트 */
+			changePerforbondYn: function() {
+				var me = this;
+				me.applyFormula();
+			},
+			/* 선급금보증기간 on-click 이벤트 */
+			changePrepaybondYn: function() {
+				var me = this;
+				me.applyFormula();
+			},
+			/* 하자보증기간 on-click 이벤트 */
+			changeMaintbondYn: function() {
+				var me = this;
+				me.applyFormula();
+			},
+			// 계약이행보증금 - 보증율
+			changedPerforBondRate: function() {
+				var me = this;
+				var perforBondYn = me.get("poData.cpgur_use_yn");
+				
+				if(!UT.isNumber(me.get("poData.cpgur_ro"))) return;
+				
+				if("Y" === perforBondYn) {
+					var perforBondRate = new BigNumber(me.get("poData.cpgur_ro") || 0); // 계약이행 지급율
+					// BigNumber 생성 시 15자리 이상의 숫자 타입은 error 발생 -> toString하여 생성
+					var cntrAmt = new BigNumber(UT.toString(me.get("poData.cntr_amt") || 0)); // 계약 금액(VAT포함)
+					
+					// cntrAmt * perforBondRate / 100
+					var preforBondAmt = (cntrAmt.isZero() || perforBondRate.isZero()) ? 0 : cntrAmt.mul(perforBondRate).div(new BigNumber(100)).toFixed();
+					me.set("poData.cpgur_amt", CCPrecManager.format("amt", preforBondAmt, me.get("poData.cur_ccd")));
+				} else {
+					me.set("poData.cpgur_ro", 0);
+					me.set("poData.cpgur_amt", 0);
+					me.set("poData.cpgur_typ_ccd", "");
+					me.set("poData.cpgur_st_dt", "");
+					me.set("poData.cpgur_exp_dt", "");
+				}
+				me.applyFormula("perforBondEditable");
+			},
+			changedPerforBondCls: function() {
+				var me = this;
+				if(me.get("poData.cpgur_typ_ccd") !== "GUR_INS") {
+					me.$.perforBondRate.clearInvalid();
+					me.$.perforBondPeriod.clearInvalid();
+				}
+				me.applyFormula("perforBondRequired");
+				me.applyFormula("isRequiredCntrDate");
+			},
+			
+			// 하자이행보증금 - 보증율
+			changedMaintBondRate: function() {
+				var me = this;
+				var maintBondYn = me.get("poData.defpgur_use_yn");
+				
+				if(!UT.isNumber(me.get("poData.defpgur_ro"))) return;
+				
+				if("Y" === maintBondYn) {
+					var maintBondRate = new BigNumber(me.get("poData.defpgur_ro") || 0); // 하자이행 지급율
+					// BigNumber 생성 시 15자리 이상의 숫자 타입은 error 발생 -> toString하여 생성
+					var cntrAmt = new BigNumber(UT.toString(me.get("poData.cntr_amt") || 0)); // 계약 금액(VAT포함)
+					
+					// cntrAmt * maintBondRate / 100
+					var maintBondAmt = (cntrAmt.isZero() || maintBondRate.isZero()) ? 0 : cntrAmt.mul(maintBondRate).div(new BigNumber(100)).toFixed();
+					me.set("poData.defpgur_amt", CCPrecManager.format("amt", maintBondAmt, me.get("poData.cur_ccd")));
+				} else {
+					me.set("poData.defpgur_ro", 0);
+					me.set("poData.defpgur_amt", 0);
+					me.set("poData.defpgur_typ_ccd", "");
+					me.set("poData.defpgur_pd_typ_ccd", "");
+					me.set("poData.defpgur_pd", null);
+				}
+				me.applyFormula("maintBondEditable");
+			},
+			changedMaintBondCls: function() {
+				var me = this;
+				if(me.get("poData.defpgur_typ_ccd") !== "GUR_INS") {
+					me.$.maintBondRate.clearInvalid();
+					me.$.maintBondTyp.clearInvalid();
+					me.$.maintBondMon.clearInvalid();
+				}
+				me.applyFormula("maintBondRequired");
+				me.applyFormula("isRequiredCntrDate");
+			},
+			
+			// 선급금이행보증금 - 보증율
+			changedPrePayBondRate: function() {
+				var me = this;
+				var prePayBondYn = me.get("poData.apymtgur_use_yn");
+				
+				if(!UT.isNumber(me.get("poData.apymtgur_ro"))) return;
+				
+				if("Y" === prePayBondYn) {
+					var prePayBondRate = new BigNumber(me.get("poData.apymtgur_ro") || 0); // 선급금이행 지급율
+					
+					// BigNumber 생성 시 15자리 이상의 숫자 타입은 error 발생 -> toString하여 생성
+					var prePayAmt = new BigNumber(UT.toString(me.get("poData.apymt_amt") || 0)); // 선급금
+					
+					
+					var provider = me.$.paymentPlanGrid.getDataProvider(),
+						plans    = provider.getItems();
+					
+					var payRate = new BigNumber(0);
+					for(var i = 0, len = plans.length; i < len; i++) {
+						var plan = plans[i];
+						if(plan["pymt_typ_ccd"] === "APYMT") {			// 선급금
+							payRate = payRate.plus(new BigNumber(plan["pymt_ro"]));
+						}
+					}
+					// cntrAmt * prePayBondRate / 100
+					//var prePayBondAmt = (prePayAmt.isZero() || prePayBondRate.isZero()) ? 0 : prePayAmt.mul(prePayBondRate).div(new BigNumber(100)).toFixed();
+					
+					//아래계산식으로 변경
+					// cntrAmt *( payRate / 100) * (prePayBondRate / 100)
+					var cntrAmt = new BigNumber(UT.toString(me.get("poData.cntr_amt") || 0));
+					var prePayBondAmt = (cntrAmt.isZero() || prePayBondRate.isZero() || payRate.isZero()) ? 0 : cntrAmt.mul(payRate).div(new BigNumber(100)).mul(prePayBondRate).div(new BigNumber(100));
+					
+					me.set("poData.apymtgur_amt", CCPrecManager.format("amt", prePayBondAmt, me.get("poData.cur_ccd")));
+				} else {
+					me.set("poData.apymtgur_ro", 0);
+					me.set("poData.apymtgur_amt", 0);
+					me.set("poData.apymtgur_typ_ccd", "");
+					me.set("poData.apymtgur_st_dt", "");
+					me.set("poData.apymtgur_exp_dt", "");
+				}
+				me.applyFormula("prePayBondEditable");
+			},
+			changedPrePayBondCls: function() {
+				var me = this;
+				if(me.get("poData.apymtgur_typ_ccd") !== "GUR_INS") {
+					me.$.prePayBondRate.clearInvalid();
+					me.$.prePayBondPeriod.clearInvalid();
+				}
+				me.applyFormula("prePayBondRequired");
+				me.applyFormula("isRequiredCntrDate");
+			},
+			
+			changeCur: function(e) {
+				var me = this;
+				
+				if(!e.isTrusted) {
+					var cur = me.get("poData.cur_ccd");
+					var provider = me.$.gridPanel.getDataProvider();
+					
+					if(provider && provider.setItemAtBatch && me.formula("editableCur")) {
+						// 전체 품목 변경
+						provider.setItemAtBatch(true, function(index, data) {
+							var qty       = data["po_qty"],                                               // 수량
+								price     = data["po_uprc"],                                             // 단가
+								precPrice = CCPrecManager.format("price", price, cur),						// 단가 소수점처리
+								amt       = (new BigNumber(precPrice)).mul(new BigNumber(qty)).toFixed(),	// 금액 = 단가 소수점처리 * 수량
+								precAmt   = CCPrecManager.format("amt", amt, cur);
+							
+							return {
+								'cur_ccd': cur,
+								'po_uprc': precPrice,
+								"po_amt": precAmt
+							}
+						});
+					}
+				}
+			},
+			
+			// 계약기간 계산
+			computeCntrPrdDate: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				
+				var max = function(a, b) {
+					if(UT.isDate(a) && UT.isDate(b)) {
+						return a.getTime() >= b.getTime() ? a : b;
+					} else if(UT.isString(a) && UT.isString(b)) {
+						return parseInt(a, 10) >= parseInt(b, 10) ? a : b;
+					} else {
+						return UT.isString(a) ? a : UT.isString(b) ? b : null;
+					}
+				}
+				var min = function(a, b) {
+					if(UT.isDate(a) && UT.isDate(b)) {
+						return a.getTime() <= b.getTime() ? a : b;
+					} else if(UT.isString(a) && UT.isString(b)) {
+						return parseInt(a, 10) <= parseInt(b) ? a : b;
+					} else {
+						return UT.isString(a) ? a : UT.isString(b) ? b : null;
+					}
+				}
+				var sd = null, ed = null;
+				var items = provider.getItems();
+				for(var i = 0, len = items.length; i < len; i++) {
+					sd = min(sd, items[i].const_st_dt);
+					ed = max(ed, items[i].const_exp_dt);
+				}
+				if(UT.isDate(sd)) {
+					me.set("poData.cntr_st_dt", UT.formatDate(sd, "yyyyMMdd"));
+				} else {
+					me.set("poData.cntr_st_dt", sd);
+				}
+				if(UT.isDate(ed)) {
+					me.set("poData.cntr_exp_dt", UT.formatDate(ed, "yyyyMMdd"));
+				} else {
+					me.set("poData.cntr_exp_dt", ed);
+				}
+			},
+			
+			// 구매의뢰자, 검수 담당자 및 구매그룹 검색 결과값 설정
+			setColumnSearchedValue: function(selected) {
+				var me        = this,
+					provider  = me.$.gridPanel.getDataProvider(),
+					fieldName = me.grid.fieldName,
+					itemIndex = me.grid.itemIndex,
+					values    = {};
+				
+				if(fieldName === "pr_realusr_nm" || fieldName === "img_pr_sug") {
+					values = {
+						pr_realusr_id: selected.usr_id || "",
+						pr_realusr_nm: selected.usr_nm || ""
+					};
+				} else if(fieldName === "gr_pic_nm" || fieldName === "img_gr_chr") {
+					values = {
+						gr_pic_id: selected.usr_id || "",
+						gr_pic_nm: selected.usr_nm || ""
+					};
+				} else if(fieldName === "purc_grp_nm" || fieldName === "img_purc_grp") {
+					values = {
+						purc_grp_cd: selected.purc_grp_cd,
+						purc_grp_nm: selected.disp_purc_grp_nm
+					}
+				} else if(fieldName === "img_dtl_spec") {
+					values = {
+						item_spec_dtl: selected.item_spec_dtl
+					}
+				}
+				provider.setItemAt(itemIndex, values);
+			},
+			
+			// 일괄 적용
+			onShowApplyDialog: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var items = provider.selectionCheckedItems();
+				
+				if(UT.isNotEmpty(items) && items.length > 0) {
+					me.$.dialog.show({
+						draggable: true
+					});
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+
+			// 일괄적용 체크해제 시 값 초기화
+			onCheckchange: function(e) {
+				var me        = this,
+					checked   = e.detail,
+					fieldName = e.target.dataset.args;
+				
+				if(!checked) {
+					if(fieldName === "purc_grp") {
+						me.set("dialog." + fieldName + "_cd", null);
+						me.set("dialog." + fieldName + "_nm", null);
+					} else {
+						me.set("dialog." + fieldName, null);
+					}
+				}
+			},
+			
+			// 일괄적용의 UOM 변경 시
+			onChangeDialogUnitCd: function() {
+				var me     = this,
+					unitCd = me.get("dialog.uom_ccd");
+				
+				// 일괄적용의 수량 regex 변경
+				me.$.dialogItemQty.regex = CCPrecManager.regex("qty", unitCd);
+				
+				var qty = me.get("dialog.po_qty");
+				if(UT.isNotEmpty(qty)) {
+					// 변경된 단위에 따른 수량 소수점 처리
+					me.set("dialog.po_qty", CCPrecManager.format("qty", qty, unitCd));
+				}
+			},
+			
+			// 일괄적용
+			onApplyData: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var itemIndex = provider.selectionCheckedIndexes();
+				var dialog = me.get("dialog");
+				var values = {};
+				
+				if(dialog.check_duty_free_yn === true) {
+					values.df_yn = dialog.df_yn === true || dialog.df_yn === "Y" ? "Y" : "N";
+				}
+				if(me.formula('unitCdEditable') && dialog.check_unit_cd === true) {
+					values.uom_ccd = dialog.uom_ccd || "";
+				}
+				if(me.formula('itemQtyEditable') && dialog.check_item_qty === true) {
+					values.po_qty = dialog.po_qty || 0;
+				}
+				/*if(me.formula('isPurcTypMT') && dialog.check_req_dlvy_dt === true) {
+					values.req_dlvy_dt = dialog.req_dlvy_dt || "";
+				}*/
+				if(me.formula('isPurcTypMT') && dialog.check_dlvy_dt === true) {
+					values.dlvy_dt = dialog.dlvy_dt || "";
+				}
+				if(dialog.check_rd_locat === true) {
+					values.dlvy_plc = dialog.dlvy_plc || "";
+				}
+				if(me.formula('isPurcTypCT') && dialog.check_prd_sd === true) {
+					values.const_st_dt = dialog.const_st_dt || "";
+				}
+				if(me.formula('isPurcTypCT') && dialog.check_prd_ed === true) {
+					values.const_exp_dt = dialog.const_exp_dt || "";
+				}
+				if(me.formula('isModTypNEditable') && dialog.check_purc_grp_cd === true) {
+					values.purc_grp_cd = dialog.purc_grp_cd || "";
+					values.purc_grp_nm = dialog.purc_grp_nm || "";
+				}
+				
+				if(UT.isNotEmpty(itemIndex) && itemIndex.length > 0) {
+					var cur = me.get("poData.cur_ccd");
+					
+					provider.setItemAtBatch(itemIndex, function(index, data) {
+						var unitCd = values["uom_ccd"] || data["uom_ccd"],
+							qty    = values["po_qty"] || data["po_qty"] || 0,
+							price  = data["po_uprc"] || 0;
+						
+						var result = UT.copy(values);
+						
+						// 수량 일괄적용 데이터 존재 시
+						if(values["po_qty"]) {
+							// 수량 소수점처리
+							qty = CCPrecManager.format("qty", qty, unitCd);
+							result["po_qty"] = qty;
+						}
+						
+						// 금액 계산 소수점처리
+						result["po_amt"] = CCPrecManager.format("amt", (new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), cur);
+						
+						return result;
+					});
+					var purcTyp = me.get("poData.purc_typ_ccd");
+					if(purcTyp === "CONSTSVC") {
+						me.computeCntrPrdDate(); // 계약기간 계산
+					}
+					me.onCloseApplyDialog();
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			
+			// 다이얼로그 닫기
+			onCloseApplyDialog: function() {
+				var me = this;
+				me.$.dialog.close();
+				me.set("dialog", me.getPropertyInfo("dialog").value());
+			},
+			// 닫기
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			},
+			// 세액 convert
+			onVatConvert: function(rowIndex, dataField, data) {
+				var me = this;
+				
+				if(data.df_yn === "Y") {
+					return 0;
+				}
+				
+				var cur = me.get("poData.cur_ccd");
+				var itemAmt = new BigNumber(data["po_amt"] || 0);
+				
+				// 품목 별 세액 계산
+				var dp = CCPrecManager.validateInfo('amt', cur).decimalprecision;
+				var rm = 1;	// ROUND_DOWN
+				
+				return itemAmt.mul(new BigNumber(me.get("taxRate"))).toFixed(dp, rm);
+			},
+			// 금액 합계
+			onAmtAggregateFn: function(dataField, datas) {
+				var me = this;
+				
+				if(dataField === "po_amt") {
+					var amtSum = new BigNumber('0');
+					
+					for(var i = 0; i < datas.length; ++i) {
+						var data = datas[i];
+						amtSum = amtSum.plus(new BigNumber(data[dataField] || 0));
+					}
+					
+					var cur   = me.get("poData.cur_ccd"),
+						value = amtSum.toFixed();
+					
+					// 금액 소수점처리(value)
+					me.set("poData.po_amt", CCPrecManager.format("amt", value, cur));
+					
+					// 발주금액 변경 시
+					me.changedPoTotAmt();
+					return value;
+					
+				} else if(dataField === "item_vat") {
+					return me.get("poData.vat_amt");
+				}
+				return null;
+			},
+			onShowCsPopup: function() {
+				var me = this;
+				me.showCsPopup();
+			},
+			showCsPopup: function() {
+				var me = this;
+				var popup = UT.popup('ep-po-cs-detail', me, 1100, 700, {
+					"save-complete": function(popup, e) {
+						me.set("poData.set_cs_amt_yn", "Y");
+					}
+				}, {titleText: "구성원 정보"});
+				popup.show();
+				popup.getWindowContent().load({"po_uuid": me.get("poData.po_uuid"), "readonly": !me.formula("editable")});
+			},
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber,
+			
+			onViewCntr: function() {
+				var me = this;
+				
+				var data = {
+					cntr_uuid: me.get("poData.cntr_uuid")
+				};
+				
+				var popup = UT.popup("es-contract-detail", me, "90%", "90%", {
+					"close-remove": function(popup, e) {
+						popup.close();
+					}
+				}, {titleText: "계약 상세", menuId: "CTR20000"});
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			
+			completeSavePoContract: function(e, res) {
+				var me = this;
+				me.onFindInfo();
+			},
+			
+			procAfterSave: function(poId) {
+				var me = this;
+				me.set("findInfo.param", {po_uuid: poId});
+				
+				if(me.get("poData.openedApproval") === true) { // 결재요청일 경우
+					me.onFindInfo(); //데이터 저장 후 재조회
+					me.set("poData.openedApproval", false);
+					
+					var aprvTypcd = me.get("poData.apvl_typ_ccd");
+					
+					// 결재팝업 호출
+					UT.popupApproval(me, {
+								task_uuid: poId, apvl_typ_ccd: aprvTypcd, apvl_tit: me.get("poData.po_tit"),
+								appData: me.get("poData"),
+								appAmt: me.get("poData.po_amt")
+							},
+							// savedCallback (결재 팝업에서 이벤트 처리후 실행되는 callback 함수 내용을 정의한다.)
+							function(aprvSts) {
+								if(aprvSts === "PRGSG") {	// 결재상신 시
+									me.onClose();
+								} else {				// 결재 임시저장 시
+									me.onFindInfo();
+								}
+							});
+				} else if(me.get("poData.stagePayEval") === true) { // 준공평가 설정일 경우
+					me.set("poData.stagePayEval", false);
+					me.showStagePayEval(poId);
+				} else if(me.get("poData.bypassApproval") === true) { // 결재없이 발주 생성 할 경우
+					me.set("poData.bypassApproval", false);
+					
+					UT.completeAlert();
+					me.onClose();
+				} else if(me.get("poData.showPoEvalSet") === true) {
+					me.set("poData.showPoEvalSet", false);
+					me.showPoEval(poId);
+				} else {
+					UT.completeAlert();
+					
+					if(me.get("poData.saveAfterClose") === true) {
+						me.onClose();
+					} else {
+						me.onFindInfo();
+					}
+				}
+			},
+			onChangeTaxCd: function(e) {
+				this.setTaxRate(e.detail.selectedItem);
+				this.changePoItemTaxRate();
+			},
+			
+			setTaxRate: function(taxCodeInfo) {
+				var taxRate = new BigNumber(0);
+				
+				if(UT.isNotEmpty(taxCodeInfo)) {
+					taxRate = (new BigNumber(taxCodeInfo.cstr_cnd_val).div(100));
+				}
+				
+				if(taxRate.comparedTo(new BigNumber(this.get("taxRate")))) {
+					//과세율이 다를 경우 변경
+					this.set("taxRate", taxRate.toNumber());
+				}
+				
+			},
+			
+			changePoItemTaxRate: function() {
+				var provider = this.$.gridPanel.getDataProvider();
+				provider.setItemAtBatch(true, function(nodeIndex, data) {
+					if(data["df_yn"] !== "Y") {
+						return {tax_rate: this.get("taxRate")};
+					}
+				});
+			},
+			
+			// 인쇄 버튼 클릭 이벤트
+			onDocumentOutput: function() {
+				var me = this;
+				
+				me.$.findInfoDocumentOutputPo.body = {
+					po_uuid: me.get("poData.po_uuid")
+				};
+				UT.request(me.$.findInfoDocumentOutputPo, function(e, res) {
+					var result = res.response;
+					
+					me.set("documentOutputDataInfo", result.resultData);
+					
+					var datasetList = me.get("documentOutputDataInfo.datasetList");
+					var projectName = me.get("documentOutputDataInfo.param.projectName");
+					var formName = me.get("documentOutputDataInfo.param.formName");
+					var url = me.get("documentOutputDataInfo.param.url");
+					// UBIFORM 호출
+					UT.openUBIFORM(projectName, formName, datasetList, url);
+					
+				});
+			},
+			
+			completeFindListCommonCodeAttributeCode: function(e, res) {
+				var me = this;
+				me.set("codes.cntrSgngTypCcd", me.codes.cntrSgngTypCcd.filter((code) => code.cstr_cnd_val === "Y"));
+				
+				me.$.cntrSgngTypCcdCombo.items = me.get("codes.cntrSgngTypCcd");
+			},
+			changeGeUseYn: function() {
+				var me = this;
+				me.applyFormula();
+			},
+			onPoEvalSet: function() {
+				var me       = this,
+					poUuid   = me.get("poData.po_uuid"),
+					poStsCcd = me.get("poData.po_sts_ccd");
+				if(UT.isEmpty(poUuid) && (me.formula("editable") && poStsCcd === "WTG" || poStsCcd === "CRNG" || UT.isEmpty(poStsCcd))) {
+					var purcTypCcd = me.get("poData.purc_typ_ccd");
+					UT.alert(me.translate("STD.PO1072", null, purcTypCcd === "QTY" ? me.translate("입고") : me.translate("기성")), function() { // {0}평가 설정은 임시저장 이후 설정가능합니다.
+						me.set("poData.showPoEvalSet", true);
+						me.onSaveDraft();
+					});
+				} else {
+					me.showPoEval(poUuid);
+				}
+			},
+			showPoEval: function(poUuid) {
+				var me = this;
+				me.fire("show-po-gr-eval-detail", {
+					'po_uuid': poUuid,
+					'closeView': "PO"
+				});
+			},
+			onImagePlantSelectShowFunction: function(data, item) {
+				if(UT.isNotEmpty(data["item_cd_crn_typ_ccd"]) && data["item_cd_crn_typ_ccd"] === 'CDLS') { // 무품목코드 일 경우만 표기
+					return "search";
+				}
+				return "";
+			},
+			// 품목 별 계약 및 발주 이력 조회
+			showItemContractHistory: function(itemCd) {
+				var me = this;
+				
+				var itemHistoryPopup = UT.popup("ep-item-perform", me, "90%", "80%", null, {titleText: I18N.translate("품목 정보")});
+				itemHistoryPopup.show();
+				itemHistoryPopup.getWindowContent().load({item_cd: itemCd});
+			},
+			completeFindRootLogicOrganizationInfo: function(e, res){
+				var me = this;
+				var result = res.response;
+				me.set("ctryCcd", result.ctry_ccd);
+			},
+
+			onAsnSchedPopup: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var dlvySchedPopup = UT.popup("ep-dlvy-sched-list", me, "90%", "90%", null, {titleText: I18N.translate("납품 일정")});
+				var paramForAsnSchedPopup = {
+					po_item_uuids : provider.getItems().map(item => item.po_item_uuid),
+					codes : me.codes
+				};
+				dlvySchedPopup.show();
+				dlvySchedPopup.getWindowContent().load(paramForAsnSchedPopup);
+			}
+		});
+	</script>
+
+</dom-module>

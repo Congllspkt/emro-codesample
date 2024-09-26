@@ -1,0 +1,256 @@
+<sc-link href="../../../lib/jsoneditor/dist/jsoneditor.min.css" rel="stylesheet" type="text/css"></sc-link>
+<script src="../../../lib/jsoneditor/dist/jsoneditor.min.js"></script>
+
+<dom-module id="ep-vendor-invite-mail-multi">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 협력사 초청메일 관리 template 조회 -->
+		<sc-ajax
+				id="findMailTemplate"
+				url="findMailTemplate.do"
+				on-response="completeFindMailTemplate"></sc-ajax>
+		
+		<sc-ajax id="sendVendorInviteMailMulti"
+				 url="sendVendorInviteMailMulti.do"
+				 body="{{mailInfo}}"
+				 on-response="completeSendVendorInviteMail">
+		</sc-ajax>
+		
+		<cc-sub-title-bar>
+			<sc-button text="이메일 전송" on-click="onSendVendorInviteMail" auth-s></sc-button>
+		</cc-sub-title-bar>
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="초청자"></sc-label>
+				<sc-text-field value="{{mailInfo.invi_pic_nm}}" disabled="true" required="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="초청자 이메일"></sc-label>
+				<sc-text-field value="{{mailInfo.invi_pic_eml}}" disabled="true"></sc-text-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<div class="vspace-10"></div>
+
+		<sc-grid id="gridPanel" class="h-200" data-provider="{{resultList}}" editable="true" use-state="true" on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="추가" on-click="onAddRow" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteList" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="vd_nm" header-text="협력사 명" width="200" text-align="left" editable="true" required="true"></sc-data-column>
+				<sc-data-column data-field="vd_eml" header-text="협력사 이메일" width="150" text-align="left" editable="true" required="true" max-length="128" validator-type="email"></sc-data-column>
+				<sc-data-column	data-field="bizregno" header-text="사업자등록번호" width="150" text-align="center" editable="true" required="true" editor-maskre="/[0-9]/" hangul-restrict="true" validator-function="gridValidatorFn"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+
+		<div class="vspace-10"></div>
+
+		<cc-form-panel column="1">
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{mailInfo.invi_tit}}" max-length="128" required="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="내용"></sc-label>
+				<sc-editor id="editor" value="{{mailInfo.invi_cont}}" max-length="500" class="h-300" style="width:100%;"></sc-editor>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-vendor-invite-mail-multi',
+			
+			properties:{
+				mailInfo: {
+					type: Object,
+					value: function () {
+						return {
+							mail_key: "VENDOR_INVITATION_MAIL",
+							invi_pic_id: "",
+							invi_pic_eml: "",
+							invi_tit: "",
+							invi_cont: ""
+						};
+					}
+				},
+				titleText: {
+					type: String,
+					value: "초청 작성"
+				},
+				// 중복리스트
+				vdInfoList: {
+					type: Array,
+					value: function(){
+						return [];
+					}
+				},
+			},
+			formulas: {
+			},
+			
+			initialized: function () {
+				var me = this;
+			},
+
+			load: function(data){
+				var me = this;
+				
+				me.reset();
+				me.set("mailInfo.invi_pic_id", SCSessionManager.currentUser.usr_id);
+				me.set("mailInfo.invi_pic_nm", SCSessionManager.currentUser.usr_nm);
+				me.set("mailInfo.invi_pic_eml", SCSessionManager.currentUser.eml);
+				me.onFindMailTemplate();
+			},
+
+			// mail Template 조회
+			onFindMailTemplate: function(){
+				var me = this;
+				
+				me.$.findMailTemplate.body = me.mailInfo;
+				UT.request(me.$.findMailTemplate);
+			},
+
+			// mail Template 조회 complete
+			completeFindMailTemplate: function(e, res){
+				var me = this;
+				var result = res.response;
+
+				if (UT.isNotEmpty(result) && result.resultStatus === "S") {
+					me.set("mailInfo.invi_tit", result.resultData.mail_tit);
+				}
+			},
+
+			// 업체 목록 추가
+		    onAddRow: function() {
+			   var me = this,
+				   provider = me.$.gridPanel.getDataProvider();
+
+			   provider.addItem({});
+		    },
+
+			// 업체 목록 삭제
+		    onDeleteList: function() {
+				var me = this,
+				   provider = me.$.gridPanel.getDataProvider(),
+				   checked = provider.selectionCheckedIndexes();
+
+			    if (checked.length === 0) {
+					UT.alert("STD.N1600"); // "선택된 항목이 없습니다",
+					return;
+				}
+				provider.removeItems();
+		    },
+
+			// 메일 전송
+			onSendVendorInviteMail: function () {
+				var me = this
+					, provider = me.$.gridPanel.getDataProvider()
+					, rows = provider.getItems();
+
+				if(rows.length === 0){
+					UT.alert("STD.N4100"); // "데이터가 존재하지 않습니다"
+					return;
+				}
+				if(!me.$.gridPanel.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+
+				// 중복체크
+				let duplicates = rows.reduce((acc, row) => {
+				    if (acc.seen[row.bizregno]) {
+						acc.duplicates.push(row);
+				    } else {
+				        acc.seen[row.bizregno] = true;
+				    }
+				    return acc;
+				}, { seen: {}, duplicates: [] }).duplicates;
+				if(duplicates.length > 0) {
+					// 중복된
+					UT.alert(me.translate("STD.E1042",null,me.translate('사업자등록번호')),null,true);
+					return;
+				}
+
+				me.$.editor.syncValue();
+				if(UT.isEmpty(me.mailInfo.invi_cont) || me.mailInfo.invi_cont === ''){
+					UT.alert("STD.VS1306")	// 초청 내용은 입력해야합니다.
+					return;
+				}
+
+				if(me.mailInfo.invi_cont.length > 500){
+					UT.alert("STD.VS1313")	// 입력 가능한 최대 길이를 초과 했습니다.
+					return;
+				}
+				const mailInfo = me.get("mailInfo");
+				UT.confirm("STD.N3500", function() {  // 발송하시겠습니까?
+					const vendorList = rows.map(row => Object.assign({}, mailInfo, row));
+					me.$.sendVendorInviteMailMulti.body = {
+						vendorInviteList : vendorList
+					};
+					UT.request(me.$.sendVendorInviteMailMulti);
+				});
+			},
+
+			// 메일 전송 complete
+			completeSendVendorInviteMail: function(e, res){
+				var me = this;
+				var result = res.response;
+				var provider = me.$.gridPanel.getDataProvider()
+					, rows = provider.getItems()
+				
+				if (UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("이메일 전송"); // 요청을 완료하였습니다.
+					me.fire("close");
+				} else {
+					var invalidList = result.resultList;
+					var invalidBizregno = invalidList.map(data => `[${rows.find(row => row.bizregno == data.bizregno)[vd_nm] || ''}] ${data.bizregno}`).join('<br>');
+					UT.alert(me.translate("STD.VS1029") + `<br>${invalidBizregno}`, null, true);
+				}
+			},
+
+			// grid validator-function
+			gridValidatorFn : function(headerText, dataField, data) {
+				var me = this;
+				if(dataField === "bizregno") {
+					// 숫자만
+					var regExp = /^[0-9]+$/;
+					if(!regExp.test(data[dataField])){
+						return me.translate("STD.E1004", null, "사업자등록번호");
+					}
+					if(!me.checkBizRegNo(data[dataField])){
+						// 사업자번호가 유효하지 않습니다.
+						return me.translate("STD.VS1026");
+					}
+				}
+				return true;
+			},
+
+			// 사업자등록번호 체크 로직
+			checkBizRegNo: function(bizRegNo) {
+				var checkID = new Array(1, 3, 7, 1, 3, 7, 1, 3, 5, 1);
+				var i, chkSum=0, c2, remander;
+				if(10 === bizRegNo.length){
+					for (i=0; i<=7; i++) chkSum += checkID[i] * bizRegNo.charAt(i);
+
+					c2 = "0" + (checkID[8] * bizRegNo.charAt(8));
+					c2 = c2.substring(c2.length - 2, c2.length);
+
+					chkSum += Math.floor(c2.charAt(0)) + Math.floor(c2.charAt(1));
+
+					remander = (10 - (chkSum % 10)) % 10 ;
+
+					if (Math.floor(bizRegNo.charAt(9)) == remander) return true; // OK!
+				}
+				return false;
+			},
+		});
+	</script>
+
+</dom-module>

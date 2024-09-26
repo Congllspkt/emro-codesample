@@ -1,0 +1,410 @@
+<dom-module id="ep-survey-ans-template">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 답변 유형 -->
+				<sc-code code="C090" value="{{codes.ansTypCcd}}"></sc-code>
+				<!-- 선형 배율 값 -->
+				<sc-code code="C092" value="{{codes.lnrValCcd}}"></sc-code>
+			</sc-code-group>
+			<!-- 답변 입력 형식 -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.inpFormCcdParam}}"
+					 last-response="{{codes.inpFormCcd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<sc-ajax id="findSurveyAnsTemplateByUuid"
+				 url="findSurveyAnsTemplateByUuid.do"
+				 on-response="completeFindSurveyAnsTemplateByUuid">
+		</sc-ajax>
+		
+		<sc-ajax id="saveSurveyAnsTemplate"
+				 url="saveSurveyAnsTemplate.do"
+				 on-response="completeSaveSurveyAnsTemplate">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-s,auth-r"></cc-auth-checker>
+		<cc-page-title-bar title-text="설문 답변 템플릿 작성">
+			<sc-button text="저장" on-click="onSave" auth-s></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel validation-group="info" column="1">
+			<cc-fieldset>
+				<sc-label text="답변 템플릿 명"></sc-label>
+				<cc-text-language-field required="true" value="{{surveyAnsTemplate.surv_ans_tmpl_nm}}" max-length="200"></cc-text-language-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="답변 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.ansTypCcd}}" value="{{surveyAnsTemplate.ans_typ_ccd}}" placeholder="선택" required="true" on-select="onSelectAnsTypCcd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="첨부 가능 여부"></sc-label>
+				<sc-checkbox-field input-value="{{surveyAnsTemplate.ath_poss_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="첨부 필수 여부"></sc-label>
+				<sc-checkbox-field input-value="{{surveyAnsTemplate.ath_mand_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="기타 답변 여부"></sc-label>
+				<sc-checkbox-field input-value="{{surveyAnsTemplate.otrs_ans_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel title-text="주관식 선택 옵션" validation-group="multiInfo" column="1" hidden="[[!formula('isMulti')]]">
+			<cc-fieldset>
+				<sc-label text="최대 선택 개수"></sc-label>
+				<sc-combobox-field class="w-100" display-field="label" value-field="data" items="{{multiMaxSelects}}" value="{{surveyAnsTemplate.max_sel_cnt}}" placeholder="선택" required="[[formula('isRank')]]"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<sc-grid id="gridPanel" class="flex" data-provider="{{surveyAnsTemplateOptions}}" editable="true" hidden="[[!formula('isChoice')]]"
+				 on-item-edit-end="onItemEditEnd" on-item-click="onItemClick">
+			<cc-grid-toolbar title-text="객관식 옵션">
+				<sc-button text="삭제" on-click="onDeleteList" auth-s></sc-button>
+				<sc-button text="추가" on-click="onAddRow" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-group-column hide-child-headers="true" header-text="옵션 명" width="240">
+					<sc-data-column data-field="disp_opt_nm" editable="true" width="210" required="true"></sc-data-column>
+					<sc-image-column data-field="disp_opt_nm_img" width="30" text-align="center" image-cls="language"></sc-image-column>
+				</sc-group-column>
+				<sc-data-column data-field="opt_sc" header-text="옵션 점수" editable="true" width="70" text-align="right" data-type="number" format-type="number"></sc-data-column>
+				<sc-data-column data-field="opt_sort" header-text="옵션 정렬" editable="true" width="70" text-align="right" data-type="number" format-type="number" required="true"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="opt_nm"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<cc-form-panel title-text="객관식 선형 배율 옵션" validation-group="linearInfo" column="1" hidden="[[!formula('isLinear')]]">
+			<cc-fieldset>
+				<sc-label text="최소 최대 값"></sc-label>
+				<div class="field-box">
+					<sc-combobox-field class="w-100" display-field="label" value-field="data" items="{{codes.lnrValCcd}}" value="{{surveyAnsTemplate.lnr_min_val_ccd}}" placeholder="선택" required="true"></sc-combobox-field>
+					<span>~</span>
+					<sc-combobox-field class="w-100" display-field="label" value-field="data" items="{{codes.lnrValCcd}}" value="{{surveyAnsTemplate.lnr_max_val_ccd}}" placeholder="선택" required="true"></sc-combobox-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="최소 라벨"></sc-label>
+				<cc-text-language-field value="{{surveyAnsTemplate.lnr_min_nm}}" max-length="60"></cc-text-language-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="최대 라벨"></sc-label>
+				<cc-text-language-field value="{{surveyAnsTemplate.lnr_max_nm}}" max-length="60"></cc-text-language-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel title-text="주관식 단답 옵션" validation-group="shortAnsInfo" column="1" hidden="[[!formula('isShortAns')]]">
+			<cc-fieldset>
+				<sc-label text="입력 형식"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.inpFormCcd}}" value="{{surveyAnsTemplate.shortans_inp_form_ccd}}" placeholder="선택" required="true" on-select="onSelectInpFormCcd"></sc-combobox-field>
+			</cc-fieldset>
+			<!--<cc-fieldset>
+				<sc-label text="정규식"></sc-label>
+				<sc-text-field value="{{surveyAnsTemplate.regexp}}" max-length="100" readonly="[[!formula('isEditableRegExp')]]" required="[[formula('isEditableRegExp')]]"></sc-text-field>
+			</cc-fieldset>-->
+			<cc-fieldset>
+				<sc-label text="입력 제한"></sc-label>
+				<div class="field-box">
+					<sc-number-field class="w-100" min-value="1" max-value="100" max-length="3"
+									 input-cover="true"
+									 value="{{surveyAnsTemplate.inp_lmt}}">
+					</sc-number-field>
+					<span style="margin-left: 10px;">[[translate('글자 제한')]] [[translate('(최대 100)')]]</span>
+				</div>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel title-text="주관식 장문 옵션" validation-group="essayAnsInfo" column="1" hidden="[[!formula('isEssayAns')]]">
+			<cc-fieldset>
+				<sc-label text="입력 제한"></sc-label>
+				<div class="field-box">
+					<sc-number-field class="w-100" min-value="1" max-value="500" max-length="3"
+									 input-cover="true"
+									 value="{{surveyAnsTemplate.inp_lmt}}">
+					</sc-number-field>
+					<span style="margin-left: 10px;">[[translate('글자 제한')]] [[translate('(최대 500)')]]</span>
+				</div>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel title-text="날짜 옵션" validation-group="dateInfo" column="1" hidden="[[!formula('isDate')]]">
+			<cc-fieldset>
+				<sc-label text="시작 일자"></sc-label>
+				<sc-date-field class="w-150" value="{{surveyAnsTemplate.st_dt_lmt}}" string-date="true"></sc-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="종료 일자"></sc-label>
+				<sc-date-field class="w-150" value="{{surveyAnsTemplate.ed_dt_lmt}}" string-date="true"></sc-date-field>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-survey-ans-template",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							inpFormCcdParam: {
+								ccd: "C091",
+								cstr_cnd_cd: "REGEXP"
+							}
+						};
+					}
+				},
+				surveyAnsTemplate: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				surveyAnsTemplateOptions: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				multiMaxSelects: {
+					type: Array,
+					value: function() {
+						var result = [];
+						for(var i = 1; i <= 3; i++) {
+							result.push({
+								data: i,
+								label: String(i)
+							});
+						}
+						return result;
+					}
+				}
+			},
+			formulas: {
+				isChoice: function() {
+					var agreeAnsTypCcds = ["SINGLE", "MULTI", "RANK", "DROPDOWN"];
+					return agreeAnsTypCcds.indexOf(this.surveyAnsTemplate.ans_typ_ccd) >= 0;
+				},
+				isMulti: function() {
+					var agreeAnsTypCcds = ["MULTI", "RANK"];
+					return agreeAnsTypCcds.indexOf(this.surveyAnsTemplate.ans_typ_ccd) >= 0;
+				},
+				isRank: function() {
+					return this.surveyAnsTemplate.ans_typ_ccd === "RANK";
+				},
+				isLinear: function() {
+					return this.surveyAnsTemplate.ans_typ_ccd === "LINEAR";
+				},
+				isShortAns: function() {
+					return this.surveyAnsTemplate.ans_typ_ccd === "SHORTANS";
+				},
+				isEssayAns: function() {
+					return this.surveyAnsTemplate.ans_typ_ccd === "ESSAYANS";
+				},
+				isDate: function() {
+					return this.surveyAnsTemplate.ans_typ_ccd === "DATE";
+				},
+				isEditableRegExp: function() {
+					return this.surveyAnsTemplate.shortans_inp_form_ccd === "KEYIN";
+				}
+			},
+			
+			load: function(survAnsTmplUuid) {
+				var me = this;
+				
+				if(UT.isNotEmpty(survAnsTmplUuid)) {
+					me.findSurveyAnsTemplateByUuid(survAnsTmplUuid);
+				}
+			},
+			
+			findSurveyAnsTemplateByUuid: function(survAnsTmplUuid) {
+				var me = this;
+				
+				me.$.findSurveyAnsTemplateByUuid.body = {
+					surv_ans_tmpl_uuid: survAnsTmplUuid
+				};
+				UT.request(me.$.findSurveyAnsTemplateByUuid);
+			},
+			
+			completeFindSurveyAnsTemplateByUuid: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("surveyAnsTemplate", response.surveyAnsTemplate);
+				me.set("surveyAnsTemplateOptions", response.surveyAnsTemplateOptions);
+				
+				me.applyFormula();
+			},
+			
+			onSelectAnsTypCcd: function(e) {
+				var me = this;
+				var gridPanel = me.$.gridPanel;
+				
+				me.applyFormula();
+				gridPanel.doContentElementResize();
+			},
+			
+			onSelectInpFormCcd: function(e) {
+				var me = this;
+				var value = e.currentTarget.value;
+				
+				var filteredInpFormCcd = me.codes.inpFormCcd.filter(function(item) {
+					return item.data === value;
+				})[0];
+				
+				me.set("surveyAnsTemplate.regexp", filteredInpFormCcd.cstr_cnd_val);
+				me.applyFormula();
+			},
+			
+			onAddRow: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				provider.addItem({});
+			},
+			
+			onDeleteList: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				provider.removeItems(true);
+			},
+			
+			isValid: function() {
+				var me = this;
+				if(!me.validate("info")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				if(me.formula("isMulti")) {
+					if(!me.validate("multiInfo")) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				if(me.formula("isLinear")) {
+					if(!me.validate("linearInfo")) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				if(me.formula("isShortAns")) {
+					if(!me.validate("shortAnsInfo")) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				if(me.formula("isEssayAns")) {
+					if(!me.validate("essayAnsInfo")) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				if(me.formula("isMulti")) {
+					if(!me.validate("multiInfo")) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				if(me.formula("isChoice")) {
+					var gridPanel = me.$.gridPanel;
+					var provider = gridPanel.getDataProvider();
+					if(provider.getItemSize() < 1) {
+						UT.alert("STD.SURV0014"); // 객관식 옵션 정보가 없습니다.
+						return false;
+					}
+					if(!me.$.gridPanel.validate()) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				return true;
+			},
+			
+			onSave: function() {
+				var me = this;
+				
+				if(!me.isValid()) {
+					return;
+				}
+				
+				var surveyAnsTemplate = me.get("surveyAnsTemplate");
+				var surveyAnsTemplateOptions = me.$.gridPanel.getDataProvider().getItems();
+				for(var i = 0; i < surveyAnsTemplateOptions.length; i++) {
+					var surveyAnsTemplateOption = surveyAnsTemplateOptions[i];
+					SCLanguageManager.combine(surveyAnsTemplateOption, "disp_opt_nm", "opt_nm");
+				}
+				
+				me.$.saveSurveyAnsTemplate.body = {
+					surveyAnsTemplate: surveyAnsTemplate,
+					surveyAnsTemplateOptions: surveyAnsTemplateOptions
+				};
+				UT.request(me.$.saveSurveyAnsTemplate);
+			},
+			
+			completeSaveSurveyAnsTemplate: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					
+					me.fire("reload");
+					me.fire("close");
+				} else {
+					UT.alert("STD.E0000");
+				}
+			},
+			
+			onItemEditEnd: function(event) {
+				var me       = this,
+					e        = event.detail,
+					data     = e.data,
+					item     = e.item,
+					newValue = e.newValue,
+					oldValue = e.oldValue,
+					provider = e.provider;
+				
+				if(item.dataField === "disp_opt_nm") {
+					SCLanguageManager.combineWithGrid(provider, item, data, "disp_opt_nm", "opt_nm");
+				}
+			},
+			
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "disp_opt_nm_img") {
+					var editable = item.editable || event.target.editable;
+					var value = data.opt_nm || "{}";
+					var texts = JSON.parse(value);
+					UT.languagePack(me, "text", texts, {
+						readonly: !editable,
+						maxLength: item.maxLength
+					}, function(e) {
+						if(!!e.value) {
+							texts[e.locale] = e.value;
+						} else {
+							delete texts[e.locale];
+						}
+						provider.setItemAt(item.rowIndex, {
+							disp_opt_nm: texts[SCLocaleManager.getLocale()],
+							opt_nm: JSON.stringify(texts)
+						});
+					});
+				}
+			},
+		})
+	</script>
+</dom-module>

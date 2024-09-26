@@ -1,0 +1,216 @@
+<dom-module id="ep-rfx-vd-list">
+<!-- 
+/**
+ *
+ *	@description : rfx 업체 제출 현황
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName : 
+ * @Since 2016. 6. 22.
+ * @변경이력 : [2016. 6. 22.] Yeon-u Kim 최초작성
+ */
+-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- RFx 정보 조회 -->
+		<sc-ajax id="findRfx"
+				 url="findRfx.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindRfx">
+		</sc-ajax>
+		
+		<!-- 견적요청 대상 업체 목록 조회 (수의/지명) -->
+		<sc-ajax id="findListRfxVd"
+				 url="findListRfxVdBid.do"
+				 body="{{rfxData}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<!-- 견적서 제출 업체 목록 조회 (공개) -->
+		<sc-ajax id="findListRfxQta"
+				 url="findListRfxBid.do"
+				 body="{{rfxData}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-code-group>
+			<!--  거래유형-->
+			<sc-code code="E902" value="{{codes.regTypCd}}"></sc-code>
+			<!--  진행상태-->
+			<sc-code code="P024" value="{{codes.progStsCd}}"></sc-code>
+		</sc-code-group>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar title-text="[[translate('제출현황 리스트')]] - [[translate('RFX 번호')]] [{{rfxData.rfx_no}}]" i18n-disabled>
+			</cc-page-title-bar>
+			
+			<sc-grid id="gridPanel" class="flex" use-dummy="false" data-provider="{{resultList}}"
+					 editable="false"
+					 use-state="false"
+					 use-selection="false"
+					 row-style-function="onRowStyleFn"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="rfx_bid_sts_ccd"			header-text="RFX 투찰 상태"				width="150"	text-align="center"
+										display-field="label"			value-field="data"				items="{{codes.progStsCd}}"		item-style-function="onItemStyleFn"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_bid_no"				header-text="RFX 투찰 번호"			width="150"	text-align="center"	></sc-data-column>
+					<sc-combobox-column	data-field="obd_typ_ccd"			header-text="온보딩 유형"			width="100"	text-align="center"
+										display-field="label"			value-field="data"				items="{{codes.regTypCd}}"		></sc-combobox-column>
+					<sc-data-column		data-field="disp_vd_cd"			header-text="협력사 코드"		width="150"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="vd_nm"				header-text="협력사 명"			width="200"	text-align="left"	></sc-data-column>
+					<sc-data-column		data-field="vd_pic_nm"			header-text="협력사 담당자 명"			width="150"	text-align="center"	visible="[[!formula('isCptTypeP')]]"></sc-data-column>
+					<sc-data-column		data-field="vd_pic_tel"	header-text="협력사 담당자 전화"	width="150"	text-align="left"	visible="[[!formula('isCptTypeP')]]"></sc-data-column>
+					<sc-data-column		data-field="vd_pic_eml"		header-text="협력사 담당자 이메일"		width="150"	text-align="left"	visible="[[!formula('isCptTypeP')]]"></sc-data-column>
+					<sc-data-column		data-field="sbmt_nm"			header-text="제출자 명"			width="120"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="sbmt_phone_no"		header-text="제출자 전화"	width="150"	text-align="left"	></sc-data-column>
+					<sc-data-column		data-field="sbmt_email"			header-text="제출자 이메일"		width="150"	text-align="left"	></sc-data-column>
+					<sc-date-column		data-field="rfx_bid_dttm"		header-text="RFX 투찰 일시"		width="150"	text-align="center"	format-type="datetime"	string-date="false"></sc-date-column>
+					<sc-data-column		data-field="cur_ccd"			header-text="통화"				width="70"	text-align="center"	></sc-data-column>
+				</sc-grid-columns>
+			</sc-grid>
+		</div>
+		<sc-dialog id="dialog_abd_cause" title-text="포기 사유" title-align="left" style="width:400px;height:170px" modal="true">
+			<table class="tb-form">
+				<tr>
+					<td>
+						<sc-textarea-field id="abn_cause_text" class="h-80" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-rfx-vd-list',
+			properties: {
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: ""
+						};
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: ""
+						};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				codes: {
+					type: Object,
+					value: {
+						progStsCd: [],
+						regTypCd: []
+					}
+				}
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				if(param) {
+					me.set("searchParam", param);
+					me.findRfxDetail();
+				}
+			},
+			formulas: {
+				isCptTypeP: function() {
+					return (this.rfxData.comp_typ_ccd === "OBID");
+				}
+			},
+			
+			/**************************************************
+			 * Ajax 호출
+			 **************************************************/
+			// rfx 상세 조회
+			findRfxDetail: function() {
+				var me = this;
+				
+				UT.request(me.$.findRfx);
+			},
+			// rfx 상세 조회 후
+			completeFindRfx: function(el, res) {
+				var me = this;
+				
+				var lastResponse = res.response;
+				
+				me.set("rfxData", lastResponse);
+				
+				me.applyFormula();
+				
+				if(me.rfxData.comp_typ_ccd === "OBID") {	// 공개 : 견적서 제출 업체 현황 조회
+					me.findListRfxQta();
+				} else {								// 수의/지명 : 견적요청 대상 업체의 견적서 현황을 가져옴.
+					me.findListRfxVd();
+				}
+			},
+			// 견적서 제출 업체 조회 (공개)
+			findListRfxQta: function() {
+				var me = this;
+				
+				UT.request(me.$.findListRfxQta);
+			},
+			// 견적요청 대상 업체 조회 (수의/지명)
+			findListRfxVd: function() {
+				var me = this;
+				
+				UT.request(me.$.findListRfxVd);
+			},
+			// 그리드 row-style-function
+			onRowStyleFn: function(data) {
+				if(data["rfx_bid_sts_ccd"] === "GUP") {	// 포기
+					return {
+						"background": "#E0E0E0"
+					}
+				}
+			},
+			// 그리드 item-click
+			onItemClick: function(event) {
+				var me = this;
+				var data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "rfx_bid_sts_ccd" && data["rfx_bid_sts_ccd"] === "GUP") {
+					me.$.abn_cause_text.value = data["gup_rsn"];
+					me.$.dialog_abd_cause.show();
+				}
+			},
+			// 그리드 item-style-function
+			onItemStyleFn: function(data, item) {
+				if(item.dataField === "rfx_bid_sts_ccd" && data["rfx_bid_sts_ccd"] === "GUP") {
+					return {
+						"fontColor": "#0e006f",
+						"fontWeight": "bold"
+					}
+				}
+			}
+		});
+	</script>
+</dom-module>

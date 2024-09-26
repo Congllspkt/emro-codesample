@@ -1,0 +1,679 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="law">
+    <!-- 계약검토요청 목록 -->
+    <select id="findReviewReqList" resultType="map">
+    /* law.findReviewReqList */
+        SELECT A.OORG_CD
+             , A.CNTRDOC_LGL_RV_UUID
+             , A.CNTRDOC_LGL_RV_NO
+             , A.CNTRDOC_LGL_RV_REVNO
+             , A.LGL_RV_REQR_ID
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN C.USR_NM ELSE C.USR_NM_EN END AS LGL_RV_REQR_NM
+             , A.LGL_RV_STS_CCD
+             , A.LGL_RV_REQR_DEPT_NM
+             , A.LGL_RV_REQ_NM
+             , A.CNTRDOC_TYP_CCD
+             , A.REG_DTTM
+             , A.LGL_TMLD_APVD_DT
+             , A.RVR_ID
+	         , A.CNTR_TMPL_TYP_CCD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN D.USR_NM ELSE D.USR_NM_EN END AS REVIEWER_NM
+             , B.VD_CD
+             , B.ERP_VD_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN B.VD_NM ELSE B.VD_NM_EN END AS VD_NM
+             , CASE WHEN EXISTS (SELECT 1
+                                   FROM CNTR
+                                  WHERE TEN_ID = #{g.tenant}
+                                    AND CNTRDOC_LGL_RV_UUID = A.CNTRDOC_LGL_RV_UUID)
+                    THEN 'Y' ELSE 'N'
+                END AS CNTR_YN -- 계약생성여부
+          FROM CNTRDOC_LGL_RV A
+    LEFT OUTER JOIN VD B
+            ON B.TEN_ID = A.TEN_ID
+           AND B.VD_CD  = A.VD_CD
+    LEFT OUTER JOIN USR C
+            ON C.TEN_ID = A.TEN_ID
+           AND C.USR_ID = A.LGL_RV_REQR_ID
+    LEFT OUTER JOIN USR D
+            ON D.TEN_ID = A.TEN_ID
+           AND D.USR_ID = A.RVR_ID
+         WHERE A.TEN_ID = #{g.tenant}
+           AND A.STS != 'D'
+         <if test="p.cntrdoc_lgl_rv_no != null and p.cntrdoc_lgl_rv_no != ''">
+            <bind name="lglRvNo" value="'%' + p.cntrdoc_lgl_rv_no + '%'"/>
+            AND A.CNTRDOC_LGL_RV_NO LIKE UPPER(#{lglRvNo})
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+            <bind name="vdCd" value="'%'+p.vd_cd+'%'"/>
+            AND UPPER(A.VD_CD) LIKE UPPER(#{vdCd})
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+            AND UPPER(B.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm !=''">
+            <bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+            AND (UPPER(B.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(B.VD_NM_EN) LIKE UPPER(#{vdNm}))
+        </if>
+        <if test="p.cntrdoc_typ_ccd != null and p.cntrdoc_typ_ccd != ''">
+            AND A.CNTRDOC_TYP_CCD = #{p.cntrdoc_typ_ccd}
+        </if>
+        <if test="p.lgl_rv_sts_ccd != null and p.lgl_rv_sts_ccd != ''">
+            AND A.LGL_RV_STS_CCD = #{p.lgl_rv_sts_ccd}
+        </if>
+        <if test="p.from_date != null and p.from_date">
+            AND A.REG_DTTM &gt;= #{p.from_date}
+        </if>
+        <if test="p.to_date != null and p.to_date">
+            <bind name="toDatePattern" value="g.getPlusDays(p.to_date, 1)"/>
+            AND A.REG_DTTM <![CDATA[<]]> #{toDatePattern}
+        </if>
+        <if test="p.usr_id != null and p.usr_id != ''">
+            AND C.USR_ID = #{p.usr_id}
+        </if>
+        <if test="p.usr_nm != null and p.usr_nm !=''">
+            <bind name="usrNm" value="'%'+p.usr_nm+'%'"/>
+            AND (UPPER(C.USR_NM) LIKE UPPER(#{usrNm}) OR UPPER(C.USR_NM_EN) LIKE UPPER(#{usrNm}))
+        </if>
+        <if test="p.dept_cd != null and p.dept_cd != ''">
+            AND A.LGL_RV_REQR_DEPT_CD = #{p.dept_cd}
+        </if>
+        <if test="p.dept_nm != null and p.dept_nm != ''">
+          <bind name="deptNm" value="'%'+p.dept_nm+'%'"/>
+            AND A.LGL_RV_REQR_DEPT_NM LIKE UPPER(#{deptNm})
+        </if>
+        <if test="p.rvr_id != null and p.rvr_id != ''">
+            AND D.USR_ID = #{p.rvr_id}
+        </if>
+        <if test="p.rvr_nm != null and p.rvr_nm !=''">
+            <bind name="rvrNm" value="'%'+p.rvr_nm+'%'"/>
+            AND (UPPER(D.USR_NM) LIKE UPPER(#{rvrNm}) OR UPPER(D.USR_NM_EN) LIKE UPPER(#{rvrNm}))
+        </if>
+        <choose>
+            <when test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+            AND A.OORG_CD IN
+               <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+                   #{oorg_cd}
+               </foreach>
+            </when>
+            <otherwise>
+            AND A.OORG_CD = '0'
+            </otherwise>
+        </choose>
+        ORDER BY A.CNTRDOC_LGL_RV_NO DESC, A.CNTRDOC_LGL_RV_REVNO DESC
+    </select>
+    <!-- 계약검토 저장 -->
+    <insert id="insertReqReview">
+    /* law.insertReqReview */
+        INSERT INTO CNTRDOC_LGL_RV(
+               TEN_ID
+             , CNTRDOC_LGL_RV_UUID
+             , CNTRDOC_LGL_RV_NO
+             , CNTRDOC_LGL_RV_REVNO
+             , LGL_RV_REQR_ID
+             , LGL_RV_REQR_DEPT_CD
+             , LGL_RV_REQR_DEPT_NM
+             , LGL_RV_REQ_NM
+             , LGL_RV_REQ_CONT
+             , OORG_CD
+             , VD_PIC_NM
+             , VD_PIC_DEPT
+             , VD_PIC_TEL
+             , VD_PIC_EML
+             , VD_CD
+             , LGL_RV_REQ_ATHG_UUID
+             , LGL_RV_STS_CCD
+             , CNTRDOC_TYP_CCD
+             , CNTR_ST_DT
+             , CNTR_EXP_DT
+             , CNTR_AMT
+             , CNTRPD_AUTO_EXT_USE_YN
+             , CUR_CCD
+             , CNTRDOC_TMPL_UUID
+             , CNTR_TMPL_TYP_CCD
+             , CNTR_SGNMETH_CCD
+             , STS
+             , REGR_ID
+             , REG_DTTM
+             , MODR_ID
+             , MOD_DTTM
+        )VALUES (
+               #{g.tenant}
+             , #{p.cntrdoc_lgl_rv_uuid}
+             , #{p.cntrdoc_lgl_rv_no}
+             , #{p.cntrdoc_lgl_rv_revno}
+             , #{p.lgl_rv_reqr_id}
+             , #{p.lgl_rv_reqr_dept_cd}
+             , #{p.lgl_rv_reqr_dept_nm}
+             , #{p.lgl_rv_req_nm}
+             , #{p.lgl_rv_req_cont}
+             , #{p.oorg_cd}
+             , #{p.vd_pic_nm}
+             , #{p.vd_pic_dept}
+             , #{p.vd_pic_tel}
+             , #{p.vd_pic_eml}
+             , #{p.vd_cd}
+             , #{p.lgl_rv_req_athg_uuid}
+             , #{p.lgl_rv_sts_ccd}
+             , #{p.cntrdoc_typ_ccd}
+             , #{p.cntr_st_dt}
+             , #{p.cntr_exp_dt}
+             , #{p.cntr_amt}
+             , #{p.cntrpd_auto_ext_use_yn}
+             , #{p.cur_ccd}
+             , #{p.cntrdoc_tmpl_uuid}
+             , #{p.cntr_tmpl_typ_ccd}
+             , #{p.cntr_sgnmeth_ccd}
+             , 'C'
+             , #{g.username}
+             , #{g.now}
+             , #{g.username}
+             , #{g.now}
+        )
+    </insert>
+    <!-- 계약검토 수정 -->
+    <update id="updateReqReview">
+    /* law.updateReqReview */
+        UPDATE CNTRDOC_LGL_RV
+           SET VD_CD             = #{p.vd_cd}
+             , LGL_RV_REQ_NM     = #{p.lgl_rv_req_nm}
+             , LGL_RV_REQ_CONT   = #{p.lgl_rv_req_cont}
+             , OORG_CD           = #{p.oorg_cd}
+             , VD_PIC_NM         = #{p.vd_pic_nm}
+             , VD_PIC_DEPT       = #{p.vd_pic_dept}
+             , VD_PIC_TEL        = #{p.vd_pic_tel}
+             , VD_PIC_EML        = #{p.vd_pic_eml}
+             , LGL_RV_REQ_ATHG_UUID = #{p.lgl_rv_req_athg_uuid}
+             , CNTRDOC_TYP_CCD      = #{p.cntrdoc_typ_ccd}
+             , CNTR_ST_DT        = #{p.cntr_st_dt}
+             , CNTR_EXP_DT       = #{p.cntr_exp_dt}
+             , CNTR_AMT          = CAST(#{p.cntr_amt} AS NUMERIC)
+             , CNTRPD_AUTO_EXT_USE_YN = #{p.cntrpd_auto_ext_use_yn}
+             , CUR_CCD           = #{p.cur_ccd}
+             , CNTRDOC_TMPL_UUID = #{p.cntrdoc_tmpl_uuid}
+             , CNTR_TMPL_TYP_CCD = #{p.cntr_tmpl_typ_ccd}
+             , CNTR_SGNMETH_CCD = #{p.cntr_sgnmeth_ccd}
+             , STS               = 'U'
+             , MODR_ID           = #{g.username}
+             , MOD_DTTM          = #{g.now}
+         WHERE TEN_ID = #{g.tenant}
+           AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </update>
+    <!-- 참조자 저장 -->
+    <insert id="insertRef">
+    /* law.insertRef */
+    INSERT INTO CNTRDOC_LGL_RV_CC(
+               TEN_ID
+             , CNTRDOC_LGL_RV_UUID
+             , LGL_RV_CC_ID
+             , STS
+             , REGR_ID
+             , REG_DTTM
+             , MODR_ID
+             , MOD_DTTM
+        )VALUES (
+               #{g.tenant}
+             , #{p.cntrdoc_lgl_rv_uuid}
+             , #{p.usr_id}
+             , 'C'
+             , #{g.username}
+             , #{g.now}
+             , #{g.username}
+             , #{g.now}
+        )
+    </insert>
+    <!-- 참조자 삭제 -->
+    <delete id="deleteRefList">
+    /* law.deleteRefList */
+    DELETE FROM CNTRDOC_LGL_RV_CC
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </delete>
+    <!-- 계약검토 상세 조회 -->
+    <resultMap id="resultMap-findRvDetail" type="map">
+        <result column="LGL_RV_OPN" javaType="string" property="lgl_rv_opn" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="findReqReviewDetail" resultMap="resultMap-findRvDetail">
+    /* law.findReqReviewDetail */
+    SELECT A.CNTRDOC_LGL_RV_UUID
+         , A.CNTRDOC_LGL_RV_NO
+         , A.CNTRDOC_LGL_RV_REVNO
+         , A.LGL_RV_REQR_ID
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN C.USR_NM ELSE C.USR_NM_EN END AS LGL_RV_REQR_NM
+         , A.LGL_RV_REQR_DEPT_CD
+         , A.LGL_RV_REQR_DEPT_NM
+         , A.LGL_RV_REQ_NM
+         , A.LGL_RV_REQ_CONT
+         , A.OORG_CD
+         , A.VD_PIC_NM
+         , A.VD_PIC_DEPT
+         , A.VD_PIC_TEL
+         , A.VD_PIC_EML
+         , A.VD_CD
+         , B.ERP_VD_CD
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN B.VD_NM ELSE B.VD_NM_EN END AS VD_NM
+         , B.BIZREGNO
+         , B.CTRY_CCD
+         , A.RVR_ID
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN D.USR_NM ELSE D.USR_NM_EN END AS REVIEWER_NM
+         , A.LGL_RV_OPN
+         , A.LGL_RV_STS_CCD
+         , A.LGL_RV_REQ_ATHG_UUID
+         , A.LGL_RV_RES_ATHG_UUID
+         , A.LGL_TMLD_RV_OPN
+         , A.LGL_RV_DT
+         , A.LGL_TMLD_APVD_DT
+         , A.CNTRDOC_TYP_CCD
+         , A.CNTR_ST_DT
+         , A.CNTR_EXP_DT
+         , A.CNTR_AMT
+         , A.CNTRPD_AUTO_EXT_USE_YN
+         , A.CUR_CCD
+         , A.CNTRDOC_TMPL_UUID
+         , A.CNTR_TMPL_TYP_CCD
+         , A.CNTR_SGNMETH_CCD
+         , A.STS
+         , A.REGR_ID
+         , A.REG_DTTM
+         , CASE WHEN EXISTS (SELECT 1
+                               FROM CNTR X
+                              WHERE X.TEN_ID = #{g.tenant}
+                                AND X.CNTRDOC_LGL_RV_UUID = A.CNTRDOC_LGL_RV_UUID)
+                THEN 'Y' ELSE 'N'
+            END AS CNTR_YN -- 계약생성여부
+         , (SELECT MAX(X.CNTRDOC_LGL_RV_REVNO)
+              FROM CNTRDOC_LGL_RV X
+             WHERE X.TEN_ID = #{g.tenant}
+               AND X.CNTRDOC_LGL_RV_NO = A.CNTRDOC_LGL_RV_NO) AS MAX_REVNO
+      FROM CNTRDOC_LGL_RV A
+     INNER JOIN VD B
+        ON (A.TEN_ID = B.TEN_ID AND A.VD_CD = B.VD_CD)
+      LEFT OUTER JOIN USR C
+        ON (A.TEN_ID = C.TEN_ID AND A.LGL_RV_REQR_ID = C.USR_ID)
+      LEFT OUTER JOIN USR D
+        ON (A.TEN_ID = D.TEN_ID AND A.RVR_ID = D.USR_ID)
+     WHERE A.TEN_ID = #{g.tenant}
+       AND A.CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+       AND A.STS <![CDATA[<>]]> 'D'
+    </select>
+    <select id="findRefList" resultType="map">
+    /* law.findRefList */
+    SELECT B.USR_ID
+         , B.USR_NM
+         , C.DEPT_NM
+      FROM CNTRDOC_LGL_RV_CC A
+INNER JOIN USR B
+        ON (A.TEN_ID = B.TEN_ID AND A.LGL_RV_CC_ID = B.USR_ID)
+ LEFT JOIN DEPT C
+        ON (B.TEN_ID = C.TEN_ID AND B.DEPT_CD = C.DEPT_CD)
+     WHERE A.TEN_ID = #{g.tenant}
+       AND A.CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+       AND A.STS <![CDATA[<>]]> 'D'
+  ORDER BY B.MOD_DTTM
+    </select>
+    <!-- 계약검토 삭제 -->
+    <delete id="delReqReview">
+    /* law.delReqReview */
+    DELETE FROM CNTRDOC_LGL_RV
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </delete>
+    <!-- ROLE_CD에 해당하는 사용자 정보 조회 -->
+    <select id="findUserByRole" resultType="map">
+    /* law.findUserByRole */
+    SELECT A.USR_ID
+         , A.USR_NM
+         , A.EML
+      FROM USR A
+INNER JOIN ROLE_USR B
+        ON (A.TEN_ID = B.TEN_ID AND A.USR_ID = B.USR_ID)
+     WHERE A.TEN_ID = #{g.tenant}
+       AND B.ROLE_CD = #{p.role_cd}
+    </select>
+    <!-- 계약검토자지정 -->
+    <update id="regReviewer">
+    /* law.regReviewer */
+    UPDATE CNTRDOC_LGL_RV
+       SET RVR_ID = #{p.rvr_id}
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+         , STS    = 'U'
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </update>
+    <!-- 검토진행상태 업데이트 -->
+    <update id="updateRvSts">
+    /* law.updateRvSts */
+    UPDATE CNTRDOC_LGL_RV
+       SET LGL_RV_STS_CCD = #{p.lgl_rv_sts_ccd}
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+         , STS    = 'U'
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </update>
+    <update id="updateRvOpn">
+    /* law.updateRvOpn : 검토의견 업데이트 */
+    UPDATE CNTRDOC_LGL_RV
+       SET LGL_RV_OPN = #{p.lgl_rv_opn}
+         , LGL_RV_RES_ATHG_UUID = #{p.lgl_rv_res_athg_uuid}
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+         , STS = 'U'
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </update>
+    <update id="updateTmldRvOpn">
+	    <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+    /* law.updateTmldRvOpn : 팀장의견 업데이트 */
+    UPDATE CNTRDOC_LGL_RV
+       SET LGL_TMLD_RV_OPN = #{p.lgl_tmld_rv_opn}
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+         , STS = 'U'
+         <if test="p.lgl_rv_sts_ccd == 'APVD'">
+          , LGL_TMLD_APVD_DT = #{nowDate}
+         </if>
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </update>
+    <!-- 참조자 계약검토목록 조회 -->
+    <select id="findReviewReqListByRef" resultType="map">
+    /* law.findReviewReqListByRef */
+        SELECT A.OORG_CD
+             , A.CNTRDOC_LGL_RV_UUID
+             , A.CNTRDOC_LGL_RV_NO
+             , A.CNTRDOC_LGL_RV_REVNO
+             , A.LGL_RV_REQR_ID
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN C.USR_NM ELSE C.USR_NM_EN END AS LGL_RV_REQR_NM
+             , A.LGL_RV_STS_CCD
+             , A.LGL_RV_REQR_DEPT_NM
+             , A.LGL_RV_REQ_NM
+             , A.CNTRDOC_TYP_CCD
+             , A.REG_DTTM
+             , A.LGL_TMLD_APVD_DT
+             , A.RVR_ID
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN D.USR_NM ELSE D.USR_NM_EN END AS REVIEWER_NM
+             , B.VD_CD
+             , B.ERP_VD_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN B.VD_NM ELSE B.VD_NM_EN END AS VD_NM
+             , CASE WHEN EXISTS (SELECT 1
+                                   FROM CNTR
+                                  WHERE TEN_ID = #{g.tenant}
+                                    AND CNTRDOC_LGL_RV_UUID = A.CNTRDOC_LGL_RV_UUID)
+                    THEN 'Y' ELSE 'N'
+                END AS CNTR_YN -- 계약생성여부
+          FROM CNTRDOC_LGL_RV A
+    LEFT OUTER JOIN VD B
+            ON B.TEN_ID = A.TEN_ID
+           AND B.VD_CD  = A.VD_CD
+    LEFT OUTER JOIN USR C
+            ON C.TEN_ID = A.TEN_ID
+           AND C.USR_ID = A.LGL_RV_REQR_ID
+    LEFT OUTER JOIN USR D
+            ON D.TEN_ID = A.TEN_ID
+           AND D.USR_ID = A.RVR_ID
+         INNER JOIN CNTRDOC_LGL_RV_CC E
+            ON E.TEN_ID = A.TEN_ID
+           AND E.CNTRDOC_LGL_RV_UUID = A.CNTRDOC_LGL_RV_UUID
+           AND E.LGL_RV_CC_ID = #{g.username}
+         WHERE A.TEN_ID = #{g.tenant}
+           AND A.STS != 'D'
+         <if test="p.cntrdoc_lgl_rv_no != null and p.cntrdoc_lgl_rv_no != ''">
+            <bind name="lglRvNo" value="'%' + p.cntrdoc_lgl_rv_no + '%'"/>
+            AND A.CNTRDOC_LGL_RV_NO LIKE UPPER(#{lglRvNo})
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+            <bind name="vdCd" value="'%'+p.vd_cd+'%'"/>
+            AND UPPER(A.VD_CD) LIKE UPPER(#{vdCd})
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+            AND UPPER(B.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm !=''">
+            <bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+            AND (UPPER(B.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(B.VD_NM_EN) LIKE UPPER(#{vdNm}))
+        </if>
+        <if test="p.cntrdoc_typ_ccd != null and p.cntrdoc_typ_ccd != ''">
+            AND A.CNTRDOC_TYP_CCD = #{p.cntrdoc_typ_ccd}
+        </if>
+        <if test="p.lgl_rv_sts_ccd != null and p.lgl_rv_sts_ccd != ''">
+            AND A.LGL_RV_STS_CCD = #{p.lgl_rv_sts_ccd}
+        </if>
+        <if test="p.from_date != null and p.from_date">
+            AND A.REG_DTTM &gt;= #{p.from_date}
+        </if>
+        <if test="p.to_date != null and p.to_date">
+            <bind name="toDatePattern" value="g.getPlusDays(p.to_date, 1)"/>
+            AND A.REG_DTTM <![CDATA[<]]> #{toDatePattern}
+        </if>
+        <if test="p.usr_id != null and p.usr_id != ''">
+            AND C.USR_ID = #{p.usr_id}
+        </if>
+        <if test="p.usr_nm != null and p.usr_nm !=''">
+            <bind name="usrNm" value="'%'+p.usr_nm+'%'"/>
+            AND (UPPER(C.USR_NM) LIKE UPPER(#{usrNm}) OR UPPER(C.USR_NM_EN) LIKE UPPER(#{usrNm}))
+        </if>
+        <if test="p.dept_cd != null and p.dept_cd != ''">
+            AND A.LGL_RV_REQR_DEPT_CD = #{p.dept_cd}
+        </if>
+        <if test="p.dept_nm != null and p.dept_nm != ''">
+          <bind name="deptNm" value="'%'+p.dept_nm+'%'"/>
+            AND A.LGL_RV_REQR_DEPT_NM LIKE UPPER(#{deptNm})
+        </if>
+        <if test="p.rvr_id != null and p.rvr_id != ''">
+            AND D.USR_ID = #{p.rvr_id}
+        </if>
+        <if test="p.rvr_nm != null and p.rvr_nm !=''">
+            <bind name="rvrNm" value="'%'+p.rvr_nm+'%'"/>
+            AND (UPPER(D.USR_NM) LIKE UPPER(#{rvrNm}) OR UPPER(D.USR_NM_EN) LIKE UPPER(#{rvrNm}))
+        </if>
+        <choose>
+            <when test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+            AND A.OORG_CD IN
+                <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+                    #{oorg_cd}
+                </foreach>
+            </when>
+            <otherwise>
+            AND A.OORG_CD = '0'
+            </otherwise>
+        </choose>
+        ORDER BY A.CNTRDOC_LGL_RV_NO DESC, A.CNTRDOC_LGL_RV_REVNO DESC
+    </select>
+    <!-- 계약건조회 -->
+    <select id="getCntrListByRvUuid" resultType="map">
+    /* law.getCntrListByRvUuid */
+    SELECT CNTR_UUID
+         , CNTR_NO
+         , CNTR_REVNO
+         , CNTR_NM
+         , CNTR_STS_CCD
+         , VD_CD
+      FROM CNTR
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+     ORDER BY CNTR_NO, CNTR_REVNO
+    </select>
+    <select id="findReqReviewCntrDocTmpl" resultType="map">
+    /* law.findListReqReviewCntrTmpl : 검토 요청 계약서 템플릿 목록 조회 */
+    SELECT CNTRDOC_LGL_RV_TMPL_UUID
+         , CNTRDOC_LGL_RV_UUID
+         , ORIG_TMPL_UUID
+         , ORIG_TMPL_UUID AS CNTRDOC_TMPL_UUID
+         , ORIG_TMPL_NM
+         , ORIG_TMPL_NM   AS CNTRDOC_TMPL_NM
+         , TMPL_TYP_CCD
+         , SGNORD_TYP_CCD
+         , LGL_RV_SUBJ_YN
+	     , CASE WHEN ((LGL_RV_OPN IS NULL OR LGL_RV_OPN = '') OR LENGTH(LGL_RV_OPN) = 0)
+	            THEN 'N' ELSE 'Y'
+	             END AS OPN_SAVE_YN      /* 검토 여부 */  FROM CNTRDOC_LGL_RV_TMPL
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+       AND TMPL_TYP_CCD = 'CNTRDOC'
+    </select>
+    <select id="findReqReviewAppxTmpl" resultType="map">
+    /* law.findListReqReviewCntrTmpl : 검토 요청 부속서류 템플릿 목록 조회 */
+    SELECT CNTRDOC_LGL_RV_TMPL_UUID
+         , CNTRDOC_LGL_RV_UUID
+         , ORIG_TMPL_UUID
+         , ORIG_TMPL_UUID AS APPX_TMPL_UUID
+         , ORIG_TMPL_NM
+         , ORIG_TMPL_NM   AS APPX_TMPL_NM
+         , TMPL_TYP_CCD
+         , MAND_YN
+         , APPX_TYP_CCD
+         , APPX_TMPL_ORD
+         , LGL_RV_SUBJ_YN
+	     , CASE WHEN ((LGL_RV_OPN IS NULL OR LGL_RV_OPN = '') OR LENGTH(LGL_RV_OPN) = 0)
+	            THEN 'N' ELSE 'Y'
+			     END AS OPN_SAVE_YN         /* 검토 여부 */  FROM CNTRDOC_LGL_RV_TMPL
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+       AND TMPL_TYP_CCD = 'APPX'
+     ORDER BY APPX_TMPL_ORD
+    </select>
+    <resultMap id="resultMap-findTmplCont" type="map">
+        <result column="ORIG_TMPL_CONT" javaType="string" property="orig_tmpl_cont" typeHandler="stringClob"/>
+        <result column="LGL_RV_TMPL_CONT" javaType="string" property="lgl_rv_tmpl_cont" typeHandler="stringClob"/>
+        <result column="LGL_RV_TMPL_RES" javaType="string" property="lgl_rv_tmpl_res" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="findReqReviewTmplCont" resultMap="resultMap-findTmplCont">
+    /* law.findReqReviewTmplCont : 검토 요청 템플릿 내용 조회 */
+    SELECT ORIG_TMPL_CONT
+         , LGL_RV_TMPL_CONT
+         , LGL_RV_OPN
+         , LGL_TMLD_RV_OPN
+         , LGL_RV_TMPL_RES
+         , LGL_RV_ATHG_UUID
+         , LGL_RV_RES_ATHG_UUID
+      FROM CNTRDOC_LGL_RV_TMPL
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_TMPL_UUID = #{p.cntrdoc_lgl_rv_tmpl_uuid}
+    </select>
+    <insert id="insertReqReviewTmpl">
+    /* law.insertReqReviewTmpl : 검토 요청 계약서/부속서류 템플릿 추가 */
+    INSERT INTO CNTRDOC_LGL_RV_TMPL
+         ( TEN_ID
+         , CNTRDOC_LGL_RV_TMPL_UUID
+         , CNTRDOC_LGL_RV_UUID
+         , ORIG_TMPL_UUID
+         , ORIG_TMPL_NM
+         , TMPL_TYP_CCD
+         , SGNORD_TYP_CCD
+         , MAND_YN
+         , APPX_TYP_CCD
+         , APPX_TMPL_ORD
+         , LGL_RV_SUBJ_YN
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+         )
+    VALUES
+         ( #{g.tenant}
+         , #{p.cntrdoc_lgl_rv_tmpl_uuid}
+         , #{p.cntrdoc_lgl_rv_uuid}
+         , #{p.orig_tmpl_uuid}
+         , #{p.orig_tmpl_nm}
+         , #{p.tmpl_typ_ccd}
+         , #{p.sgnord_typ_ccd}
+         , #{p.mand_yn}
+         , #{p.appx_typ_ccd}
+		 , CAST(#{p.appx_tmpl_ord} AS INT)  , 'N'
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+         )
+    </insert>
+    <update id="updateReqReviewTmpl">
+    /* law.updateReqReviewTmpl : 검토 요청 계약서/부속서류 템플릿 수정 */
+    UPDATE CNTRDOC_LGL_RV_TMPL
+       SET
+		    APPX_TMPL_ORD = CAST(#{p.appx_tmpl_ord} AS INT)  , STS = 'U'
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_TMPL_UUID = #{p.cntrdoc_lgl_rv_tmpl_uuid}
+    </update>
+    <update id="updateReqReviewTmplCont">
+    /* law.updateReqReviewTmplCont : 검토 요청 계약서/부속서류 템플릿 내용 수정 */
+    UPDATE CNTRDOC_LGL_RV_TMPL
+       SET ORIG_TMPL_CONT = #{p.orig_tmpl_cont}
+         , LGL_RV_TMPL_CONT = #{p.lgl_rv_tmpl_cont}
+         , LGL_RV_TMPL_RES = #{p.lgl_rv_tmpl_res}
+         , LGL_RV_ATHG_UUID = #{p.lgl_rv_athg_uuid}
+         , LGL_RV_SUBJ_YN = #{p.lgl_rv_subj_yn}
+         , STS = 'U'
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_TMPL_UUID = #{p.cntrdoc_lgl_rv_tmpl_uuid}
+    </update>
+    <update id="updateReqReviewTmplOpn">
+    /* law.updateReqReviewTmplOpn : 검토 요청 계약서/부속서류 템플릿 검토 의견 수정 */
+    UPDATE CNTRDOC_LGL_RV_TMPL
+       SET LGL_RV_OPN = #{p.lgl_rv_opn}
+         , LGL_TMLD_RV_OPN = #{p.lgl_tmld_rv_opn}
+         , LGL_RV_TMPL_RES = #{p.lgl_rv_tmpl_res}
+         , LGL_RV_RES_ATHG_UUID = #{p.lgl_rv_res_athg_uuid}
+         , STS = 'U'
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_TMPL_UUID = #{p.cntrdoc_lgl_rv_tmpl_uuid}
+    </update>
+    <delete id="deleteReqReviewTmplRvId">
+    /* law.deleteReqReviewTmplRvId : 검토 요청 계약서/부속서류 템플릿 전체 삭제 */
+    DELETE FROM CNTRDOC_LGL_RV_TMPL
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+    </delete>
+    <delete id="deleteReqReviewTmplByRvTmplId">
+    /* law.deleteReqReviewTmplByRvTmplId : 검토 요청 계약서/부속서류 템플릿 아이디로 삭제 */
+    DELETE FROM CNTRDOC_LGL_RV_TMPL
+     WHERE TEN_ID = #{g.tenant}
+       AND CNTRDOC_LGL_RV_TMPL_UUID = #{p.cntrdoc_lgl_rv_tmpl_uuid}
+    </delete>
+    <resultMap id="resultMap-getAppList" type="map">
+        <result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+        <result column="CONTENT" javaType="string" property="edit_content" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="findListReviewAppxTmpl" resultMap="resultMap-getAppList">
+    /* law.findListReviewAppxTmpl : 검토 부속서류 템플릿 목록 조회 */
+    SELECT TMPL.ORIG_TMPL_UUID            AS APPX_TMPL_UUID
+         , TMPL.ORIG_TMPL_NM              AS CNTR_APPX_NM
+         , TMPL.MAND_YN                   AS MAND_YN
+         , TMPL.APPX_TYP_CCD              AS APPX_TYP_CCD
+         , NVL(ORIG.APPX_CRTR_TYP_CCD,'BUYER') AS APPX_CRTR_TYP_CCD
+         , TMPL.APPX_TMPL_ORD             AS CNTRDOC_TMPL_ORD
+         , CASE WHEN TMPL.LGL_RV_SUBJ_YN = 'Y'
+                THEN TMPL.LGL_RV_TMPL_CONT
+                ELSE ORIG_CONT.APPX_TMPL_CONT
+            END AS CONTENT
+         , CASE WHEN TMPL.LGL_RV_SUBJ_YN = 'Y'
+                THEN NVL(TMPL.LGL_RV_RES_ATHG_UUID, TMPL.LGL_RV_ATHG_UUID)
+                ELSE ORIG.ATHG_UUID
+            END AS ATHG_UUID
+      FROM CNTRDOC_LGL_RV_TMPL TMPL
+      LEFT OUTER JOIN APPX_TMPL ORIG
+        ON ORIG.TEN_ID = TMPL.TEN_ID
+       AND ORIG.APPX_TMPL_UUID = TMPL.ORIG_TMPL_UUID
+      LEFT OUTER JOIN APPX_TMPL_CONT ORIG_CONT
+        ON ORIG_CONT.TEN_ID = TMPL.TEN_ID
+       AND ORIG_CONT.APPX_TMPL_UUID = ORIG.APPX_TMPL_UUID
+     WHERE TMPL.TEN_ID = #{g.tenant}
+       AND TMPL.CNTRDOC_LGL_RV_UUID = #{p.cntrdoc_lgl_rv_uuid}
+       AND TMPL.TMPL_TYP_CCD = 'APPX'
+     ORDER BY TMPL.APPX_TMPL_ORD
+    </select>
+</mapper>

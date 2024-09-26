@@ -1,0 +1,238 @@
+<dom-module id="ep-sgic-guardetail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <!-- 보증 상세화면 조회 -->
+        <sc-ajax
+                id="getGuarDetail"
+                url="sgic/getGuarDetail.do"
+                on-response="completeGetGuarDetail">
+        </sc-ajax>
+
+        <!-- 보증 승인 -->
+        <sc-ajax
+                id="approveGuar"
+                url="sgic/approveGuar.do"
+                last-response="{{guarInfo}}"
+                on-response="completeGuar">
+        </sc-ajax>
+
+        <!-- 보증 반려 -->
+        <sc-ajax
+                id="rejectGuar"
+                url="sgic/rejectGuar.do"
+                on-response="completeGuar">
+        </sc-ajax>
+
+        <!-- 보증 파기 -->
+        <sc-ajax
+                id="destroyGuar"
+                url="sgic/destroyGuar.do"
+                on-response="completeGuar">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <!-- 툴바 -->
+        <cc-page-title-bar>
+            <!--<sc-button text="인쇄" on-click="onPrint"></sc-button>-->
+            <sc-button text="승인" on-click="onApprove" hidden="[[!formula('buyerCState')]]"></sc-button>
+            <sc-button text="반려" on-click="onRejectEgur" hidden="[[!formula('buyerCState')]]"></sc-button>
+            <sc-button text="파기" on-click="onDestroyEgur" hidden="[[!formula('buyerFState')]]"></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <sc-container title="전자보증서" class="vbox flex">
+            <iframe width="780" height="640" id="executinoIf" name="executinoIf"></iframe>
+        </sc-container>
+	
+		<sc-dialog id="guarRejectDialog" title-text="반려 사유 작성" style="width:600px; height:300px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="반려" on-click="onReject"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{searchParam.ret_rsn}}"></sc-textarea-field>
+		</sc-dialog>
+		
+		<sc-dialog id="guarDestroyDialog" title-text="파기 사유 작성" style="width:600px; height:300px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="파기" on-click="onDestroy"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{searchParam.des_rsn}}"></sc-textarea-field>
+		</sc-dialog>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-sgic-guardetail',
+
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "서울보증보험"
+				},
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                // 보증정보
+                guarInfo: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+
+            formulas: {
+                buyerFState: function () {
+                    var me = this;
+                    var status = me.get("searchParam").gur_sts_ccd;
+                    var gur_typ_ccd = me.get("searchParam").gur_typ_ccd;
+                    return status === 'APVD' && ( gur_typ_ccd == "CPGUR" || gur_typ_ccd == "APYMTPGUR" || gur_typ_ccd == "DEFPGUR");
+                },
+                buyerCState: function () {
+                    var me = this;
+                    var status = me.get("searchParam").gur_sts_ccd;
+                    var gur_typ_ccd = me.get("searchParam").gur_typ_ccd;
+                    return status === 'APVL_WTG' && ( gur_typ_ccd == "CPGUR" || gur_typ_ccd == "APYMTPGUR" || gur_typ_ccd == "DEFPGUR");
+                }
+            },
+
+            load: function (data) {
+                var me = this;
+                me.set("searchParam", data);
+				me.applyFormula();
+                me.loadDetail();
+            },
+
+            // form정보, maker정보 초기 설정
+            loadDetail: function () {
+				var me = this;
+				var iframe = me.$.executinoIf;
+				var gur_uuid = me.get("searchParam.gur_uuid");
+				iframe.src = "sgic/sgicBond.do?gur_uuid=" + gur_uuid +"&print=no";
+		
+            },
+
+            // 보증 상세조회 결과
+            completeGetGuarDetail: function (e, res) {
+                var me = this;
+                var result = res.response;
+
+                if(result != null){
+                	if(UT.isEmpty(result.xml_path) || UT.isEmpty(result.guar_type)) {
+                		UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                		return;
+                	}
+                	
+                    me.set("guarInfo", result);
+    				me.set("guarInfo.gur_insco_ccd","SGI"); //보증보험사 서울보증보험
+    				me.applyFormula();
+    				
+                    //보증 jsp 호출
+                    var iframe = me.$.executinoIf;
+                    var gur_uuid = me.get("guarInfo.gur_uuid");
+                    iframe.src = "bp/edoc/guarantee/GuaranteeController/sgicBond.do?xml_path=" + xml_path + "&guar_type=" + guar_type+ "&print=no" + "&gur_uuid=" + gur_uuid ;
+                
+                }else{
+                	UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                	return;
+                }
+            },
+
+            onPrint: function (){
+            	var me = this;
+
+                //보증 jsp 호출
+                var iframe = me.$.executinoIf;
+                var xml_path = me.get("guarInfo.xml_path");
+                var guar_type = me.get("guarInfo.gur_typ_ccd");
+
+                var url = "bp/edoc/guarantee/GuaranteeController/sgicBond.do?xml_path=" + xml_path + "&guar_type=" + guar_type + "&print=yes";
+                UT.popupJsp(url,me,"820","80%");
+            },
+            
+            onApprove: function () {
+                var me = this;
+				var gurUuid = me.get("searchParam.gur_uuid");
+                
+                me.$.approveGuar.body = {
+					gur_uuid : gurUuid
+				};
+                UT.request(me.$.approveGuar);
+            },
+	
+			onRejectEgur: function() {
+				var me = this,
+					dialog = me.$.guarRejectDialog;
+		
+				dialog.show();
+			},
+
+            onReject: function () {
+				var me = this,
+					retRsn = me.get("searchParam.ret_rsn");
+	
+				if(UT.isEmpty(retRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("반려 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+	
+				me.$.rejectGuar.body = {
+					gur_uuid : me.get("searchParam.gur_uuid"),
+					resp_mesg_text : retRsn
+				}
+				
+				UT.request(me.$.rejectGuar);
+            },
+	
+			onDestroyEgur: function() {
+				var me = this,
+					dialog = me.$.guarDestroyDialog;
+				
+				dialog.show();
+			},
+
+            onDestroy: function () {
+                var me = this,
+					desRsn = me.get("searchParam.des_rsn");
+				
+				if(UT.isEmpty(desRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("파기 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+
+				me.$.destroyGuar.body = {
+					gur_uuid : me.get("searchParam.gur_uuid"),
+					resp_mesg_text : desRsn
+				}
+	
+				UT.request(me.$.destroyGuar);
+            },
+
+            completeGuar: function (e, res) {
+                var me = this;
+            	var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); //요청이 완료되었습니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+				me.fire("completeGuar");
+            },
+
+            // 창 닫기
+            onClose: function () {
+                var me = this;
+                me.fire("close");
+            }
+        });
+    </script>
+</dom-module>

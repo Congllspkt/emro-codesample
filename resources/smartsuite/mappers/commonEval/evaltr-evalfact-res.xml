@@ -1,0 +1,617 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="evaltr-evalfact-res">
+	<delete id="deleteEvaltrEvalfactRes">
+    /* evaltr-evalfact-res.deleteEvaltrEvalfactRes : 평가항목 평가자 결과 삭제 */
+    DELETE  FROM EVALTR_EVALFACT_RES EVFACT_RES
+     WHERE TEN_ID =#{p.ten_id}
+     <choose>
+         <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+             /* 삭제 단위가 전체인 경우 평가요청 아이디로 평가항목 결과 모두 삭제 */
+             AND EXISTS ( SELECT 'X'
+                            FROM EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                            INNER JOIN EVAL_SUBJ_RES ESRES
+                               ON EVALTR_RES.TEN_ID = ESRES.TEN_ID
+                              AND EVALTR_RES.EVAL_SUBJ_RES_UUID = ESRES.EVAL_SUBJ_RES_UUID
+                           WHERE EVALTR_RES.TEN_ID = EVFACT_RES.TEN_ID
+                             AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = EVFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                             AND ESRES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                       )
+         </when>
+         <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+             /* 삭제 단위가 평가대상인 경우 해당 평가대상의 평가항목 결과를 모두 삭제 */
+             AND EXISTS ( SELECT 'X'
+                            FROM EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                           WHERE EVALTR_RES.TEN_ID = EVFACT_RES.TEN_ID
+                            AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = EVFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                            AND EVALTR_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+                       )
+         </when>
+         <otherwise>
+             /* 삭제 단위가 평가자인 경우 해당 평가자의 평가항목 결과를 삭제 */
+             AND EVAL_SUBJ_EVALTR_RES_UUID IN (SELECT EVAL_SUBJ_EVALTR_RES_UUID
+                                               FROM EVAL_SUBJ_EVALTR_RES
+                                               WHERE EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid} AND EVALTR_ID = #{p.evaltr_id})
+         </otherwise>
+     </choose>
+	</delete>
+	<select id="findEvalfactListForSearch" resultType="map">
+	/* evaltr-evalfact-res.findEvalfactListForSearch : 평가 수행 평가항목 목록 조회 */
+		SELECT
+			 ETEF.EVALTMPL_EVALFACT_UUID
+			 , ETEF.EVALTMPL_UUID
+			 , ET.EVALTMPL_CD
+			 , ET.EVALTMPL_NM
+			 , ETEF.EVALFACT_UUID
+			 , EF.EVALFACT_NM
+			 , EF.EVALFACT_CD
+			 , ETEF.SORT AS FACT_SORT           /* 평가템플릿 평가항목 정렬 */
+		     , ETEG.SORT AS FACT_GRP_SORT       /* 평가템플릿 평가항목군 정렬 */
+		     , ETEF.EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+			 , ETEG.EFACTG_UUID
+			 , EFG.EFACTG_CD
+			 , EFG.EFACTG_NM
+			 , EF.EVALFACT_TYP_CCD           /* 평가항목 유형(정량정성 구분) */
+		FROM EVALTMPL_EVALFACT ETEF  /* 평가템플릿 평가항목 */
+		INNER JOIN EVALTMPL ET ON ET.TEN_ID = ETEF.TEN_ID AND ET.EVALTMPL_UUID = ETEF.EVALTMPL_UUID AND ET.CNFD_YN = 'Y' /* 평가템플릿 */
+		INNER JOIN EVALFACT EF ON EF.TEN_ID = ETEF.TEN_ID AND EF.EVALFACT_UUID = ETEF.EVALFACT_UUID AND EF.CNFD_YN = 'Y' /* 평가항목 */
+		INNER JOIN EVALTMPL_EFACTG ETEG ON ETEG.TEN_ID = ETEF.TEN_ID AND ETEG.EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID /* 평가템플릿 평가항목군 */
+		INNER JOIN EFACTG EFG ON EFG.TEN_ID = EF.TEN_ID AND EFG.EFACTG_UUID = ETEG.EFACTG_UUID /* 평가항목군 */
+		INNER JOIN EVAL_SUBJ_RES ESR
+		        ON ESR.TEN_ID = ETEF.TEN_ID
+		       AND ETEF.EVALTMPL_UUID = ESR.EVALTMPL_UUID
+		       AND ESR.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+		INNER JOIN EVAL_SUBJ_EVALTR_RES ESER
+		        ON ESER.TEN_ID = ESR.TEN_ID
+		       AND ESER.EVALTR_ID = #{p.evaltr_id}
+		       AND ESER.EVAL_SUBJ_RES_UUID = ESR.EVAL_SUBJ_RES_UUID
+		       AND (ESER.EVALFACT_EVALTR_AUTHTY_CCD = 'ALL' OR ESER.EVALFACT_EVALTR_AUTHTY_CCD = ETEF.EVALFACT_EVALTR_AUTHTY_CCD) /* 평가자에게 평가 권한이 있는 항목 모두 조회 */
+		WHERE ETEF.TEN_ID      = #{g.tenant}
+		AND ETEF.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+			<if test="p.slfck_evaltr_yn != null and p.slfck_evaltr_yn eq 'Y'.toString()">
+			/* 자체점검 평가자일 경우(퍼포먼스평가) */
+		    AND EXISTS ( SELECT 1
+			             FROM EVALSHT_SLFCK_EVALFACT /* 평가시트 자가진단 평가항목 */
+			             WHERE TEN_ID = #{g.tenant}
+			             AND EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID )
+			</if>
+		AND ETEF.STS != 'D'
+-- 		AND EF.EVALFACT_TYP_CCD != 'QUANT' /* 정량항목 평가지에서 조회하지 않음 */
+		ORDER BY ET.EVALTMPL_CD, (CASE WHEN ETEG.SORT IS NULL THEN 0 ELSE ETEG.SORT END), EFG.EFACTG_NM, (CASE WHEN ETEF.SORT IS NULL THEN 0 ELSE ETEF.SORT END), EF.EVALFACT_NM
+	</select>
+	<select id="findEvaltemplateListForFulfill" resultType="map">
+		/* evaltr-evalfact-res.findEvaltemplateListForFulfill : 평가 수행 평가템플릿 목록 조회 */
+		SELECT ESR.EVAL_SUBJ_RES_UUID            /* 평가대상 결과 uuid */
+			 , ESR.OORG_CD
+			 , ESR.EVAL_TASK_TYP_CCD             /* 평가업무유형 공통코드 */
+			 , ESR.EVAL_REQ_UUID                 /* 평가 요청 UUID (각 업무별 평가 UUID) */
+			 , ET.EVALTMPL_CD                    /* 평가템플릿 코드 */
+			 , ET.EVALTMPL_NM                    /* 평가템플릿 명 */
+			 , ET.EVALTMPL_UUID                  /* 평가템플릿 uuid */
+			 , ESER.RMK                          /* 비고 */
+		     , ESER.EVALTR_ID
+			 , ESER.EVALTR_SC                    /* 평가자별 대상 평가점수 */
+			 , ESER.ATHG_UUID                    /* 첨부파일(평가대상 평가자 결과) */
+			 , ( SELECT COUNT(*)
+			     FROM ATHF
+			     WHERE TEN_ID  = ESER.TEN_ID
+			     AND ATHG_UUID = ESER.ATHG_UUID
+			     AND STS     != 'D' ) AS ATT_CNT
+		FROM EVAL_SUBJ_RES ESR /* 평가대상 결과 */
+		INNER JOIN (
+		    SELECT TEN_ID
+		         , EVAL_SUBJ_RES_UUID
+		         , EVALTR_ID
+		         , MAX(RMK) AS RMK
+		         , MAX(EVALTR_SC) AS EVALTR_SC
+		         , MAX(ATHG_UUID) AS ATHG_UUID
+		      FROM EVAL_SUBJ_EVALTR_RES
+		      WHERE TEN_ID = #{g.tenant}
+			    AND EVALTR_ID = #{p.evaltr_id}
+		      GROUP BY TEN_ID, EVAL_SUBJ_RES_UUID, EVALTR_ID
+		) ESER ON ESR.TEN_ID = ESER.TEN_ID AND ESR.EVAL_SUBJ_RES_UUID = ESER.EVAL_SUBJ_RES_UUID
+		INNER JOIN EVALTMPL ET ON ET.TEN_ID = ESR.TEN_ID
+		                       AND ET.EVALTMPL_UUID = ESR.EVALTMPL_UUID
+		                       AND ET.EVAL_TASK_TYP_CCD = ESR.EVAL_TASK_TYP_CCD
+		                       AND ET.CNFD_YN = 'Y' /* 확정된 평가템플릿만 조회 */
+		WHERE ESR.TEN_ID = #{g.tenant}
+		AND ESR.EVAL_TASK_TYP_CCD = #{p.eval_task_typ_ccd}
+		AND ESR.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+		ORDER BY ET.EVALTMPL_CD
+	</select>
+	<select id="findEvalfactListForFulfill" resultType="map">
+		/* evaltr-evalfact-res.findEvalfactListForFulfill : 평가 수행 평가항목 목록 조회 - 평가지용 */
+		SELECT R.TEN_ID                       /* 시스템아이디 */
+			 , R.OORG_CD                      /* 운영조직코드 */
+			 , R.EVAL_TASK_TYP_CCD            /* 평가 업무 유형 공통코드 */
+			 , R.EVALTMPL_EVALFACT_UUID       /* 평가템플릿 평가항목 UUID */
+			 , R.EVALTMPL_EFACTG_UUID         /* 평가템플릿 평가항목군 UUID */
+			 , R.EVAL_SUBJ_RES_UUID           /* 평가대상 결과 UUID */
+			 , R.EVAL_SUBJ_EVALTR_RES_UUID    /* 평가대상 평가자 결과 UUID */
+			 , R.EVALTMPL_UUID                /* 평가템플릿 UUID */
+			 , R.EVALTMPL_CD                  /* 평가템플릿 코드 */
+			 , R.EVALTMPL_NM                  /* 평가템플릿 명 */
+			 , R.EVALFACT_UUID                /* 평가항목 UUID */
+			 , R.EVALFACT_CD                  /* 평가항목 코드 */
+			 , R.EVALFACT_NM                  /* 평가항목 명 */
+			 , R.EFACTG_UUID                  /* 평가항목군 UUID */
+			 , R.EFACTG_CD                    /* 평가항목군 코드 */
+			 , R.EFACTG_NM                    /* 평가항목군 명 */
+		     , R.EVALFACT_WGT                 /* 평가항목 가중치 */
+		     , R.EFACTG_WGT                   /* 평가항목군 가중치 */
+			 , R.EVALTMPL_EVALFACT_SORT       /* 항목 정렬 */
+			 , R.EVALTMPL_EFACTG_SORT         /* 항목군 정렬 */
+			 , R.EVALFACT_TYP_CCD             /* 공통코드(R001) 정성, 정량구분 */
+			 , R.ADD_CND_CCD                  /* 공통코드(EVKD) 추가 조건 */
+			 , ( SELECT DTLCD_NM
+				 FROM DTLCD_MULTLANG DM
+				 WHERE DM.TEN_ID  = R.TEN_ID
+				 AND DM.CCD  = 'EVKD'
+				 AND DM.LANG_CCD = #{g.locale}
+				 AND DM.DTLCD  = R.ADD_CND_CCD ) AS ADD_CND_NM /* 추가 조건 명 */
+			 , R.EVALFACT_DTL_DSPY_TYP_CCD    /* 평가항목 상세 표시 유형 공통코드 */
+			 , R.EVALFACT_EXPLN               /* 평가항목설명 */
+			 , R.NULLV_DATFIL_METH_CCD        /* 공통코드(R006) NULL값 데이터보정 방식 */
+			 , ( SELECT DTLCD_NM
+			 	 FROM DTLCD_MULTLANG DM
+			 	 WHERE DM.TEN_ID  = R.TEN_ID
+			 	 AND DM.CCD  = 'R006'
+			 	 AND DM.LANG_CCD = #{g.locale}
+			 	 AND DM.DTLCD  = R.NULLV_DATFIL_METH_CCD ) AS NULLV_DATFIL_METH_NM /* NULL값 데이터보정 방식 명 */
+		     , R.NULLV_ELEM_SC                /* NULL값 기본 점수 */
+			 , R.QUANT_FMLA_EXPLN             /* 정량 계산식 설명 */
+			 , R.QUANT_FMLA                   /* 정량 계산식 */
+			 , R.QUANT_VAL_UNIT               /* 정량 값 단위 */
+		     , R.QUANT_FMLA_VAL               /* 정량 계산식 값 */
+			 , R.EVALFACT_SC                  /* (정량일 경우) 평가대상 평가항목 결과 - 평가항목 점수 */
+		     , R.QUANT_EVALFACT_NULLV_YN      /* 정량 평가항목 NULL값 여부 */
+			 , R.CNFD_YN                      /* 확정여부 */
+			 , R.SLFCK_SUBJ_YN                /* 자체 점검 대상 여부 */
+			 , R.STS                          /* 상태 */
+			 , R.REGR_ID                      /* 등록자아이디 */
+			 , R.REG_DTTM                     /* 등록일시 */
+			 , R.MODR_ID                      /* 수정자아이디 */
+			 , R.MOD_DTTM                     /* 수정일시 */
+			 , R.ATHG_UUID                    /* 평가대상 평가자 결과 첨부파일(종합첨부) */
+			 , VAL.ST_VAL                     /* 최소점수 */
+			 , VAL.STP_VAL                    /* 최대점수 */
+			 , ( SELECT CASE WHEN #{g.locale} = 'ko_KR' OR (USR_NM_EN IS NULL OR USR_NM_EN = '') THEN USR_NM ELSE USR_NM_EN END
+			     FROM USR
+			     WHERE TEN_ID = #{g.tenant}
+			       AND USR_ID = R.MODR_ID) AS MODR_NM
+			 , R.EVALFACT_EVALTR_AUTHTY_CCD   /* 평가항목 평가자 권한 */
+			 , R.EVALTR_ID 					  /* 평가자 ID */
+			 , R.EVAL_SUBJ_EVALFACT_RES_UUID  /* 평가대상 평가항목 결과 - UUID */
+		     , R.EVAL_SUBJ_EFACTG_RES_UUID    /* 평가대상 평가항목군 결과 UUID */
+			 <if test="p.eval_task_typ_ccd != null and p.eval_task_typ_ccd eq 'PE'.toString()">
+		     , #{p.slfck_evaltr_yn} AS SLFCK_EVALTR_YN                            /* 자체점검 평가자 여부 */
+			 , CASE WHEN ( SELECT  EVALTMPL_EVALFACT_UUID
+						   FROM EVALSHT_SLFCK_EVALFACT
+						   WHERE TEN_ID = #{g.tenant}
+						   AND EVALTMPL_EVALFACT_UUID = R.EVALTMPL_EVALFACT_UUID
+						   AND ROWNUM = 1  ) IS NOT NULL  THEN 'Y'
+			        ELSE 'N' END AS SLFCK_EFACT_YN                                /* 자체점검 평가 항목 여부 */
+			 , SLFCK_RES.EVAL_SUBJ_EVALTR_RES_UUID AS SLFCK_SUBJ_EVALTR_RES_UUID  /* 자체점검 평가자 결과 UUID */
+			 , ( SELECT SUM(SLCTD_SCALE_SC)
+			     FROM EVALTR_EVALFACT_RES
+			     WHERE TEN_ID = #{g.tenant}
+			     AND EVAL_SUBJ_EVALTR_RES_UUID = SLFCK_RES.EVAL_SUBJ_EVALTR_RES_UUID
+			     AND EVALTMPL_UUID = R.EVALTMPL_UUID
+			     AND EVALFACT_UUID = R.EVALFACT_UUID ) AS SLFCK_EFACT_SC
+			 </if>
+		FROM ( SELECT ESR.TEN_ID                              /* 시스템아이디 */
+					, ESR.OORG_CD                             /* 운영조직코드 */
+					, ESR.EVAL_SUBJ_RES_UUID                  /* 평가대상 결과 UUID */
+					, ESR.EVAL_TASK_TYP_CCD                   /* 평가 업무 유형 공통코드 */
+					, ETEF.EVALTMPL_EVALFACT_UUID             /* 평가템플릿 평가항목 UUID */
+					, ETEG.EVALTMPL_EFACTG_UUID               /* 평가템플릿 평가항목군 UUID */
+					, ESR.EVALTMPL_UUID                       /* 평가템플릿 UUID */
+		        	, ET.EVALTMPL_NM                          /* 평가템플릿 명 */
+		        	, ET.EVALTMPL_CD                          /* 평가템플릿 코드 */
+					, ESER.ATHG_UUID                          /* 평가대상 평가자 결과 첨부파일 */
+					, EF.EVALFACT_UUID                        /* 평가항목 UUID */
+					, EF.EVALFACT_CD                          /* 평가항목코드 */
+					, EF.EVALFACT_NM                          /* 평가항목명 */
+					, EG.EFACTG_UUID                          /* 평가항목군 UUID */
+					, EG.EFACTG_CD                            /* 평가항목군 코드 */
+					, EG.EFACTG_NM                            /* 평가항목군명 */
+					, EF.EVALFACT_TYP_CCD                     /* 공통코드(R001) 평가항목 유형(정량정성 구분) */
+					, EF.ADD_CND_CCD                          /* 추가 조건 */
+					, EF.SCALE_APPL_YN                        /* 스케일 적용 여부 */
+					, EF.SCALE_RNG_SETUP_CCD                  /* 스케일 구간 설정 공통코드 */
+					, EF.NULLV_DATFIL_METH_CCD                /* NULL값 데이터보정 방식 공통코드 */
+		            , EF.NULLV_ELEM_SC                        /* NULL값 기본 점수 */
+					, EF.QUANT_FMLA_EXPLN                     /* 정량 계산식 설명 */
+					, EF.QUANT_FMLA                           /* 정량 계산식 */
+					, EF.QUANT_VAL_UNIT                       /* 정량 값 단위 */
+		            , ESEFR.EVALFACT_SC                       /* 평가항목 점수(정량항목 조회) */
+		            , ESEFR.QUANT_FMLA_VAL                    /* 정량 계산식 값 */
+		            , ESEFR.QUANT_EVALFACT_NULLV_YN           /* 정량 평가항목 NULL값 여부 */
+					, ETEF.SORT AS EVALTMPL_EVALFACT_SORT     /* 평가템플릿 항목 정렬 */
+					, ETEG.SORT AS EVALTMPL_EFACTG_SORT       /* 평가템플릿 항목군 정렬 */
+					, EF.EVALFACT_EXPLN                       /* 평가항목설명 */
+					, EF.CNFD_YN                              /* 확정여부 */
+					, EF.EVALFACT_DTL_DSPY_TYP_CCD            /* 평가항목 상세 표시 유형 공통코드*/
+					, EF.STS                                  /* 상태 */
+					, EF.REGR_ID                              /* 등록자아이디 */
+					, EF.REG_DTTM                             /* 등록일시 */
+					, EF.MODR_ID                              /* 수정자아이디 */
+					, EF.MOD_DTTM                             /* 수정일시 */
+		            , ETEF.SLFCK_SUBJ_YN                      /* 자체 점검 대상 여부 */
+					, ETEF.EVALFACT_WGT                       /* 평가항목 가중치 */
+					, ETEG.EFACTG_WGT                         /* 평가항목군 가중치 */
+					, ESER.EVALFACT_EVALTR_AUTHTY_CCD         /* 평가항목 평가자 권한 */
+					, ESER.EVAL_SUBJ_EVALTR_RES_UUID          /* 평가대상 평가자 결과 UUID */
+					, ESEGR.EVAL_SUBJ_EFACTG_RES_UUID         /* 평가대상 평가항목군 결과 UUID */
+		            , ESEFR.EVAL_SUBJ_EVALFACT_RES_UUID       /* 평가대상 평가항목 결과 UUID */
+					, ESER.EVALTR_ID
+				FROM EVAL_SUBJ_RES ESR  /* 평가대상 결과 */
+				INNER JOIN EVAL_SUBJ_EVALTR_RES ESER ON ESER.TEN_ID = ESR.TEN_ID
+													 AND ESER.EVAL_SUBJ_RES_UUID = ESR.EVAL_SUBJ_RES_UUID /* 평가대상 평가자 결과 */
+				    								 AND ESER.EVALTR_ID = #{p.evaltr_id}
+				INNER JOIN EVALTMPL ET ON ET.TEN_ID = ESR.TEN_ID AND ET.EVALTMPL_UUID = ESR.EVALTMPL_UUID AND ET.CNFD_YN = 'Y' /* 평가템플릿 */
+				LEFT OUTER JOIN EVALTMPL_EFACTG ETEG ON ET.TEN_ID = ETEG.TEN_ID
+													 AND ET.EVALTMPL_UUID = ETEG.EVALTMPL_UUID
+				    								 AND ETEG.STS != 'D' /* 평가템플릿 평가항목군 */
+				INNER JOIN EFACTG EG ON ETEG.TEN_ID = EG.TEN_ID AND ETEG.EFACTG_UUID = EG.EFACTG_UUID /* 평가항목군 */
+				LEFT OUTER JOIN EVALTMPL_EVALFACT ETEF ON ET.TEN_ID = ETEF.TEN_ID
+													   AND ETEG.EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID
+													   AND ET.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+													   AND (ESER.EVALFACT_EVALTR_AUTHTY_CCD = 'ALL' OR ESER.EVALFACT_EVALTR_AUTHTY_CCD = ETEF.EVALFACT_EVALTR_AUTHTY_CCD) /* 평가자에게 평가 권한이 있는 항목 모두 조회 */
+				    								   AND ETEF.STS != 'D'/* 평가템플릿 평가항목 */
+				INNER JOIN EVALFACT EF ON ETEF.TEN_ID = EF.TEN_ID AND ETEF.EVALFACT_UUID = EF.EVALFACT_UUID /* 평가항목 */
+				INNER JOIN EVAL_SUBJ_EFACTG_RES ESEGR ON ESEGR.TEN_ID = ESR.TEN_ID
+				                                      AND ESEGR.EVAL_SUBJ_RES_UUID = ESR.EVAL_SUBJ_RES_UUID
+				                                      AND ESEGR.EVALTMPL_UUID = ETEG.EVALTMPL_UUID
+				                                      AND ESEGR.EVALTMPL_EFACTG_UUID = ETEG.EVALTMPL_EFACTG_UUID
+				                                      AND ESEGR.EFACTG_UUID = ETEG.EFACTG_UUID /* 평가대상 평가항목군 결과 */
+				INNER JOIN EVAL_SUBJ_EVALFACT_RES ESEFR ON ESEFR.TEN_ID = ESR.TEN_ID
+					                				    AND ESEFR.EVAL_SUBJ_RES_UUID = ESR.EVAL_SUBJ_RES_UUID
+					                				    AND ESEFR.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+					                				    AND ESEFR.EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID
+					                				    AND ESEFR.EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID
+					                				    AND ESEFR.EVALFACT_UUID = ETEF.EVALFACT_UUID /* 평가대상 평가항목 결과 */
+				WHERE ETEF.TEN_ID = #{g.tenant}
+				AND ESR.EVAL_TASK_TYP_CCD = #{p.eval_task_typ_ccd}
+				AND ESR.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+				AND ESR.STS != 'D'
+			<if test="p.slfck_evaltr_yn != null and p.slfck_evaltr_yn eq 'Y'.toString()">
+				/* 자체점검 평가자일 경우(퍼포먼스평가) */
+				AND EXISTS ( SELECT 1
+							 FROM EVALSHT_SLFCK_EVALFACT /* 평가시트 자가진단 평가항목 */
+							 WHERE TEN_ID = #{g.tenant}
+							 AND EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID )
+			</if>
+-- 				AND EF.EVALFACT_TYP_CCD != 'QUANT' /* 정량항목 평가지에서 조회하지 않음 */
+			) R
+		LEFT OUTER JOIN ( SELECT EVALTMPL_EVALFACT_UUID, ST_VAL, STP_VAL
+		                  FROM EVALTMPL_EVALFACT_SCALE
+		                  WHERE TEN_ID = #{g.tenant}
+		                  AND STS != 'D' ) VAL
+		ON R.EVALFACT_TYP_CCD = 'QUALI_SC_INP' /* 직접입력 항목일 때 최대, 최소값 */
+		AND VAL.EVALTMPL_EVALFACT_UUID = R.EVALTMPL_EVALFACT_UUID
+		<if test="p.eval_task_typ_ccd != null and p.eval_task_typ_ccd eq 'PE'.toString()">
+			/* 자체점검 결과 확인(퍼포먼스평가) */
+			LEFT OUTER JOIN PE_SUBJ_EVALTR SLFCK_PSE /* 퍼포먼스 평가 평가자 (자체점검) */
+						 ON SLFCK_PSE.TEN_ID = R.TEN_ID
+						AND SLFCK_PSE.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+						AND SLFCK_PSE.SLFCK_EVALTR_YN = 'Y'
+			LEFT OUTER JOIN EVAL_SUBJ_EVALTR_RES SLFCK_RES /* 평가 대상 평가자 결과 (자체점검) */
+						 ON SLFCK_RES.TEN_ID = SLFCK_PSE.TEN_ID
+						AND SLFCK_RES.EVAL_SUBJ_EVALTR_RES_UUID = SLFCK_PSE.EVAL_SUBJ_EVALTR_RES_UUID
+						AND SLFCK_RES.EVAL_PRGS_STS_CCD = 'SUBM' /* 제출 완료 건만 조회 */
+		</if>
+		ORDER BY R.EVALTMPL_CD, (CASE WHEN R.EVALTMPL_EFACTG_SORT IS NULL THEN 0 ELSE R.EVALTMPL_EFACTG_SORT END), R.EFACTG_NM, (CASE WHEN R.EVALTMPL_EVALFACT_SORT IS NULL THEN 0 ELSE R.EVALTMPL_EVALFACT_SORT END), R.EVALFACT_NM
+	</select>
+	<select id="findEvalfactScaleList" resultType="map">
+		/* evaltr-evalfact-res.findEvalfactScaleList : 평가수행 평가항목별 스케일 리스트 조회 */
+		SELECT ESR.TEN_ID                            /* 시스템아이디 */
+		     , ESR.EVAL_SUBJ_RES_UUID                /* 평가대상 결과 UUID */
+		 	 , ESER.EVAL_SUBJ_EVALTR_RES_UUID        /* 평가대상 평가자 결과 UUID */
+		     , ESEFR.EVAL_SUBJ_EVALFACT_RES_UUID     /* 평가대상 평가항목 결과 UUID */
+		 	 , ESER.EVALFACT_EVALTR_AUTHTY_CCD       /* 평가항목 평가자 권한 공통코드 */
+		 	 , ESER.EVALTR_ID                        /* 평가자 ID */
+		 	 , ESR.OORG_CD                           /* 운영조직코드 */
+		 	 , ESR.EVAL_TASK_TYP_CCD                 /* 평가업무 공통코드 */
+		 	 , ET.EVALTMPL_UUID                      /* 평가템플릿 UUID */
+		 	 , ET.EVALTMPL_CD                        /* 평가템플릿 코드 */
+		 	 , ETEG.EFACTG_UUID                      /* 평가항목군 UUID */
+		 	 , EFG.EFACTG_CD                         /* 평가항목군 코드 */
+		 	 , EFG.EFACTG_NM                         /* 평가항목군 명 */
+		 	 , ETEG.SORT AS EVALTMPL_EFACTG_SORT     /* 평가템플릿 평가항목군 정렬 */
+		 	 , ETEF.EVALFACT_UUID                    /* 평가항목 UUID */
+		 	 , EF.EVALFACT_CD                        /* 평가항목 코드 */
+		 	 , EF.EVALFACT_NM                        /* 평가항목 명 */
+		 	 , EF.EVALFACT_EXPLN                     /* 평가항목 설명 */
+		     , EF.EVALFACT_DTL_DSPY_TYP_CCD          /* 평가항목 상세 표시 유형 공통코드 */
+		     , ETEF.SORT AS EVALTMPL_EVALFACT_SORT   /* 평가템플릿 평가항목 정렬 */
+		 	 , EF.EVALFACT_TYP_CCD                 /* 평가항목 유형(정량정성 구분) */
+		 	 , ETEFC.EVALTMPL_EVALFACT_SCALE_UUID    /* 평가템플릿 평가항목 스케일 UUID */
+		 	 , ETEFC.EVALTMPL_EVALFACT_UUID          /* 평가템플릿 평가항목 UUID */
+		 	 , ETEF.EVALTMPL_EFACTG_UUID             /* 평가템플릿 평가항목군 UUID */
+		 	 , ETEFC.SCALE_CD                        /* 스케일 코드 */
+		 	 , ETEFC.SCALE_NM                        /* 스케일 명 */
+		 	 , ETEFC.SC                              /* 점수 */
+		 	 , ETEFC.SCALE_SORT                      /* 스케일 정렬*/
+		 	 , ROUND( CASE WHEN EF.ADD_CND_CCD = 'NA' THEN  /* 일반 항목인 경우 항목군 가중치, 항목가중치 고려 실 점수 산출 */
+		 	 			   (SELECT DISTINCT EFACTG_WGT
+		 	 			    FROM EVALTMPL_EFACTG
+		 	 			   	WHERE TEN_ID = #{g.tenant}
+		 	 			   	AND EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID ) * ETEF.EVALFACT_WGT * ETEFC.SC / 10000
+		 	 		  ELSE                                        /* 가점,감점,가감점 항목인 경우 (스케일 점수 * 항목가중치 / 100) = 실 점수로 제공 */
+					        ETEF.EVALFACT_WGT * ETEFC.SC / 100 END, 2) AS SC2 /* 가중치 적용 점수 */
+		 	 , CASE WHEN EF.EVALFACT_TYP_CCD = 'QUANT' THEN (CASE WHEN ESEFR.SCALE_SC IS NOT NULL AND ESEFR.SCALE_SC = ETEFC.SC THEN 'Y' ELSE 'N' END)
+		 	 		ELSE (CASE WHEN ETEFR.SLCTD_SCALE_CD IS NOT NULL THEN 'Y' ELSE 'N' END) END AS SELECT_YN  /* 스케일 선택여부 */
+		 	 , ETEFR.SLCTD_SCALE_SC AS ORGN_SLCTD_SCALE_SC   /* 선택된 스케일 점수 */
+		 	 , ETEFR.SLCTD_SCALE_CD AS ORGN_SLCTD_SCALE_CD   /* 선택된 스케일 코드 */
+		     , CASE WHEN ESEFR.SCALE_SC IS NULL THEN NULLIF(1,1) ELSE ESEFR.SCALE_SC END AS SCALE_SC          /* 스케일 점수 */
+		 	 , CASE WHEN ESEFR.EVALFACT_SC IS NULL THEN NULLIF(1,1) ELSE ESEFR.EVALFACT_SC END AS EVALFACT_SC /* 항목 점수 */
+		 	 , ETEFR.RMK                             /* 평가자 평가항목 의견 */
+		 	 , ETEFR.ATHG_UUID                       /* 평가자 평가항목 첨부파일(항목별 첨부파일) */
+		     , ( SELECT COUNT(*)
+		         FROM ATHF
+		         WHERE TEN_ID  = ETEF.TEN_ID
+			       AND ATHG_UUID = ETEFR.ATHG_UUID
+			       AND STS != 'D' ) AS ATT_CNT
+			 <if test="p.eval_task_typ_ccd != null and p.eval_task_typ_ccd eq 'PE'.toString()">
+			 , SLFCK_EFRES.SLCTD_SCALE_CD AS SLFCK_SCALE_CD    /* 자체점검 평가자가 선택한 스케일 */
+			 , SLFCK_EFRES.SLCTD_SCALE_SC AS SLFCK_SCALE_SC    /* 자체점검 평가자가 선택한 스케일 점수 */
+			 </if>
+		FROM EVALTMPL_EVALFACT ETEF  /* 평가시트 평가항목 */
+		INNER JOIN EVALTMPL ET ON ET.TEN_ID = ETEF.TEN_ID AND ET.EVALTMPL_UUID = ETEF.EVALTMPL_UUID AND ET.CNFD_YN = 'Y' /* 평가템플릿 */
+		INNER JOIN EVALFACT EF ON EF.TEN_ID = ETEF.TEN_ID AND EF.EVALFACT_UUID = ETEF.EVALFACT_UUID AND EF.CNFD_YN = 'Y' /* 평가항목 */
+		INNER JOIN EVALTMPL_EFACTG ETEG ON ETEG.TEN_ID = ETEF.TEN_ID AND ETEG.EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID /* 평가템플릿 평가항목군 */
+		INNER JOIN EFACTG EFG ON EFG.TEN_ID = EF.TEN_ID AND EFG.EFACTG_UUID = ETEG.EFACTG_UUID /* 평가항목군 마스터 */
+		LEFT OUTER JOIN EVALTMPL_EVALFACT_SCALE ETEFC ON ETEFC.TEN_ID = ETEF.TEN_ID AND ETEFC.EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID AND ETEFC.STS != 'D' /* 평가템플릿 평가항목 스케일 */
+		INNER JOIN EVAL_SUBJ_RES ESR /* 평가대상 결과 */
+			    ON ESR.TEN_ID = ETEF.TEN_ID
+			   AND ESR.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+			   AND ESR.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+		INNER JOIN EVAL_SUBJ_EVALTR_RES ESER  /* 평가대상 평가자 결과 */
+			    ON ESER.TEN_ID = ETEF.TEN_ID
+			   AND ESR.EVAL_SUBJ_RES_UUID = ESER.EVAL_SUBJ_RES_UUID
+			   AND ESER.EVALTR_ID = #{p.evaltr_id}
+			   AND (ESER.EVALFACT_EVALTR_AUTHTY_CCD = 'ALL' OR ESER.EVALFACT_EVALTR_AUTHTY_CCD = ETEF.EVALFACT_EVALTR_AUTHTY_CCD) /* 평가자에게 평가 권한이 있는 항목 모두 조회 */
+		<if test="p.eval_task_typ_ccd != null and p.eval_task_typ_ccd eq 'PE'.toString()">
+			/* 자체점검 결과 확인(퍼포먼스평가) */
+			LEFT OUTER JOIN PE_SUBJ_EVALTR SLFCK_PSE /* 퍼포먼스 평가 평가자 (자체점검) */
+			ON SLFCK_PSE.TEN_ID = ESER.TEN_ID
+			AND SLFCK_PSE.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+			AND SLFCK_PSE.SLFCK_EVALTR_YN = 'Y'
+			LEFT OUTER JOIN EVAL_SUBJ_EVALTR_RES SLFCK_RES /* 평가 대상 평가자 결과 (자체점검) */
+			ON SLFCK_RES.TEN_ID = SLFCK_PSE.TEN_ID
+			AND SLFCK_RES.EVAL_SUBJ_EVALTR_RES_UUID = SLFCK_PSE.EVAL_SUBJ_EVALTR_RES_UUID
+			AND SLFCK_RES.EVAL_PRGS_STS_CCD = 'SUBM' /* 제출 완료 건만 조회 */
+			LEFT OUTER JOIN EVALTR_EVALFACT_RES SLFCK_EFRES
+			ON SLFCK_EFRES.TEN_ID = ETEF.TEN_ID
+			AND SLFCK_EFRES.EVAL_SUBJ_EVALTR_RES_UUID = SLFCK_RES.EVAL_SUBJ_EVALTR_RES_UUID
+			AND SLFCK_EFRES.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+			AND SLFCK_EFRES.EVALFACT_UUID = ETEF.EVALFACT_UUID
+			AND SLFCK_EFRES .EVALTMPL_EVALFACT_SCALE_UUID = ETEFC.EVALTMPL_EVALFACT_SCALE_UUID
+		</if>
+		LEFT OUTER JOIN EVAL_SUBJ_EVALFACT_RES ESEFR /* 평가 대상 평가항목 결과 */
+		ON ESEFR.TEN_ID = ETEF.TEN_ID
+		AND ESEFR.EVAL_SUBJ_RES_UUID = ESR.EVAL_SUBJ_RES_UUID
+		AND ESEFR.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+		AND ESEFR.EVALTMPL_EFACTG_UUID = ETEG.EVALTMPL_EFACTG_UUID
+		AND ESEFR.EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID
+		AND ESEFR.EVALFACT_UUID = ETEF.EVALFACT_UUID
+		LEFT OUTER JOIN EVALTR_EVALFACT_RES ETEFR  /* 평가자 평가항목 결과 */
+		ON  ETEFR.TEN_ID        = ESER.TEN_ID
+		AND ETEFR.EVALTMPL_UUID = ETEF.EVALTMPL_UUID
+		AND ETEFR.EVALFACT_UUID = ETEF.EVALFACT_UUID
+		AND ETEFR.EVAL_SUBJ_EVALTR_RES_UUID = ESER.EVAL_SUBJ_EVALTR_RES_UUID
+		AND ETEFR.EVAL_SUBJ_EVALFACT_RES_UUID = ESEFR.EVAL_SUBJ_EVALFACT_RES_UUID
+		AND ETEFR.EVALTMPL_EVALFACT_SCALE_UUID = ETEFC.EVALTMPL_EVALFACT_SCALE_UUID /* 선택된 스케일가 있을 경우에만 조회 */
+		AND ETEFR.SLCTD_SCALE_CD = ETEFC.SCALE_CD                                   /* 선택된 스케일가 있을 경우에만 조회 */
+		AND ETEFR.STS != 'D'
+		WHERE ESR.TEN_ID = #{g.tenant}
+		AND ESR.EVAL_TASK_TYP_CCD = #{p.eval_task_typ_ccd}
+		AND ESR.STS != 'D'
+		AND ESER.STS != 'D'
+-- 		AND EF.EVALFACT_TYP_CCD != 'QUANT' /* 정량항목 평가지에서 조회하지 않음 */
+		<if test="p.slfck_evaltr_yn != null and p.slfck_evaltr_yn eq 'Y'.toString()">
+		/* 자체점검 평가자일 경우(퍼포먼스평가) */
+		AND EXISTS ( SELECT 1
+					 FROM EVALSHT_SLFCK_EVALFACT /* 평가시트 자가진단 평가항목 */
+					 WHERE TEN_ID = #{g.tenant}
+					 AND EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID )
+		</if>
+		ORDER BY ET.EVALTMPL_CD, (CASE WHEN ETEG.SORT IS NULL THEN 0 ELSE ETEG.SORT END), EFG.EFACTG_NM, (CASE WHEN ETEF.SORT IS NULL THEN 0 ELSE ETEF.SORT END), EF.EVALFACT_NM,
+		         EF.EVALFACT_CD, ETEFC.SCALE_SORT, ETEFC.SC DESC
+	</select>
+	<select id="findListQuantitativeEvalfactResult" resultType="map">
+		/* evaltr-evalfact-res.findListQuantitativeEvalfactResult : 정량 평가항목 계산항목, 계산값 조회 */
+		SELECT ESEFR.TEN_ID
+			 , ESEFR.EVAL_SUBJ_RES_UUID
+			 , ESEFR.EVAL_SUBJ_EVALFACT_RES_UUID
+		     , ESEFR.EVALTMPL_EVALFACT_UUID          /* 평가템플릿 평가항목 UUID */
+			 , ESEFR.EVALFACT_UUID
+			 , EF.EVALFACT_CD
+			 , ESEFR.QUANT_FMLA_EXPLN                /* 정량 계산식 설명 */
+			 , ESEFR.QUANT_FMLA                      /* 정량 계산식 */
+			 , ESEFR.EVALFACT_SC                     /* 평가항목 점수 */
+			 , ESEFR.SCALE_SC                        /* 스케일 점수 */
+			 , ESCFR.NULLV_YN                        /* NULL값 여부 */
+			 , CF.CALCFACT_UUID
+			 , CF.CALCFACT_CD
+			 , CF.CALCFACT_NM
+			 , ESCFR.CALCFACT_VAL                    /* 계산항목 값 */
+		     , CF.NMTR_VAL_NULLV_DATFIL_METH_CCD     /* 분자 값 NULL값 데이터보정 방식 공통코드 */
+			 , ( SELECT DTLCD_NM
+			 	 FROM DTLCD_MULTLANG DM
+			 	 WHERE DM.TEN_ID  = CF.TEN_ID
+			 	 AND DM.CCD  = 'R806'
+			 	 AND DM.LANG_CCD = #{g.locale}
+			 	 AND DM.DTLCD  = CF.NMTR_VAL_NULLV_DATFIL_METH_CCD ) AS NMTR_NULLV_HNDL_NM /* 분자 값 NULL값 데이터보정 방식명 */
+			 , CF.NMTR_DNTR_DIV_CCD                  /* 분자/분모 구분 코드 */
+			 , ( SELECT DTLCD_NM
+			 	 FROM DTLCD_MULTLANG DM
+			 	 WHERE DM.TEN_ID  = CF.TEN_ID
+			 	 AND DM.CCD  = 'R805'
+			 	 AND DM.LANG_CCD = #{g.locale}
+			 	 AND DM.DTLCD  = CF.NMTR_DNTR_DIV_CCD ) AS NMRT_DNMNT_NM /* 분자/분모 구분 명 */
+		FROM EVAL_SUBJ_EVALFACT_RES ESEFR /* 평가항목 결과 */
+		INNER JOIN EVAL_SUBJ_CALCFACT_RES ESCFR ON ESCFR.TEN_ID = ESEFR.TEN_ID AND ESCFR.EVAL_SUBJ_RES_UUID = ESEFR.EVAL_SUBJ_RES_UUID
+		INNER JOIN EVALFACT_CALCFACT EFCF ON ESEFR.TEN_ID = EFCF.TEN_ID AND ESEFR.EVALFACT_UUID = EFCF.EVALFACT_UUID /* 평가항목 계산항목 */
+		INNER JOIN EVALFACT EF ON EF.TEN_ID = ESEFR.TEN_ID AND EF.EVALFACT_UUID = ESEFR.EVALFACT_UUID /* 평가항목 마스터 */
+		INNER JOIN CALCFACT CF ON CF.TEN_ID = ESCFR.TEN_ID AND CF.CALCFACT_UUID = EFCF.CALCFACT_UUID AND CF.CALCFACT_UUID = ESCFR.CALCFACT_UUID /* 계산항목 마스터 */
+		WHERE ESEFR.TEN_ID = #{g.tenant}
+		AND ESEFR.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+		AND EF.EVALFACT_TYP_CCD = 'QUANT'
+		ORDER BY EF.SORT, EF.EVALFACT_NM, CF.CALCFACT_CD
+	</select>
+    <insert id="insertEvaltrEvalfactScaleFulfill">
+    /* evaltr_evalfact_res.insertEvaltrEvalfactScaleFulfill : 평가자 평가항목 결과를 저장한다.*/
+    INSERT INTO EVALTR_EVALFACT_RES (
+           TEN_ID
+         , EVALTR_EVALFACT_RES_UUID
+         , EVAL_SUBJ_EVALTR_RES_UUID
+         , EVALTMPL_UUID
+         , EVAL_SUBJ_EVALFACT_RES_UUID
+         , EVALFACT_UUID
+         , SLCTD_SCALE_CD
+         , SLCTD_SCALE_SC
+         , SC_APPL_SUBJ_YN
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+         , ATHG_UUID
+         , EVALTMPL_EVALFACT_SCALE_UUID
+    )
+    SELECT ESUBJ_RES.TEN_ID
+		 , RANDOMUUID  , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+         , ESUBJ_RES.EVALTMPL_UUID
+         , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+         , EFACT_RES.EVALFACT_UUID
+         , #{p.slctd_scale_cd}
+         , CAST(#{p.slctd_scale_sc} AS NUMERIC(8, 5))
+         , 'Y'
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+         , #{p.athg_uuid}
+         , #{p.evaltmpl_evalfact_scale_uuid}
+      FROM EVAL_SUBJ_RES ESUBJ_RES
+     INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+        ON ESUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+       AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+       AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+       AND EVALTR_RES.STS != 'D'
+     INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+        ON EVALTR_RES.TEN_ID = EFACT_RES.TEN_ID
+       AND EVALTR_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+       AND EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID = #{p.eval_subj_evalfact_res_uuid}
+       AND EFACT_RES.STS != 'D'
+     WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+       AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+    </insert>
+    <select id="findListEvaltrEvalfactResSc" resultType="map">
+    /* evaltr-evalfact-res.findListEvaltrEvalfactResSc : 평가자별 평가항목별 정성평가 점수를 조회한다. */
+    SELECT ESUBJ_RES.TEN_ID
+         , EVALTR_RES.EVALTR_ID
+         , USR.USR_NM AS EVALTR_NM
+         , USR.USR_NM_EN AS EVALTR_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN USR.USR_NM ELSE CASE WHEN USR.USR_NM_EN IS NULL OR USR.USR_NM_EN = '' THEN USR.USR_NM ELSE USR.USR_NM_EN END END AS DISPLAY_EVALTR_NM
+         , CASE WHEN EFACT.ADD_CND_CCD = 'NA'    /* 일반항목 */
+                    THEN EVTR_EFACT_RES.SUM_SLCTD_SCALE_SC * ((CASE WHEN ET_EFACTG.EFACTG_WGT IS NULL THEN 100 ELSE ET_EFACTG.EFACTG_WGT END) / 100) * ((CASE WHEN ET_EFACT.EVALFACT_WGT IS NULL THEN 100 ELSE ET_EFACT.EVALFACT_WGT END) / 100)
+                WHEN EFACT.ADD_CND_CCD = 'EXPNT'  /* 가점항목 */
+                    THEN EVTR_EFACT_RES.SUM_SLCTD_SCALE_SC * ((CASE WHEN ET_EFACTG.EFACTG_WGT IS NULL THEN 100 ELSE ET_EFACTG.EFACTG_WGT END) / 100) * ((CASE WHEN ET_EFACT.EVALFACT_WGT IS NULL THEN 100 ELSE ET_EFACT.EVALFACT_WGT END) / 100)
+                WHEN EFACT.ADD_CND_CCD = 'DEDTN'  /* 감점항목 */
+                    THEN (-1) * EVTR_EFACT_RES.SUM_SLCTD_SCALE_SC * ((CASE WHEN ET_EFACTG.EFACTG_WGT IS NULL THEN 100 ELSE ET_EFACTG.EFACTG_WGT END) / 100) * ((CASE WHEN ET_EFACT.EVALFACT_WGT IS NULL THEN 100 ELSE ET_EFACT.EVALFACT_WGT END) / 100)
+            END AS EVALTR_EVALFACT_SC
+         , EVTR_EFACT_RES.SUM_SLCTD_SCALE_SC
+         , ET_EFACTG.EFACTG_WGT
+         , ET_EFACT.EVALFACT_WGT
+         , ET_EFACTG.EFACTG_UUID
+         , ESUBJ_RES.EVALTMPL_UUID
+         , EVTR_EFACT_RES.EVALFACT_UUID
+         , EVALTR_RES.EVALTR_SC
+         , EVALTR_RES.EVAL_PRGS_STS_CCD
+         , EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD
+         , ESUBJ_RES.EVAL_SC
+         , ESUBJ_RES.EVAL_TASK_TYP_CCD
+         , ESUBJ_RES.EVAL_REQ_UUID
+         , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+         , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+         , EVTR_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+      FROM EVAL_SUBJ_RES ESUBJ_RES
+     INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+        ON ESUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+       AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+       AND EVALTR_RES.STS != 'D'
+       AND EVALTR_RES.EVAL_PRGS_STS_CCD = 'SUBM'   /* 제출 상태의 평가자 결과만 조회 */
+     INNER JOIN (
+                 SELECT EVALTR_RES.TEN_ID
+                      , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                      , EVTR_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                      , EVTR_EFACT_RES.EVALTMPL_UUID
+                      , EVTR_EFACT_RES.EVALFACT_UUID
+                      , SUM(EVTR_EFACT_RES.SLCTD_SCALE_SC) SUM_SLCTD_SCALE_SC
+                   FROM EVAL_SUBJ_RES ESUBJ_RES
+                  INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                     ON ESUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+                    AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+                    AND EVALTR_RES.STS != 'D'
+                  INNER JOIN EVALTR_EVALFACT_RES EVTR_EFACT_RES
+                     ON EVALTR_RES.TEN_ID = EVTR_EFACT_RES.TEN_ID
+                    AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = EVTR_EFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                    AND EVTR_EFACT_RES.STS != 'D'
+                    AND EVTR_EFACT_RES.SC_APPL_SUBJ_YN = 'Y'
+                  WHERE EVTR_EFACT_RES.TEN_ID = #{p.ten_id}
+                    AND ESUBJ_RES.STS != 'D'
+                 <choose>
+                     <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+                         AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                     </when>
+                     <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+                         /* 요청 단위가 평가대상인 경우 해당 평가대상의 평가자 평가항목 결과만 조회 */
+                         AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+                     </when>
+                     <otherwise>
+                         AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                     </otherwise>
+                 </choose>
+                  GROUP BY EVALTR_RES.TEN_ID, EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID, EVTR_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID, EVTR_EFACT_RES.EVALTMPL_UUID, EVTR_EFACT_RES.EVALFACT_UUID
+         ) EVTR_EFACT_RES
+        ON EVALTR_RES.TEN_ID = EVTR_EFACT_RES.TEN_ID
+       AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = EVTR_EFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID
+      LEFT OUTER JOIN EVALFACT EFACT
+        ON EVTR_EFACT_RES.TEN_ID = EFACT.TEN_ID
+       AND EVTR_EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+      LEFT OUTER JOIN EVALTMPL_EVALFACT ET_EFACT
+        ON EVTR_EFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+       AND EVTR_EFACT_RES.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+       AND EVTR_EFACT_RES.EVALFACT_UUID = ET_EFACT.EVALFACT_UUID
+       AND ET_EFACT.STS != 'D'
+      LEFT OUTER JOIN EVALTMPL_EFACTG ET_EFACTG
+        ON ET_EFACT.TEN_ID = ET_eFACTG.TEN_ID
+       AND ET_EFACT.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+       AND ET_EFACTG.STS != 'D'
+      LEFT OUTER JOIN USR
+        ON EVALTR_RES.TEN_ID = USR.TEN_ID
+       AND EVALTR_RES.EVALTR_ID = USR.USR_ID
+     WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+       AND ESUBJ_RES.STS != 'D'
+      <choose>
+        <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+            AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+        </when>
+        <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+              /* 요청 단위가 평가대상인 경우 해당 평가대상의 평가자 평가항목 결과만 조회 */
+              AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+        </when>
+        <otherwise>
+            AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+        </otherwise>
+      </choose>
+     ORDER BY EVALTR_RES.EVALTR_SC DESC, ET_EFACTG.SORT, ET_EFACT.SORT
+    </select>
+</mapper>

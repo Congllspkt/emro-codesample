@@ -1,0 +1,296 @@
+<sc-link rel="import" href="cc-rfx-config-header.html"></sc-link>
+
+<dom-module id="es-rfx-config-second">
+	<template>
+		
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 경쟁 방식 -->
+				<sc-code code="P211" value="{{codes.compTypCcd}}"></sc-code>
+				<!-- 구매 유형 -->
+				<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+				<!-- RFX 목적 -->
+				<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-page-title-bar id="titTxt">
+			<sc-button text="RFX 복사" on-click="onCopyRfx" hidden="[[formula('isViaPr')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose" hidden="[[!formula('isViaPr')]]"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-rfx-config-header id="header" rfx-data="[[rfxInfo]]" cur-lvl="2" on-select-no="onSelectNo"></cc-rfx-config-header>
+		
+		<div class="rfx_wrap">
+			<div class="content rfx_flex col">
+				<div class="cont_box inform">
+					<h4><b>[[rfx_str_tit]]</b><span>[[rfx_str_eng]]</span><span>[[rfx_str_kor]]</span></h4>
+					<p id="rfx_tit" class="title">[[rfxInfo.rfx_tit]]</p>
+					<div class="tag_group flex">
+					</div>
+				</div>
+				<div class="cont_box inform">
+					<ul class="form_box rfx_flex">
+						<li class="rfx_flex">
+							<span class="label">[[translate('구매 유형')]]</span>
+							<div class="check_group rfx_flex">
+								<sc-radio-group-field display-field="label" value-field="data"
+													  items="{{codes.p2pPurcTypCcd}}" value="{{rfxInfo.purc_typ_ccd}}">
+								</sc-radio-group-field>
+							</div>
+						</li>
+						<li class="rfx_flex">
+							<span id="rfPurp" class="label">[[translate('RFX 목적')]]</span>
+							<span id="raTyp" class="label">[[translate('역경매 결과 유형')]]</span>
+							<div class="check_group rfx_flex">
+								<sc-radio-group-field display-field="label" value-field="data"
+													  items="{{codes.rfxPurpFilterCcd}}" value="{{rfxInfo.rfx_purp_ccd}}">
+								</sc-radio-group-field>
+							</div>
+						</li>
+						<li class="rfx_flex">
+							<span class="label">[[translate('경쟁 유형')]]</span>
+							<div class="check_group rfx_flex">
+								<sc-radio-group-field display-field="label" value-field="data"
+													  items="{{codes.compTypFilterCcd}}" value="{{rfxInfo.comp_typ_ccd}}">
+								</sc-radio-group-field>
+							</div>
+						</li>
+					</ul>
+				</div>
+			</div>
+			<div class="btn_bar rfx_flex">
+				<a class="sc-button prev" on-click="onPrev">
+					<span class="icon"></span>
+					<span>[[translate('이전')]]</span>
+				</a>
+				<a class="sc-button next" on-click="onNext">
+					<span>[[translate('다음')]]</span>
+					<span class="icon"></span>
+				</a>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-rfx-config-second',
+			properties : {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							compTypCcd : [],
+							compTypFilterCcd : [],
+							p2pPurcTypCcd: [],
+							rfxPurpCcd: [],
+							rfxPurpFilterCcd: []
+						};
+					},
+					reset: false
+				},
+				rfxInfo : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				rfxStr : {
+					type : Object,
+					value : function() {
+						return {
+							RFP : ['Request For Proposal', '제안 요청서'],
+							RFQ : ['Request For Quotation', '견적 요청서'],
+							RAUC : ['Reverse Auction', '역경매']
+						};
+					}
+				},
+				viaPr : {
+					type : Boolean,
+					value :false
+				},
+				dfltData : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas : {
+				isViaPr: function() {
+					return this.get("viaPr");
+				}
+			},
+			
+			observers : [
+				'onChangRfxInfo(rfxInfo.rfx_typ_ccd)'
+			],
+			
+			load : function(data) {
+				var me = this;
+				if(data.via_pr) {
+					me.set("viaPr", UT.copy(data.via_pr));
+				}
+				if(!UT.isEmpty(data.dfltData)) {
+					me.set("dfltData", UT.copy(data.dfltData));
+				}
+				me.set('rfxInfo', UT.copy(data.rfxInfo));
+				
+				var rfxTyp = me.get("rfxInfo.rfx_typ_ccd");
+				// me.$.header.onChangeRfxTyp(rfxTyp);
+				if(!UT.isEmpty(rfxTyp)) {
+					if(rfxTyp == 'RAUC') {
+						me.$.rfPurp.hidden = true;
+						me.$.raTyp.hidden = false;
+					} else {
+						me.$.rfPurp.hidden = false;
+						me.$.raTyp.hidden = true;
+					}
+					me.onMakeSub(rfxTyp);
+				}
+				me.filterComboCodes();
+				me.applyFormula();
+			},
+			// 제목 만들기
+			onMakeSub : function(rfxTyp) {
+				var me = this;
+				var rfxStr = me.get("rfxStr");
+				
+				for(var i in rfxStr) {
+					if(rfxTyp == i) {
+						me.set("rfx_str_eng", rfxStr[i][0]);
+						me.set("rfx_str_kor", rfxStr[i][1]);
+					}
+				}
+				
+				if("RAUC" == rfxTyp) {
+					me.set("rfx_str_tit", me.translate(me.get("rfx_str_kor")));
+				} else {
+					me.set("rfx_str_tit", rfxTyp);
+				}
+			},
+			//코드 값 정리
+			filterComboCodes: function(param) {
+				var me = this;
+				
+				if(me.codes) {
+					// 계약 유형
+					if(me.get("viaPr") && !UT.isEmpty(me.get("dfltData.rfx_purp_ccd"))) {
+						var rfxPurp = me.codes.rfxPurpCcd.filter(function(code) {
+							if(code.data == me.get("dfltData.rfx_purp_ccd")) return true;
+						});
+						me.set("codes.rfxPurpFilterCcd", rfxPurp);
+					} else {
+						var rfxPurp = me.codes.rfxPurpCcd.filter(function(code) {
+							if(code.data !== 'UPRCCNTR_PURC') return true;
+						});
+						me.set("codes.rfxPurpFilterCcd", rfxPurp);
+						if(UT.isEmpty(me.get("rfxInfo.rfx_purp_ccd"))) {
+							me.set("rfxInfo.rfx_purp_ccd", rfxPurp[0].data)
+						}
+					}
+					
+					// 구매 유형
+					if(me.get("viaPr") && !UT.isEmpty(me.get("dfltData.purc_typ_ccd"))) {
+						var rfxPurp = me.codes.p2pPurcTypCcd.filter(function(code) {
+							if(code.data == me.get("dfltData.purc_typ_ccd")) return true;
+						});
+						me.set("codes.p2pPurcTypCcd", rfxPurp);
+					} else {
+						if(UT.isEmpty(me.get("rfxInfo.purc_typ_ccd"))) {
+							var p2pPurcTyp = me.get('codes.p2pPurcTypCcd');
+							me.set("rfxInfo.purc_typ_ccd", p2pPurcTyp[0].data);
+						}
+					}
+					
+					if(me.get("rfxInfo.rfx_typ_ccd") == 'RAUC') {
+						var filtered = me.codes.compTypCcd.filter(function(code) {
+							if(code.data !== 'PRICNTR') {	//수의계약 제외
+								return true;
+							}
+						});
+						me.set("codes.compTypFilterCcd", filtered);
+					} else {
+						me.set("codes.compTypFilterCcd", me.get("codes.compTypCcd"));
+					}
+					
+					if(UT.isEmpty(me.get("rfxInfo.comp_typ_ccd"))) {
+						var compTyp = me.get('codes.compTypFilterCcd');
+						me.set("rfxInfo.comp_typ_ccd", compTyp[0].data);
+					}
+				}
+			},
+			// 이전 버튼 클릭
+			onPrev : function() {
+				var me = this;
+				
+				var param = new Object();
+				param.rfxInfo = me.get("rfxInfo");
+				param.via_pr = me.get("viaPr");
+				param.dfltData = me.get("dfltData");
+				me.fire('first-page', param);
+			},
+			// 다음 버튼 클릭
+			onNext : function() {
+				var me = this;
+				me.onAddTagGrp();
+				
+				var param = new Object();
+				param.typ = 'next';
+				param.rfxInfo = me.get("rfxInfo");
+				param.via_pr = me.get("viaPr");
+				param.dfltData = me.get("dfltData");
+				me.fire('third-page', param);
+			},
+			// 세번째 화면에서 tag 전달 준비
+			onAddTagGrp : function(data) {
+				var me = this;
+				var codes = me.get("codes");
+				var data = me.get("rfxInfo");
+				
+				var purcTyp = codes.p2pPurcTypCcd.filter(function(code) {
+					if(code.data == me.get("rfxInfo.purc_typ_ccd")) return true;
+				});
+				var rfxPurp = codes.rfxPurpFilterCcd.filter(function(code) {
+					if(code.data == me.get("rfxInfo.rfx_purp_ccd")) return true;
+				});
+				var compTyp = codes.compTypCcd.filter(function(code) {
+					if(code.data == me.get("rfxInfo.comp_typ_ccd")) return true;
+				});
+				
+				var tagGrp = new Array();
+				tagGrp.push(me.translate("구매 유형") + " : " + purcTyp[0].label);
+				tagGrp.push(me.translate("RFX 목적") + " : " + rfxPurp[0].label);
+				tagGrp.push(me.translate("경쟁 유형") + " : " + compTyp[0].label);
+				
+				me.set("rfxInfo.tagGrp", tagGrp);
+			},
+			//RFx 복사 버튼 클릭 이벤트
+			onCopyRfx : function() {
+				var me = this;
+				me.fire('copy-rfx');
+			},
+			// header 번호 클릭 이벤트
+			onSelectNo : function(e, data) {
+				var me = this;
+				
+				var param = new Object();
+				param.lvl = data;
+				param.rfxInfo = me.get("rfxInfo");
+				param.via_pr = me.get("viaPr");
+				param.dfltData = me.get("dfltData");
+				me.fire('selected-no', param);
+			},
+			onClose : function() {
+				var me = this;
+				me.reset();
+				me.fire('close');
+			},
+			onChangRfxInfo : function(data) {
+				var me = this;
+				me.$.header.onChangeRfxTyp(data);
+			}
+		});
+	</script>
+</dom-module>

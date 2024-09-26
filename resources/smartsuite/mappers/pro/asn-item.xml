@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 
+ASN: 납품예정 헤더
+ASN_ITEM: 납품예정 품목
+ -->
+
+<mapper namespace="asn-item">
+    <select id="searchAsnItemByAsnUuid" resultType="map">
+        /* asn-item.searchAsnItemByAsnUuid: 납품예정의 상세품목 목록조회 */        SELECT AD.TEN_ID
+             , AD.ASN_ITEM_UUID
+             , AD.ASN_NO
+             , AD.ASN_ORDN
+             , AD.ASN_LNO
+             , AD.ASN_UUID
+             , AD.OORG_CD
+             , AD.VD_CD
+             , AD.PLT_CD
+             , AD.ITEM_OORG_CD
+             , AD.ITEM_CD_CRN_TYP_CCD
+             , (CASE
+                    WHEN AD.ITEM_CD_CRN_TYP_CCD = 'CDLS' -- 구매품목유형: 미등록(무코드품목)
+                        THEN NULL
+                    ELSE AD.ITEM_CD
+                 END)                                                                 AS DISP_ITEM_CD
+             , AD.ITEM_CD
+             , (CASE WHEN 'en_US' = #{g.locale} THEN AD.ITEM_NM_EN
+                     ELSE AD.ITEM_NM
+                 END) AS DISP_ITEM_NM
+             , AD.ITEM_SPEC
+             , AD.ITEM_SPEC_DTL
+             , AD.UOM_CCD
+             , (CASE WHEN AD.PO_QTY IS NULL THEN 0 ELSE AD.PO_QTY END)           AS PO_QTY
+             , (CASE WHEN AD.PO_UPRC IS NULL THEN 0 ELSE AD.PO_UPRC END)         AS PO_UPRC
+             , (CASE WHEN AD.PO_AMT IS NULL THEN 0 ELSE AD.PO_AMT END)           AS PO_AMT
+             , (CASE WHEN AD.ASN_QTY IS NULL THEN 0 ELSE AD.ASN_QTY END)         AS ASN_QTY
+             , (CASE WHEN AD.ASN_RO IS NULL THEN 0 ELSE AD.ASN_RO END)           AS ASN_RO
+             , (CASE WHEN AD.ASN_AMT IS NULL THEN 0 ELSE AD.ASN_AMT END)         AS ASN_AMT
+             , (CASE WHEN AD.GR_APVD_QTY IS NULL THEN 0 ELSE AD.GR_APVD_QTY END) AS GR_APVD_QTY
+             , (CASE WHEN AD.GR_RET_QTY IS NULL THEN 0 ELSE AD.GR_RET_QTY END)   AS GR_RET_QTY
+             , AD.GR_CMPLD_YN
+             , AD.PR_NO
+             , AD.PR_LNO
+             , AD.PR_ITEM_UUID
+             , AD.PO_NO
+             , AD.PO_LNO
+             , AD.PO_ITEM_UUID
+             , AD.ASN_DT
+             , AD.DLVY_DT
+             , AD.ASN_STS_CCD
+             , AD.RMK
+             , AD.STS
+             , AD.REGR_ID
+             , AD.REG_DTTM
+             , AD.MODR_ID
+             , AD.MOD_DTTM
+             , (CASE WHEN PD.GR_QTY IS NULL THEN 0 ELSE PD.GR_QTY END)           AS PO_GR_QTY
+             , PD.CUR_CCD
+             , PD.REQ_DLVY_DT
+             , PD.DLVY_PLC
+             , PD.PURC_TYP_CCD
+             , PD.PURC_GRP_CD
+             , PD.GR_PIC_ID
+             , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                     ELSE JOB.PURC_GRP_NM
+                 END) AS DISP_PURC_GRP_NM
+             , PH.PO_CRN_DT
+             , PH.PYMTMETH_CCD
+             , (CASE WHEN PH.DFRM_RO IS NULL THEN 0 ELSE PH.DFRM_RO END)         AS DFRM_RO
+             , PD.PO_ERY_ED_YN /*발주 강제 종료 여부*/
+          FROM ASN_ITEM AD
+          INNER JOIN      PO_ITEM PD
+                          ON AD.TEN_ID = PD.TEN_ID
+                              AND AD.PO_NO = PD.PO_NO
+                              AND AD.PO_ITEM_UUID = PD.PO_ITEM_UUID
+                              AND PD.STS != 'D'
+          INNER JOIN      PO PH
+                          ON PD.TEN_ID = PH.TEN_ID
+                              AND PD.PO_UUID = PH.PO_UUID
+                              AND PH.STS != 'D'
+          LEFT OUTER JOIN PURC_GRP JOB
+                          ON JOB.TEN_ID = PD.TEN_ID
+                              AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+                              AND JOB.PURC_GRP_CD = PD.PURC_GRP_CD
+                              AND JOB.CO_CD = #{g.comp_cd}
+                              AND JOB.USE_YN = 'Y'
+         WHERE AD.TEN_ID = #{g.tenant}
+           AND AD.ASN_UUID = #{p.asn_uuid}
+           AND AD.STS != 'D'
+         ORDER BY CAST(AD.ASN_LNO AS INT) ASC
+    </select>
+    <select id="searchProgressPaymentRequestItemByAsnUuid" resultType="map">
+    /* asn-item.searchProgressPaymentRequestItemByAsnUuid: 기성요청별 품목 목록 */
+    SELECT AD.TEN_ID
+         , AD.ASN_ITEM_UUID
+         , AD.ASN_NO
+         , AD.ASN_ORDN
+         , AD.ASN_LNO
+         , AD.ASN_UUID
+         , AD.OORG_CD
+         , AD.VD_CD
+         , AD.PLT_CD
+         , AD.ITEM_OORG_CD
+         , AD.ITEM_CD_CRN_TYP_CCD
+         , CASE WHEN AD.ITEM_CD_CRN_TYP_CCD = 'CDLS'  -- 구매품목유형: 미등록(무코드품목)
+                     THEN NULL
+                ELSE AD.ITEM_CD
+           END  AS DISP_ITEM_CD
+         , AD.ITEM_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN AD.ITEM_NM_EN
+                 ELSE AD.ITEM_NM
+             END) AS DISP_ITEM_NM
+         , AD.ITEM_SPEC
+         , AD.ITEM_SPEC_DTL
+         , AD.UOM_CCD
+         , (CASE WHEN AD.PO_QTY   IS NULL THEN 0 ELSE AD.PO_QTY   END) AS PO_QTY
+         , (CASE WHEN AD.PO_UPRC IS NULL THEN 0 ELSE AD.PO_UPRC END) AS PO_UPRC
+         , (CASE WHEN AD.PO_AMT   IS NULL THEN 0 ELSE AD.PO_AMT   END) AS PO_AMT
+         , (CASE WHEN AD.ASN_QTY     IS NULL THEN 0 ELSE AD.ASN_QTY     END) AS ASN_QTY
+         , (CASE WHEN AD.ASN_RO    IS NULL THEN 0 ELSE AD.ASN_RO    END) AS ASN_RO
+         , (CASE WHEN AD.ASN_AMT     IS NULL THEN 0 ELSE AD.ASN_AMT     END) AS ASN_AMT
+         , (CASE WHEN AD.GR_APVD_QTY   IS NULL THEN 0 ELSE AD.GR_APVD_QTY   END) AS GR_APVD_QTY
+         , (CASE WHEN AD.GR_RET_QTY IS NULL THEN 0 ELSE AD.GR_RET_QTY END) AS GR_RET_QTY
+         , AD.GR_CMPLD_YN
+         , AD.PR_NO
+         , AD.PR_LNO
+         , AD.PR_ITEM_UUID
+         , AD.PO_NO
+         , AD.PO_LNO
+         , AD.PO_ITEM_UUID
+         , AD.ASN_DT
+         , AD.DLVY_DT
+         , AD.ASN_STS_CCD
+         , AD.RMK
+         , AD.STS
+         , AD.REGR_ID
+         , AD.REG_DTTM
+         , AD.MODR_ID
+         , AD.MOD_DTTM
+         , (CASE WHEN PD.GR_QTY IS NULL THEN 0 ELSE PD.GR_QTY END) AS PO_GR_QTY
+         , PD.CUR_CCD
+         , PD.REQ_DLVY_DT
+         , PD.DLVY_PLC
+         , PD.PURC_TYP_CCD
+         , PD.PURC_GRP_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                 ELSE JOB.PURC_GRP_NM
+             END) AS DISP_PURC_GRP_NM
+         , PH.PO_CRN_DT
+         , PH.PYMTMETH_CCD
+         , (CASE WHEN PH.DFRM_RO IS NULL THEN 0 ELSE PH.DFRM_RO END) AS DFRM_RO
+         , (SELECT SUM(CASE WHEN GT.GR_AMT IS NULL THEN 0 ELSE GT.GR_AMT END)
+              FROM GR_ITEM GT
+             INNER JOIN GR GH
+                ON GH.TEN_ID = GT.TEN_ID
+               AND GH.GR_UUID  = GT.GR_UUID
+             WHERE GT.TEN_ID = AD.TEN_ID
+               AND GT.PO_NO  = AD.PO_NO
+               AND GH.PO_REVNO <![CDATA[<=]]> PH.PO_REVNO  /* 발주변경이 가능하므로 이전 발주차수에 연결된 GR들도 포함 */
+               AND GT.PO_LNO = AD.PO_LNO
+               AND (
+                       GT.ASN_ORDN <![CDATA[<=]]> AD.ASN_ORDN
+                    OR GT.ASN_ORDN IS NULL
+                   ) /*AR없이 GR 생성한 경우(선급금등록) 포함*/
+               AND GT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* C:검수완료 */
+               AND GT.STS != 'D'
+           ) AS GR_TTL_AMT /* 누적금액 */
+      FROM ASN_ITEM AD
+     INNER JOIN PO_ITEM PD
+        ON AD.TEN_ID     = PD.TEN_ID
+       AND AD.PO_ITEM_UUID = PD.PO_ITEM_UUID
+       AND PD.STS       != 'D'
+     INNER JOIN PO PH
+        ON PD.TEN_ID = PH.TEN_ID
+       AND PD.PO_UUID  = PH.PO_UUID
+       AND PH.STS   != 'D'
+      LEFT OUTER JOIN PURC_GRP JOB
+        ON JOB.TEN_ID       = PD.TEN_ID
+       AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+       AND JOB.PURC_GRP_CD  = PD.PURC_GRP_CD
+       AND JOB.CO_CD      = #{g.comp_cd}
+       AND JOB.USE_YN       = 'Y'
+     WHERE AD.TEN_ID = #{g.tenant}
+       AND AD.ASN_UUID  = #{p.asn_uuid}
+       AND AD.STS   != 'D'
+     ORDER BY CAST(AD.PO_LNO AS INT) ASC
+    </select>
+    <select id="searchAdvancePaymentRequestItem" resultType="map">
+    /* asn-item.searchAdvancePaymentRequestItem : 선급금 요청 품목 조회 */
+    SELECT ARDT.TEN_ID
+         , ARDT.ASN_ITEM_UUID
+         , ARDT.ASN_NO
+         , ARDT.ASN_ORDN
+         , ARDT.ASN_LNO
+         , ARDT.ASN_UUID
+         , ARDT.OORG_CD
+         , ARDT.VD_CD
+         , ARDT.PLT_CD
+         , ARDT.ITEM_OORG_CD
+         , ARDT.ITEM_CD_CRN_TYP_CCD
+         , CASE WHEN ARDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'  -- 구매품목유형: 미등록(무코드품목)
+                     THEN NULL
+                ELSE ARDT.ITEM_CD
+           END  AS DISP_ITEM_CD
+         , ARDT.ITEM_CD
+         , ARDT.ITEM_NM
+         , ARDT.ITEM_NM_EN
+         , (CASE WHEN 'en_US' = #{g.locale} THEN ARDT.ITEM_NM_EN
+                 ELSE ARDT.ITEM_NM
+             END) AS DISP_ITEM_NM
+         , ARDT.ITEM_SPEC
+         , ARDT.ITEM_SPEC_DTL
+         , ARDT.UOM_CCD
+         , ARDT.PO_QTY
+         , ARDT.PO_UPRC
+         , ARDT.PO_AMT
+         , ARDT.ASN_QTY
+         , ARDT.ASN_RO
+         , ARDT.ASN_AMT
+         , ARDT.ASN_AMT        AS GR_AMT /* 기성요청금액을 승인금액으로 셋팅 */
+         , ARDT.GR_CMPLD_YN
+         , ARDT.PR_NO
+         , ARDT.PR_LNO
+         , ARDT.PR_ITEM_UUID
+         , ARDT.PO_NO
+         , ARDT.PO_LNO
+         , ARDT.PO_ITEM_UUID
+         , ARDT.DLVY_DT
+         , PODT.CUR_CCD
+         , PODT.PURC_TYP_CCD
+         , (SELECT SUM(CASE WHEN GRDT.GR_AMT IS NULL THEN 0 ELSE GRDT.GR_AMT END)
+              FROM GR_ITEM  GRDT
+             INNER JOIN GR GRHD
+                ON GRHD.TEN_ID = GRDT.TEN_ID
+               AND GRHD.GR_UUID  = GRDT.GR_UUID
+             WHERE GRDT.TEN_ID  = ARDT.TEN_ID
+               AND GRDT.PO_NO   = ARDT.PO_NO  /* 발주변경이 가능하므로 PO_UUID가 아닌 PO_NO로 조회하여 이전 발주차수에 연결된 GR들도 포함한다 (작성하기 위한 데이터 조회이므로 현재 발주차수가 최종 발주차수임) */
+               AND GRDT.PO_LNO  = ARDT.PO_LNO
+               AND (
+                       GRDT.ASN_ORDN <![CDATA[<=]]> ARDT.ASN_ORDN
+                    OR GRDT.ASN_ORDN IS NULL
+                   )
+               AND GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* C:검수완료 */
+               AND GRDT.STS        != 'D'
+           ) AS GR_TTL_AMT /* 누적금액 */
+        , PODT.PURC_GRP_CD
+        , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                ELSE JOB.PURC_GRP_NM
+            END) AS DISP_PURC_GRP_NM
+        , (CASE WHEN POHD.DFRM_RO IS NULL THEN 0 ELSE POHD.DFRM_RO END) AS DFRM_RO
+        , PODT.CONST_EXP_DT /* 수행 종료일*/
+        , ARHD.PPBAS_CMPLD_DT /* 실적 종료일*/
+      FROM ASN_ITEM ARDT
+     INNER JOIN ASN ARHD
+        ON ARHD.TEN_ID = ARDT.TEN_ID
+       AND ARHD.ASN_UUID = ARDT.ASN_UUID
+     INNER JOIN PO_ITEM PODT
+        ON ARDT.TEN_ID     = PODT.TEN_ID
+       AND ARDT.PO_ITEM_UUID = PODT.PO_ITEM_UUID
+       AND PODT.STS       != 'D'
+     INNER JOIN PO POHD
+        ON POHD.TEN_ID = PODT.TEN_ID
+       AND POHD.PO_UUID = PODT.PO_UUID
+       AND POHD.STS != 'D'
+      LEFT OUTER JOIN PURC_GRP JOB
+        ON JOB.TEN_ID       = PODT.TEN_ID
+       AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+       AND JOB.PURC_GRP_CD  = PODT.PURC_GRP_CD
+       AND JOB.CO_CD      = #{g.comp_cd}
+       AND JOB.USE_YN       = 'Y'
+     WHERE ARDT.TEN_ID = #{g.tenant}
+       AND ARDT.ASN_UUID  = #{p.asn_uuid}
+       AND ARDT.STS   != 'D'
+     ORDER BY CAST(ARDT.PO_LNO AS INT) ASC
+    </select>
+    <select id="searchGrItemByAsnUuid" resultType="map">
+    /* asn-item.searchGrItemByAsnUuid : 검수요청아이디로 입고품목 조회 */
+    SELECT ARDT.OORG_CD
+         , ARHD.PYMTMETH_CCD
+         , ARDT.PLT_CD
+         , ARDT.ITEM_OORG_CD
+         , PODT.WH_CCD
+         , ARHD.VD_CD
+         , PODT.PURC_TYP_CCD
+         <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+         , #{nowDate}  AS GR_DT
+         , 'CRNG'         AS GR_STS_CCD
+         , ARDT.ITEM_CD_CRN_TYP_CCD
+         , CASE WHEN ARDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'  -- 구매품목유형: 미등록(무코드품목)
+                     THEN NULL
+                ELSE ARDT.ITEM_CD
+           END  AS DISP_ITEM_CD
+         , ARDT.ITEM_CD
+         , ARDT.ITEM_NM
+         , ARDT.ITEM_NM_EN
+         , (CASE WHEN 'en_US' = #{g.locale} THEN ARDT.ITEM_NM_EN
+                 ELSE ARDT.ITEM_NM
+             END) AS DISP_ITEM_NM
+         , ARDT.ITEM_SPEC
+         , ARDT.ITEM_SPEC_DTL
+         , ARDT.UOM_CCD
+         , PODT.PURC_GRP_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                 ELSE JOB.PURC_GRP_NM
+             END) AS DISP_PURC_GRP_NM
+         , ARHD.CUR_CCD
+         , PODT.PO_QTY
+         , PODT.PO_UPRC
+         , PODT.PO_AMT
+         , PODT.GR_QTY                   AS PO_GR_QTY
+         ,  GETPRECFORMAT(#{g.tenant}, 'amt', PODT.GR_QTY * PODT.PO_UPRC, PODT.CUR_CCD) AS PO_GR_AMT
+         , ARDT.ASN_QTY                   AS GR_QTY
+         , ARDT.PR_NO
+         , ARDT.PR_LNO
+         , ARDT.PR_ITEM_UUID
+         , ARDT.PO_NO
+         , ARDT.PO_LNO
+         , ARDT.PO_ITEM_UUID
+         , ARDT.ASN_NO
+         , ARDT.ASN_LNO
+         , ARDT.ASN_ITEM_UUID
+         , ARDT.ASN_QTY
+         , 0                             AS RET_QTY
+         , 0                             AS CNCL_QTY
+         , PODT.REQ_DLVY_DT
+         , ARDT.DLVY_DT
+         , PODT.DLVY_PLC
+         , (CASE WHEN POHD.DFRM_RO IS NULL THEN 0 ELSE POHD.DFRM_RO END) AS DFRM_RO
+      FROM ASN ARHD
+     INNER JOIN ASN_ITEM ARDT
+        ON ARDT.TEN_ID = ARHD.TEN_ID
+       AND ARDT.ASN_UUID  = ARHD.ASN_UUID
+       AND ARDT.STS   != 'D'
+     INNER JOIN PO_ITEM PODT
+        ON PODT.TEN_ID     = ARDT.TEN_ID
+       AND PODT.PO_ITEM_UUID = ARDT.PO_ITEM_UUID
+     INNER JOIN PO POHD
+        ON POHD.TEN_ID = PODT.TEN_ID
+       AND POHD.PO_UUID = PODT.PO_UUID
+      LEFT OUTER JOIN PURC_GRP JOB               /* JOB : 직무(그룹) */
+        ON JOB.TEN_ID       = PODT.TEN_ID
+       AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+       AND JOB.PURC_GRP_CD  = PODT.PURC_GRP_CD
+       AND JOB.CO_CD      = #{g.comp_cd}
+       AND JOB.USE_YN       = 'Y'
+     WHERE ARHD.TEN_ID = #{g.tenant}
+       AND ARHD.ASN_UUID  = #{p.asn_uuid}
+     ORDER BY ARHD.ASN_NO, CAST(ARDT.ASN_LNO AS INT)
+    </select>
+    <update id="updateAsnItemPassReturnQuantity">
+    /* asn-item.updateAsnItemPassReturnQuantity: AR 품목의 합격수량/반품수량 수정 */
+    UPDATE ASN_ITEM
+       SET GR_APVD_QTY   = #{p.sum_gr_qty}
+         , GR_RET_QTY = #{p.sum_ret_qty}
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID = #{g.tenant}
+       AND ASN_ITEM_UUID = #{p.asn_item_uuid}
+    </update>
+    <select id="searchAsnItemQty" resultType="map">
+        /*asn-item.searchAsnItemQty : 발주 품목 ASN 수량 업데이트*/
+        SELECT PO_ITEM_UUID
+            ,COALESCE(
+            SUM(CASE WHEN ASN_STS_CCD NOT IN ('GR_REQ', 'GR_PRGSG')
+                    THEN 0
+                ELSE ASN_QTY END), 0) AS SUM_ASN_QTY
+        FROM ASN_ITEM
+        WHERE TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.asn_item_uuid != null and p.asn_item_uuid != ''">
+                AND ASN_ITEM_UUID = #{p.asn_item_uuid}
+            </when>
+            <otherwise>
+                <if test="p.asn_item_uuids != null and p.asn_item_uuids.size() != 0">
+                    AND ASN_ITEM_UUID IN
+                    <foreach close=")" collection="p.asn_item_uuids" item="asn_item_uuid" open="(" separator=",">
+                        #{asn_item_uuid}
+                    </foreach>
+                </if>
+            </otherwise>
+        </choose>
+        GROUP BY PO_ITEM_UUID
+    </select>
+</mapper>

@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="setup">
+    <!-- 협력사유형목록조회 -->
+    <select id="findListVendorType" resultType="map">
+    /* setup.findListVendorType: 협력사유형목록조회 */
+        SELECT VT.SYS_ID                        /* 시스템 아이디 */
+                 , VT.TYP_CD                    /* 유형코드 */
+                 , VT.VD_TYP_NM                 /* 협력사 유형 명 LOC */
+                 , VT.VD_TYP_EN_NM              /* 협력사 유형 영문명 */
+                 , VT.EVAL_BAS_CD               /* 평가시트 적용 단위 코드 */
+                 , CASE WHEN VT.EVAL_BAS_CD IS NULL OR VT.EVAL_BAS_CD = '' THEN 'Y'
+                        ELSE 'N'
+                    END AS EVAL_BAS_EDIT_YN            /* 평가시트 적용단위 변경 가능 여부 */
+                 , VT.REG_EVAL_TARG_YN          /* 등록평가 대상여부 */
+                 , VT.SPR_EVAL_TARG_YN          /* 정기평가 대상여부 */
+                 , VT.USE_YN                    /* 사용여부 */
+                 , CASE WHEN ( SELECT MAX(VG.TYP_CD) 
+                                       FROM   ESSOGVT VG 
+                                       WHERE VT.SYS_ID = VG.SYS_ID 
+                                       AND     VT.TYP_CD = VG.TYP_CD ) IS NULL THEN 'N'
+                           ELSE 'Y'
+                    END  AS USED_YN             /* 운영조직 매핑여부 */
+                 , VT.STS                       /* 상태 */
+                 , VT.REM                       /* 비고 */
+        FROM   ESSVDTP VT    /* VT : 협력사 유형 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND VT.SYS_ID = #{g.tenant}
+            AND VT.STS != 'D'
+        </trim>
+        ORDER BY VT.TYP_CD
+    </select>
+    <!-- 협력사 유형 마스터 조회 -->
+    <select id="findListVendorTypeMaster" resultType="map">
+    /* setup.findListVendorTypeMaster: 협력사유형마스터목록조회 */
+        SELECT DL.SYS_ID
+             , MAX (DL.DTL_CD) AS TYP_CD
+             , MAX (CASE WHEN DL.LANG_CD = 'ko_KR' THEN DL.DTL_CD_NM ELSE '' END)    AS VD_TYP_NM
+             , MAX (CASE WHEN DL.LANG_CD = 'en_US' THEN DL.DTL_CD_NM ELSE '' END)    AS VD_TYP_EN_NM
+             , MAX ('Y')    AS USE_YN
+             , DT.REM     AS REM
+        FROM ESACDDL DL    /* DL : 상세 코드 명 */
+            INNER JOIN
+               ESACDDT DT    /* DT : 상세 코드 */
+            ON ( DL.SYS_ID = DT.SYS_ID
+                   AND DL.GRP_CD = DT.GRP_CD
+                   AND DL.DTL_CD = DT.DTL_CD )
+       WHERE DL.SYS_ID = #{g.tenant}
+             AND DL.STS != 'D'
+             AND DL.GRP_CD = 'E900'  /* E900 : 협력사 유형 */
+             AND NOT EXISTS
+                        ( SELECT TYP_CD
+                            FROM ESSVDTP VT    /* VT : 협력사 유형 */
+                          WHERE VT.SYS_ID = DL.SYS_ID
+                              AND VT.TYP_CD = DL.DTL_CD
+                              AND VT.STS != 'D' )
+        GROUP BY DL.SYS_ID
+                 , DL.DTL_CD
+                 , DT.REM
+                 , DT.SORT_ORD
+       ORDER BY DT.SORT_ORD
+    </select>
+    <!-- 협력사 유형 삭제 (delete vendor type before insert) -->
+    <delete id="deleteVendorTypeForInsert">
+    /* setup.deleteVendorTypeForInsert : 협력사 유형 삽입위해 기존 데이터 삭제*/
+        DELETE FROM ESSVDTP    /* 협력사 유형  */
+        WHERE  SYS_ID    = #{g.tenant}
+        AND    TYP_CD    = #{p.typ_cd}
+    </delete>
+    <!-- 협력사 유형 Insert -->
+    <insert id="insertListVendorType">
+    /* setup.insertListVendorType : 협력사유형 insert*/
+        INSERT INTO ESSVDTP        /* 협력사 유형  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+                  SYS_ID            /* 시스템 아이디 */
+                , REG_ID            /* 등록자 아이디 */
+                , REG_DT            /* 등록 일시 */
+                , MOD_ID            /* 수정자 아이디 */
+                , MOD_DT            /* 수정 일시 */
+                , STS               /* 상태*/
+                , TYP_CD            /* 협력사 유형 코드 */
+                , VD_TYP_NM         /* 협력사 유형 명 */
+                , VD_TYP_EN_NM      /* 협력사 유형 영문 명 */
+                , EVAL_BAS_CD       /* 평가시트 적용 단위 코드 */
+                , REG_EVAL_TARG_YN  /* 등록평가 대상여부 */
+                , SPR_EVAL_TARG_YN  /* 정기평가 대상여부 */
+                , USE_YN            /* 사용여부 */
+                , REM               /* 비고 */
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+                  #{g.tenant}
+                , #{g.username}
+                , #{g.now}
+                , #{g.username}
+                , #{g.now}
+                , 'C'
+                , #{p.typ_cd}
+                , #{p.vd_typ_nm}
+                , #{p.vd_typ_en_nm}
+                , #{p.eval_bas_cd}
+            <choose>
+                <when test="p.reg_eval_targ_yn != null and p.reg_eval_targ_yn != ''">
+                    , #{p.reg_eval_targ_yn}
+                </when>
+                <otherwise>
+                    , 'N'
+                </otherwise>
+            </choose>
+            <choose>
+                <when test="p.spr_eval_targ_yn != null and p.spr_eval_targ_yn != ''">
+                    , #{p.spr_eval_targ_yn}
+                </when>
+                <otherwise>
+                    , 'N'
+                </otherwise>
+            </choose>
+                , #{p.use_yn}
+                , #{p.rem}
+        </trim>
+    </insert>
+    <!-- 협력사 유형 수정 -->
+    <update id="updateListVendorType">
+    /* setup.updateListVendorType : 협력사유형 수정*/
+        UPDATE ESSVDTP        /* 협력사 유형 */
+        <trim prefix="SET" prefixOverrides=",">
+                  MOD_ID               = #{g.username}              /* 수정자 아이디 */ 
+                , MOD_DT               = #{g.now}                   /* 수정 일시 */
+                , STS                  = 'U'                        /* 상태 */
+            <if test="p.vd_typ_nm != null and p.vd_typ_nm != ''">
+                , VD_TYP_NM            = #{p.vd_typ_nm}             /* 협력사 유형 명 */
+            </if>
+            <if test="p.vd_typ_en_nm != null and p.vd_typ_en_nm != ''">
+                , VD_TYP_EN_NM         = #{p.vd_typ_en_nm}          /* 협력사 유형 영문명 */
+            </if>
+            <if test="p.eval_bas_cd != null and p.eval_bas_cd != ''">
+                , EVAL_BAS_CD          = #{p.eval_bas_cd}           /* 평가시트 적용 단위 코드 */
+            </if>
+            <choose>
+                <when test="p.reg_eval_targ_yn != null and p.reg_eval_targ_yn != ''">
+                    , REG_EVAL_TARG_YN     = #{p.reg_eval_targ_yn}      /* 등록평가 대상여부 */
+                </when>
+                <otherwise>
+                    , REG_EVAL_TARG_YN     = 'N'      /* 등록평가 대상여부 */
+                </otherwise>
+            </choose>
+            <choose>
+                <when test="p.spr_eval_targ_yn != null and p.spr_eval_targ_yn != ''">
+                    , SPR_EVAL_TARG_YN     = #{p.spr_eval_targ_yn}      /* 정기평가 대상여부 */
+                </when>
+                <otherwise>
+                    , SPR_EVAL_TARG_YN     = 'N'     /* 정기평가 대상여부 */
+                </otherwise>
+            </choose>
+            <if test="p.use_yn != null and p.use_yn != ''">
+                , USE_YN               = #{p.use_yn}                /* 사용여부 */
+            </if>
+            <if test="p.rem != null">
+                , REM                  = #{p.rem}                   /* 비고 */
+            </if>
+        </trim>
+         WHERE SYS_ID = #{g.tenant}         /* 시스템 아이디 */
+           AND TYP_CD = #{p.typ_cd}         /* 협력사 유형 코드 */
+    </update>
+    <!-- 운영 조직 협력사 유형 상태 수정(sts = 'D') -->
+    <update id="updateVendorTypeOrgStsByDelete">
+    /* setup.updateVendorTypeOrgStsForDelete : 운영 조직 협력사 유형 삭제 (STS='D')*/
+        UPDATE ESSOGVT    /* 운영 조직 협력사 유형 */
+        <trim prefix="SET" prefixOverrides=",">
+                , STS = 'D'
+                , MOD_ID = #{g.username}           /* 수정자 아이디 */ 
+                , MOD_DT = #{g.now}                /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID  = #{g.tenant}     /* 시스템 아이디 */
+            AND TYP_CD  = #{p.typ_cd}     /* 협력사 유형 코드 */
+        </trim>
+    </update>
+    <!-- 협력사 유형 상태 변경 (sts = 'D')-->
+    <update id="updateVendorTypeStsByDelete">
+    /* setup.updateVendorTypeStsByDelete : 협력사 유형 삭제(STS = 'D')*/
+        UPDATE ESSVDTP         /* 협력사 유형 */
+        <trim prefix="SET" prefixOverrides=",">
+                , STS = 'D'
+                , MOD_ID = #{g.username}        /* 수정자 아이디 */ 
+                , MOD_DT = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+         AND SYS_ID = #{g.tenant}     /* 시스템 아이디 */
+         AND TYP_CD = #{p.typ_cd}     /* 협력사 유형 코드 */
+        </trim>
+    </update>
+    <!-- 운영조직 협력사유형 목록조회 -->
+    <select id="findListVendorOrg" resultType="map">
+    /* setup.findListVendorOrg: 협력사유형별운영조직목록조회 */
+        SELECT A.SYS_ID                                /* 시스템 아이디 */
+             , A.OPER_ORG_CD                            /* 운영조직코드 */
+             , A.UP_OPER_ORG_CD
+             , A.ORG_TYP_CD                             /* 조직유형코드 */
+             , A.ORG_CD                                 /* 조직코드 */
+             , A.UP_ORG_CD                              /* 상위조직코드 */
+             , A.TYP_CD                                 /* 협력사유형코드 */
+             , A.OPER_ORG_VD_TYP_ID                     /* 운영조직 협력사 유형 아이디 */
+             , B.ORG_NM                                 /* 조직명 */
+             , B.ORG_EN_NM                              /* 조직영문명 */
+             , A.LEAF_YN                                /* 최하위 조직여부 */
+             , A.USE_YN                                 /* 사용여부 */
+          FROM ( SELECT X.SYS_ID
+                      , X.OPER_ORG_CD
+                      , X.ORG_TYP_CD
+                      , X.ORG_CD
+                      , X.OPER_UNIT_CD
+                      , X.UP_ORG_CD
+                      , X.UP_OPER_ORG_CD
+                      , X.LEAF_YN
+                      , CASE WHEN Y.USE_YN IS NULL OR Y.USE_YN = ''
+                                  THEN 'N' 
+                             ELSE Y.USE_YN
+                        END  AS USE_YN
+                      , CASE WHEN Y.OPER_ORG_VD_TYP_ID IS NULL OR Y.OPER_ORG_VD_TYP_ID = ''
+                                  THEN #{p.oper_org_vd_typ_id}
+                             ELSE Y.OPER_ORG_VD_TYP_ID
+                        END  AS OPER_ORG_VD_TYP_ID
+                      , CASE WHEN Y.TYP_CD IS NULL OR Y.TYP_CD = ''
+                                  THEN #{p.typ_cd}
+                             ELSE Y.TYP_CD
+                        END  AS TYP_CD
+                  FROM ESAOOMG X                    /* 운영조직 */
+                  LEFT OUTER JOIN ESSOGVT Y         /* 운영조직 협력사유형 */
+                    ON (
+                           X.SYS_ID      = Y.SYS_ID
+                       AND X.OPER_ORG_CD = Y.OPER_ORG_CD
+                       AND Y.TYP_CD      = #{p.typ_cd}
+                       AND Y.STS        != 'D'
+                       )
+                 WHERE X.SYS_ID       = #{g.tenant}
+                   AND X.OPER_UNIT_CD = #{p.job_typ_cd}
+                   AND X.USE_YN       = 'Y'
+                   AND X.STS         != 'D'
+               ) A
+         INNER JOIN ESAOGMG B         /* 조직 */
+            ON (
+                   A.SYS_ID     = B.SYS_ID
+               AND A.ORG_TYP_CD = B.ORG_TYP_CD
+               AND A.ORG_CD     = B.ORG_CD
+               )
+         WHERE B.USE_YN = 'Y'
+           AND B.STS  != 'D'
+         ORDER BY A.ORG_CD
+    </select>
+    <select id="findOrgToVendorTypeCnt" resultType="int">
+    /* setup.findOrgToVendorTypeCnt : 협력사유형 운영조직 조회*/
+        SELECT COUNT(1)
+          FROM ESSOGVT
+         WHERE SYS_ID             = #{g.tenant}
+           AND OPER_ORG_VD_TYP_ID = #{p.oper_org_vd_typ_id}
+    </select>
+    <insert id="insertOrgToVendorType">
+    /* setup.insertOrgToVendorType : 협력사유형 운영조직 연결 */
+        INSERT INTO ESSOGVT
+              (      
+                     SYS_ID
+                   , OPER_ORG_VD_TYP_ID
+                   , TYP_CD
+                   , OPER_ORG_CD
+                   , USE_YN
+                   , REM
+                   , STS
+                   , REG_ID
+                   , REG_DT
+                   , MOD_ID
+                   , MOD_DT
+              )
+              VALUES
+              (      
+                     #{g.tenant}
+                   , #{g.uuid}
+                   , #{p.typ_cd}
+                   , #{p.oper_org_cd}
+                   , #{p.use_yn}
+                   , #{p.rem}
+                   , 'C'
+                   , #{g.username}
+                   , #{g.now}
+                   , #{g.username}
+                   , #{g.now}
+              )
+    </insert>
+    <update id="updateOrgToVendorType">
+    /* setup.updateOrgToVendorType : 협력사유형 운영조직 연결 */
+        UPDATE ESSOGVT SET
+               USE_YN   = #{p.use_yn}
+             , REM      = #{p.rem}
+             , STS      = 'U'
+             , MOD_ID   = #{g.username}
+             , MOD_DT   = #{g.now}
+        WHERE SYS_ID    = #{g.tenant}
+          AND OPER_ORG_VD_TYP_ID = #{p.oper_org_vd_typ_id}
+    </update>
+</mapper>

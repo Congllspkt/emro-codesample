@@ -1,0 +1,376 @@
+<sc-link rel="import" href="ep-itemcat-list.html"></sc-link>
+
+<dom-module id="es-itemcat-info">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	
+	</style>
+	
+	<template>
+		
+		<!-- 삭제 -->
+		<sc-ajax
+				id="deleteListSimilar"
+				url="deleteListSimilar.do"
+				on-response="completeDeleteListSimilar">
+		</sc-ajax>
+		
+		<sc-code-group auto>
+			<sc-code code="P045" value="{{codes.purcTyp}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<cc-form-panel title-text="품목분류 정보" collapsible="true">
+			<cc-fieldset>
+				<sc-label text="품목분류 명"></sc-label>
+				<sc-text-field max-length="60" required="true"
+							   value="{{itemCatInfo.itemcat_nm}}">
+				</sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="품목분류 코드"></sc-label>
+				<sc-text-field max-length="18" required="true" readonly="[[!formula('isNew')]]" upper-case="true"
+							   mask-re="/[0-9a-zA-Z]/" strip-chars-re="/[ㄱ-힣]/" value="{{itemCatInfo.itemcat_cd}}">
+				</sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="품목분류 명 영문"></sc-label>
+				<sc-text-field max-length="60" required="true"
+							   mask-re="/[0-9a-zA-Z\s!&quot;#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/" strip-chars-re="/[ㄱ-힣]/" value="{{itemCatInfo.itemcat_nm_en}}">
+				</sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset hidden="[[!formula('is1Level')]]">
+				<sc-label text="구매 유형 공통코드"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.purcTyp}}"
+								   value="{{itemCatInfo.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="품목분류 경로"></sc-label>
+				<sc-text-field value="{{itemCatInfo.itemcat_path}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="품목분류 경로 영문"></sc-label>
+				<sc-text-field value="{{itemCatInfo.itemcat_path_en}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="유사어"></sc-label>
+				<sc-text-field max-length="128" value="{{itemCatInfo.itemcat_simword}}"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="최종 변경 일시"></sc-label>
+				<div class="field-box">
+					<sc-label class="w-180" text="{{itemCatInfo.mod_dttm}}" i18n-disabled></sc-label>
+					<sc-label text="{{itemCatInfo.modr_id}}" i18n-disabled></sc-label>
+				</div>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="사용 여부"></sc-label>
+				<sc-checkbox-field input-value="{{itemCatInfo.use_yn}}" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="품목분류 설명"></sc-label>
+				<sc-textarea-field max-length="1000" value="{{itemCatInfo.rmk}}"></sc-textarea-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="용도 설명"></sc-label>
+				<sc-textarea-field max-length="500" value="{{itemCatInfo.usg_expln}}"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<sc-grid id="gridPanel" class="flex" use-state="true">
+			<cc-grid-toolbar title-text="유사 품목분류">
+				<sc-button text="추가" on-click="onAddPopup" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDelete" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="sim_itemcat_cd" header-text="유사 품목분류 코드" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="disp_itemcat_nm" header-text="유사 품목분류 명" width="400" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="itemcat_cd"></sc-grid-field>
+				<sc-grid-field data-field="sim_itemcat_cd"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm_en"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-itemcat-info",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							purcTyp: []
+						};
+					}
+				},
+				
+				parentInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				itemCatInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isNew: function() {
+					var me = this;
+					return me.get("itemCatInfo.is_new");
+				},
+				
+				is1Level: function() {
+					var me = this;
+					return me.get("itemCatInfo.itemcat_lvl") === 1;
+				}
+			},
+			
+			observers: [
+				'pathChanged(itemCatInfo.itemcat_nm, itemCatInfo.itemcat_path)', 'pathEngChanged(itemCatInfo.itemcat_nm_en, itemCatInfo.itemcat_path_en)'
+			],
+			
+			pathChanged: function(itemcat_nm, itemcat_path) {
+				if(itemcat_path) {
+					var originPath = itemcat_path.split(' > ');
+					var changePath = Array.prototype.slice.call(originPath, 0, originPath.length - 1);
+					changePath.push(itemcat_nm);
+					
+					this.set('itemCatInfo.itemcat_path', changePath.join(' > '));
+				} else {
+					this.set('itemCatInfo.itemcat_path', itemcat_nm);
+				}
+			},
+			
+			pathEngChanged: function(itemcat_nm, itemcat_path) {
+				if(itemcat_path) {
+					var originPath = itemcat_path.split(' > ');
+					var changePath = Array.prototype.slice.call(originPath, 0, originPath.length - 1);
+					changePath.push(itemcat_nm);
+					
+					this.set('itemCatInfo.itemcat_path_en', changePath.join(' > '));
+				} else {
+					this.set('itemCatInfo.itemcat_path_en', itemcat_nm);
+				}
+			},
+			
+			// 상위 탭화면에서 조회한 데이터를 받아서, 분류해설탭 화면의 정보를 세팅한다.
+			setClassInfo: function(res, parentItem) {
+				var me = this;
+				
+				if(parentItem) {
+					me.set("parentInfo", parentItem);
+				}
+				
+				// 분류정보
+				me.set("itemCatInfo", res.response.itemCatInfo);
+				
+				me.applyFormula();
+				// 유사 분류 목록
+				me.$.gridPanel.setDataProvider(res.response.similarList);
+			},
+			
+			/**
+			 *  분류정보 신규추가(현재노드 or 하위노드 추가)
+			 */
+			addClassInfo: function(data) {
+				var me = this;
+				
+				me.set("parentInfo", data);
+				
+				var row = {
+					is_new: true
+					, par_itemcat_cd: data.itemcat_cd
+					, itemcat_lvl: parseInt(data.itemcat_lvl) + 1
+				};
+				
+				if(data.itemcat_lvl > 0) {
+					data.itemcat_path = UT.isEmpty(data.itemcat_path) ? data.itemcat_nm : data.itemcat_path;
+					data.itemcat_path_en = UT.isEmpty(data.itemcat_path_en) ? data.itemcat_nm : data.itemcat_path_en;
+					
+					row.itemcat_path = (data.itemcat_path || "") + " > ";
+					row.itemcat_path_en = (data.itemcat_path_en || "") + " > ";
+				}
+				
+				me.set("itemCatInfo", row);
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 분류정보의 bindingObject를 리턴한다.
+			 */
+			getItemCatInfo: function() {
+				var me = this;
+				
+				return me.get("itemCatInfo");
+			},
+			
+			/**
+			 * 유사분류목록의 bindingObject를 리턴한다.
+			 */
+			getSimilarList: function() {
+				var me = this;
+				var grid = me.$.gridPanel;
+				var provider = grid.getDataProvider();
+				
+				var created = provider.getNewItems();
+				var result = new Array();
+				
+				if(created.length > 0) {
+					result = created;
+				}
+				
+				return result;
+			},
+			
+			/**
+			 * 유사분류목록 삭제
+			 */
+			onDelete: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600");
+				} else {
+					var deleted = provider.removeItems();
+					var historyList = [];
+					for(var i = 0; i < deleted.length; i++) {
+						var item = deleted[i];
+						historyList.push(me.newHistory(me.get("itemCatInfo"), "SIM_CLS_LIST_DEL", "SIMILAR CATEGORY CODE : " + item.sim_itemcat_cd + ", CATEGORY NAME : " + item.itemcat_nm));
+					}
+					if(deleted.length > 0) {
+						UT.confirm("STD.N1300", function() {
+							// request body에 데이타 셋팅
+							me.$.deleteListSimilar.body = {
+								deleteList: deleted,
+								historyList: historyList
+							};
+							
+							UT.request(me.$.deleteListSimilar);
+						});
+					}
+				}
+			},
+			
+			newHistory: function(itemCatInfo, chgTypCcd, modCont) {
+				var me = this;
+				return {
+					itemcat_cd: itemCatInfo.itemcat_cd,
+					itemcat_lvl: itemCatInfo.itemcat_lvl,
+					itemcat_uuid: UT.generateUUID(),
+					chg_typ_ccd: chgTypCcd,
+					mod_cont: modCont
+				};
+			},
+			
+			// 삭제 완료 callback
+			completeDeleteListSimilar: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("삭제", function() {
+						me.fire("search");
+					});
+				} else {
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 추가 팝업 호출
+			 */
+			onAddPopup: function() {
+				var me = this;
+				
+				var itemcatInfoPopup = UT.popup("ep-itemcat-list", me, 600, 600, {
+					"selected-items": function(popup, e) {
+						var selected = e.detail;
+						me.onAddCateList(selected);
+						popup.close();
+					}
+				});
+				itemcatInfoPopup.show();
+			},
+			
+			onAddCateList: function(pRows) {
+				var me       = this,
+					provider = me.$.gridPanel.getDataProvider();
+				
+				// 직무담당자 그리드
+				var rows = provider.getItems();
+				var dupCnt = 0; // 중복건수
+				
+				if(pRows.length > 0) {
+					for(var i = 0; i < pRows.length; i++) {
+						// 그리드에 존재하는 데이터가 있는지 체크한다.
+						var exist = false;
+						
+						if(rows) {
+							for(var j = 0; j < rows.length; j++) {
+								var simItemCatCd = rows[j].sim_itemcat_cd;
+								
+								// 아이디를 비교해서 데이터 존재여부 체크
+								if(simItemCatCd == pRows[i].itemcat_cd) {
+									exist = true;
+									dupCnt++;
+									break;
+								}
+							}
+						}
+						
+						// 그리드에 존재하지 않는 데이터만 그리드에 신규 추가한다.
+						if(!exist) {
+							// 그리드 신규행 추가
+							var row = {
+								// key 값
+								sim_itemcat_cd: pRows[i].itemcat_cd,
+								disp_itemcat_nm: pRows[i].disp_itemcat_nm,
+								itemcat_nm : pRows[i].itemcat_nm,
+								itemcat_nm_en : pRows[i].itemcat_nm_en
+							};
+							
+							provider.addItem(row);
+						}
+					}
+				}
+				
+				if(dupCnt > 0) {
+					// 중복 데이터 {0}건 제외 후 추가하였습니다
+					UT.alert(me.translate("STD.N2010", null, dupCnt), null, true);
+				}
+			},
+			clear: function() {
+				var me = this;
+				me.reset();
+			}
+		});
+	</script>
+</dom-module>

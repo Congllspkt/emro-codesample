@@ -1,0 +1,295 @@
+<dom-module id="es-sp-rfx-cs-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findListRfxCs"
+				 url="findListRfxCs.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindList">
+		</sc-ajax>
+		
+		<sc-ajax id="checkRfxCsVd"
+				 url="checkRfxCsVd.do">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<!-- 코드 조회 code group -->
+			<sc-code-group id="codes">
+				<!-- 경쟁 방식 -->
+				<sc-code code="P211" value="{{codes.compTypCcd}}"></sc-code>
+				<!-- RFX 상태 -->
+				<sc-code code="P013" value="{{codes.rfxStsCcd}}"></sc-code>
+				<!-- 역경매 결과 상태 -->
+				<sc-code code="P014" value="{{codes.rfxResStsCcd}}"></sc-code>
+				<!-- RFx 유형 -->
+				<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+				<!-- 구매 유형 -->
+				<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+				<!-- 제출상태 -->
+				<sc-code code="P101" value="{{codes.sbmtStsCd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar></cc-page-title-bar>
+			
+			<cc-search-condition-panel on-search="onFindList" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-multi-combobox-field id="operorgcombobox" value="{{searchParam.oorg_cds}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="전체">
+					</cc-sp-operorg-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 등록 일자"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_crn_dt}}" to-value="{{searchParam.to_rfx_crn_dt}}"
+										  default-from-value="-3M" default-to-value="0d" string-date="false">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.p2pPurcTypCcd}}" value="{{searchParam.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfxTypCcd}}" value="{{searchParam.rfx_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 마감 일시"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_clsg_dttm}}" to-value="{{searchParam.to_rfx_clsg_dttm}}"
+										  string-date="false">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="경쟁 유형"></sc-label>
+					<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.compTypCcd}}" value="{{searchParam.comp_typ_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 번호"></sc-label>
+					<cc-multi-text-field value="{{searchParam.rfx_no}}" multi-value="{{searchParam.rfx_nos}}" placeholder="전체" on-enter="onFindList" title="RFX 번호"></cc-multi-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{searchParam.rfx_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<!-- 그리드 -->
+			<sc-grid id="gridPanel" class="flex" use-dummy="false"
+					 editable="false"
+					 use-state="false"
+					 selection-mode="radio"
+					 use-selection="true"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="공동수급협정서 작성" on-click="onCreateCs"></sc-button>
+					<sc-button text="승인" on-click="onApproveCs"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="oorg_cd"				header-text="운영조직"	width="170"	text-align="center"	display-field="logic_org_nm"	value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_sts_ccd"			header-text="RFX 상태"	width="100"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.rfxStsCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="cs_vd_cls"				header-text="협력사 구분"		width="80"	text-align="center"	converter="onCsVdClsConverter"></sc-data-column>
+					<sc-combobox-column	data-field="cstm_ptcp_confm_sts"	header-text="제출 상태"		width="100"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.sbmtStsCd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_typ_ccd"			header-text="RFX 유형"		width="80"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.rfxTypCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_no"					header-text="RFX 번호"		width="120"	text-align="center"	style-name="link"></sc-data-column>
+					<sc-data-column		data-field="rfx_rnd"				header-text="진행차수"			width="90"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="rfx_tit"				header-text="제목"			width="250"	text-align="left"	></sc-data-column>
+					<sc-date-column		data-field="rfx_crn_dt"				header-text="RFX 등록 일자"	width="100"	text-align="center"	></sc-date-column>
+					<sc-date-column		data-field="rfx_st_dttm"			header-text="RFX 시작 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+					<sc-date-column		data-field="rfx_clsg_dttm"			header-text="RFX 마감 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+					<sc-date-column		data-field="cstm_ptcp_confm_dttm"	header-text="컨소시엄 참가 확인 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+				</sc-grid-columns>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-sp-rfx-cs-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							sbmtStsCd: [],
+							compTypCcd: [],
+							rfxResStsCcd: [],
+							rfxStsCcd: [],
+							rfxProgStsFilterCd: [],
+							rfxTypCcd: [],
+							p2pPurcTypCcd: []
+						};
+					},
+					reset: false
+				}
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				var me = this;
+				
+				me.initComboColumns();
+				me.load();
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				
+				if(UT.isNotEmpty(param)) {
+					// 컴포넌트 별 default 값이 셋팅되어 있을 수 있으므로 파라미터로 넘어온 값만 셋팅한다.
+					for(var key in param) {
+						if(param.hasOwnProperty(key)) {
+							// me.get("searchParam")[key] = param[key];
+							var paramKey = "searchParam." + key;
+							me.set(paramKey, param[key]);
+						}
+					}
+				}
+				me.onFindList();
+			},
+			
+			/**************************************************
+			 * 그리드 초기화
+			 **************************************************/
+			// 그리드 combo column 설정
+			initComboColumns: function() {
+				var me = this;
+				
+				var rfxTypCcd = me.codes.rfxTypCcd;
+				var filteredRfxTypCcd = rfxTypCcd.filter(function(code) {
+					return code["data"] !== "RAUC" && code["data"] !== "RFI"; // 역경매 제외
+				});
+				me.set("codes.rfxTypCcd", filteredRfxTypCcd);
+				
+				var rfxStsCcd = me.codes.rfxStsCcd;
+				var filteredRfxStsCcd = rfxStsCcd.filter(function(code) {
+					return ["CRNG", "APVL_PRGSG", "NEGO_PRGSG"].indexOf(code["data"]) === -1;
+				});
+				me.set("codes.rfxStsCcd", filteredRfxStsCcd);
+			},
+			
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "rfx_no") {
+					//상세 조회 화면 호출
+					me.fire('show-qta-detail', {"rfx_uuid": data.rfx_uuid, "readonly": true});
+				}
+			},
+			onCsVdClsConverter: function(rowIndex, fieldName, data) {
+				var me = this;
+				return data["rep_vd_yn"] === "Y" ? me.translate("대표협력사") : me.translate("구성협력사");
+			},
+			
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			// 조회 버튼 클릭시
+			onFindList: function() {
+				var me = this;
+				
+				//검색조건의 필수값 체크
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(me.$.findListRfxCs);
+			},
+			completeFindList: function(el, res) {
+				var me = this;
+				me.$.gridPanel.setDataProvider(res.response);
+			},
+			
+			onCreateCs: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				var selectedItem = checked[0];
+				if(selectedItem.rep_vd_yn !== "Y") {
+					UT.alert("STD.RFX1216");
+					return;
+				}
+				
+				// 신규 협정서 작성하려는 경우
+				if(selectedItem["new_yn"] === "Y") {
+					me.$.checkRfxCsVd.body = {"rfx_uuid": selectedItem["rfx_uuid"]};
+					UT.request(me.$.checkRfxCsVd, function(e, res) {
+						var result       = res.response,
+							resultStatus = result.resultStatus,
+							resultData   = result.resultData;
+						
+						if(resultStatus === "S") {
+							// 상세 조회 화면 호출
+							me.fire('show-detail', selectedItem);
+							
+						} else if(resultStatus === "E") {
+							if(UT.isNotEmpty(resultData.rfx_bid_uuid)) {
+								UT.alert("STD.CS1013"); // 이미 견적서를 작성하여 협정서 작성이 불가합니다.
+								
+							} else if(UT.isNotEmpty(resultData.rep_vd_yn) && resultData.rep_vd_yn === "N") {
+								UT.alert("STD.CS1014");	// 해당 RFx에 공동수급 구성원으로 등록되어 협정서 작성이 불가합니다.
+							}
+						} else {
+							UT.alert("STD.E9999");
+						}
+					});
+				} else {
+					//상세 조회 화면 호출
+					me.fire('show-detail', selectedItem);
+				}
+			},
+			onApproveCs: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				var selectedItem = checked[0];
+				if(selectedItem.rep_vd_yn === "Y") {
+					UT.alert("STD.TC0023");
+					return;
+				}
+				
+				//상세 조회 화면 호출
+				me.fire('show-detail', selectedItem);
+			}
+		});
+	</script>
+</dom-module>

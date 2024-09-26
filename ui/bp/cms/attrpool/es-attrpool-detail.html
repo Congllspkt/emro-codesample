@@ -1,0 +1,608 @@
+<dom-module id="es-attrpool-detail">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		
+		.field-box {
+			display: inline-block;
+			float: left;
+			width: auto;
+			vertical-align: bottom;
+			height: 20px;
+			margin-right: 20px;
+		}
+		
+		.field-box div {
+			margin-right: 5px;
+			display: inline-block;
+		}
+		
+		.field-box > * {
+			line-height: 20px;
+		}
+		
+		.field-box sc-radio-field, .field-box sc-label {
+			vertical-align: top
+		}
+		
+		/*.sc-label.txt_normal {*/
+		/*	font-weight: normal*/
+		/*}*/
+		
+		.spin_fixed sc-label {
+			margin-right: 5px;
+		}
+	</style>
+	
+	<template>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<sc-code-group id="codes" auto>
+			<sc-code code="MT003" value="{{codes.cmnYn}}"></sc-code>        <!-- 개별/공통 -->
+			<sc-code code="MT004" value="{{codes.attrType}}"></sc-code>    <!-- 유형구분 -->
+			<sc-code code="MT005" value="{{codes.dataType}}"></sc-code>        <!-- TYPE -->
+			<sc-code code="MT006" value="{{codes.unitGrpCd}}"></sc-code>    <!-- 품목속성 UOM 분류 -->
+			<sc-code code="C009" value="{{codes.useYnCd}}"></sc-code>
+		</sc-code-group>
+		
+		<sc-ajax id="findInfoAttributePool"
+				 url="findInfoAttributePool.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindInfoAttr">
+		</sc-ajax>
+		
+		<!-- 분류배정현황 조회 -->
+		<sc-ajax id="findListAssignedAttributePool"
+				 url="findListAssignedAttributePool.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<sc-ajax id="saveInfoAttributePool"
+				 url="saveInfoAttributePool.do"
+				 on-response="completeSaveInfoAttr">
+		</sc-ajax>
+		
+		<cc-page-title-bar>
+			<sc-button text="저장" hidden="[[formula('disableState')]]" on-click="onSave" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel title-text="일반 정보" validation-group="attrInfo">
+			<cc-fieldset>
+				<sc-label text="품목속성 코드"></sc-label>
+				<sc-text-field value="{{attrInfo.iattr_cd}}" readonly="true" validation-group="searchParam"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="품목속성 명"></sc-label>
+				<sc-text-field max-length="60" required="[[!formula('disableState')]]" readonly="[[formula('disableState')]]"
+							   value="{{attrInfo.iattr_nm}}">
+				</sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="UOM 사용 여부"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.useYnCd}}"
+								   value="{{attrInfo.iattr_uom_use_yn}}" placeholder="선택" on-change="onChangeUseYnCd" selected-index="0"
+								   disabled="[[formula('disableState')]]">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="개별/공통"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.cmnYn}}"
+								   value="{{attrInfo.comm_yn}}" placeholder="선택" selected-index="0"
+								   disabled="[[formula('disableState')]]">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="데이터 타입"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.dataType}}"
+								   value="{{attrInfo.iattr_dat_typ_ccd}}" placeholder="선택" selected-index="0"
+								   disabled="[[formula('disableState')]]">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="필수 여부"></sc-label>
+				<sc-checkbox-field input-value="{{attrInfo.mand_yn}}" checked-value="Y" un-checked-value="N" on-change="onChangeMandYn"
+								   disabled="[[formula('disableState')]]">
+				</sc-checkbox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="디폴트 값"></sc-label>
+				<sc-text-field max-length="60" readonly="[[formula('disableState')]]" value="{{attrInfo.dflt_val}}"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="표시 순서"></sc-label>
+				<sc-number-field min-value="0" max-length="3" readonly="[[formula('disableState')]]" required="[[!formula('disableState')]]"
+								 value="{{attrInfo.sort}}">
+				</sc-number-field>
+			</cc-fieldset>
+			
+			<cc-fieldset hidden="[[formula('hiddenStateByAttrTyp')]]">
+				<sc-label text="품목속성 UOM 분류"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.unitGrpCd}}"
+								   value="{{attrInfo.iattr_uom_cls_ccd}}" placeholder="선택" required="[[!formula('disableState')]]"
+								   readonly="[[formula('disableState')]]">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="입력 값 제한"></sc-label>
+				<div>
+					<div class="field-box" hidden="[[!formula('isDataTypNumber')]]">
+						<sc-radio-field id="radioScope" name="yn" label="입력 값 범위" input-value="N" value="[[attrInfo.input_chk]]"
+										disabled="[[formula('disableRadioSts')]]"
+										on-click="onClickRadio">
+						</sc-radio-field>
+						<div class="hspace-10"></div>
+						<div class="spin_fixed" style="display: inline-flex; margin-bottom: 5px;">
+							<sc-number-field class="w-100" max-length="13" readonly="[[formula('disableRestrictRange')]]" required="[[formula('isMandRestrictRange')]]"
+											 value="{{attrInfo.inp_val_st}}">
+							</sc-number-field>
+							<sc-label text="이상 ~"></sc-label>
+							<sc-number-field class="w-100" max-length="13" readonly="[[formula('disableRestrictRange')]]" required="[[formula('isMandRestrictRange')]]"
+											 min-value="{{attrInfo.input_val_st_min_val}}"
+											 value="{{attrInfo.inp_val_ed}}">
+							</sc-number-field>
+							<sc-label text="미만"></sc-label>
+						</div>
+					</div>
+					
+					<div class="field-box" hidden="[[formula('isDataTypNumber')]]">
+						<sc-radio-field id="radioScope" name="yn" label="입력 값 최대 길이" input-value="N" value="[[attrInfo.input_chk]]"
+										disabled="[[formula('disableRadioSts')]]"
+										on-click="onClickRadio">
+						</sc-radio-field>
+						<div class="hspace-10"></div>
+						<div class="spin_fixed">
+							<sc-number-field class="w-100" min-value="1" max-value="13" max-length="2" readonly="[[formula('disableRestrictLength')]]" required="[[formula('isMandRestrictLength')]]"
+											 value="{{attrInfo.inp_val_len}}">
+							</sc-number-field>
+						</div>
+					</div>
+					
+					<div class="field-box" id="input_list" style="display: inline-flex; margin-bottom: 5px;">
+						<sc-radio-field id="radioList" name="yn" label="입력 값 목록" input-value="Y" value="[[attrInfo.input_chk]]"
+										disabled="[[formula('disableRadioSts')]]"
+										on-click="onClickRadio">
+						</sc-radio-field>
+						<div class="hspace-10"></div>
+						<sc-label text="{{inputValListCnt}}" i18n-disabled></sc-label>
+						<sc-text-field max-length="256" readonly="[[formula('disableRestrictList')]]" required="[[formula('isMandRestrictList')]]"
+									   value="{{attrInfo.lov_inp_val}}" on-change="inputValListChange" style="width:120px;">
+						</sc-text-field>
+						<sc-label text="예시) 10/20/30, 대/중/소" class="txt_normal"></sc-label>
+					</div>
+				</div>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="입력 값 샘플"></sc-label>
+				<sc-text-field max-length="128" readonly="[[formula('disableState')]]"
+							   value="{{attrInfo.inp_val_samp}}">
+				</sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset column-span="2">
+				<sc-label text="비고"></sc-label>
+				<sc-textarea-field class="h-50" max-length="128" readonly="[[formula('disableState')]]"
+								   value="{{attrInfo.rmk}}">
+				</sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="배정된 품목속성 개수"></sc-label>
+				<sc-label text="{{attrInfo.asgd_iattr_cnt}}" i18n-disabled></sc-label>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="값 입력 현황"></sc-label>
+				<sc-label text="{{attrInfo.value_added_cnt}}" i18n-disabled></sc-label>
+			</cc-fieldset>
+		</cc-form-panel>
+	
+		
+		<sc-grid id="gridPanel" use-state="false" class="flex" data-provider="{{resultList}}" use-selection="false">
+			<cc-grid-toolbar title-text="배정된 품목분류 현황"></cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="itemcat_cd" header-text="품목분류 코드" width="150"></sc-data-column>
+				<sc-data-column data-field="itemcat_nm" header-text="품목분류 명" width="150" text-align="left"></sc-data-column>
+				<sc-data-column data-field="ih_itemcat_lvl" header-text="상속 품목분류 레벨" width="150"></sc-data-column>
+				<sc-data-column data-field="asgd_iattr_nm" header-text="배정 명" width="150" text-align="left"></sc-data-column>
+				<sc-data-column data-field="use_cnt" header-text="값 입력 현황" width="100"></sc-data-column>
+				<sc-data-column data-field="dflt_val" header-text="디폴트 값" width="150" text-align="left"></sc-data-column>
+				<sc-data-column data-field="rmk" header-text="비고" width="500" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-attrpool-detail',
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							attrType: [],	// 유형구분
+							cmnYn: [],		// 개별공통
+							dataType: [],	// TYPE
+							unitGrpCd: [],// 품목속성 UOM 분류
+							useYnCd: []
+						};
+					}
+				},
+				
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				// 속성 기본 정보 binding 객체
+				attrInfo: {
+					type: Object,
+					value: function() {
+						return {
+							sort: 1
+						};
+					}
+				},
+				
+				inputValListCnt: {
+					type: String,
+					value: function() {
+						return this.translate("STD.CMS1005", null, 0);	// "{0} 개"
+					}
+				},
+				
+				isChanged: {
+					type: Boolean,
+					value: false
+				}
+				
+			},
+			
+			formulas: {
+				
+				isDataTypNumber: function() {
+					return this.get("attrInfo.iattr_dat_typ_ccd") === "NUMC";
+				},
+				
+				// 폼 상태에 따라 컬럼 수정여부 제어
+				disableState: function() {
+					var attrInfo = this.get("attrInfo");
+					var attrCd = attrInfo.iattr_cd;
+					var asgnAttrCnt = attrInfo.asgd_iattr_cnt || 0;
+					
+					if(attrInfo.is_new || UT.isEmpty(attrCd) || asgnAttrCnt == 0) {
+						return false;
+					}
+					return true;
+				},
+				
+				// 입력값 제한 라디오 버튼 제어
+				disableRadioSts: function() {
+					return this.formula("disableState");
+				},
+				
+				// 입력값 제어 - 입력값 목록
+				disableRestrictList: function() {
+					var me = this;
+					return (me.formula('disableRadioSts') || (me.get("attrInfo.input_chk") !== "Y"));
+				},
+				
+				// 입력값 제어 - 입력값 범위
+				disableRestrictRange: function() {
+					var me = this;
+					return (me.formula('disableRadioSts') || (me.get("attrInfo.input_chk") === "Y"));
+				},
+				
+				// 입력값 제어 - 입력값 길이
+				disableRestrictLength: function() {
+					var me = this;
+					return (me.formula('disableRadioSts') || (me.get("attrInfo.input_chk") === "Y"));
+				},
+				
+				// 유형구분에 값에 따른 품목속성 UOM 분류 컬럼 hidden 처리
+				hiddenStateByAttrTyp: function() {
+					// 유형구분 
+					var useYn = this.get("attrInfo.iattr_uom_use_yn");
+					
+					// 일반
+					if(useYn === "N") {
+						return true;
+						// UOM (Unit Of Measurement : 측정단위)
+					} else if(useYn === "Y") {
+						return false;
+					}
+					
+					return true;
+				},
+				isMandRestrictList: function() {
+					var me = this;
+					var mandYn = me.get("attrInfo.mand_yn");
+					return (!me.formula('disableRestrictList') && mandYn === "Y");
+				},
+				isMandRestrictRange: function() {
+					var me = this;
+					var mandYn = me.get("attrInfo.mand_yn");
+					return (!me.formula('disableRestrictRange') && mandYn === "Y");
+				},
+				isMandRestrictLength: function() {
+					var me = this;
+					var mandYn = me.get("attrInfo.mand_yn");
+					return (!me.formula('disableRestrictLength') && mandYn === "Y");
+				}
+			},
+			
+			observers: ["onChangeDataTyp(attrInfo.iattr_dat_typ_ccd)",
+				"onChangeMandYn(attrInfo.mand_yn)",
+				"onChangeMinVal(attrInfo.inp_val_st)"],
+			
+			onChangeMinVal: function(value) {
+				var me = this;
+				var minVal = parseInt(value, 10);
+				me.set("attrInfo.input_val_st_min_val", minVal + 1);
+			},
+			
+			load: function(param) {
+				var me = this;
+				// 상세조회
+				if(param) {
+					me.findInfoAttributePool(param);
+					// 신규
+				} else {
+					me.addAttr();
+				}
+			},
+			
+			/**
+			 * 속성항목 정보 추가
+			 */
+			addAttr: function() {
+				var me = this;
+				
+				// 신규
+				me.set("attrInfo.is_new", true);
+				me.set("attrInfo.mand_yn", "Y");	// 입력필수여부
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 유형구분 콤보 변경시 처리
+			 * - 유형구분값에 따라, 품목속성 UOM 분류 콤보의 hidden을 제어한다.
+			 */
+			onChangeUseYnCd: function(e) {
+				var me = this;
+				
+				// 유형구분
+				var useYn = me.get("attrInfo.iattr_uom_use_yn");
+				
+				// 일반
+				if(useYn === "N") {
+					// 품목속성 UOM 분류 값 초기화
+					me.set("attrInfo.iattr_uom_cls_ccd", null);
+				}
+				
+				me.applyFormula();
+			},
+			onChangeMandYn: function(mandYn) {
+				var me = this;
+				me.applyFormula();
+			},
+			/**
+			 * TYPE 콤보 변경시 처리
+			 * - TYPE 값에 따라, 입력값 제한의 disable을 제어한다.
+			 */
+			onChangeDataTyp: function(dataTyp) {
+				var me = this;
+				
+				if(!dataTyp) {
+					return;
+				}
+				
+				// 속성코드
+				var attrCd = me.get("attrInfo.iattr_cd");
+				var dataTyp = me.get("attrInfo.iattr_dat_typ_ccd");
+				
+				// 속성코드가 없는 경우에만(신규상태), 입력값 제한의 disable을 제어한다.
+				if(!attrCd) {
+					if(dataTyp === "CHAR") {
+						me.set("attrInfo.inp_val_st", null);
+						me.set("attrInfo.inp_val_ed", null);
+						me.set("attrInfo.lov_inp_val", null);
+						
+					} else if(dataTyp === "NUMC") {
+						me.set("attrInfo.inp_val_len", null);
+						me.set("attrInfo.lov_inp_val", null);
+					}
+					me.set("attrInfo.input_chk", "N");
+					
+				} else if((attrCd && me.get("attrInfo.asgd_iattr_cnt") == 0)) {
+					if(dataTyp === "CHAR") {
+						me.set("attrInfo.inp_val_st", null);
+						me.set("attrInfo.inp_val_ed", null);
+						
+					} else if(dataTyp === "NUMC") {
+						me.set("attrInfo.inp_val_len", null);
+					}
+					
+					if(me.get("attrInfo.input_chk") === "N") {
+						me.set("attrInfo.lov_inp_val", null);
+					}
+				}
+				
+				me.applyFormula();
+				
+				// 입력값 목록 개수
+				me.inputValListChange();
+			},
+			
+			/**
+			 * 입력값 목록 값 변경시, 개수 보여주기 위한 처리
+			 */
+			inputValListChange: function() {
+				var me = this;
+				
+				var inputValList = me.get("attrInfo.lov_inp_val");
+				
+				var cnt = 0;
+				
+				if(inputValList) {
+					var arr = inputValList.split("/");
+					
+					for(var i = 0; i < arr.length; i++) {
+						var item = arr[i];
+						
+						if(item.trim()) {
+							cnt++;
+						}
+					}
+				}
+				
+				me.set("inputValListCnt", me.translate("STD.CMS1005", null, cnt)); // "{0} 개"
+			},
+			
+			/**
+			 * 속성항목 정보 조회
+			 */
+			findInfoAttributePool: function(data) {
+				var me = this;
+				
+				if(data) {
+					var param = {
+						iattr_cd: data.iattr_cd
+					};
+					me.set("searchParam", param);
+				}
+				
+				UT.request(me.$.findInfoAttributePool);
+			},
+			
+			// 속성항목 정보 조회 callback
+			completeFindInfoAttr: function(e, res) {
+				var me = this;
+				
+				// 입력값 제한 라디오 값 세팅
+				var attrInfo = res.response;
+				me.set("attrInfo", attrInfo);
+				
+				// 입력값 목록 개수
+				me.inputValListChange();
+				
+				// 분류배정현황 조회
+				me.findListAssignedAttributePool();
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 분류배정현황 조회
+			 */
+			findListAssignedAttributePool: function() {
+				var me = this;
+				UT.request(me.$.findListAssignedAttributePool);
+			},
+			
+			/**
+			 * 속성항목 정보 저장
+			 */
+			onSave: function() {
+				var me = this;
+				
+				// 필수값 체크
+				if(!me.validate('attrInfo')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				// request body에 데이타 셋팅
+				me.$.saveInfoAttributePool.body = {
+					attrInfo: me.attrInfo
+				};
+				UT.confirm("STD.N1200", function() {
+					UT.request(me.$.saveInfoAttributePool);
+				});
+			},
+			
+			// 속성항목 정보 저장 callback
+			completeSaveInfoAttr: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						me.set("searchParam.iattr_cd", result.resultData.iattr_cd);
+						me.findInfoAttributePool();
+						
+						me.set("isChanged", true);
+					});
+				} else {
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onClickRadio: function(e) {
+				var me = this;
+				
+				if(e.currentTarget.id == "radioList") {
+					me.set("attrInfo.input_chk", "Y");
+					
+					me.set("attrInfo.inp_val_st", null);
+					me.set("attrInfo.inp_val_ed", null);
+					me.set("attrInfo.inp_val_len", null);
+					
+				} else {
+					me.set("attrInfo.input_chk", "N");
+					
+					me.set("attrInfo.lov_inp_val", null);
+				}
+				
+				me.applyFormula();
+				
+				// 입력값 목록 개수
+				me.inputValListChange();
+			},
+			
+			/**
+			 * 데이터 초기화
+			 */
+			onClear: function() {
+				var me = this;
+				me.reset();
+			},
+			
+			/**
+			 * 닫기
+			 */
+			onClose: function() {
+				var me = this;
+				me.fire("close-remove", me.get("isChanged"));
+				me.onClear();
+			}
+		});
+	</script>
+</dom-module>

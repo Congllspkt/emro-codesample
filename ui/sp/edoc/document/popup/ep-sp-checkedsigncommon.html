@@ -1,0 +1,168 @@
+<sc-link rel="import" href="ep-sp-certinfo.html"></sc-link>
+
+<dom-module id="ep-sp-checkedsigncommon">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+        <!-- 협력사 및 협력사 서명 조회 -->
+        <sc-ajax id="checkedSign"
+                 url="checkedSign.do"
+                 body="{{searchParam}}"
+                 on-response="completeCheckedSign">
+        </sc-ajax>
+
+        <!-- 실제서명조회 -->
+        <sc-ajax id="getCertInfoView"
+                 url="getCertInfoView.do"
+                 on-response="completeGetCertInfoView">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <!-- 서명 그리드 -->
+        <sc-grid id="CCSignGridView" use-selection="false" use-state="false" data-provider="{{checkSign.ownerList}}" on-item-click="onCCItemClick">
+            <cc-grid-toolbar title-text="구매사 서명"></cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-data-column data-field="cntr_nm" header-text="계약 명" width="200" text-align="left"></sc-data-column><!--서명제목-->
+                <sc-data-column data-field="file_nm" header-text="서명 파일 명" width="250" text-align="left"></sc-data-column><!--서명종류-->
+                <sc-data-column data-field="reg_dttm" header-text="서명 일시" width="150" text-align="center" format-type="datetime"></sc-data-column><!--서명일자-->
+                <sc-image-column data-field=cert header-text="인증 상세" width="80" text-align="center" image-cls="search"></sc-image-column><!--인증서-->
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field data-field="sgndusr_typ_ccd"></sc-grid-field>
+                <sc-grid-field data-field="cntr_appx_uuid"></sc-grid-field>
+                <sc-grid-field data-field="athg_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+        <!-- 협력사서명 그리드 -->
+        <sc-grid id="JCSignGridView" use-selection="false" use-state="false" data-provider="{{checkSign.vendorList}}" on-item-click="onJCItemClick">
+            <cc-grid-toolbar title-text="협력사 서명"></cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-data-column data-field="cntr_nm" header-text="계약 명" width="200" text-align="left"></sc-data-column><!--서명제목-->
+                <sc-data-column data-field="file_nm" header-text="서명 파일 명" width="250" text-align="left"></sc-data-column><!--서명종류-->
+                <sc-data-column data-field="reg_dttm" header-text="서명 일시" width="150" text-align="center" format-type="datetime"></sc-data-column><!--서명일자-->
+                <sc-image-column data-field="cert" header-text="인증 상세" width="80" text-align="center" image-cls="search"></sc-image-column><!--인증서-->
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field data-field="sgndusr_typ_ccd"></sc-grid-field>
+                <sc-grid-field data-field="cntr_appx_uuid"></sc-grid-field>
+                <sc-grid-field data-field="athg_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+    <script>
+        Polymer({
+            is: 'ep-sp-checkedsigncommon',
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "서명 확인"
+				},
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+
+                //코드
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            appx_typ_ccd: []
+                        };
+                    }
+                }
+            },
+
+            initialized: function () {
+                var me = this;
+
+            },
+
+            completeCheckedSign: function (e, res) {
+                var me = this;
+                var result = res.response;
+
+                me.$.CCSignGridView.setDataProvider(result.ownerList);
+                me.$.JCSignGridView.setDataProvider(result.vendorList);
+            },
+
+            //본사서명 그리드 Click 이벤트 핸들러
+            onCCItemClick: function (e) {
+                var me = this;
+                var data = e.detail.data;
+                var item = e.detail.item;
+
+                if (item.dataField === "cert") {
+                    me.$.getCertInfoView.body = data;
+                    UT.request(me.$.getCertInfoView);
+                }
+            },
+
+            //협력사서명 그리드 Click 이벤트 핸들러
+            onJCItemClick: function (e) {
+                var me = this;
+                var data = e.detail.data;
+                var item = e.detail.item;
+			
+                data.ctry_ccd = me.searchParam.ctry_ccd;
+
+                if (item.dataField === "cert") {
+                    me.$.getCertInfoView.body = data;
+                    UT.request(me.$.getCertInfoView);
+                }
+            },
+
+            //초기 데이터 세팅
+            load: function (data) {
+                var me = this;
+                me.set("searchParam", data);
+
+                me.searchCheckedSign();
+            },
+
+            //협력사,협력사 서명조회
+            searchCheckedSign: function () {
+                var me = this;
+                UT.request(me.$.checkedSign);
+            },
+
+            completeGetCertInfoView: function (e, res) {
+                var me = this;
+                var result = res.response;
+                if (result.result_status === "S") {
+                	if(result.blockChainUseYn == "Y"){
+						// 블록체인 사용할 경우
+						if(result.sgndusr_typ_ccd === "BUYER" || result.ctry_ccd === "KR"){
+	                		// 본사 또는 국내업체
+		                    var certInfo = UT.popup("ep-sp-certinfo", me, "700", "360", {});
+		                    certInfo.show();
+		                    certInfo.getWindowContent().load(result);
+	                	}else{
+	                		// 해외
+	                		var overseaCertInfo = UT.popup("ep-sp-certinfo", me, "700", "200", {});
+		               		overseaCertInfo.show();
+	 	                    overseaCertInfo.getWindowContent().load(result);
+	                	}
+					}else{
+						// 블록체인 사용안할 경우
+	                    var certInfoNoBlock = UT.popup("ep-sp-certinfo", me, "700", "320", {});
+	                    certInfoNoBlock.show();
+	                    certInfoNoBlock.getWindowContent().load(result);
+					}
+                   
+                }else{
+                	// 서명값 검증 , 무결성 실패(인증서를 불러오지 않음)
+                	UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                }
+            }
+        });
+
+    </script>
+</dom-module>

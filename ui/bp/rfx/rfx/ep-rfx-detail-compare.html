@@ -1,0 +1,215 @@
+<sc-link rel="import" href="ep-rfx-compare-case1.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-compare-case2.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-compare-case3.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-compare-case4.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-compare-doc.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-compare-itm.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-price-doctor-compare.html" lazy></sc-link>
+
+<dom-module id="ep-rfx-detail-compare">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<sc-ajax id="findListRfxQtaCompareByRfxId"
+				 url="findListRfxBidCompareByRfxId.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<sc-ajax id="findListRfxQtaCompareByRfxNo"
+				 url="findListRfxBidCompareByRfxNo.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<sc-tab-navigation id="tabNavi" class="flex" selected="0" on-item-select="onItemSelect">
+			<!-- SMARTNINE-4601 삭제 -->
+			<!-- <div id="doc" title-text="견적대비[총액]" class="fit" hidden="[[!formula('isDocTabVisible')]]"></div>
+			<div id="itm" title-text="견적대비[품목]" class="fit" hidden="[[!formula('isStlYn')]]"></div> -->
+			<ep-rfx-compare-case1 id="case1" title-text="투찰 상세 비교"></ep-rfx-compare-case1>
+			<template>
+				<ep-rfx-compare-case2 id="case2" title-text="협력사별 진행차수 비교"
+									  on-initialized="_onCase2Initialized"></ep-rfx-compare-case2>
+			</template>
+			<template>
+				<ep-rfx-compare-case3 id="case3" title-text="진행차수별 협력사 비교"
+									  on-initialized="_onCase3Initialized"></ep-rfx-compare-case3>
+			</template>
+			<template>
+				<ep-rfx-compare-case4 id="case4" title-text="협력사별 상세 비교"
+									  on-initialized="_onCase4Initialized"></ep-rfx-compare-case4>
+			</template>
+			<template>
+				<ep-rfx-price-doctor-compare id="case5" title-text="품목별 AI 추정단가 비교" visible="[[formula('isExistPriceDoctorModule')]]"
+											 on-initialized="_onCase5Initialized"></ep-rfx-price-doctor-compare>
+			</template>
+		</sc-tab-navigation>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-rfx-detail-compare',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultListByRfxId: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultListByRfxNo: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			formulas: {
+				// 선정 여부 : rfx 종료 상태가 'S' 업체선정 인 경우
+				isStlYn: function() {
+					return this.searchParam.rfx_res_sts_ccd === "VD_SLCTN";
+				},
+				
+				// 총액 별 여부
+				isDoc: function() {
+					return this.searchParam.item_slctn_typ_ccd === "BYTOT";
+				},
+				
+				// 견적대비[총액] 탭 visible 여부 : 선정 && 총액
+				isDocTabVisible: function() {
+					return this.formula('isStlYn') && this.formula('isDoc');
+				},
+				
+				isExistPriceDoctorModule: function() {
+					return SCModuleManager.exist("price-doctor");
+				},
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set('searchParam', param);
+				me.applyFormula();
+				
+				me.findListRfxQtaCompareByRfxId();
+			},
+			
+			onItemSelect: function(e) {
+				var me      = this,
+					content = e.detail.item;
+				if(content.id === 'itm') {
+					if(!me._itmEl) {
+						SCLinkManager.load('ep-rfx-compare-itm').then(function() {
+							me._itmEl = document.createElement('ep-rfx-compare-itm');
+							me._itmEl.classList.add('fit');
+							me.listen(me._itmEl, 'initialized', function() {
+								me._itmEl.load(me.searchParam);
+								me = null;
+							});
+							Polymer.dom(me.$.itm).appendChild(me._itmEl);
+						});
+					}
+				}
+				
+			},
+			
+			findListRfxQtaCompareByRfxId: function() {
+				var me = this;
+				UT.request(me.$.findListRfxQtaCompareByRfxId, function(e, res) {
+					var result = res.response;
+					me.set('resultListByRfxId', result);
+					// 선정이 안된경우 3번째 탭 선택
+					// if(!me.formula('isStlYn')) {
+					me.$.tabNavi.selectItem(me.$.case1);
+					me.$.case1.load(me.resultListByRfxId);
+					//견적대비[총액],견적대비[품목] 탭 삭제 SMARTNINE-4601
+					/*  } else if(!me.formula('isDoc')){
+						 me.$.tabNavi.selectItem(me.$.itm);
+					 } else {
+						 if(!me._docEl){
+							 SCLinkManager.load('ep-rfx-compare-doc').then(function() {
+								 me._docEl = document.createElement('ep-rfx-compare-doc');
+								 me._docEl.classList.add('fit');
+								 me.listen(me._docEl, 'initialized', function(){
+									 me._docEl.load(me.searchParam);
+									 me = null;
+								 });
+								 Polymer.dom(me.$.doc).appendChild(me._docEl);
+							 });
+						 }
+					 } */
+				});
+			},
+			
+			_onCase1Initialized: function() {
+				var me = this;
+				me.$.case1.load(me.resultListByRfxId);
+			},
+			
+			_onCase2Initialized: function() {
+				var me = this;
+				
+				if(UT.isEmpty(me.resultListByRfxNo)) {
+					UT.request(me.$.findListRfxQtaCompareByRfxNo, function(e, res) {
+						var result = res.response;
+						me.set('resultListByRfxNo', result);
+						me.$.case2.load(result);
+					});
+				} else {
+					me.$.case2.load(me.resultListByRfxNo);
+				}
+			},
+			
+			_onCase3Initialized: function() {
+				var me = this;
+				
+				if(UT.isEmpty(me.resultListByRfxNo)) {
+					UT.request(me.$.findListRfxQtaCompareByRfxNo, function(e, res) {
+						var result = res.response;
+						me.set('resultListByRfxNo', result);
+						me.$.case3.load(result);
+					});
+				} else {
+					me.$.case3.load(me.resultListByRfxNo);
+				}
+				
+			},
+			_onCase4Initialized: function() {
+				var me = this;
+				
+				if(UT.isEmpty(me.resultListByRfxNo)) {
+					UT.request(me.$.findListRfxQtaCompareByRfxNo, function(e, res) {
+						var result = res.response;
+						me.set('resultListByRfxNo', result);
+						me.$.case4.load(result);
+					});
+				} else {
+					me.$.case4.load(me.resultListByRfxNo);
+				}
+				
+			},
+			_onCase5Initialized: function() {
+				var me = this;
+				me.$.case5.load(me.get("searchParam"));
+			},
+			
+			_destroy: function() {
+				var me = this;
+				if(me._docEl) {
+					me._docEl = null;
+				}
+				if(me._itmEl) {
+					me._itmEl = null;
+				}
+			}
+		});
+	</script>
+</dom-module>

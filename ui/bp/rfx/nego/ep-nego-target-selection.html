@@ -1,0 +1,166 @@
+<!-- 
+/**
+ * @description : 우선협상선정 팝업
+ * @Since 2022. 9. 02.
+ * @변경이력 : [2022. 9. 02.]
+ */
+-->
+<dom-module id="ep-nego-target-selection">
+	<style>
+		:host {
+			@apply(--vbox-layout)
+		}
+	</style>
+
+	<template>
+		<!-- RFP 총액별 종합평가 조회 -->
+		<sc-ajax id="findListRankingTotalEvalAmount"
+				 url="../rfx/findListRankingTotalEvalAmount.do"
+				 on-response="completeFindListRankingTotalEvalAmount">
+		</sc-ajax>
+
+		<sc-ajax id="saveNegoTarget"
+				 url="saveNegoTarget.do"
+				 on-response="completeSaveNegoTarget">
+		</sc-ajax>
+		
+		<sc-ajax id="getNegotiableTargets"
+				 url="getNegotiableTargets.do"
+				 body="{{searchParam}}"
+				 on-response="completeGetNegotiableTargets"
+		></sc-ajax>
+		<!-- 코드 조회 -->
+		<sc-code-group>
+			<!-- 협력사 거래 유형 -->
+			<sc-code code="E902" value="{{codes.regTyp}}"></sc-code>
+			<!-- 협력사 거래상태 -->
+			<sc-code code="E035" value="{{codes.po_poss_yn}}"></sc-code>
+			<!-- 통화코드 -->
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>
+		</sc-code-group>
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		<div class="vbox flex">
+			<!-- <cc-sub-title-bar>
+				<sc-button text="닫기"     on-click="onClose"></sc-button>
+			</cc-sub-title-bar> -->
+			<sc-grid id="nonPriVdRankGridPanel"
+					 class="flex"
+					 data-provider="{{resultList}}"
+					 use-state="false">
+				<cc-grid-toolbar title-text="종합평가 협력사 순위">
+					<sc-button text="협상 진행" on-click="onNegotiate" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column     data-field="slctn_rank"       header-text="선정 순위"         width="90"></sc-data-column>
+					<sc-combobox-column data-field="obd_typ_ccd"        header-text="온보딩 유형"  width="100"
+										items="[[codes.regTyp]]"    display-field="label"     value-field="data"></sc-combobox-column>
+					<sc-combobox-column data-field="po_poss_yn"        header-text="발주 가능 여부"  width="100"
+										items="[[codes.po_poss_yn]]"   display-field="label"     value-field="data"></sc-combobox-column>
+					<sc-data-column     data-field="vd_cd"          header-text="협력사 코드"     width="100"></sc-data-column>
+					<sc-data-column     data-field="vd_nm"          header-text="협력사 명"      width="200" text-align="left"></sc-data-column>
+					<sc-combobox-column data-field="cur_ccd"            header-text="통화"      width="70"
+										items="[[codes.curCcd]]" display-field="label"    value-field="data"></sc-combobox-column>
+					<sc-data-column     data-field="rfx_bid_amt"        header-text="RFX 투찰 금액"        width="140" text-align="right"
+										data-type="number"          format-type="amt"></sc-data-column>
+					<sc-data-column     data-field="exch_rfx_bid_amt"   header-text="환산 금액"     width="140" text-align="right"
+										data-type="number"          format-type="amt"></sc-data-column>
+				</sc-grid-columns>
+			</sc-grid>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: "ep-nego-target-selection",
+
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							regTyp: [],
+							po_poss_yn: [],
+							curCcd: []
+						};
+					},
+					reset: false
+				},
+
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+			},
+
+			initialized: function() {
+			},
+
+			load: function(param) {
+				this.set("searchParam.rfx_uuid", param.rfx_uuid);
+				this.getNegotiableTargets();
+			},
+
+			getNegotiableTargets: function() {
+				UT.request(this.$.getNegotiableTargets);
+			},
+
+			completeGetNegotiableTargets: function(el, res) {
+				var result = res.response;
+				if(result.resultStatus === 'S') {
+					this.set("rfxData", res.response.resultData);
+					this.set("resultList", res.response.resultList);
+				}
+			},
+
+			/* 협상진행 버튼 클릭 시 */
+			onNegotiate: function() {
+				var me = this;
+				var provider = me.$.nonPriVdRankGridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600");
+				} else if(!me.isNegotiable) {
+					UT.alert(me.translate("STD.NG1001", null, me.translate('마감')), null, true); //견적진행상태가 '{0}'상태일 경우에 협상을 진행할 수 있습니다.
+				} else {
+					UT.confirm("STD.NG1000", function() { // 협상을 진행하시겠습니까?
+						me.$.saveNegoTarget.body = {
+							rfxData: me.get("rfxData"),
+							rfxBids: selected
+						};
+						UT.request(me.$.saveNegoTarget);
+					});
+				}
+			},
+
+			onClose: function() {
+				this.reset();
+				this.fire('close');
+			},
+
+			get isNegotiable() {
+				return "CLSG" === this.get("rfxData.rfx_sts_ccd");
+			},
+
+			completeSaveNegoTarget: function() {
+				this.fire('selected-item');
+			}
+		})
+	</script>
+</dom-module>

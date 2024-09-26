@@ -1,0 +1,1175 @@
+<dom-module id="es-item-reg-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-request-group id="codes" init>
+			<sc-ajax url="findListOperationOrganizationByUser.do"
+					 body="IO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<sc-ajax id="findInfoAllItemReg"
+				 url="findInfoAllItemReg.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindInfoAllItemReg">
+		</sc-ajax>
+		
+		<!-- 배정속성 정보 조회 -->
+		<sc-ajax id="findListItemAsgnAttrByItemreg"
+				 url="findListItemAsgnAttrByItemreg.do"
+				 on-response="completeFindListItemAsgnAttrByItemreg">
+		</sc-ajax>
+		
+		<!-- 저장 -->
+		<sc-ajax id="saveInfoItemReg"
+				 url="saveInfoItemReg.do"
+				 on-response="completeSaveInfoItemReg">
+		</sc-ajax>
+		
+		<!-- 유사도 조회 -->
+		<sc-ajax id="findListItemSimilarity"
+				 url="findListItemSimilarity.do"
+				 on-response="completeFindListItemSimilarity"></sc-ajax>
+		
+		<!-- 기능 권한에 따른 버튼 제어 -->
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="품목 정보">
+			<sc-button text="저장" hidden="[[!formula('isEditableAndItemAdmin')]]" on-click="onSave" auth-s></sc-button>
+			<sc-button text="반려" hidden="[[!formula('isRejectableAndItemAdmin')]]" on-click="onReject" auth-s></sc-button>
+			<sc-button text="등록 승인" hidden="[[!formula('isEditableAndItemAdmin')]]" on-click="onReg" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel title-text="요청자 정보" validation-group="save">
+				<cc-fieldset>
+					<sc-label text="요청자 부서"></sc-label>
+					<div class="field-box">
+						<sc-label text="{{regInfo.reqr_comp}}" readonly="[[!formula('isEditableAndItemAdmin')]]" i18n-disabled></sc-label>
+						/
+						<sc-label text="{{regInfo.reqr_dept}}" readonly="[[!formula('isEditableAndItemAdmin')]]" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="요청자"></sc-label>
+					<div class="field-box">
+						<sc-label text="{{regInfo.reqr_id}}" readonly="[[!formula('isEditableAndItemAdmin')]]" i18n-disabled></sc-label>
+						/
+						<sc-label text="{{regInfo.reqr_nm}}" readonly="[[!formula('isEditableAndItemAdmin')]]" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="요청자 연락처"></sc-label>
+					<sc-label text="{{regInfo.reqr_phone}}" readonly="[[!formula('isEditableAndItemAdmin')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="검토자 정보" collapsible="true" hidden="[[!formula('isRejectOrApproved')]]">
+				<cc-fieldset>
+					<sc-label text="검토 부서"></sc-label>
+					<div class="field-box">
+						<sc-label text="{{regInfo.apvr_comp}}" i18n-disabled></sc-label>
+						/
+						<sc-label text="{{regInfo.apvr_dept}}" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="검토자"></sc-label>
+					<div class="field-box">
+						<sc-label text="{{regInfo.apvr_id}}" i18n-disabled></sc-label>
+						/
+						<sc-label text="{{regInfo.apvr_nm}}" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="검토자 연락처"></sc-label>
+					<sc-label text="{{regInfo.apvr_phone}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				
+				<cc-fieldset column-span="2" hidden="[[!formula('isReject')]]">
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{regInfo.item_reg_req_ret_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="변경 요청 내용" hidden="[[!formula('isModReq')]]">
+				<cc-fieldset column-span="2">
+					<sc-label text="내용"></sc-label>
+					<sc-textarea-field value="{{regInfo.item_chg_req_cont}}" readonly="true" max-length="1000"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="품목 요청 정보" validation-group="save">
+				<cc-fieldset>
+					<sc-label text="요청 번호"></sc-label>
+					<sc-label text="{{regInfo.item_reg_req_no}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="품목 코드"></sc-label>
+					<sc-label text="{{regInfo.item_cd}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="품목 명"></sc-label>
+					<sc-text-field max-length="60" required="true" readonly="[[!formula('isEditableAndItemAdmin')]]"
+								   value="{{regInfo.item_nm}}">
+					</sc-text-field>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="품목 명 영문"></sc-label>
+					<sc-text-field max-length="60" required="true" readonly="[[!formula('isEditableAndItemAdmin')]]"
+								   value="{{regInfo.item_nm_en}}">
+					</sc-text-field>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="유사어"></sc-label>
+					<div class="field-box">
+						<sc-text-field max-length="1000" readonly="[[!formula('isEditableAndItemAdmin')]]" value="{{regInfo.item_simword}}"></sc-text-field>
+						<div class="hspace-2"></div>
+						<sc-label text="(* [[translate('입력구분자')]]',')" class="w-200" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="제조사 명"></sc-label>
+					<sc-text-field max-length="60" readonly="[[!formula('isEditableAndItemAdmin')]]" value="{{regInfo.mfgr_nm}}">
+					</sc-text-field>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="모델 번호"></sc-label>
+					<sc-text-field max-length="60" value="{{regInfo.mdl_no}}" readonly="[[!formula('isEditableAndItemAdmin')]]">
+					</sc-text-field>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="UOM"></sc-label>
+					<cc-amt-unit-search value="{{regInfo.uom_ccd}}" result-value="{{regInfo.uom_nm}}" disabled="[[!formula('isEditableAndItemAdmin')]]" hide-trigger="[[!formula('isEditableAndItemAdmin')]]" value-class="w-80">
+					</cc-amt-unit-search>
+				</cc-fieldset>
+				
+				<cc-fieldset column-span="2">
+					<sc-label text="품목분류"></sc-label>
+					<cc-cate-combobox-field id="itemCateField" itemcat-lvl1-cd="{{regInfo.itemcat_lvl_1_cd}}" itemcat-lvl2-cd="{{regInfo.itemcat_lvl_2_cd}}"
+											itemcat-lvl3-cd="{{regInfo.itemcat_lvl_3_cd}}" itemcat-lvl4-cd="{{regInfo.itemcat_lvl_4_cd}}" required="true"
+											disabled="[[!formula('isEditableAndItemAdmin')]]" validation-group="similarity">
+					</cc-cate-combobox-field>
+				</cc-fieldset>
+				
+				<cc-fieldset column-span="2">
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field max-length="128" readonly="[[!formula('isEditableAndItemAdmin')]]" value="{{regInfo.rmk}}">
+					</sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+				<!-- 공통 속성 동적생성 영역 -->
+				<div id="commonAttr"></div>
+				
+				<!-- 개별 속성 동적생성 영역 -->
+				<div id="eachAttr"></div>
+			
+			<cc-form-panel title-text="중복/유사 품목 조회" collapsible="true" column="1" hidden="[[!formula('isViewSimilarity')]]">
+				<cc-fieldset validation-group="similarity">
+					<div class="field-box">
+						<sc-label text="유사 품목 수(최대)"></sc-label>
+						<sc-number-field class="w-150 align-right" value="{{similarityOptions.num_topk}}" min-value="0" input-cover="true" format-type="integer" default-value="5" decimal-precision="0" hide-trigger="true" required="true"></sc-number-field>
+						<span style="padding:0 10px"></span>
+						<sc-label text="유사도"></sc-label>
+						<sc-number-field class="w-150 align-right" value="{{similarityOptions.similarity}}" min-value="0" input-cover="true" format-type="qty" default-value="95" required="true"></sc-number-field>
+						<sc-label text="% 이상"></sc-label>
+						<span style="padding:0 10px"></span>
+						<sc-button text="중복/유사 품목 조회" on-click="onFindListItemSimilarity" veto-fixed-size></sc-button>
+					</div>
+				</cc-fieldset>
+				<sc-grid id="gridPanel" class="h-400" editable="false"
+						 data-provider="{{similarityList}}"
+						 use-state="false"
+						 use-selection="false">
+					<cc-grid-toolbar></cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="topk_prob" header-text="유사도" width="80" text-align="center" format-type="percentDecimal" item-style-function="onItemStyle"></sc-data-column>
+						<sc-data-column data-field="topk_code" header-text="품목 코드" width="150" editable="false"></sc-data-column>
+						<sc-data-column data-field="item_nm" header-text="품목명" width="200" text-align="left" editable="false" visible="false"></sc-data-column>
+						<sc-data-column data-field="cate_path" header-text="분류" width="220" text-align="left" editable="false" visible="false"></sc-data-column>
+						<sc-data-column data-field="topk_desc" header-text="품목 규격" width="500" text-align="left"></sc-data-column>
+						<sc-data-column data-field="unit_cd" header-text="단위" width="50" editable="false" visible="false"></sc-data-column>
+						<sc-data-column data-field="cur" header-text="통화" width="70" editable="false" visible="false"></sc-data-column>
+						<sc-data-column data-field="po_item_price" header-text="최근PO단가" width="125" format-type="amt" text-align="right" visible="false"></sc-data-column>
+						<sc-date-column data-field="po_cre_date" header-text="PO일자" width="100" editable="false" visible="false"></sc-date-column>
+						<sc-data-column data-field="price_cntr_no" header-text="장기계약번호" width="120" editable="false" visible="false"></sc-data-column>
+						<sc-data-column data-field="sg_path" header-text="SG정보(경로)" width="280" text-align="left" visible="false"></sc-data-column>
+						<sc-combobox-column data-field="cls" header-text="구분" width="90" items="[[codes.mtClsCd]]" display-field="label" value-field="data" visible="false"></sc-combobox-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="cntr_rev" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="cntr_item_id" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="cntr_item_lno" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="auto_po_yn" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="po_no" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="po_rev" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="auto_po_yn" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="cate_cd" data-type="text"></sc-grid-field>
+						<sc-grid-field data-field="cate_nm" data-type="text"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</cc-form-panel>
+			
+			<cc-form-panel form-cls="label-column" style="margin-top:5px;">
+				<cc-fieldset>
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="fileUpload" class="h-200" value="{{regInfo.athg_uuid}}" editable="[[formula('isEditableAndItemAdmin')]]"></sc-upload>
+				</cc-fieldset>
+				
+				<cc-fieldset>
+					<sc-label text="이미지 파일"></sc-label>
+					<sc-upload id="imgUpload" class="h-200" value="{{regInfo.img_athg_uuid}}" editable="[[formula('isEditableAndItemAdmin')]]" image-only="true" view-type="thumbnail"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="oorgGridPanel" class="h-300" collapsible="true"
+					 editable="[[formula('isEditableAndItemAdmin')]]"
+					 use-state="[[formula('isEditableAndItemAdmin')]]"
+					 use-selection="false"
+					 on-item-edit-end="onItemEditEnd"
+					 data-provider="{{oorgList}}">
+				<cc-grid-toolbar title-text="운영조직">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="200" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-checkbox-column data-field="use_yn" header-text="사용 여부" width="120" text-align="center" checked-value="Y" un-checked-value="N"
+										editable="true" display-box="true" display-checkbox="false" hide-unchecked-mark="true" item-style-function="onItemStyleFunction"></sc-checkbox-column>
+					<sc-checkbox-column data-field="bpa_yn" 	header-text="BPA 여부"		width="120" editable="false" checked-value="Y" un-checked-value="N" display-checkbox="false" visible="[[formula('isVisibleYn')]]"></sc-checkbox-column>
+					<sc-checkbox-column data-field="mult_vd_yn" header-text="멀티 협력사 여부"	width="120" editable="false" checked-value="Y" un-checked-value="N" display-checkbox="false" visible="[[formula('isVisibleYn')]]"></sc-checkbox-column>
+					<sc-checkbox-column data-field="qta_subj_yn" 	header-text="쿼터 여부"	width="120" editable="false" checked-value="Y" un-checked-value="N" display-checkbox="false" visible="[[formula('isVisibleYn')]]"></sc-checkbox-column>
+					<sc-checkbox-column data-field="tl_yn" 		header-text="Touchless 여부"	width="120" editable="true"	 checked-value="Y" un-checked-value="N" display-checkbox="false" item-editable-function="onItemEditbleFunction"></sc-checkbox-column>
+					<sc-checkbox-column data-field="qta_yn" 	header-text="쿼터 대상 여부"		width="120" editable="true"	 checked-value="Y" un-checked-value="N" display-checkbox="false" item-editable-function="onItemEditbleFunction"></sc-checkbox-column>
+				</sc-grid-columns>
+			</sc-grid>
+			
+			<sc-dialog id="dialog" title-text="반려 사유" style="width:450px; height:310px" modal="true" draggable="true">
+				<cc-sub-title-bar>
+					<sc-button text="반려" on-click="onSaveReject" auth-a></sc-button>
+				</cc-sub-title-bar>
+				<cc-form-panel form-cls="label-column"  label-width="120" validation-group="reject">
+					<cc-fieldset>
+						<sc-label text="사유"></sc-label>
+						<sc-textarea-field value="{{rejectCause}}" class="h-100" max-length="500" required="true"></sc-textarea-field>
+					</cc-fieldset>
+				</cc-form-panel>
+			</sc-dialog>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-item-reg-detail',
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset : false,
+					value: function() {
+						return {
+							oorgCd: []
+						};
+					}
+				},
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// 품목 정보 binding 객체
+				regInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// 배정속성
+				asgnAttrList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				// 공통속성
+				commonAttrList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				// 개별속성
+				eachAttrList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				// 반려사유
+				rejectCause: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				},
+				// 속성값 세팅여부
+				attrSetModeYn: {
+					type: String,
+					value: function() {
+						return "Y";
+					}
+				},
+				
+				isChanged: {
+					type: Boolean,
+					value: false
+				},
+				
+				isInitLoad: {
+					type: Boolean,
+					value: true
+				},
+				
+				sessionInfo: {
+					type: Object,
+					value: function() {
+						return SCSessionManager.userDetails;
+					}
+				},
+				
+				similarityOptions: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				similarityList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				oorgList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			formulas: {
+				editable: function() {
+					var me = this;
+					var editable = false;
+					// 진행상태
+					var progSts = me.get("regInfo.item_reg_req_sts_ccd") || "CRNG";
+					
+					// 승인요청중
+					if(progSts === "APVL_REQG") {
+						editable = true;
+					}
+					return editable;
+				},
+				//반려가능상태
+				rejectable: function() {
+					var me = this;
+					var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+					//관리화면이고 승인요청상태인경우 반려가능
+					return progSts === "APVL_REQG";
+				},
+				//반려 상태
+				isReject: function() {
+					var me = this;
+					// 진행상태
+					var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+					return (progSts === "RET");
+				},
+				//승인 상태
+				isApproved: function() {
+					var me = this;
+					// 진행상태
+					var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+					return (progSts === "APVD");
+				},
+				//반려 이거나 승인인 상태
+				isRejectOrApproved: function() {
+					var me = this;
+                    // 진행상태
+                    var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+                    return (progSts === "RET" || progSts === "APVD");
+				},
+				isModReq: function() {
+					var me = this;
+					var reqTyp = me.get("regInfo.req_typ_ccd");
+					
+					// 요청 유형(C:변경), 변경요청내용 폼 visible처리
+					return (reqTyp === "CHG")
+				},
+				isExistItemDoctor: function() {
+					return SCModuleManager.exist('item-doctor');
+				},
+				isExistAsgnAttr: function() {
+					return !UT.isEmpty(this.get("asgnAttrList"));
+				},
+				isViewSimilarity: function() {
+					return this.formula('isExistItemDoctor') && this.formula('isEditableAndItemAdmin') && this.formula('isExistAsgnAttr');
+				},
+				isItemAdmin: function() {
+					var me = this;
+					var isBoolean = false;
+					var info = me.get("sessionInfo.authorities");
+					
+					for(var i in info) {
+						if(info[i].authority == 'I100') {
+							isBoolean = true;
+						}
+					}
+					return isBoolean;
+				},
+				
+				isEditableAndItemAdmin: function() {
+					return this.formula('editable') && this.formula('isItemAdmin');
+				},
+				
+				isRejectableAndItemAdmin: function() {
+					return this.formula('rejectable') && this.formula('isItemAdmin');
+				},
+				isExistPro: function() {
+					return SCModuleManager.exist('pro');
+				},
+				isExistItemCd: function() {
+					return !UT.isEmpty(this.get("regInfo.item_cd"));
+				},
+				isVisibleYn: function() {
+					return this.formula('isExistItemCd') && this.formula('isExistPro');
+				}
+			},
+			
+			observers: ["onChangeItemCat4Cd(regInfo.itemcat_lvl_4_cd)"],
+			
+			load: function(param) {
+				var me = this;
+				me.set("searchParam", param);
+				me.onFindInfoItemReg();
+			},
+			
+			onFindInfoItemReg : function() {
+				var me = this;
+				UT.request(me.$.findInfoAllItemReg);
+			},
+			
+			completeFindInfoAllItemReg : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(UT.isNotEmpty(result)) {
+					me.set("regInfo", result.regInfo);
+					me.set("oorgList", result.oorgList);
+					me.set("asgnAttrList", result.asgnAttrList);
+					
+					me.onMakeAsgnAttr(me.get("asgnAttrList"));
+					me.set("isInitLoad", false);
+					me.applyFormula();
+				}
+			},
+			
+			checkValidCode: function() {
+				var me = this;
+				var regInfo = me.get('regInfo');
+				
+				if(UT.isNotEmpty(regInfo.uom_ccd) && UT.isEmpty(regInfo.uom_nm)) {
+					UT.alert("STD.CMS1000"); //기본단위가 유효하지 않습니다.
+					return false;
+				}
+				return true;
+			},
+			
+			//분류4값(itemcat_4_cd)가 변경될때, 해당코드의 배정속성을 조회한다.
+			onChangeItemCat4Cd: function(itemcatCd) {
+				var me = this;
+				
+				if(me.get("isInitLoad")) {
+					return;
+				}
+				
+				me.removeAttrChild();
+				
+				if(itemcatCd) {
+					me.$.findListItemAsgnAttrByItemreg.body = {
+						itemcat_cd: itemcatCd,
+						itemcat_lvl: 4
+					};
+					
+					UT.request(me.$.findListItemAsgnAttrByItemreg);
+					
+				} else {
+					me.set("regInfo.item_spec", "");
+				}
+			},
+			
+			completeFindListItemAsgnAttrByItemreg : function(e, res) {
+				var me = this;
+				var result = res.response;
+				me.set("asgnAttrList", result);
+				
+				if(UT.isNotEmpty(result)) {
+					me.onMakeAsgnAttr(me.get("asgnAttrList"));
+				}
+				me.applyFormula('isViewSimilarity');
+				me.set("similarityList", new Array());
+				me.$.gridPanel.doContentElementResize();
+				
+			},
+			
+			//분류값에 따라 동적생성된 속성 정보를 화면에서 제거한다.
+			removeAttrChild: function() {
+				var me = this;
+				
+				// 요청자 정보 동적 node 삭제
+				me.removeChildByTagName(me.$.commonAttr, "cc-form-panel");
+				
+				// 속성 정보 동적 node 삭제
+				me.removeChildByTagName(me.$.eachAttr, "cc-form-panel");
+			},
+			
+			// 배정속성 조회 callback
+			onMakeAsgnAttr: function(asgnAttrList) {
+				var me             = this;
+				var result         = asgnAttrList;
+				var commonAttrList = []; // 공통속성 List
+				var	eachAttrList   = []; // 개별속성 List
+				
+				for(var i = 0, len = result.length; i < len; i++) {
+					var attr = result[i];
+					attr.indexId = i; //추후 조회를 위한 index 입력
+					(attr.comm_yn == "Y") ? commonAttrList.push(attr) : eachAttrList.push(attr); //공통,개별 속성 판단 후 데이터 분기처리
+				}
+				
+				me.set("commonAttrList", commonAttrList);
+				me.set("eachAttrList", eachAttrList);
+				
+				// 공통속성 Panel 생성
+				if(commonAttrList.length > 0) {
+					var commonAttrPanel = me.createCcFormPanel(me.$.commonAttr, commonAttrList);
+					commonAttrPanel.titleText = me.translate("공통 속성"); 	// 속성그룹명
+					commonAttrPanel.i18nDisabled = true;
+				}
+				
+				// 개별속성
+				var eachAttrGrp = {};
+				
+				// 개별속성 객체에 속성그룹코드별로 배열을 세팅한다.
+				for(var i = 0; i < eachAttrList.length; i++) {
+					var key = eachAttrList[i].iattr_grp_cd;
+					if(typeof (eachAttrGrp[key]) == "undefined") {
+						eachAttrGrp[key] = [];
+					}
+					
+					eachAttrGrp[key].push(eachAttrList[i]);
+				}
+				
+				// 개별 속성 종류별로 Panel 생성
+				var eachAttrPanel;
+				for(var key in eachAttrGrp) {
+					if(eachAttrGrp.hasOwnProperty(key)) {
+						var attrList = eachAttrGrp[key];
+						var eachAttrPanel = me.createCcFormPanel(me.$.eachAttr, attrList);
+						eachAttrPanel.titleText = me.translate("개별 속성") + " - " + attrList[0].disp_iattr_grp_nm; //속성그룹명
+						eachAttrPanel.i18nDisabled = true;
+					}
+				}
+				
+				// 속성정보를 조합하여 규격에 보여준다.
+				if(UT.isEmpty(me.get("regInfo.item_spec"))) {
+					me.buildSpec();
+				}
+				
+				// 저장된 속성값이 세팅되지 않게 한다.
+				me.set("attrSetModeYn", "N");
+			},
+			
+			createCcFormPanel : function(target, attrList) {
+				var me = this;
+				var panel = document.createElement("cc-form-panel");
+				
+				me.appendCcFieldSet(panel, attrList);
+				me.domAppendChild(target, panel);
+				
+				return panel;
+			},
+			
+			appendCcFieldSet : function(panel, attrList) {
+				var me = this;
+				var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+				var attrSetModeYn = me.get("attrSetModeYn");
+				
+				for(var i in attrList) {
+					var item = attrList[i], label, input, combo;
+					
+					fieldSet = document.createElement('cc-fieldset');
+					label = document.createElement('sc-label');
+					label.text = item.asgd_iattr_nm; // 배정속성명
+					label.setAttribute("i18n-disabled", true); //동적 생성 컬럼에 대해서 다국어 적용 X
+					me.domAppendChild(fieldSet, label);
+					
+					var inputList = item.lov_inp_val;
+					// 입력값목록 존재 시 (data type과 상관없음. 콤보박스로 생성)
+					if(inputList) {
+						var comboValues = inputList.split('/');
+						
+						var comboList = [];
+						
+						for(var i = 0; i < comboValues.length; i++) {
+							var row = {
+								label: comboValues[i]
+								, data: comboValues[i]
+							};
+							
+							comboList.push(row);
+						}
+						
+						combo = document.createElement('sc-combobox-field');
+						combo.displayField = "label";
+						combo.valueField = "data";
+						combo.items = comboList;
+						combo.placeholder = "선택";
+						combo.classList.add('attrValues');
+						combo.classList.add('w-200');
+						
+						// 필수 여부
+						if(item.mand_yn == "Y") {
+							combo.required = true;
+						} else {
+							combo.required = false;
+						}
+						
+						if(progSts != "APVL_REQG") {
+							combo.disabled = true;
+						}
+						
+						if(!me.formula('isEditableAndItemAdmin')) {
+							combo.disabled = true;
+						}
+						
+						// 데이터가 존재하는 경우 기본값 세팅 안함.
+						if(item.iattr_inp_val) {
+							combo.value = (attrSetModeYn == "Y") ? item.iattr_inp_val : item.dflt_val;
+						} else {
+							combo.value = item.dflt_val;
+						}
+						
+						combo.addEventListener('change', function() {
+							me.buildSpec();
+						});
+						
+						me.domAppendChild(fieldSet, combo);
+						
+					} else {
+						if(item.iattr_dat_typ_ccd === "NUMC") {
+							input = document.createElement('sc-number-field');
+							
+							// 입력값 범위
+							input.minValue = item.inp_val_st;
+							input.maxValue = item.inp_val_ed;
+							input.maxLength = 13;
+							input.style = 'vertical-align: top;';
+						} else {
+							input = document.createElement('sc-text-field');
+							
+							// 입력값 최대 길이
+							input.maxLength = item.inp_val_len;
+						}
+						input.classList.add('attrValues');
+						
+						// 데이터가 존재하는 경우 기본값 세팅 안함.
+						if(item.iattr_inp_val && attrSetModeYn == "Y") {
+							var attrVal = item.iattr_inp_val;
+							
+							if(item.iattr_dat_typ_ccd === "NUMC") {
+								if(!Number.isNaN(Number(attrVal))) {
+									input.value = attrVal;
+								}
+							} else {
+								input.value = attrVal;
+							}
+						} else if(item.dflt_val) {
+							var basVal = item.dflt_val;
+							
+							if(item.iattr_dat_typ_ccd === "NUMC") {
+								if(!Number.isNaN(Number(basVal))) {
+									input.value = basVal;
+								}
+							} else {
+								input.value = basVal;
+							}
+						}
+						
+						// 필수 여부
+						if(item.mand_yn == "Y") {
+							input.required = true;
+						} else {
+							input.required = false;
+						}
+						
+						if(progSts != "APVL_REQG") {
+							input.disabled = true;
+						}
+						
+						if(!me.formula('isEditableAndItemAdmin')) {
+							input.disabled = true;
+						}
+						
+						input.addEventListener('change', function() {
+							me.buildSpec();
+						});
+						
+						input.classList.add('w-200');
+						me.domAppendChild(fieldSet, input);
+					}
+					
+					// 속성 유형이 UOM 이면 단위 콤보 생성
+					if(item.iattr_uom_use_yn == "Y") {
+						var unitGrpCd = item.iattr_uom_cls_ccd;
+						
+						var comCode = item[unitGrpCd];
+						
+						combo = document.createElement('sc-combobox-field');
+						combo.displayField = "label";
+						combo.valueField = "data";
+						combo.items = comCode;
+						combo.placeholder = "선택";
+						combo.classList.add('w-200');
+						combo.id = "unitValues" + item.indexId;
+						combo.style.marginLeft = "5px";
+						
+						// 필수 여부
+						if(item.mand_yn == "Y") {
+							combo.required = true;
+						} else {
+							combo.required = false;
+						}
+						
+						// 데이터가 존재하는 경우 기본값 세팅 안함.
+						if(item.iattr_uom_ccd) {
+							if(attrSetModeYn == "Y") {
+								combo.value = item.iattr_uom_ccd;
+							} else {
+								combo.value = item.dflt_val;
+							}
+						}
+						if(progSts != "APVL_REQG") {
+							combo.disabled = true;
+						}
+						
+						if(!me.formula('isEditableAndItemAdmin')) {
+							combo.disabled = true;
+						}
+						
+						combo.addEventListener('change', function() {
+							me.buildSpec();
+						});
+						me.domAppendChild(fieldSet, combo);
+					}
+					
+					me.domAppendChild(panel, fieldSet);
+				}
+			},
+
+			//target에 element를 추가한다.
+			domAppendChild: function(target, el) {
+				var me = this;
+				
+				Polymer.dom(target).appendChild(el);
+			},
+			
+			//target에 element를 제거한다.
+			domRemoveChild: function(target, el) {
+				var me = this;
+				
+				Polymer.dom(target).removeChild(el);
+			},
+			
+			//target에 tagName을 이용해 자식 노드를 삭제한다.
+			removeChildByTagName: function(target, tagName) {
+				var me = this;
+				var targetEl = target;
+				
+				if(targetEl) {
+					var dynamic = targetEl.getElementsByTagName(tagName);
+					
+					for(var i = 0, dynamicLen = dynamic.length; i < dynamicLen; i++) {
+						var el = dynamic[0];
+						
+						me.domRemoveChild(targetEl, el);
+					}
+				}
+			},
+			
+			onSave: function() {
+				var me = this;
+				me.doSave();
+			},
+			
+			//품목 저장 or 등록요청 or 등록
+			doSave: function(progSts) {
+				var me = this;
+				var message = "";
+				
+				if(progSts) {
+					me.set("regInfo.item_reg_req_sts_ccd", progSts); // 요청
+				}
+				
+				// 필수값 체크
+				if(!me.validate("save")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(!me.checkValidCode()) {
+					return;
+				}
+				
+				// 동적생성된 값 매핑(공통&개별 속성)
+				me.setAttrValList(me.$.commonAttr, "commonAttrList");
+				me.setAttrValList(me.$.eachAttr, "eachAttrList");
+				
+				// 등록요청 or 등록인 경우, 공통&개별 속성의 필수값을 체크한다.
+				if(progSts == "APVL_REQG" || progSts == "APVD") {
+					var asgnAttrList = me.get("asgnAttrList");
+					var reqNm = "";
+
+					for(var i = 0; i < asgnAttrList.length; i++) {
+						var row = asgnAttrList[i];
+						
+						// 속성항목 중 필수인 항목
+						if(row.mand_yn == "Y") {
+							// 속성값이 없는 경우
+							if(!row.iattr_inp_val) {
+								reqNm = row.asgd_iattr_nm;
+								break;
+							}
+							
+							// 단위 Pool 그룹 코드가 존재하면
+							if(row.iattr_uom_ccd) {
+								// 단위코드 값이 없는 경우
+								if(!row.iattr_uom_ccd) {
+									reqNm = row.asgd_iattr_nm;
+									break;
+								}
+							}
+						}
+					}
+				}
+				
+				//oorgList 세팅
+				var provider = me.$.oorgGridPanel.getDataProvider();
+				var oorgList = provider.filterItems({use_yn : "Y"});
+				
+				// request body에 데이타 셋팅
+				me.$.saveInfoItemReg.body = {
+					regInfo: me.get("regInfo")
+					, asgnAttrList: me.get("asgnAttrList")
+					, oorgList : oorgList
+				};
+
+				switch(progSts) {
+					case "APVL_REQG":
+						// STD.N1210 = 요청하시겠습니까?
+						message = "STD.N1210";
+						break;
+					case "APVD":
+						// STD.N1106 = 승인하시겠습니까?
+						message = "STD.N1106";
+						break;
+					case "RET":
+						// STD.N3000 = 반려하시겠습니까?
+						message = "STD.N3000";
+						break;
+					default:
+						// STD.N1200 = 저장하시겠습니까?
+						message = "STD.N1200";
+				}
+				UT.confirm(message || "STD.N1200", function() {
+					Promise.all([me.$.fileUpload.upload(), me.$.imgUpload.upload()]).then(function() {
+						UT.request(me.$.saveInfoItemReg);
+					});
+				});
+			},
+			
+			//동적생성된 값을 세팅한다.
+			setAttrValList: function(target, refList) {
+				var me = this;
+				
+				// 동적생성된 속성 데이터 값 세팅
+				if(target) {
+					var attrValues = target.getElementsByClassName('attrValues');
+					var attrLen = attrValues.length;
+					
+					for(var i = 0; i < attrLen; i++) {
+						var el = attrValues[i];
+						
+						var referList = me.get(refList);
+						var row = referList[i];
+						me.asgnAttrList[row.indexId].iattr_inp_val = el.value;
+						
+						var unitValue = document.getElementById("unitValues" + row.indexId);
+						if(unitValue) {
+							me.asgnAttrList[row.indexId].iattr_uom_ccd = unitValue.value;
+						}
+					}
+				}
+			},
+			
+			// 저장 callback
+			completeSaveInfoItemReg: function(e, res) {
+				var me = this;
+				var result = res.response;
+				var message = "STD.N1510";
+				if(UT.isObject(result) && result.success) {
+					var progSts = me.get("regInfo.item_reg_req_sts_ccd");
+					var alertPrefixMessage = "";
+					if(!UT.isEmpty(progSts)){
+						switch(progSts){
+							case "APVL_REQG":
+								alertPrefixMessage = "등록 요청";
+								break;
+							case "APVD":
+								alertPrefixMessage = "등록 승인";
+								break;
+							case "RET":
+								alertPrefixMessage = "반려";
+								break;
+							default:
+								alertPrefixMessage = "저장";
+								break;
+						}
+					}
+					UT.completeAlert(alertPrefixMessage);
+					var result_data = result.resultData;
+					me.set("regInfo.item_reg_req_no", result_data.item_reg_req_no);
+					me.set("isChanged", true);
+					if(progSts == "APVD" || progSts == "RET" ) {
+						me.onClose();
+					} else {
+						me.removeAttrChild();
+						me.onFindInfoItemReg();
+						me.set("isInitLoad", true);
+						me.set("attrSetModeYn", "Y");
+					}
+				} else {
+					message = result.resultMessage;
+					UT.alert(message);
+				}
+			},
+			
+			//데이터 초기화
+			onClear: function() {
+				var me = this;
+				
+				me.removeAttrChild();
+				me.reset();
+			},
+			
+			//닫기
+			onClose: function() {
+				var me = this;
+				me.fire("close", me.get("isChanged"));
+				me.reset();
+			},
+			
+			//등록 버튼 클릭
+			onReg: function() {
+				var me = this;
+				me.doSave("APVD");
+			},
+			
+			//규격 정보 세팅
+			buildSpec: function() {
+				var me = this;
+				
+				// 동적생성된 값 매핑(공통&개별 속성)
+				me.setAttrValList(me.$.commonAttr, "commonAttrList");
+				me.setAttrValList(me.$.eachAttr, "eachAttrList");
+				
+				var spec = "";
+				var asgnAttrList = me.get("asgnAttrList");
+				
+				for(var i in asgnAttrList) {
+					if(asgnAttrList.hasOwnProperty(i)) {
+						spec += me.getSpec(asgnAttrList[i]);
+					}
+				}
+				
+				me.set("regInfo.item_spec", spec);
+			},
+			
+			// 속성별 규격 정보
+			getSpec: function(attr) {
+				var me = this;
+				
+				var strSpec = "";
+				
+				if(attr.iattr_inp_val) {
+					var asgnAttrNm = attr.asgd_iattr_nm || '';
+					var attrVal = attr.iattr_inp_val;
+					var unitCdVal = attr.iattr_uom_ccd || '';
+					
+					strSpec = "[" + asgnAttrNm + ":" + attrVal + unitCdVal + "]";
+				}
+				
+				return strSpec;
+			},
+			
+			//반려버튼 클릭
+			onReject: function() {
+				var me = this;
+				
+				me.set("rejectCause", "");
+				me.$.dialog.show();
+			},
+			
+			//반려 저장
+			onSaveReject: function() {
+				var me = this;
+				
+				if(!me.validate("reject")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				me.set("regInfo.item_reg_req_ret_rsn", me.get("rejectCause"));
+				me.$.dialog.close();
+				me.doSave("RET");
+			},
+			
+			onFindListItemSimilarity : function() {
+				var me = this;
+				var param = new Object();
+				
+				// 1. 품목명 && 분류 && 유사도 option validation
+				if(!me.validate('similarity')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				// 2. 속성에 대한 validation
+				var validate = false;
+				for(var i=0,len=me.asgnAttrList.length; i<len; i++) {
+					if(UT.isNotEmpty(me.asgnAttrList[i].iattr_inp_val)){
+						validate = true;
+						break;
+					}
+				}
+				if(!validate) {
+					UT.alert("STD.CMS1014"); //유사도 검색을 위해 하나 이상의 속성값을 입력해주세요.
+					return;
+				}
+				
+				// 2. data 가공
+				var inputs = me.asgnAttrList.reduce(function(pre, attrInfo) {
+					if(UT.isNotEmpty(attrInfo.iattr_inp_val)){
+						var data = {
+							seq : 0,
+							item_nm : me.regInfo.item_nm,
+							class_cd : me.regInfo.itemcat_lvl_4_cd,
+							attr_cd : attrInfo.iattr_cd,
+							attr_val : attrInfo.iattr_inp_val
+						}
+						pre.push(data);
+					}
+					return pre;
+				}, []);
+				
+				var options = new Object();
+				options.similarity = me.get("similarityOptions.similarity");
+				options.num_topk = me.get("similarityOptions.num_topk");
+				
+				me.$.findListItemSimilarity.body = {
+					options : options,
+					inputs : inputs
+				};
+				UT.request(me.$.findListItemSimilarity);
+			},
+			
+			completeFindListItemSimilarity : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) {
+					me.set("similarityList", result.resultList);
+					return;
+				} else {
+					UT.alert("STD.E9999");// 오류가 발생하였습니다.\n관리자에게 문의하세요
+					return;
+				}
+			},
+			
+			onItemStyle: function(data) {
+				var similarity = data.topk_prob;
+				if(similarity >= 95){
+					return {
+						background : "#cf5d5b",
+						fontWeight : "bold"
+					};
+				}else if(similarity >= 90){
+					return {
+						background : "#e4af4e",
+						fontWeight : "bold"
+					};
+				} else {
+					return {
+						background : "#98bf55",
+						fontWeight : "bold"
+					};
+				}
+			},
+			
+			////////////////////////////////////
+			//////////////oorgList//////////////
+			////////////////////////////////////
+			onItemEditEnd : function(e, detail) {
+				var me = this;
+				var data = detail.data;
+				var item = detail.item;
+				var grid = me.$.oorgGridPanel;
+				var provider = grid.getDataProvider();
+				
+				if(item.dataField == "use_yn" && data.use_yn == "N") {
+					provider.setItemAt(item.rowIndex, {"tl_yn" : "N", "qta_yn" : "N"});
+				}
+			},
+			onItemEditbleFunction : function(data, item) {
+				return data["use_yn"] == "Y";
+			},
+			
+			// 사용여부 배경색 지정
+			onItemStyleFunction: function(data, item) {
+				var me = this;
+				
+				if(item.dataField == "use_yn") {
+					return {"background": "#FFFFFF"};
+				}
+			}
+		});
+	</script>
+</dom-module>

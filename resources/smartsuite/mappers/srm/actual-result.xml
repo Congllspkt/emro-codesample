@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="actual-result">
+	<select id="findListVdAcres" resultType="map">
+	/* actual-result.findListVdAcres : 실적관리 목록 조회 */
+	SELECT VQUANT_DREG.TEN_ID
+		 , VQUANT_DREG.VD_QUANT_DAT_REG_UUID
+		 , VQUANT_DREG.OORG_CD
+		 , VQUANT_DREG.VD_CD
+		 , VQUANT_DREG.VMG_CD
+		 , VQUANT_DREG.DAT_TYP_CCD
+	     , VQUANT_DREG.DAT_TYP_CCD AS UNIT
+		 , VQUANT_DREG.DAT_APPL_YYMM
+	     , VQUANT_DREG.VAL
+	     , VQUANT_DREG.RMK
+	     , VQUANT_DREG.REGR_ID
+	     , VQUANT_DREG.REG_DTTM
+	     , VQUANT_DREG.MODR_ID
+	     , VQUANT_DREG.MOD_DTTM
+	     , VD.VD_NM
+	     , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+	     , VD.BIZREGNO
+	     , VD.ERP_VD_CD
+		<if test="p.dat_typ_ccd != 'SCL_ISS_CNT'">
+		 , SG.SG_CD
+		 , SG.SG_NM
+	     , SG.SG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN SG.SG_NM ELSE CASE WHEN SG.SG_NM_EN IS NULL OR SG.SG_NM_EN = '' THEN SG.SG_NM ELSE SG.SG_NM_EN END END AS DISPLAY_SG_NM
+		</if>
+	  FROM VD_QUANT_DAT_REG VQUANT_DREG
+      LEFT JOIN VD
+        ON VD.TEN_ID = VQUANT_DREG.TEN_ID
+       AND VD.VD_CD = VQUANT_DREG.VD_CD
+	 <if test="p.dat_typ_ccd != 'SCL_ISS_CNT'">
+     INNER JOIN SG
+	    ON SG.TEN_ID = VQUANT_DREG.TEN_ID
+	   AND SG.SG_CD = VQUANT_DREG.VMG_CD
+	 </if>
+	 WHERE VQUANT_DREG.TEN_ID = #{g.tenant}
+       AND VQUANT_DREG.STS != 'D'
+	   AND VQUANT_DREG.DAT_APPL_YYMM &gt;= #{p.appl_from_dt}
+	   AND VQUANT_DREG.DAT_APPL_YYMM &lt;= #{p.appl_to_dt}
+	  <if test="p.oorg_cd != null and p.oorg_cd != ''">
+		AND VQUANT_DREG.OORG_CD = #{p.oorg_cd}
+	  </if>
+	  <if test="p.dat_typ_ccd != null and p.dat_typ_ccd != ''">
+		AND VQUANT_DREG.DAT_TYP_CCD = #{p.dat_typ_ccd}
+	  </if>
+	  <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+		<bind name="erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+	    AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erp_vd_cd})
+	  </if>
+	  <if test="p.vd_nm != null and p.vd_nm != ''">
+		<bind name="vd_nm" value="'%' + p.vd_nm + '%'"/>
+		AND UPPER(VD.VD_NM) LIKE UPPER(#{vd_nm})
+	  </if>
+	  ORDER BY VQUANT_DREG.MOD_DTTM DESC
+	</select>
+	<select id="findListSgVendorInfo" resultType="map">
+	/* actual-result.findListSgVendorInfo : 협력사 소싱그룹 목록 조회 */
+	SELECT OORG_VVMG.TEN_ID
+		 , OORG_VVMG.VD_OORG_VMG_UUID
+		 , OORG_VVMG.VD_OORG_UUID
+		 , OORG_VVMG.VMG_OORG_UUID
+		 , VD_OORG.OORG_CD
+		 , VD_OORG.VD_CD
+		 , VD.ERP_VD_CD
+		 , VD.VD_NM
+		 , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+		 , VD.BIZREGNO
+		 , VD_OORG.OBD_TYP_CCD
+		 , VMG.VMG_CD
+		 , VMG.VMG_CD AS SG_CD
+		 , SG.SG_CD
+		 , SG.SG_NM						/* 소싱그룹 명 */
+         , SG.SG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN SG.SG_NM ELSE CASE WHEN SG.SG_NM_EN IS NULL OR SG.SG_NM_EN = '' THEN SG.SG_NM ELSE SG.SG_NM_EN END END AS DISPLAY_SG_NM
+		 , SG.PAR_SG_CD
+		 , SG2.SG_CD
+		 , SG2.SG_NM AS SG_MID_NM		/* 상위 소싱그룹 명 (중분류) */
+		 , SG2.PAR_SG_CD
+		 , SG3.SG_CD
+		 , SG3.SG_NM AS SG_TOP_NM		/* ROOT 소싱그룹 명 (대분류) */
+		 , SG3.PAR_SG_CD
+	  FROM VD_OORG_VMG OORG_VVMG
+     INNER JOIN VD_OORG VD_OORG
+        ON OORG_VVMG.TEN_ID = VD_OORG.TEN_ID
+       AND OORG_VVMG.VD_OORG_UUID = VD_OORG.VD_OORG_UUID
+     INNER JOIN VMG_OORG VO
+		ON VO.TEN_ID = OORG_VVMG.TEN_ID
+       AND VO.VMG_OORG_UUID = OORG_VVMG.VMG_OORG_UUID
+     INNER JOIN VMG
+		ON VO.TEN_ID = VMG.TEN_ID
+       AND VO.VMG_UUID = VMG.VMG_UUID
+	 INNER JOIN SG SG
+		ON SG.TEN_ID = VMG.TEN_ID
+	   AND SG.SG_CD = VMG.VMG_CD
+	  LEFT JOIN SG SG2
+		ON SG2.TEN_ID = SG.TEN_ID
+	   AND SG2.SG_CD = SG.PAR_SG_CD
+ 	  LEFT JOIN SG SG3
+		ON SG3.TEN_ID = SG2.TEN_ID
+	   AND SG3.SG_CD = SG2.PAR_SG_CD
+	 INNER JOIN VD VD
+        ON VD_OORG.TEN_ID = VD.TEN_ID
+       AND VD_OORG.VD_CD  = VD.VD_CD
+	 WHERE OORG_VVMG.TEN_ID = #{g.tenant}
+	   AND VD_OORG.OORG_CD  = #{p.oorg_cd}
+	   AND OORG_VVMG.STS != 'D'
+	   AND VD.STS != 'D'
+	 <if test="p.obd_typ_ccd != null and p.obd_typ_ccd != ''">
+	   AND VD_OORG.OBD_TYP_CCD = #{p.obd_typ_ccd}
+	 </if>
+	 <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+	   <bind name="erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+	   AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erp_vd_cd})
+	 </if>
+	 <if test="p.vd_nm != null and p.vd_nm != ''">
+	   <bind name="vd_nm" value="'%' + p.vd_nm + '%'"/>
+	   AND UPPER(VD.VD_NM) LIKE UPPER(#{vd_nm})
+	 </if>
+	 <if test="p.bizregno != null and p.bizregno != ''">
+	  <bind name="bizregno" value="'%' + p.bizregno + '%'"/>
+	   AND UPPER(VD.BIZREGNO) LIKE UPPER(#{bizregno})
+	 </if>
+	 ORDER BY SG3.SG_CD, SG2.SG_CD, SG.SG_CD
+	</select>
+	<insert id="insertVdAcresList">
+	/* actual-result.insertVdAcresList : 실적관리 목록 저장(신규 insert) */
+		INSERT INTO VD_QUANT_DAT_REG(
+			TEN_ID
+		  , VD_QUANT_DAT_REG_UUID
+		  , OORG_CD
+		  , VD_CD
+		  , VMG_CD
+		  , DAT_TYP_CCD
+		  , DAT_APPL_YYMM
+		  , VAL
+		  , RMK
+		  , STS
+		  , REGR_ID
+		  , REG_DTTM
+		  , MODR_ID
+		  , MOD_DTTM
+		) VALUES (
+		    #{g.tenant}
+		  , #{p.vd_quant_dat_reg_uuid}
+          , #{p.oorg_cd}
+          , #{p.vd_cd}
+          , #{p.sg_cd}
+          , #{p.dat_typ_ccd}
+          , #{p.dat_appl_yymm}
+          , #{p.val}
+          , #{p.rmk}
+          , 'C'
+          , #{g.username}
+          , #{g.now}
+          , #{g.username}
+		  , #{g.now}
+		)
+	</insert>
+	<update id="updateVdAcresList">
+	/* actual-result.updateVdAcresList : 실적관리 목록 저장(수정 update) */
+		UPDATE VD_QUANT_DAT_REG
+		   SET VD_CD = #{p.vd_cd}
+		     , VMG_CD = #{p.sg_cd}
+		     , VAL = #{p.val}
+		     , RMK = #{p.rmk}
+		     , DAT_APPL_YYMM = #{p.dat_appl_yymm}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_QUANT_DAT_REG_UUID = #{p.vd_quant_dat_reg_uuid}
+		   AND STS != 'D'
+	</update>
+	<delete id="deleteVdAcresList">
+	/* actual-result.deleteVdAcresList : 실적관리 목록 삭제 */
+		DELETE FROM VD_QUANT_DAT_REG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_QUANT_DAT_REG_UUID = #{p.vd_quant_dat_reg_uuid}
+		   AND STS != 'D'
+	</delete>
+	<select id="findSgVdNm" resultType="map">
+	/* actual-result.findSgVdNm : 실적관리 협력사 소싱그룹명 조회 */
+		SELECT VD.VD_CD
+			 , VD.VD_NM
+		     , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+			 , VD.BIZREGNO
+             , SG.SG_CD
+             , SG.SG_NM
+             , SG.SG_NM_EN
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN SG.SG_NM ELSE CASE WHEN SG.SG_NM_EN IS NULL OR SG.SG_NM_EN = '' THEN SG.SG_NM ELSE SG.SG_NM_EN END END AS DISPLAY_SG_NM
+        FROM VD
+       INNER JOIN SG
+          ON SG.TEN_ID = VD.TEN_ID
+	   WHERE VD.TEN_ID = #{g.tenant}
+		 AND VD.ERP_VD_CD = #{p.erp_vd_cd}
+		 AND SG.SG_CD = #{p.sg_cd}
+	</select>
+</mapper>

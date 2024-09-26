@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-master">
+    <select id="findListItemMaster" resultType="map">
+        /* item-master.findListItemMaster */
+        SELECT
+            ITEM.TEN_ID         /*시스템 아이디 */
+            , ITEM.ITEM_CD        /*품목 코드 */
+            , ITEM.REQ_ITEM_CD    /*요청 품목 코드 */
+            , ITEM.ITEM_REG_REQ_NO     /*등록요청번호*/
+            , CASE WHEN 'en_US' = #{g.locale} THEN ITEM.ITEM_NM_EN
+                ELSE ITEM_NM
+                END DISP_ITEM_NM
+            , ITEM.ITEM_NM        /*품목 명 */
+            , ITEM.ITEM_NM_EN     /*품목 영문 명 */
+            , ITEM.ITEM_SIMWORD        /*유사어*/
+            , ITEM.ITEM_SPEC           /*규격 */
+            , ITEM.UOM_CCD    /*기본 단위 코드 */
+            , ITEM.ITEMCAT_LVL_1_CD       /*분류1 코드 */
+            , ITEM.ITEMCAT_LVL_2_CD       /*분류2 코드 */
+            , ITEM.ITEMCAT_LVL_3_CD       /*분류3 코드 */
+            , ITEM.ITEMCAT_LVL_4_CD       /*분류4 코드 */
+            , ITEM.ITEMCAT_LVL_5_CD       /*분류5 코드 */
+            , ITEM.SG_CD          /*소싱그룹 코드 */
+            , ITEM.ATHG_UUID         /*첨부 번호 */
+            , ITEM.IMG_ATHG_UUID     /*이미지 첨부 번호 */
+            , ITEM.DWG_NO     /*도면 번호 */
+            , ITEM.MFGR_CD       /*제조사코드*/
+            , ITEM.MFGR_NM       /*제조사 명 */
+            , ITEM.MDL_NO         /*모델 번호 */
+            , ITEM.HS_NO          /*HS 번호 */
+            , ITEM.REP_ITEM_CD_YN      /*대표코드*/
+            , ITEM.USE_YN         /*사용 여부 */
+            , ITEM.RMK            /*비고 */
+            , ITEM.STS            /*상태 */
+            , ITEM.REGR_ID         /*등록자 아이디 */
+            , ITEM.REG_DTTM         /*등록 일시 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT1.ITEMCAT_NM_EN
+                ELSE CAT1.ITEMCAT_NM
+                END ITEMCAT_LVL_1_NM 			/* 품목분류1명 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT2.ITEMCAT_NM_EN
+                ELSE CAT2.ITEMCAT_NM
+                END ITEMCAT_LVL_2_NM 		/* 품목분류2명 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT3.ITEMCAT_NM_EN
+                ELSE CAT3.ITEMCAT_NM
+                END ITEMCAT_LVL_3_NM 		/* 품목분류3명 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT4.ITEMCAT_NM_EN
+                ELSE CAT4.ITEMCAT_NM
+                END ITEMCAT_LVL_4_NM  		/* 품목분류4명 */
+        FROM ITEM ITEM
+        LEFT OUTER JOIN ITEMCAT CAT1
+        ON CAT1.TEN_ID = ITEM.TEN_ID
+        AND CAT1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+        AND CAT1.STS != 'D'
+        LEFT OUTER JOIN ITEMCAT CAT2
+        ON CAT2.TEN_ID = ITEM.TEN_ID
+        AND CAT2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+        AND CAT2.STS != 'D'
+        LEFT OUTER JOIN ITEMCAT CAT3
+        ON CAT3.TEN_ID = ITEM.TEN_ID
+        AND CAT3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+        AND CAT3.STS != 'D'
+        LEFT OUTER JOIN ITEMCAT CAT4
+        ON CAT4.TEN_ID = ITEM.TEN_ID
+        AND CAT4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+        AND CAT4.STS != 'D'
+        WHERE ITEM.TEN_ID = #{g.tenant}
+        <!-- 분류 -->
+        <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != &quot;&quot;">
+            AND ITEM.ITEMCAT_LVL_1_CD = #{p.itemcat_lvl_1_cd}
+        </if>
+        <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != &quot;&quot;">
+            AND ITEM.ITEMCAT_LVL_2_CD = #{p.itemcat_lvl_2_cd}
+        </if>
+        <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != &quot;&quot;">
+            AND ITEM.ITEMCAT_LVL_3_CD = #{p.itemcat_lvl_3_cd}
+        </if>
+        <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != &quot;&quot;">
+            AND ITEM.ITEMCAT_LVL_4_CD = #{p.itemcat_lvl_4_cd}
+        </if>
+        <!-- 규격 -->
+        <if test="p.item_spec != null and p.item_spec != &quot;&quot;">
+            <bind name="specPattern" value="'%' + p.item_spec + '%'"/>
+            AND UPPER(ITEM.ITEM_SPEC) LIKE UPPER(#{specPattern})
+        </if>
+        <!-- 품목코드 -->
+        <choose>
+            <when test="p.item_cds != null and p.item_cds.size() != 0">
+                AND ITEM.ITEM_CD IN
+                <foreach close=")" collection="p.item_cds" item="item_cd" open="(" separator=",">
+                    #{item_cd}
+                </foreach>
+            </when>
+            <otherwise>
+                <if test="p.item_cd != null and p.item_cd != &quot;&quot;">
+                    <bind name="itemCdPattern" value="'%' + p.item_cd + '%'"/>
+                    AND UPPER(ITEM.ITEM_CD) LIKE UPPER(#{itemCdPattern})
+                </if>
+            </otherwise>
+        </choose>
+        <!-- 품목명 -->
+        <if test="p.item_nm != null and p.item_nm != &quot;&quot;">
+            <bind name="itemNmPattern" value="'%' + p.item_nm + '%'"/>
+            AND (UPPER(ITEM.ITEM_NM) LIKE UPPER(#{itemNmPattern}) OR UPPER(ITEM.ITEM_NM_EN) LIKE UPPER(#{itemNmPattern}))
+        </if>
+        AND ITEM.STS != 'D'
+        AND ITEM.USE_YN = 'Y'
+        ORDER BY ITEM.ITEM_CD DESC
+    </select>
+    <select id="findInfoItemMaster" resultType="map">
+        /* item-master.findInfoItemMaster */
+        SELECT
+            ITEM.TEN_ID         /*시스템 아이디 */
+             , ITEM.ITEM_CD        /*품목 코드 */
+             , ITEM.REQ_ITEM_CD    /*요청 품목 코드 */
+             , ITEM.ITEM_REG_REQ_NO     /*등록요청번호*/
+             , ITEM.ITEM_NM        /*품목 명 */
+             , ITEM.ITEM_NM_EN     /*품목 영문 명 */
+             , ITEM.ITEM_SIMWORD        /*유사어*/
+             , ITEM.ITEM_SPEC           /*규격 */
+             , ITEM.UOM_CCD    /*기본 단위 코드 */
+             , ITEM.ITEMCAT_LVL_1_CD       /*분류1 코드 */
+             , ITEM.ITEMCAT_LVL_2_CD       /*분류2 코드 */
+             , ITEM.ITEMCAT_LVL_3_CD       /*분류3 코드 */
+             , ITEM.ITEMCAT_LVL_4_CD       /*분류4 코드 */
+             , ITEM.ITEMCAT_LVL_5_CD       /*분류5 코드 */
+             , ITEM.SG_CD          /*소싱그룹 코드 */
+             , ITEM.ATHG_UUID         /*첨부 번호 */
+             , ITEM.IMG_ATHG_UUID     /*이미지 첨부 번호 */
+             , ITEM.DWG_NO     /*도면 번호 */
+             , ITEM.MFGR_CD       /*제조사코드*/
+             , ITEM.MFGR_NM       /*제조사 명 */
+             , ITEM.MDL_NO         /*모델 번호 */
+             , ITEM.HS_NO          /*HS 번호 */
+             , ITEM.REP_ITEM_CD_YN      /*대표코드*/
+             , ITEM.USE_YN         /*사용 여부 */
+             , ITEM.RMK            /*비고 */
+             , ITEM.STS            /*상태 */
+             , ITEM.REGR_ID         /*등록자 아이디 */
+             , ITEM.REG_DTTM         /*등록 일시 */
+             , ITEM.MODR_ID         /*수정자 아이디 */
+             , ITEM.MOD_DTTM         /*수정 일시 */
+             , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT1.ITEMCAT_NM_EN
+                        ELSE CAT1.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT1
+                WHERE CAT1.TEN_ID  = ITEM.TEN_ID
+                  AND CAT1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+                  AND CAT1.STS != 'D'
+                ) AS ITEMCAT_LVL_1_NM			/* 품목분류1명 */
+             , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT2.ITEMCAT_NM_EN
+                        ELSE CAT2.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT2
+                WHERE CAT2.TEN_ID  = ITEM.TEN_ID
+                AND CAT2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+                AND CAT2.STS != 'D'
+            ) AS ITEMCAT_LVL_2_NM 		/* 품목분류2명 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT3.ITEMCAT_NM_EN
+                        ELSE CAT3.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT3
+                WHERE CAT3.TEN_ID  = ITEM.TEN_ID
+                AND CAT3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+                AND CAT3.STS != 'D'
+            ) AS ITEMCAT_LVL_3_NM 		/* 품목분류3명 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT4.ITEMCAT_NM_EN
+                        ELSE CAT4.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT4
+                WHERE CAT4.TEN_ID  = ITEM.TEN_ID
+                AND CAT4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+                AND CAT4.STS != 'D'
+            ) AS ITEMCAT_LVL_4_NM 		/* 품목분류4명 */
+        FROM ITEM ITEM
+        WHERE ITEM.TEN_ID      = #{g.tenant}
+        AND ITEM.ITEM_CD     = #{p.item_cd}
+        AND ITEM.STS != 'D'
+    </select>
+    <select id="findInfoItemMasterForChange" resultType="map">
+        /* item-master.findInfoItemMasterForChange : 변경요청을 위한 데이터 조회*/
+        SELECT
+            ITEM.TEN_ID         /*시스템 아이디 */
+            , ITEM.ITEM_CD        /*품목 코드 */
+            , ITEM.REQ_ITEM_CD    /*요청 품목 코드 */
+            , ITEM.ITEM_REG_REQ_NO     /*등록요청번호*/
+            , ITEM.ITEM_NM        /*품목 명 */
+            , ITEM.ITEM_NM_EN     /*품목 영문 명 */
+            , ITEM.ITEM_SIMWORD        /*유사어*/
+            , ITEM.ITEM_SPEC           /*규격 */
+            , ITEM.UOM_CCD    /*기본 단위 코드 */
+            ,(
+                SELECT
+                    DL.DTLCD_NM
+                FROM DTLCD D
+                INNER JOIN DTLCD_MULTLANG DL
+                ON D.TEN_ID   = DL.TEN_ID
+                AND D.CCD   = DL.CCD
+                AND D.DTLCD   = DL.DTLCD
+                AND DL.LANG_CCD = #{g.locale}
+                WHERE D.TEN_ID   = #{g.tenant}
+                AND D.DTLCD   = 'C007'
+                AND D.USE_YN   = 'Y'
+                AND D.DTLCD   = ITEM.UOM_CCD
+            ) AS UOM_CCD_NM
+            , ITEM.ITEMCAT_LVL_1_CD       /*분류1 코드 */
+            , ITEM.ITEMCAT_LVL_2_CD       /*분류2 코드 */
+            , ITEM.ITEMCAT_LVL_3_CD       /*분류3 코드 */
+            , ITEM.ITEMCAT_LVL_4_CD       /*분류4 코드 */
+            , ITEM.ITEMCAT_LVL_5_CD       /*분류5 코드 */
+            , ITEM.SG_CD          /*소싱그룹 코드 */
+            , ITEM.ATHG_UUID         /*첨부 번호 */
+            , ITEM.IMG_ATHG_UUID     /*이미지 첨부 번호 */
+            , ITEM.DWG_NO     /*도면 번호 */
+            , ITEM.MFGR_CD       /*제조사코드*/
+            , ITEM.MFGR_NM       /*제조사 명 */
+            , ITEM.MDL_NO         /*모델 번호 */
+            , ITEM.HS_NO          /*HS 번호 */
+            , ITEM.REP_ITEM_CD_YN      /*대표코드*/
+            , ITEM.USE_YN         /*사용 여부 */
+            , ITEM.RMK            /*비고 */
+            , ITEM.STS            /*상태 */
+            , ITEM.REGR_ID         /*등록자 아이디 */
+            , ITEM.REG_DTTM         /*등록 일시 */
+            , ITEM.MODR_ID         /*수정자 아이디 */
+            , ITEM.MOD_DTTM         /*수정 일시 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT1.ITEMCAT_NM_EN
+                        ELSE CAT1.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT1
+                WHERE CAT1.TEN_ID  = ITEM.TEN_ID
+                AND CAT1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+                AND CAT1.STS != 'D'
+            ) AS ITEMCAT_LVL_1_NM			/* 품목분류1명 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT2.ITEMCAT_NM_EN
+                        ELSE CAT2.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT2
+                WHERE CAT2.TEN_ID  = ITEM.TEN_ID
+                AND CAT2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+                AND CAT2.STS != 'D'
+            ) AS ITEMCAT_LVL_2_NM 		/* 품목분류2명 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT3.ITEMCAT_NM_EN
+                        ELSE CAT3.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT3
+                WHERE CAT3.TEN_ID  = ITEM.TEN_ID
+                AND CAT3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+                AND CAT3.STS != 'D'
+            ) AS ITEMCAT_LVL_3_NM 		/* 품목분류3명 */
+            , (
+                SELECT
+                    CASE WHEN 'en_US' = #{g.locale} THEN CAT4.ITEMCAT_NM_EN
+                        ELSE CAT4.ITEMCAT_NM
+                        END ITEMCAT_NM
+                FROM ITEMCAT CAT4
+                WHERE CAT4.TEN_ID  = ITEM.TEN_ID
+                AND CAT4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+                AND CAT4.STS != 'D'
+            ) AS ITEMCAT_LVL_4_NM 		/* 품목분류4명 */
+        FROM ITEM ITEM
+        WHERE ITEM.TEN_ID      = #{g.tenant}
+        AND ITEM.ITEM_CD     = #{p.item_cd}
+        AND ITEM.STS != 'D'
+    </select>
+    <select id="findItemByItemCd" resultType="map">
+        SELECT ITEM.ITEM_CD
+             , ITEM.ITEM_NM
+             , ITEM.ITEM_NM_EN
+             , CASE WHEN #{g.locale} = 'en_US' THEN ITEM.ITEM_NM_EN
+                    ELSE ITEM.ITEM_NM
+                END AS DISP_ITEM_NM
+             , ITEM.ITEM_SPEC
+             , ITEM.MFGR_CD
+             , ITEM.MFGR_NM
+             , ITEM.MDL_NO
+             , ITEM.ITEMCAT_LVL_1_CD
+             , CAT1.ITEMCAT_NM AS ITEMCAT_LVL_1_NM
+             , CAT1.ITEMCAT_NM_EN AS ITEMCAT_LVL_1_NM_EN
+             , CASE WHEN #{g.locale} = 'en_US' THEN CAT1.ITEMCAT_NM_EN
+                    ELSE CAT1.ITEMCAT_NM
+                END AS DISP_ITEMCAT_LVL_1_NM
+             , ITEM.ITEMCAT_LVL_2_CD
+             , CAT2.ITEMCAT_NM AS ITEMCAT_LVL_2_NM
+             , CAT2.ITEMCAT_NM_EN AS ITEMCAT_LVL_2_NM_EN
+             , CASE WHEN #{g.locale} = 'en_US' THEN CAT2.ITEMCAT_NM_EN
+                    ELSE CAT2.ITEMCAT_NM
+                END AS DISP_ITEMCAT_LVL_2_NM
+             , ITEM.ITEMCAT_LVL_3_CD
+             , CAT3.ITEMCAT_NM AS ITEMCAT_LVL_3_NM
+             , CAT3.ITEMCAT_NM_EN AS ITEMCAT_LVL_3_NM_EN
+             , CASE WHEN #{g.locale} = 'en_US' THEN CAT3.ITEMCAT_NM_EN
+                    ELSE CAT3.ITEMCAT_NM
+                END AS DISP_ITEMCAT_LVL_3_NM
+             , ITEM.ITEMCAT_LVL_4_CD
+             , CAT4.ITEMCAT_NM AS ITEMCAT_LVL_4_NM
+             , CAT4.ITEMCAT_NM_EN AS ITEMCAT_LVL_4_NM_EN
+             , CASE WHEN #{g.locale} = 'en_US' THEN CAT4.ITEMCAT_NM_EN
+                    ELSE CAT4.ITEMCAT_NM
+                END AS DISP_ITEMCAT_LVL_4_NM
+          FROM ITEM
+          LEFT OUTER JOIN ITEMCAT CAT1
+            ON CAT1.TEN_ID = ITEM.TEN_ID
+           AND CAT1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+          LEFT OUTER JOIN ITEMCAT CAT2
+            ON CAT2.TEN_ID = ITEM.TEN_ID
+           AND CAT2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+          LEFT OUTER JOIN ITEMCAT CAT3
+            ON CAT3.TEN_ID = ITEM.TEN_ID
+           AND CAT3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+          LEFT OUTER JOIN ITEMCAT CAT4
+            ON CAT4.TEN_ID = ITEM.TEN_ID
+           AND CAT4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+         WHERE ITEM.TEN_ID = #{g.tenant}
+           AND ITEM.ITEM_CD = #{p.item_cd}
+    </select>
+</mapper>

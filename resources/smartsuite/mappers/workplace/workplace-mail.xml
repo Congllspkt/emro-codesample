@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="workplace-mail">
+    <select id="getMailTargList" resultType="map">
+    /* workplace-mail.getMailTargList */
+        SELECT OTMA.TICK_ID
+             , CASE WHEN TKCF.CLOSE_MAIL_TARG_YN ='Y' AND OTMA.CLOSE_MAIL_SND_YN ='N' AND <include refid="shared-workplace.condition_delay"/> THEN 'Y'
+                    ELSE 'N'
+               END AS CLOSE_TARG_YN -- 지연 메일 발송 대상 여부
+             , CASE WHEN TKCF.ARR_MAIL_TARG_YN ='Y' AND OTMA.ARR_MAIL_SND_YN ='N' AND <include refid="shared-workplace.condition_immnt"/> THEN 'Y'
+                    ELSE 'N'
+               END AS ARR_TARG_YN -- 임박 메일 발송 대상 여부
+             , CASE WHEN TKCF.NEW_MAIL_TARG_YN ='Y' AND OTMA.NEW_MAIL_SND_YN ='N' AND <include refid="shared-workplace.condition_new"/> THEN 'Y'
+                    ELSE 'N'
+               END AS NEW_TARG_YN -- 신규 메일 발송 대상 여부
+          FROM ESTOTMA OTMA
+         INNER JOIN ESTTKCF TKCF
+            ON OTMA.SYS_ID  = TKCF.SYS_ID
+           AND OTMA.WORK_ID = TKCF.WORK_ID
+         WHERE OTMA.SYS_ID = #{g.tenant}
+           AND (
+                   ( TKCF.CLOSE_MAIL_TARG_YN = 'Y' AND OTMA.CLOSE_MAIL_SND_YN = 'N' )
+                OR ( TKCF.ARR_MAIL_TARG_YN = 'Y' AND OTMA.ARR_MAIL_SND_YN = 'N' )
+                OR ( TKCF.NEW_MAIL_TARG_YN = 'Y' AND OTMA.NEW_MAIL_SND_YN = 'N' )
+               )
+    </select>
+    <select id="getMailReceiver" resultType="map">
+    /* workplace-mail.getMailReceiver */
+        SELECT TICK_ID
+             , AUTH_TYP_CD
+             , AUTH_CD
+          FROM ESTOTAH
+         WHERE SYS_ID = #{g.tenant}
+           AND TICK_ID = #{p.tick_id}
+    </select>
+    <select id="getUserMailInfo" resultType="map">
+    /* workplace-mail.getUserMailInfo */
+        SELECT USR_NM  AS TO_NM
+             , EMAIL   AS TO_ADDR
+          FROM ESAUSER
+         WHERE SYS_ID = #{g.tenant}
+           AND USR_ID = #{p}
+    </select>
+    <select id="getOperMailInfo" resultType="map">
+    /* workplace-mail.getOperMailInfo */
+        SELECT DISTINCT USR.USR_NM AS TO_NM
+             , USR.EMAIL           AS TO_ADDR
+          FROM ESAOOPM OOPM
+         INNER JOIN ESAUSER USR
+            ON OOPM.SYS_ID = USR.SYS_ID
+           AND OOPM.USR_ID = USR.USR_ID
+         WHERE OOPM.SYS_ID      = #{g.tenant}
+           AND OOPM.OPER_ORG_CD = #{p}
+    </select>
+    <select id="getWorkplaceMailContents" resultType="map">
+    /* workplace-mail.getWorkplaceMailContents */
+        SELECT UPWK.WORK_NM AS MAIN_WORK_NM
+             , WKMA.WORK_NM
+             , OTMA.CLOSE_DT
+             , OTMA.TICK_TIT
+             , OTMA.TICK_OPEN_DT
+             , CASE WHEN OTMA.OPEN_USR_ID IS NULL THEN ' '
+                    ELSE OTMA.OPEN_USR_ID
+               END AS OPEN_USR_ID
+             , OTMA.CLOSE_MAIL_SND_YN
+             , OTMA.ARR_MAIL_SND_YN
+             , OTMA.NEW_MAIL_SND_YN
+         FROM ESTOTMA OTMA
+        INNER JOIN ESTWKMA WKMA
+           ON WKMA.SYS_ID  = OTMA.SYS_ID
+          AND WKMA.WORK_ID = OTMA.WORK_ID
+          AND WKMA.STS    <![CDATA[<>]]> 'D'
+        INNER JOIN ESTWKMA UPWK
+           ON UPWK.SYS_ID  = WKMA.SYS_ID
+          AND UPWK.WORK_ID = WKMA.UP_WORK_ID
+          AND UPWK.STS    <![CDATA[<>]]> 'D'
+        WHERE OTMA.SYS_ID  = #{g.tenant}
+          AND OTMA.TICK_ID = #{p.tick_id}
+    </select>
+    <update id="updateMailSendYn">
+    /* workplace-mail.updateMailSendYn */
+        UPDATE ESTOTMA
+           SET CLOSE_MAIL_SND_YN = #{p.close_mail_snd_yn}
+             , ARR_MAIL_SND_YN   = #{p.arr_mail_snd_yn}
+             , NEW_MAIL_SND_YN   = #{p.new_mail_snd_yn}
+         WHERE SYS_ID  = #{g.tenant}
+           AND TICK_ID = #{p.tick_id} 
+    </update>
+    <select id="findListWorkplaceAlarmReceiverUsr" resultType="map">
+    /* workplace-mail.findListWorkplaceAlarmReceiverUsr : 업무 상태 알림 메일 수신자목록 조회 */
+    SELECT USR.CO_CD
+         , USR.USR_ID
+         , USR.USR_NM
+         , USR.EML
+         , USR.TEN_ID
+         , USR.USR_TYP_CCD
+     FROM (
+            SELECT DISTINCT TAUTH.TEN_ID
+                 , CASE WHEN TAUTH.AUTHTY_DIV_CCD = 'OORG' THEN OUSR.USR_ID
+                        WHEN TAUTH.AUTHTY_DIV_CCD = 'PURC_GRP' THEN PGP.USR_ID
+                        WHEN TAUTH.AUTHTY_DIV_CCD = 'BUYER' THEN USR.USR_ID
+                    END USR_ID
+              FROM TASK_AUTHTY TAUTH
+              LEFT OUTER JOIN OORG_USR OUSR
+                ON TAUTH.TEN_ID = OUSR.TEN_ID
+               AND TAUTH.AUTHTY_DIV_CCD = 'OORG'
+               AND TAUTH.AUTHTY_CD = OUSR.OORG_CD
+              LEFT OUTER JOIN PURC_GRP_PIC PGP
+                ON TAUTH.TEN_ID = PGP.TEN_ID
+               AND TAUTH.AUTHTY_DIV_CCD = 'PURC_GRP'
+               AND TAUTH.AUTHTY_CD = PGP.PURC_GRP_CD
+               AND PGP.STS != 'D'
+               AND PGP.PURC_GRP_TYP_CCD = 'PURC'
+              LEFT OUTER JOIN USR
+                ON TAUTH.TEN_ID = USR.TEN_ID
+               AND TAUTH.AUTHTY_DIV_CCD = 'BUYER'
+               AND TAUTH.AUTHTY_CD = USR.USR_ID
+             WHERE TAUTH.TEN_ID = #{g.tenant}
+               AND TAUTH.AUTHTY_DIV_CCD IN ('OORG', 'PURC_GRP', 'PURC', 'BUYER')
+           ) TO_USR
+       INNER JOIN USR
+          ON TO_USR.TEN_ID = USR.TEN_ID
+         AND TO_USR.USR_ID = USR.USR_ID
+         AND (USR.EML IS NOT NULL  )
+    </select>
+</mapper>

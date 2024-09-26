@@ -1,0 +1,350 @@
+<sc-link rel="import" href="es-performance-eval-req-sht.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-req-subj.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-req-evaltr.html"></sc-link>
+
+<dom-module id="es-performance-eval-req-group">
+	
+	<!--
+	/**
+	 *
+	 *	@description : 퍼포먼스평가 퍼포먼스평가그룹 조회
+	 *  <pre>
+	 * </pre>
+	 * @author : hj.jang
+	 * @FileName :
+	 * @Since 2023. 06. 08
+	 * @변경이력 : [2023. 06. 08] hj.jang 최초작성
+	 */
+	-->
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- 1. 퍼포먼스평가 평가그룹 조회 -->
+		<sc-ajax id="findPfmcReqPegInfo"
+				url="findPfmcReqPegInfo.do"
+				body="{{pePegInfo}}"
+				on-response="completeFindPfmcReqPegInfo">
+		</sc-ajax>
+
+		<!-- 2. 평가 대상 저장 -->
+		<sc-ajax id="savePeSubj"
+				url="savePeSubj.do"
+				on-response="completeSavePeSubj">
+		</sc-ajax>
+
+		<!-- 3. 평가 대상 평가자 저장 -->
+		<sc-ajax id="savePeSubjEvaltr"
+				 url="savePeSubjEvaltr.do"
+				 on-response="completeSavePeSubjEvaltr">
+		</sc-ajax>
+
+		<!---->
+		<sc-request-group init>
+			<sc-code-group>
+			
+			</sc-code-group>
+		
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		
+		<sc-tab-navigation id="grpTabNavi" class="flex page" selected-index="0"
+						   on-item-activate="onItemActivate" on-item-select="onItemSelect">
+			<es-performance-eval-req-sht id="evalShtTab" title-text="평가시트" on-initialized="_onShtInitialized" read-only="[[readOnly]]" is-initialized="true" on-changed-peg="onChangedPeg"></es-performance-eval-req-sht>
+			<template>
+				<es-performance-eval-req-subj id="subjTab" title-text="평가 대상" read-only="[[readOnly]]"
+									   on-initialized="_onSubjInitialized" on-save-pe-subj="onSavePeSubj"></es-performance-eval-req-subj>
+			</template>
+			<template>
+				<es-performance-eval-req-evaltr id="evaltrTab" title-text="평가자" read-only="[[readOnly]]"
+											  on-initialized="_onEvaltrInitialized" on-save-pe-subj-evaltr="onSavePeSubjEvaltr"></es-performance-eval-req-evaltr>
+			</template>
+		</sc-tab-navigation>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-performance-eval-req-group',
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							evalTaskTypCcd: [],   /* 평가업무구분 공통코드 */
+							peReqStsCcd: [],      /* 평가수행상태 공통코드 */
+						}
+					},
+					reset: false
+				},
+				isInitialized : {
+					type : Boolean,
+					value : false
+				},
+				pfmcEvalReq: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				pePegInfo : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				pegVmgList : {
+					type: Object,
+					value: function() {
+					return [];
+					}
+				},
+				pfmcEvalshtEvalfactAuthty : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				peEvalGrdList : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				loadCompleted: {
+					type: Boolean,
+					value: function() {
+						return false;
+					}
+				},
+				pegInfo : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				pfmcEvalshtInfo : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				},
+				readOnly : {
+                    type : Boolean,
+					value : true
+				},
+				pageMoveable : {
+					type : Boolean,
+					value : true
+				}
+
+			},
+			formulas: {
+
+			},
+			initialized: function() {
+				this.set("isInitialized", true);
+			},
+			load: function(param) {
+				var me = this;
+				me.set("pePegInfo", param);
+				me.set("loadCompleted", true);
+
+			},
+			setPfmcEvalReq : function(param) {
+                var me = this;
+                me.set("pfmcEvalReq", param);
+			},
+			setTabReadOnly : function(readOnly) {
+				var me = this;
+				var tabList = me.getTabNodes();
+				if(UT.isEmpty(tabList)) {
+					return;
+				}
+				me.set("readOnly", readOnly);
+				for(var i = 0; i < tabList.length; i++) {
+					if(tabList[i].isInitialized) {
+						tabList[i].set("readOnly", readOnly);
+					}
+				}
+			},
+			getTabNodes : function() {
+				var me = this;
+				return me.$.grpTabNavi.items;
+			},
+			//=============================== 서비스 =============================
+			onFindPfmcReqPegInfo : function() {
+				var me = this;
+				UT.request(me.$.findPfmcReqPegInfo);
+			},
+			completeFindPfmcReqPegInfo : function(e, res) {
+				var me = this,
+					peg = res.response;
+				if(UT.isNotEmpty(peg)) {
+					me.set("pePegInfo", peg.pePegInfo);
+					me.set("pegVmgList", peg.pegVmgList);
+					me.set("pfmcEvalshtInfo", peg.pfmcEvalshtInfo);
+					me.set("pfmcEvalshtEvalfactAuthty", peg.pfmcEvalshtEvalfactAuthty);
+					me.set("peEvalGrdList", peg.peEvalGrdList);
+					if(me.$.evalShtTab.isInitialized) {
+						me.$.evalShtTab.load({
+							pfmcEvalReq : me.pfmcEvalReq,
+							pePegInfo : me.pePegInfo,
+							pfmcEvalshtInfo : me.pfmcEvalshtInfo,
+							peEvalGrdList : me.peEvalGrdList
+						});
+					}
+					// 탭 수정 정보 존재 시 이동 X
+					me.set("pageMoveable", false);
+				}
+			},
+			onChangedPeg : function() {
+				var me = this;
+				me.onFindPfmcReqPegInfo();
+			},
+			onSavePeSubj : function(e, detail) {
+				var me = this;
+				me.$.savePeSubj.body = {
+					pfmcEvalReq : me.pfmcEvalReq,
+					pePegInfo : me.pePegInfo,
+					pfmcEvalshtInfo : me.pfmcEvalshtInfo,
+					savePeSubjList : detail.updated
+				};
+				UT.request(me.$.savePeSubj);
+			},
+			completeSavePeSubj : function(e, res) {
+				var me = this,
+					result = res.response;
+				if(result.resultStatus === "S") {
+					UT.completeAlert("저장"); //	저장이 완료되었습니다.
+					me.$.subjTab.onFindListPfmcReqSubj();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			onSavePeSubjEvaltr : function(e, detail) {
+				var me = this;
+				me.$.savePeSubjEvaltr.body = {
+					pfmcEvalReq : me.pfmcEvalReq,
+					pePegInfo : me.pePegInfo,
+					pfmcEvalshtInfo : me.pfmcEvalshtInfo,
+					insertPeSubjEvaltrList : detail.inserted,
+					udpatePeSubjEvaltrList : detail.updated,
+					deletePeSubjEvaltrList : detail.deleted
+				};
+				UT.request(me.$.savePeSubjEvaltr);
+			},
+			completeSavePeSubjEvaltr : function(e, res) {
+				var me = this,
+					result = res.response;
+				if(result.resultStatus === "S") {
+					UT.completeAlert("저장"); //	저장이 완료되었습니다.
+					me.$.evaltrTab.onFindListPfmcReqSubjEvaltr();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			//=============================== TAB 제어 =============================
+			onItemActivate : function(e) {
+				var me = this;
+				var oldItem = e.detail.oldItem;
+				var activeItem = e.detail.activeItem;
+
+				if(UT.isNotEmpty(oldItem) && me.isPegInnerTabStateChanged(oldItem)) {
+					// e.preventDefault();
+					// UT.alert("STD.SRM1082"); //	변경된 정보를 먼저 저장해야 합니다.
+					// return;
+					if(!me.pageMoveable) {
+						e.preventDefault();
+						// 	변경된 정보가 있습니다. 저장하지 않고 진행하시겠습니까?
+						UT.confirm("STD.N3900", function() {
+							me.set("pageMoveable", true);
+							me.$.grpTabNavi.selectItem(activeItem);
+						}, function() {
+							me.set("pageMoveable", false);
+						});
+						
+					} else {
+						me.set("pageMoveable", false);
+					}
+				}
+
+			},
+			// 파라미터로 넘겨진 탭에 변경된 정보 존재하면 return true. tabEle가 null인 경우 전체 탭 대상.
+			isPegInnerTabStateChanged : function(tabEle) {
+				var me = this,
+					changed = false;
+				
+				var changedResult = function(e) {
+					return !!e.isInitialized && !!e.getExistChangedInfo();
+				};
+				
+				if(UT.isNotEmpty(tabEle)) {
+					changed = changedResult(tabEle);
+				} else {
+					var tabNodes = me.getTabNodes();
+					if(UT.isNotEmpty(tabNodes)) {
+						for(var i = 0; i < tabNodes.length; i++) {
+							changed = changedResult(tabNodes[i]);
+							if(changed) {
+								break;
+							}
+						}
+					}
+				}
+				return changed;
+			},
+			onItemSelect : function(e) {
+				var me = this,
+					contentId = e.detail.item.id;
+				// 탭 클릭시 새로 로드
+				if(me.$[contentId].isInitialized) {
+					me.$[contentId].load({
+						pfmcEvalReq : me.pfmcEvalReq,
+						pfmcEvalshtInfo : me.pfmcEvalshtInfo,
+						pePegInfo : me.pePegInfo,
+						pegVmgList : me.pegVmgList,
+						pfmcEvalshtEvalfactAuthty : me.pfmcEvalshtEvalfactAuthty,
+						peEvalGrdList : me.peEvalGrdList
+					});
+				}
+			},
+			_onShtInitialized : function(e) {
+				var me = this;
+				if(me.isCompleted) {
+					me.$.evalShtTab.load({
+						pfmcEvalReq : me.pfmcEvalReq,
+						pePegInfo : me.pePegInfo,
+						pfmcEvalshtInfo : me.pfmcEvalshtInfo,
+						peEvalGrdList : me.peEvalGrdList
+					});
+				}
+			},
+			_onSubjInitialized : function(e) {
+				var me = this;
+				if(me.loadCompleted) {
+					me.$.subjTab.load({pfmcEvalReq : me.pfmcEvalReq, pePegInfo : me.pePegInfo, pegVmgList : me.pegVmgList});
+				}
+			},
+			_onEvaltrInitialized : function(e) {
+				var me = this;
+				if(me.loadCompleted) {
+					me.$.evaltrTab.load({
+						pfmcEvalReq : me.pfmcEvalReq,
+						pePegInfo : me.pePegInfo,
+						pfmcEvalshtEvalfactAuthty : me.pfmcEvalshtEvalfactAuthty
+					});
+				}
+			},
+		});
+	</script>
+</dom-module>

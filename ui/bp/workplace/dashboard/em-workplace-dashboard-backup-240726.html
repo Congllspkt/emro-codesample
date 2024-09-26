@@ -1,0 +1,1194 @@
+<sc-link rel="import" href="es-dashboard-task-list.html"></sc-link>
+<sc-link rel="import" href="popup/ep-work-setup.html"></sc-link>
+<sc-link rel="import" href="popup/ep-new-work.html"></sc-link>
+<!--<sc-link rel="import" href="/ui/bp/unifiedPriceInfo/mae/shared/cc-dashboard-chart.html"></sc-link>-->
+<!--<sc-link rel="import" href="/ui/bp/llm/event/es-widget-event-watch.html"></sc-link>-->
+<sc-link rel="import" href="/webjars/bower_components/smartsuite/bp/unifiedPriceInfo/rmatl/shared/cc-dashboard-chart.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/llm/evnt/es-widget-evnt-watch.html"></sc-link>
+<sc-link rel="stylesheet" type="text/css" href="../../../assets/css/workplace.css"></sc-link>
+<sc-link rel="stylesheet" type="text/css" href="../../../assets/css/workplace_custom.css"></sc-link>
+
+<dom-module id="em-workplace-dashboard">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+
+		<sc-code-group>
+			<sc-code code="C004" value="{{codes.cur}}"></sc-code>         <!-- 통화 -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+			<sc-code code="C024" value="{{codes.domovrsDivCcd}}"></sc-code> <!-- 내외자 구분 공통코드 -->
+			<sc-code code="D034" value="{{codes.elecCntrProgSts}}"></sc-code>   <!-- 전자계약진행상태 -->
+			<sc-code code="P009" value="{{codes.pymtmethCcd}}"></sc-code>  <!-- 지급방법 -->
+			<sc-code code="P010" value="{{codes.delyTermsCd}}"></sc-code> <!-- 납품방법 -->
+			<sc-code code="P011" value="{{codes.aprvSts}}"></sc-code>     <!-- 결재상태 -->
+			<sc-code code="P012" value="{{codes.vdPoStsCcd}}"></sc-code>   <!-- 협력사진행상태 -->
+			<sc-code code="P038" value="{{codes.poProgSts}}"></sc-code>   <!-- 발주진행상태 -->
+			<sc-code code="P045" value="{{codes.purcTypCcd}}"></sc-code>     <!-- 구매 유형 공통코드 -->
+			<sc-code code="P056" value="{{codes.poTypCcd}}"></sc-code>    <!-- 발주생성유형(계약방식) -->
+			<sc-code code="P070" value="{{codes.modTyp}}"></sc-code>      <!-- 변경유형 -->
+		</sc-code-group>
+		<sc-request-group init>
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<!-- 계약 체결 유형 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.cntrSignParam}}"
+					 last-response="{{codes.cntrSgngTypCcd}}">
+			</sc-ajax>
+		</sc-request-group>
+
+    	<sc-ajax id="findWorkByUserSetup" url="setup/findWorkByUserSetup.do" on-response="completeFindUserWorkSetup"></sc-ajax>
+
+        <sc-ajax id="findTaskCount" url="findTaskCount.do" body="{{searchParam}}" last-response="{{taskCount}}"></sc-ajax>
+
+        <sc-ajax id="findListMainTaskCount" url="findListMainTaskCount.do" body="{{searchParam}}" on-response="completeFindListMainTaskInfo"></sc-ajax>
+
+        <sc-ajax id="findListTaskStatus" url="findListTaskStatus.do" body="{{searchParam}}" on-response="completeFindListTaskStatus"></sc-ajax>
+
+        <sc-ajax id="findReturnedPoCount" url="findReturnedPoCount.do" body="{{searchParam}}" on-response="completeFindListReturnedPo"></sc-ajax>
+
+        <sc-ajax id="findUnitPriceAdequacyCount" url="findUnitPriceAdequacyCount.do" body="{{searchParam}}" on-response="completeFindUnitPriceAdequacyCount"></sc-ajax>
+
+        <sc-ajax id="findPoTypeCount" url="findPoTypeCount.do" body="{{searchParam}}" on-response="completeFindPoTypeCount"></sc-ajax>
+
+        <sc-ajax id="findListWorkplaceDashboardPoData" url="findListWorkplaceDashboardPoData.do" on-response="completeFindListWorkplaceDashboardPoData"></sc-ajax>
+
+        <sc-ajax id="findListWorkplaceDashboardUnitPrice" url="findListWorkplaceDashboardUnitPrice.do" on-response="completeFindListWorkplaceDashboardUnitPrice"></sc-ajax>
+
+        <sc-ajax id="findItemDoctorData" url="findItemDoctorData.do" last-response="{{itemCount}}"></sc-ajax>
+
+        <div class="hbox flex">
+			<div class="vbox" style="width: 70%" ><sc-panel class="flex wpPanel">
+	            <sc-panel id="workTitlePanel" class="sTitleBar boxType" title-text="Task Status" collapsible="false" style="">
+
+	                <div class="innerPanel">
+	                    <div class="tabBar">
+	                        <a class="on tab-link" on-click="onClickMainTaskPage" data-args="main">Overview per Main Task</a>
+	                        <a class="tab-link" on-click="onClickTaskStatusPage"  data-args="sub">Overview per Task Status</a>
+	                    </div>
+
+	                    <sc-pages id="pages" class="tabContent">
+		    	            <div class="tabContent flex" id="mainTaskDiv">
+			                    <cc-main-task-detail id="mainTaskDetail" on-item-click="onItemClickMainTaskDetail" main-task-list="{{mainTaskList}}" search-param="{{searchParam}}"></cc-main-task-detail>
+		                    </div>
+		                    <div class="tabContent flex" id="taskStatusDiv">
+			                    <cc-task-status-detail id="taskStatusDetail" on-item-click="onItemClickTaskStatusDetail" main-task-list="{{mainTaskList}}" flow-data="{{flowData}}" search-param="{{searchParam}}"></cc-task-status-detail>
+		                    </div>
+	                    </sc-pages>
+	                </div>
+	            </sc-panel>
+
+				<sc-panel  class="sTitleBar boxType" title-text="PO & UnitPrice" style=";display: block;font-size: 0;" collapsible="false">
+					<div style="display: inline-block;width: 23%;margin-right: 5px;margin-left: 5px;"><cc-echart id="poTypeChart" on-click="onClickPoTypeChart" class="box flex" style="margin-top: 5px;height:250px;"></cc-echart></div>
+					<div style="display: inline-block;width: 23%;margin-right: 5px;"><cc-echart id="returnPoChart" on-click="onClickReturnPoChart" class="box flex" style="margin-top: 5px;height:250px;"></cc-echart></div>
+					<div style="display: inline-block;width: 23%;margin-right: 5px;"><cc-echart id="unitPriceAdequacyChart" on-click="onClickUnitPriceChart" class="box flex" style="margin-top: 5px;height:250px;"></cc-echart></div>
+					<div style="display: inline-block;width: 27%;margin-right: 5px;border: 1px solid #C2C2C2; padding: 5px;">
+						<div class="box flex" style="font-size: 15px;font-weight: bold; color: #555; border-top: 2px solid #cf5d5b;height:120px;">
+							<div>
+								<p>
+									<span style="font-size: 20px; font-weight: bold;">Duplicate Items</span>
+									</br>
+									<span style="font-size: 10px;"># of 100% Similarity</span>
+								</p>
+								<p style="margin-top: 10px;text-align: center"> <span style="font-size: 24px; color:#EB7575"> {{itemCount.duplicateItemCount}} </span> <span style="font-size: 15px;"> [[translate('건')]]</span></p>
+							</div>
+						</div>
+						<div style="height: 10px"></div>
+						<div class="box flex" style="font-size: 15px;font-weight: bold; color: #555; border-top: 2px solid #cf5d5b;height:120px;">
+							<div>
+								<p>
+									<span style="font-size: 20px; font-weight: bold;">AutoPO Recommendations</span>
+									</br>
+									<span style="font-size: 10px;"># of Items to change PO Type</span>
+								</p>
+								<p style="margin-top: 10px;text-align: center"><span style="font-size: 24px; color:#EB7575"> {{itemCount.recommendPoItemCount}} </span> <span style="font-size: 15px;"> [[translate('건')]]</span></sp></p>
+							</div>
+						</div>
+					</div>
+				</sc-panel>
+
+
+				<!-- Task Grid -->
+	            <es-dashboard-task-list id="list" on-complete-save="onCompleteSaveWorkList"  search-param="{{searchParam}}" hidden="[[!formula('taskDisplayMode')]]"></es-dashboard-task-list>
+
+				<!-- Po Return & Type Grid -->
+				<sc-panel  class="sTitleBar boxType" title-text="PO List" hidden="[[!formula('poDisplayMode')]]" style=";display: block;font-size: 0;"   collapsible="false">
+					<sc-grid id="gridPanel" on-item-click="onItemClick" use-state="false" editable="false" use-selection="false"  class="h-250">
+						<sc-grid-columns>
+							<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="170"
+												display-field="logic_org_nm"
+												value-field="oorg_cd"
+												items="{{codes.oorgCd}}"></sc-combobox-column>
+
+							<sc-group-column hide-child-headers="true" header-text="결재 상태" width="130" text-align="center">
+								<sc-combobox-column data-field="apvl_sts_ccd" header-text="결재 상태" width="100"
+													display-field="label" value-field="data" items="{{codes.aprvSts}}"></sc-combobox-column>
+								<sc-image-column data-field="img_aprv" width="30" text-align="center" image-change-function="onImageChangeFn"></sc-image-column>
+							</sc-group-column>
+							<sc-combobox-column data-field="po_sts_ccd" header-text="상태" width="100"
+												display-field="label"
+												value-field="data"
+												items="{{codes.poProgSts}}"></sc-combobox-column>
+							<!--<sc-data-column data-field="cntr_use_yn" header-text="전자계약 사용 여부" width="120"></sc-data-column>-->
+							<sc-combobox-column data-field="cntr_sgng_typ_ccd" header-text="계약 체결 유형" width="100"
+												display-field="label"
+												value-field="data"
+												items="{{codes.cntrSgngTypCcd}}"></sc-combobox-column>
+							<sc-group-column hide-child-headers="true" header-text="전자계약 진행상태" width="120" text-align="center">
+								<sc-combobox-column data-field="ecntr_sts_ccd" width="120"
+													display-field="label"
+													value-field="data"
+													items="{{codes.elecCntrProgSts}}"></sc-combobox-column>
+							</sc-group-column>
+							<sc-combobox-column data-field="po_chg_typ_ccd" header-text="변경 유형" width="100"
+												display-field="label"
+												value-field="data"
+												items="{{codes.modTyp}}"></sc-combobox-column>
+							<sc-data-column data-field="po_cmpld_yn" header-text="발주 완료 여부" width="100"></sc-data-column>
+							<sc-data-column data-field="po_no" header-text="발주 번호" width="120" style-name="link"></sc-data-column>
+							<sc-data-column data-field="po_revno" header-text="차수" width="50"></sc-data-column>
+							<sc-data-column data-field="ecntr_no" header-text="계약 번호" width="120" style-name="link"></sc-data-column>
+							<sc-data-column data-field="po_tit" header-text="제목" width="300" text-align="left"></sc-data-column>
+							<sc-data-column data-field="erp_vd_cd" header-text="협력사 코드" width="100"></sc-data-column>
+							<sc-data-column data-field="vd_nm" header-text="협력사 명" width="200" text-align="left"></sc-data-column>
+							<sc-data-column data-field="rfx_no" header-text="RFX 번호" width="120"></sc-data-column>
+							<sc-combobox-column data-field="po_typ_ccd" header-text="생성 유형" width="100"
+												display-field="label"
+												value-field="data"
+												items="{{codes.poTypCcd}}"></sc-combobox-column>
+							<sc-combobox-column data-field="purc_typ_ccd" header-text="구매 유형" width="80"
+												display-field="label"
+												value-field="data"
+												items="{{codes.purcTypCcd}}"></sc-combobox-column>
+							<sc-data-column data-field="uprccntr_no" header-text="단가계약 번호" width="120"></sc-data-column>
+							<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70"
+												display-field="data"
+												value-field="data"
+												items="{{codes.cur_ccd}}"></sc-combobox-column>
+							<sc-data-column data-field="po_amt" header-text="금액" width="140" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+							<sc-date-column data-field="po_crn_dt" header-text="발주 등록 일자" width="80"></sc-date-column>
+							<sc-combobox-column data-field="domovrs_div_ccd" header-text="내외자 구분" width="100"
+												display-field="label"
+												value-field="data"
+												items="{{codes.domovrsDivCcd}}"></sc-combobox-column>
+							<sc-combobox-column data-field="pymtmeth_ccd" header-text="지급방법" width="150" text-align="left"
+												display-field="label"
+												value-field="data"
+												items="{{codes.pymtmethCcd}}"></sc-combobox-column>
+							<sc-combobox-column data-field="dlvymeth_ccd" header-text="납품방법" width="150" text-align="left"
+												display-field="label"
+												value-field="data"
+												items="{{codes.delyTermsCd}}"></sc-combobox-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="po_task_uuid"></sc-grid-field>
+							<sc-grid-field data-field="po_uuid"></sc-grid-field>
+							<sc-grid-field data-field="po_chg_task_uuid"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</sc-panel>
+
+				<!-- UnitPrice Grid -->
+				<sc-panel  class="sTitleBar boxType" title-text="UnitPrice List" hidden="[[!formula('unitPriceDisplayMode')]]" style=";display: block;font-size: 0;"   collapsible="false">
+					<sc-grid id="priceContractGridPanel" on-item-click="onUntiPriceItemClick" use-state="false" use-selection="false"  editable="false" class="h-250">
+							<sc-grid-columns>
+								<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="130" text-align="center" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+								<sc-data-column data-field="uprccntr_no" header-text="단가계약 번호" width="100" text-align="center"></sc-data-column>
+								<sc-data-column data-field="item_cd" header-text="품목 코드" width="90" text-align="center"></sc-data-column>
+								<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="170" text-align="left"></sc-data-column>
+								<sc-data-column data-field="disp_vd_nm" header-text="협력사 명" width="170" text-align="left"></sc-data-column>
+								<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="50" display-field="data" value-field="data" items="{{codes.uomCcd}}"></sc-combobox-column>
+								<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" display-field="data" value-field="data" items="{{codes.cur}}"></sc-combobox-column>
+								<sc-data-column data-field="uprccntr_uprc" header-text="단가계약 단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+								<sc-group-column header-text="계약 기간" width="165" hide-child-headers="true">
+									<sc-date-column data-field="uprc_efct_st_dt" width="80"></sc-date-column>
+									<sc-data-column data-field="uprc_efct_term_str" width="5" text-align="center" item-label-function="onItemLabelFn"></sc-data-column>
+									<sc-date-column data-field="uprc_efct_exp_dt" width="80"></sc-date-column>
+								</sc-group-column>
+								<!--<sc-date-column data-field="uprccntr_dt" header-text="최초 계약 일자" width="90"></sc-date-column>-->
+								<sc-group-column header-text="트랜잭션 데이터" width="250">
+									<sc-data-column data-field="po_cnt" header-text="# of PO" width="60"></sc-data-column>
+									<sc-data-column data-field="po_tot_amt" header-text="총 금액" width="110" text-align="right"	data-type="number"	format-type="price"></sc-data-column>
+									<sc-data-column data-field="avg_po_ltm" header-text="평균 리드타임" width="80" item-label-function="onItemLabelFn"></sc-data-column>
+								</sc-group-column>
+								<sc-data-column data-field="ade_indicator" header-text="적정성 지표"	width="50"	item-style-function="onItemStyleFn"	visible="[[formula('isExistPriceDoctorModule')]]"></sc-data-column>
+								<sc-group-column	header-text="AI 추정 단가"	width="250"	visible="[[formula('isExistPriceDoctorModule')]]">
+									<sc-group-column	header-text="추정 단가"	width="140"	hide-child-headers="true">
+										<sc-data-column		data-field="exch_fcst_uprc"			width="100"	text-align="right"	editable="false"
+															   data-type="number"					format-type="price"></sc-data-column>
+										<sc-data-column		data-field="uprccntr_fcst_uprc_sts"	width="20"	text-align="center"	item-label-function="onItemLabelFn"	item-style-function="onItemStyleFn"></sc-data-column>
+									</sc-group-column>
+									<sc-data-column		data-field="fcst_uprc_rate"			header-text="비율"		width="70"	text-align="right"	editable="false"
+														   data-type="number"					format-type="percentDecimal"	item-style-function="onItemStyleFn"></sc-data-column>
+								</sc-group-column>
+								<sc-group-column header-text="가격 적정성 검토"	width="250"	visible="[[formula('isExistPriceDoctorModule')]]">
+									<sc-group-column	header-text="시장 가격"	width="140"	hide-child-headers="true">
+										<sc-data-column data-field="exch_mktprc"			width="100"	text-align="right"	editable="false"
+														data-type="number"	format-type="price"></sc-data-column>
+										<sc-data-column		data-field="uprccntr_mk_uprc_sts"	width="20"	text-align="center"	item-label-function="onItemLabelFn"	item-style-function="onItemStyleFn"></sc-data-column>
+									</sc-group-column>
+									<sc-data-column	data-field="mktprc_rate"			header-text="비율"		width="70"	text-align="right"	editable="false"
+													   data-type="number"					format-type="percentDecimal"	item-style-function="onItemStyleFn"></sc-data-column>
+								</sc-group-column>
+							</sc-grid-columns>
+						</sc-grid>
+				</sc-panel>
+
+			</sc-panel></div>
+			<div class="hspace-5"></div>
+	       	<div class="vbox" style="width:30%;height:90%">
+				<sc-panel class="flex wpPanel">
+					<sc-panel  class="sTitleBar boxType" title-text="My favorite" style=";display: block;font-size: 0;"   collapsible="false">
+						<div style="height: 400px;"><cc-dashboard-chart></cc-dashboard-chart></div>
+						<div><es-widget-evnt-watch id="materialList"></es-widget-evnt-watch></div>
+						<div><es-widget-evnt-watch id="vendorList"></es-widget-evnt-watch></div>
+					</sc-panel>
+				</sc-panel>
+
+			</div>
+		</div>
+        
+    </template>
+    <script>
+        Polymer({
+            is : 'em-workplace-dashboard',
+
+            properties: {
+				taskCount: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				mainTaskList : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {
+							searchTerm:	''
+						};
+					}
+				},
+				flowData  : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				poTypeChartOption: {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: I18N.translate("발주 유형"),
+								left: 'center',
+								top : 20
+							},
+							tooltip : {
+								trigger: 'item',
+								textStyle : {
+									fontSize : 10
+								}
+							},
+							legend: {
+								orient: 'vertical',
+								left: 'left',
+								show : false,
+								top	: 10
+							},
+							series: []
+						};
+					}
+				},
+				returnPoChartOption: {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: I18N.translate("발주 거부"),
+								left: 'center',
+								top : 20
+							},
+							legend: {
+								orient: 'vertical',
+								left: 'left',
+								show : false,
+								top	: 10
+							},
+							tooltip : {
+								trigger: 'item',
+								textStyle : {
+									fontSize : 10
+								}
+							},
+							series: []
+						};
+					}
+				},
+				unitPriceAdequacyOption:{
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: 'Unit Price Adequacy',
+								left: 'center',
+								top : 20
+							},
+							color: ['#EB7575', '#F5BC5F', '#72B0EA'],
+							legend: {
+								top : '70'
+							},
+							tooltip: {
+								trigger: 'axis',
+								axisPointer: {
+									type: 'shadow'
+								}
+							},
+							grid: {
+								left: '10%',
+								right: '10%',
+								bottom: '20%',
+								top: '40%',
+								containLabel: false
+							},
+							xAxis: {
+								type: 'value'
+							},
+							yAxis: {
+								type: 'category',
+								data: ['']
+							},
+							series: []
+						};
+					}
+				},
+				taskDisplayValue: {
+                    type: Boolean,
+                    value: true
+                },
+				poDisplayValue: {
+                    type: Boolean,
+                    value: false
+                },
+				unitPriceDisplayValue: {
+                    type: Boolean,
+                    value: false
+                },
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							cur: [],
+							domovrsDivCcd: [],
+							aprvSts: [],
+							vdPoStsCcd: [],
+							poProgSts: [],
+							pymtmethCcd: [],
+							delyTermsCd: [],
+							purcTypCcd: [],
+							poTypCcd: [],
+							modTyp: [],
+							oorgCd: [],
+							cntrSignParam: {
+								ccd: "P237",
+								cstr_cnd_cd: "PO"
+							},
+							cntrSgngTypCcd:[] /* 계약 체결 유형 */
+						}
+					},
+					reset: false
+				},
+            },
+			formulas: {
+				taskDisplayMode: function(){
+					var me = this;
+					return me.get('taskDisplayValue');
+				},
+				poDisplayMode: function(){
+					var me = this;
+					return me.get('poDisplayValue');
+				},
+				unitPriceDisplayMode: function(){
+					var me = this;
+					return me.get('unitPriceDisplayValue');
+				},
+				isExistPriceDoctorModule: function() {
+					return SCModuleManager.exist("price-doctor");
+				}
+
+			},
+			initialized: function () {
+				var me = this;
+				me.findTaskCount();
+				me.findItemDoctorData();
+			},
+
+			findItemDoctorData : function () {
+			   var me = this;
+			   UT.request(me.$.findItemDoctorData);
+			},
+			findTaskCount: function() {
+				var me = this;
+				UT.request(me.$.findTaskCount);
+				me.findMainTask();
+			},
+			findMainTask : function() {
+				var me = this;
+				UT.request(me.$.findListMainTaskCount);
+			},
+
+			findReturnedPoCount:function () {
+				var me = this;
+                UT.request(me.$.findReturnedPoCount);
+			},
+			findUnitPriceAdequacyCount:function () {
+				var me = this;
+                UT.request(me.$.findUnitPriceAdequacyCount);
+			},
+			findPoTypeCount:function () {
+				var me = this;
+                UT.request(me.$.findPoTypeCount);
+			},
+
+			completeFindListMainTaskInfo: function (e, res) {
+				var me = this;
+				var result = res.response || [];
+
+				var selectedItem = me.get("selectedItem");
+
+				result.forEach(function (r) {
+
+					//widget에서 선택한 workStatus가 있는 경우 처리
+					if(UT.isNotEmpty(selectedItem) && r.main_task_uuid === selectedItem.main_task_uuid){
+						r.selectedIndex = "on";
+					}else{
+						r.selectedIndex = "";
+					}
+					var all = new BigNumber(r.delay_tot_cnt || 0).add(new BigNumber(r.immnt_tot_cnt || 0)).add(new BigNumber(r.norm_tot_cnt || 0)).toFixed();
+
+					r.delay = {};        // 지연
+					r.imminent = {};     // 임박(경고)
+					r.normal = {};      // 일반
+					r.taskCount = all; // 전체 카운트 설정
+
+					if(all == 0){
+						r.delay.left = "0";
+						r.imminent.left = "0";
+						r.normal.left = "0";
+						r.delay.width = "0%";
+						r.imminent.width = "0%";
+						r.normal.width = "0%";
+						return;
+					}
+
+					var delayRate = new BigNumber((new BigNumber(r.delay_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var imminentRate = new BigNumber((new BigNumber(r.immnt_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var delayAndImminentRate = delayRate.plus(imminentRate);
+					var normalRate = (r.norm_tot_cnt === 0) ? new BigNumber(0) : (new BigNumber(100)).minus(delayAndImminentRate);
+
+					r.delay.left = "0%";
+					r.delay.width = delayRate.toFixed() + "%";
+
+					r.imminent.left = delayRate.toFixed() + "%";
+					r.imminent.width = imminentRate.toFixed() + "%";
+
+					r.normal.left = delayAndImminentRate.toFixed() + "%";
+					r.normal.width = normalRate.toFixed() + "%";
+				});
+
+				me.set("mainTaskList", result);
+				me.$.list.setMainTaskList(result);
+
+				me.findTaskStatus();
+				me.findMaterialSearch();
+			},
+
+			findTaskStatus : function() {
+				var me = this;
+				UT.request(me.$.findListTaskStatus);
+			},
+
+			completeFindListTaskStatus: function (e, res) {
+				var me = this;
+
+				var result = res.response;
+				var flowData = [];
+				for(var i = 0; i < result.length; i++) {
+					var taskStatus = UT.copy(result[i]);
+					var mainWorks = me.mainTaskList.filter(function(data) {
+						return taskStatus.main_task_uuid === data.main_task_uuid;
+					});
+					if(UT.isNotEmpty(mainWorks) && mainWorks.length > 0) {
+						taskStatus.delay_tot_cnt = mainWorks[0].delay_tot_cnt;
+						taskStatus.norm_tot_cnt = mainWorks[0].norm_tot_cnt;
+						taskStatus.immnt_tot_cnt = mainWorks[0].immnt_tot_cnt;
+						taskStatus.new_tot_cnt = mainWorks[0].new_tot_cnt;
+						taskStatus.tot_cnt = new BigNumber(mainWorks[0].delay_tot_cnt || 0).add(new BigNumber(mainWorks[0].immnt_tot_cnt || 0)).add(new BigNumber(mainWorks[0].norm_tot_cnt || 0)).toFixed();
+					}
+
+					for(var j = 0; j < taskStatus.task_status_list.length; j++) {
+						var taskStatusItem = taskStatus.task_status_list[j];
+
+						var delayCnt = taskStatusItem.delay_cnt;
+						var normCnt = taskStatusItem.norm_cnt;
+						var immntCnt = taskStatusItem.immnt_cnt;
+						var totCnt = new BigNumber(delayCnt || 0).add(new BigNumber(normCnt || 0)).add(new BigNumber(immntCnt || 0)).toFixed();
+
+						taskStatusItem.tot_cnt = Number(totCnt || 0);
+						taskStatusItem.delay = {left : "0", width: "0%"};
+						taskStatusItem.immnt = {left : "0", width: "0%"};
+						taskStatusItem.norm = {left : "0", width: "0%"};
+
+						if(totCnt !== 0){
+							var minRate = 0; // statusLine 상태별 최소 너비 비율
+							var minCnt = new BigNumber(totCnt).mul(new BigNumber(minRate)).div(new BigNumber(100));
+							var minDelyCnt = new BigNumber(taskStatusItem.delay_cnt || 0);
+							minDelyCnt = minDelyCnt.gte(minCnt) ? minDelyCnt : minCnt;
+							var minWrnnCnt = new BigNumber(taskStatusItem.immnt_cnt || 0);
+							minWrnnCnt = minWrnnCnt.gte(minCnt) ? minWrnnCnt : minCnt;
+							var minNormCnt = new BigNumber(taskStatusItem.norm_cnt || 0);
+							minNormCnt = minNormCnt.gte(minCnt) ? minNormCnt : minCnt;
+							var minTotCnt = minDelyCnt.plus(minWrnnCnt).plus(minNormCnt);
+
+							var delayRate = new BigNumber(minDelyCnt.mul(new BigNumber(100)).div(minTotCnt).toFixed(2));
+							var immntRate = new BigNumber(minWrnnCnt.mul(new BigNumber(100)).div(minTotCnt).toFixed(2));
+							var delayAndImmntRate = delayRate.plus(immntRate);
+							var normRate = (new BigNumber(100)).minus(delayAndImmntRate);
+
+							taskStatusItem.delay.left = "0%";
+							taskStatusItem.delay.width = delayRate.toFixed() + "%";
+
+							taskStatusItem.immnt.left = delayRate.toFixed() + "%";
+							taskStatusItem.immnt.width = immntRate.toFixed() + "%";
+
+							taskStatusItem.norm.left = delayAndImmntRate.toFixed() + "%";
+							taskStatusItem.norm.width = normRate.toFixed() + "%";
+						}
+					}
+					flowData.push(taskStatus);
+				}
+				me.set("flowData", flowData);
+
+				me.findReturnedPoCount();
+				me.findUnitPriceAdequacyCount();
+				me.findPoTypeCount();
+			},
+
+			findMaterialSearch : function (){
+				var me = this;
+				me.$.materialList.load({
+						"title": "Material News", // 출력할 타이틀 지정
+						"evnt_cd": ["EVT00014", "EVT00015", "EVT00016", "EVT00017"], // Event Watch 관리 프로그램 이벤트 코드 참고
+						"size": 5    // 최대 조회 건수
+					});
+
+				me.$.vendorList.load({
+					"title": "Vendor News",
+					"evnt_cd": ["EVT00018", "EVT00019", "EVT00020", "EVT00021", "EVT00022"],
+					"size": 5
+				});
+			},
+
+			completeFindListReturnedPo: function (e, res) {
+				var me = this;
+				var result = res.response;
+				me.drawReturnPoChart(result);
+			},
+
+			completeFindUnitPriceAdequacyCount: function (e, res) {
+				var me = this;
+				var result = res.response;
+				me.drawUnitPriceAdequacyChart(result);
+			},
+
+			completeFindPoTypeCount: function (e, res) {
+				var me = this;
+				var result = res.response;
+				me.drawPoTypeChart(result);
+			},
+
+			_getMenuInfo: function(menuCd) {
+				var menuInfo = SCMenuManager.getMenuNode(menuCd);
+				return menuInfo;
+			},
+
+			onItemClick: function(event) {
+				var me   = this,
+						data = event.detail.data,
+						item = event.detail.item;
+
+				if(item.dataField === "po_no") {
+					// 발주 리스트에서 클릭 시 화면 노출  PO MENU CODE = PRO30040
+					var menuInfo = me._getMenuInfo('PRO30040'),
+							menuName = menuInfo.menu_nm,
+							menuUrl = menuInfo.menu_url;
+
+
+
+					MDIUT.createWindow('PRO30040', menuName, menuUrl + '?task_uuid='+data.po_uuid+'&workplace_yn=Y');
+				}
+			},
+			onUntiPriceItemClick: function(event) {
+				var me   = this,
+						data = event.detail.data,
+						item = event.detail.item;
+
+				if(item.dataField === "po_no") {
+					// 발주 리스트에서 클릭 시 화면 노출  PO MENU CODE = PRO30040
+					var menuInfo = me._getMenuInfo('PRO30040'),
+							menuName = menuInfo.menu_nm,
+							menuUrl = menuInfo.menu_url;
+
+					MDIUT.createWindow('PRO30040', menuName, menuUrl + '?task_uuid='+data.po_uuid);
+				}
+			},
+
+
+
+			onMainTaskClicked: function (e) {
+            	var me = this;
+                var item = e.detail;
+                // me.$.taskStatusChart.load(item);
+                me.$.mainTaskDetail.set("selectedItem",item);
+				me.$.list.load(item);
+				me.$.list.scrollIntoView({behavior:'smooth'});
+			},
+
+			onTaskStatusClicked: function (e) {
+				var me = this;
+				var item = e.detail;
+
+				me.$.list.load(item);
+				// 업무상태 클릭 시 task list 그리드로 scroll 이동
+				if(UT.isNotEmpty(item.taskStatusList)) {
+					me.$.list.scrollIntoView({behavior:'smooth'});
+				}
+			},
+
+
+			completeFindUserWorkSetup: function(e,res){
+				var me = this;
+
+				if(UT.isNotEmpty(res.response)){
+					var result = res.response;
+					if(result.chic_tab_cd === "S"){
+						me.togglePageOnStatus(e.target);
+						me.$.pages.selectItem(me.$.taskStatusDetail);
+					}
+				}
+			},
+
+			refresh: function () {
+				var me = this;
+				me.findTaskCount();
+				me.$.list.refresh();
+			},
+
+
+			onCompleteSaveWorkList: function () {
+            	var me = this;
+				me.refresh();
+			},
+
+			onClickMainTaskPage: function (e) {
+                var me = this;
+				me.set("poDisplayValue", false);
+				me.set("taskDisplayValue", true);
+				me.set("unitPriceDisplayValue", false);
+				me.applyFormula("poDisplayMode");
+				me.applyFormula("unitPriceDisplayMode");
+				me.applyFormula("taskDisplayMode");
+				me.togglePageOnStatus(e.target);
+				me.$.pages.selectItem(me.$.mainTaskDiv);
+			},
+
+			onClickTaskStatusPage: function (e) {
+				var me = this;
+				me.set("poDisplayValue", false);
+				me.set("taskDisplayValue", true);
+				me.set("unitPriceDisplayValue", false);
+				me.applyFormula("poDisplayMode");
+				me.applyFormula("unitPriceDisplayMode");
+				me.applyFormula("taskDisplayMode");
+				me.togglePageOnStatus(e.target);
+				me.$.pages.selectItem(me.$.taskStatusDiv);
+			},
+            togglePageOnStatus: function (target) {
+            	var me = this;
+
+            	if(target.classList.contains("on")){
+            		return;
+            	}
+
+				var list = me.querySelectorAll(".tabBar .tab-link");
+
+				for(var i=0; i<list.length; i++) {
+					list[i].classList.toggle("on");
+                }
+
+				target.scrollIntoView({
+					behavior: 'smooth'
+				});
+			},
+
+			onItemClickTaskStatusDetail: function (e) {
+				var me = this;
+				me.set("poDisplayValue", false);
+				me.set("taskDisplayValue", true);
+				me.set("unitPriceDisplayValue", false);
+				me.applyFormula("poDisplayMode");
+				me.applyFormula("unitPriceDisplayMode");
+				me.applyFormula("taskDisplayMode");
+                me.$.list.load(e.detail);
+			},
+
+			onItemClickMainTaskDetail: function (e) {
+                var me = this;
+                // me.$.taskStatusChart.load(e.detail);
+				me.set("poDisplayValue", false);
+				me.set("unitPriceDisplayValue", false);
+				me.set("taskDisplayValue", true);
+				me.applyFormula("poDisplayMode");
+				me.applyFormula("unitPriceDisplayMode");
+				me.applyFormula("taskDisplayMode");
+                me.$.list.load(e.detail);
+			},
+
+			//******************************************
+			//* 탑메뉴
+			//*********************************************/
+			onClickUserSetup: function(){
+				var me = this;
+				var setupPopup = UT.popup("ep-work-setup",me,"40%","50%");
+				setupPopup.show();
+				setupPopup.getWindowContent().load();
+
+			},
+			onClickMemo: function () {
+				var me = this;
+				var param = {
+					only_memo: "Y",
+					workList: []
+				};
+				me.$.list.load(param);
+			},
+
+			onClickNoti: function () {
+				var me = this;
+				var param = {
+					only_noti: "Y",
+					workList: [],
+                    isNotiSearch: true
+				};
+				me.$.list.load(param);
+			},
+
+			onClickExcept: function () {
+				var me = this;
+				var param = {
+					only_exception: "Y",
+					workList: []
+                };
+				me.$.list.load(param);
+			},
+
+			onClickNew: function () {
+            	var me = this;
+				var param = {
+					seriesIndex: 3,
+					workList: []
+				};
+				me.$.list.load(param);
+			},
+
+			convertCount : function (count){
+				return UT.isEmpty(count) ? 0 : count;
+			},
+
+			convertTitle: function(type) {
+				var me = this;
+				if(type === "new") {
+					return me.translate("신규 업무");
+				} else if(type === "memo") {
+					return me.translate("메모된 업무");
+				} else if(type === "noti") {
+					return me.translate("할당통보된 업무");
+				} else if(type === "except") {
+					return me.translate("제외된 업무");
+				}else if(type === "setting"){
+					return me.translate("설정");
+				} else {
+					return "";
+				}
+			},
+			onPopupNewTask: function() {
+				var me = this;
+				var popup = UT.popup("ep-new-work", me, 1300, 650);
+				popup.show();
+				popup.getWindowContent().load();
+			},
+
+			drawPoTypeChart:function (result) {
+				var me = this;
+				var option = me.get("poTypeChartOption");
+				var chartSeries = [];
+
+				if(result != null){
+					var chartSeriesData = [
+						{groupId : 'URGPURC', value: result.urgpurc_cnt, name: 'Urgent PO' },
+						{groupId : 'SPOTPURC', value: result.spotpurc_cnt, name: 'SpotPO w/o Contract' },
+						{groupId : 'SPOTCNTR', value: result.spotcntr_cnt, name: 'SpotPO w/ Contract' },
+						{groupId : 'TLAUTOPO', value: result.tlautopo_cnt, name: 'Touchless AutoPO' },
+						{groupId : 'NTLAUTOPO', value: result.ntlautopo_cnt, name: 'Controlled AutoPO' }
+					];
+				}
+				chartSeries.push({
+					name: me.translate("발주 유형"),
+					type: 'pie',
+					minAngle : '10',
+					radius: ['30%','50%'],
+					top : '15%',
+					label : {
+						fontSize : 10
+					},
+					data : chartSeriesData
+				});
+				option.series = chartSeries;
+				me.$.poTypeChart.generateChart(option);
+			},
+
+			drawReturnPoChart:function (result) {
+				var me = this;
+				var option = me.get("returnPoChartOption");
+				var chartSeries = [];
+
+				if(result != null){
+					var chartSeriesData = [
+						{ groupId : 'DLVY_NOT_POSS',value: result.dlvy_not_poss_cnt, name: 'Delivery' },
+						{ groupId : 'SUPPLIER_PROD_CAPA',value: result.supplier_prod_capa_cnt, name: 'Supplier Capacity' },
+						{ groupId : 'SUPPLIER_INVEN_CAPA',value: result.supplier_inven_capa_cnt, name: 'Supplier Inventory' },
+						{ groupId : 'PO_UPRC_ISS',value: result.po_uprc_iss_cnt, name: 'Price' },
+						{ groupId : 'OTH',value: result.oth_cnt, name: 'Others' }
+					];
+				}
+
+				chartSeries.push({
+					name: me.translate("발주 거부"),
+					type: 'pie',
+					minAngle : '10',
+					top : '15%',
+					radius: ['30%','50%'],
+					data : chartSeriesData,
+					label : {
+						fontSize : 10
+					},
+				});
+
+				option.series = chartSeries;
+				me.$.returnPoChart.generateChart(option);
+			},
+			drawUnitPriceAdequacyChart:function (result) {
+				var me = this;
+				var option = me.get("unitPriceAdequacyOption");
+				var chartSeries = [];
+
+				if(result != null){
+					chartSeries.push({
+						name: 'Warning',
+						type: 'bar',
+						stack: 'total',
+						label: {
+							show: true,
+							fontSize : 15
+						},
+						emphasis: {
+							focus: 'series'
+						},
+						data : [
+							{
+								groupId : 'RED',
+								value :result.RED,
+								itemStyle: {color: '#EB7575'}
+							}
+						]
+					});
+					chartSeries.push({
+						name: 'Caution',
+						type: 'bar',
+						stack: 'total',
+						label: {
+							show: true,
+							fontSize : 15
+						},
+						emphasis: {
+							focus: 'series'
+						},
+						data : [
+							{
+								groupId : 'YELLOW',
+								value :result.YELLOW,
+								itemStyle: {color: '#F5BC5F'}
+							}
+						],
+					});
+					chartSeries.push({
+						name: 'Safe',
+						type: 'bar',
+						stack: 'total',
+						label: {
+							show: true,
+							fontSize : 15
+						},
+						emphasis: {
+							focus: 'series'
+						},
+						data : [
+							{
+								groupId : 'GREEN',
+								value :result.GREEN,
+								itemStyle: {color: '#72B0EA'}
+							}
+						]
+					});
+				}
+
+
+				option.series = chartSeries;
+				me.$.unitPriceAdequacyChart.generateChart(option);
+			},
+			onClickPoTypeChart :function (param) {
+				var me =this;
+				var data = param.detail.data;
+				if(UT.isNotEmpty(data)) {
+					data["chart_type"] = 'poType';
+					data["groupId"] = data.groupId || '';
+
+					me.set("taskDisplayValue", false);
+					me.set("poDisplayValue", true);
+					me.set("unitPriceDisplayValue", false);
+					me.applyFormula("poDisplayMode");
+					me.applyFormula("unitPriceDisplayMode");
+					me.applyFormula("taskDisplayMode");
+					me.onEchartPoClicked(data);
+				}
+			},
+			onClickReturnPoChart :function (param) {
+				var me = this;
+				var data = param.detail.data;
+				if(UT.isNotEmpty(data)) {
+					data["chart_type"] = 'returnedPo';
+					data["groupId"] = data.groupId || '';
+					me.set("poDisplayValue", true);
+					me.set("unitPriceDisplayValue", false);
+					me.set("taskDisplayValue", false);
+					me.applyFormula("poDisplayMode");
+					me.applyFormula("unitPriceDisplayMode");
+					me.applyFormula("taskDisplayMode");
+					me.onEchartPoClicked(data);
+				}
+			},
+			onClickUnitPriceChart :function (param) {
+				var me = this;
+				var data = param.detail.data;
+				if(UT.isNotEmpty(data)) {
+					data["color"] = data.groupId || '';
+					me.set("poDisplayValue", false);
+					me.set("unitPriceDisplayValue", true);
+					me.set("taskDisplayValue", false);
+					me.applyFormula("poDisplayMode");
+					me.applyFormula("unitPriceDisplayMode");
+					me.applyFormula("taskDisplayMode");
+					me.onEchartUnitPriceClicked(data);
+				}
+			},
+
+			onEchartUnitPriceClicked: function (param) {
+				var me = this;
+				me.$.findListWorkplaceDashboardUnitPrice.body = param;
+				UT.request(me.$.findListWorkplaceDashboardUnitPrice);
+			},
+
+
+			onEchartPoClicked: function (param) {
+				var me = this;
+				param.main_task_uuid = 'PO';
+				me.$.findListWorkplaceDashboardPoData.body = param;
+				UT.request(me.$.findListWorkplaceDashboardPoData);
+			},
+
+			completeFindListWorkplaceDashboardPoData: function(e,res){
+				var me = this;
+				var result = res.response;
+				me.$.gridPanel.setDataProvider(result);
+				me.applyFormula();
+			},
+			completeFindListWorkplaceDashboardUnitPrice: function(e,res){
+				var me = this;
+				var result = res.response;
+				me.$.priceContractGridPanel.setDataProvider(result);
+				me.applyFormula();
+			},
+			onImageChangeFn: function(data, item) {
+				if(this.existApproval(data)) {
+					return "link";
+				}
+				return null;
+			},
+			existApproval: function(data) {
+				var taskUuid = data.po_chg_typ_ccd === "CHG" ? "po_chg_task_uuid" : "po_task_uuid";
+				if(["CRNG"].indexOf(data["apvl_sts_ccd"]) < 0 && UT.isNotEmpty(data[taskUuid])) {
+					return true;
+				} else {
+					return false;
+				}
+			},
+			onItemLabelFn: function(data, item) {
+				if(item.dataField === "uprccntr_fcst_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchFcstUprc = data.exch_fcst_uprc;
+
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchFcstUprc)) {
+						if(uprccntrUprc < exchFcstUprc) {
+							return "▲";
+						} else if(uprccntrUprc > exchFcstUprc) {
+							return "▼";
+						}
+						return "";
+					}
+				} else if(item.dataField === "uprccntr_mk_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchMkPrice = data.exch_mktprc;
+
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchMkPrice)) {
+						if(uprccntrUprc < exchMkPrice) {
+							return "▲";
+						} else if(uprccntrUprc > exchMkPrice) {
+							return "▼";
+						}
+						return "";
+					}
+				} else if(item.dataField === "uprc_efct_term_str") {
+					return "-";
+				} else if(item.dataField === "avg_po_ltm") {
+					if(UT.isNotEmpty(data[item.dataField])) {
+						return SCFormatter.format("number", data[item.dataField]) + " days";
+					}
+				}
+			},
+
+			onItemStyleFn: function(data, item) {
+				var red = "#EB7575",
+					green = "#72B0EA",
+					yellow = "#F5BC5F";
+
+				if(item.dataField === "uprccntr_fcst_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchFcstUprc = data.exch_fcst_uprc;
+
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchFcstUprc)) {
+						if(uprccntrUprc < exchFcstUprc) {
+							return {
+								fontColor: green
+							};
+						} else if(uprccntrUprc > exchFcstUprc) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "uprccntr_mk_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchMkPrice = data.exch_mktprc;
+
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchMkPrice)) {
+						if(uprccntrUprc < exchMkPrice) {
+							return {
+								fontColor: green
+							};
+						} else if(uprccntrUprc > exchMkPrice) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "fcst_uprc_rate") {
+					var fcstUprcRate = data.fcst_uprc_rate;
+
+					if(UT.isNotEmpty(fcstUprcRate)) {
+						if(fcstUprcRate > 0) {
+							return {
+								fontColor: green
+							};
+						} else if(fcstUprcRate < 0) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "mktprc_rate") {
+					var mkPriceRate = data.mktprc_rate;
+
+					if(UT.isNotEmpty(mkPriceRate)) {
+						if(mkPriceRate > 0) {
+							return {
+								fontColor: green
+							};
+						} else if(mkPriceRate < 0) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "ade_indicator") {
+					var bg = "";
+					var x = 3;
+					var fcstUprcRate = data.fcst_uprc_rate,
+						mkPriceRate = data.mktprc_rate;
+
+					// AI 예측 비율과 시장가 비율 둘다 존재하는 경우 둘다 95% 미만이면 빨강 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하는 경우 95% 이상 100% 미만인 경우 노랑 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하는 경우 100% 이상인 경우 초록 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하지 않는 경우 색상 표시 안함
+					if(UT.isNotEmpty(fcstUprcRate) && UT.isNotEmpty(mkPriceRate)) {
+						if(fcstUprcRate >= x || mkPriceRate >= x) {
+							bg = green;
+						} else if((fcstUprcRate >= -x && fcstUprcRate < x) || (mkPriceRate >= -x && mkPriceRate < x)) {
+							bg = yellow;
+						} else if(fcstUprcRate < -x || mkPriceRate < -x) {
+							bg = red;
+						} else {
+							bg = yellow;
+						}
+					} else
+						if(UT.isNotEmpty(fcstUprcRate || mkPriceRate)) {
+						var rate = fcstUprcRate || mkPriceRate;
+						if(rate < -x) {
+							bg = red;
+						} else if(rate >= -x && rate < x) {
+							bg = yellow;
+						} else if(rate >= x) {
+							bg = green;
+						}
+					}
+
+					return {
+						background: bg
+					}
+				}
+			}
+		});
+    </script>
+</dom-module>

@@ -1,0 +1,359 @@
+<sc-link rel="import" href="ep-performance-eval-result-calcfact-adj-detail.html"></sc-link>
+<dom-module id="es-performance-eval-result-calcfact-adj-list">
+	<!--
+	/**
+	 *
+	 *	@description : 정량평가 세부 측정 항목 > 세부 측정값 관리
+	 *  <pre>
+	 * </pre>
+	 * @FileName :
+	 * @Since 2017. 7. 10.
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		
+		<!-- 계산항목조회 -->
+		<sc-ajax id="findListCalcfactByPeUsed"
+				 url="findListCalcfactByPeUsed.do"
+				 last-response="{{calcfactList}}">
+		</sc-ajax>
+		
+		<!-- 계산항목상세조회 -->
+		<sc-ajax id="findListAdjCalcfactByFact"
+				 url="findListAdjCalcfactByFact.do"
+				 last-response="{{calcfactAdjList}}">
+		</sc-ajax>
+		
+		<!-- 계산항목 리스트 저장 -->
+		<sc-ajax id="savePeSubjCalcfactAdjList"
+				 url="savePeSubjCalcfactAdjList.do"
+				 on-response="completeUpdatePeSubjCalcfactAdjList">
+		</sc-ajax>
+		
+		<!-- 정량항목 결과 재계산 -->
+		<sc-ajax id="reCalculateQuantEvalfact" url="reCalculateQuantEvalfact.do"></sc-ajax>
+		<!-- 계산항목 값 재수집 -->
+		<sc-ajax id="reCalculateCalcfactVal" url="reCalculateCalcfactVal.do"></sc-ajax>
+		
+		<cc-search-condition-panel on-search="onPeQuantEvalfactSearch"	on-enter="onPeQuantEvalfactSearch" 	validation-group="search"	auth-r>
+			<cc-fieldset>
+				<sc-label text="퍼포먼스평가그룹"></sc-label>
+				<sc-combobox-field value="{{searchParam.peg_cd}}" items="{{codes.pegList}}" display-field="peg_nm" value-field="peg_cd"
+								   placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="소싱그룹"></sc-label>
+				<sc-combobox-field value="{{searchParam.vmg_cd}}" items="{{codes.vmgList}}" display-field="display_vmg_nm" value-field="vmg_cd"
+								   placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="NULL값 여부"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.useYnCcd}}"
+								   value="{{searchParam.nullv_yn}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계산항목 명"></sc-label>
+				<sc-combobox-field display-field="calcfact_nm" value-field="calcfact_uuid" items="{{calcfactList}}"
+								   value="{{searchParam.calcfact_uuid}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="조정 여부"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.useYnCcd}}"
+								   value="{{searchParam.adj_yn}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<sc-grid id="calcfactGridPanel" class="flex" use-selection="false" use-state="[[formula('isEditable')]]"	editable="[[formula('isEditable')]]"
+				 on-item-click="onCellDataClicked"	data-provider="{{calcfactAdjList}}" >
+			<cc-grid-toolbar>
+				<sc-button text="계산항목 값 재수집" on-click="onReCalculateCalcfactVal" hidden="[[!formula('isEditable')]]"></sc-button>
+				<sc-button text="결과 재계산" on-click="onReCalcQuantEvalfact" hidden="[[!formula('isEditable')]]"></sc-button>
+				<sc-button text="저장" on-click="onSavePeSubjCalcfactAdj" hidden="[[!formula('isEditable')]]"></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-checkbox-column data-field="dat_coll_xcept_yn" header-text="[[translate('재수집 제외')]]&#xd;[[translate('대상 여부')]]" width="110" editable="[[formula('isEditable')]]" i18n-disabled></sc-checkbox-column>
+				<sc-checkbox-column data-field="adj_yn" header-text="조정 여부" width="110"></sc-checkbox-column>
+				<sc-image-column data-field="btn_calcfact_val" header-text="조정 사유" width="80" text-align="center" editable="false"
+								 image-change-function="onImageChange"></sc-image-column>
+				<sc-checkbox-column data-field="calc_reqd_yn" header-text="재계산 대상 여부" width="120"></sc-checkbox-column>
+				<sc-checkbox-column data-field="nullv_yn" header-text="NULL값 여부" width="110" checked-value="Y" un-checked-value="N"></sc-checkbox-column>
+				<sc-data-column data-field="ini_calcfact_val" header-text="최초 계산항목 값" width="140" text-align="right" data-type="number" format-type="decimal"></sc-data-column>
+				<sc-data-column data-field="calcfact_val" header-text="계산항목 값" width="100" text-align="right" data-type="number" format-type="decimal"></sc-data-column>
+				<sc-data-column data-field="erp_vd_cd" header-text="협력사 코드" width="100"></sc-data-column>
+				<sc-data-column data-field="display_vd_nm" header-text="협력사 명" width="250" text-align="left"></sc-data-column>
+				<sc-data-column data-field="display_vmg_nm" header-text="소싱그룹" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="calcfact_nm" header-text="계산항목" width="250" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="pe_subj_calcfact_res_uuid"></sc-grid-field>
+				<sc-grid-field data-field="eval_subj_calcfact_res_uuid"></sc-grid-field>
+				<sc-grid-field data-field="pe_uuid"></sc-grid-field>
+				<sc-grid-field data-field="pe_subj_res_uuid"></sc-grid-field>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="vd_nm"></sc-grid-field>
+				<sc-grid-field data-field="vd_nm_en"></sc-grid-field>
+				<sc-grid-field data-field="vmg_oorg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="vmg_cd"></sc-grid-field>
+				<sc-grid-field data-field="vmg_nm"></sc-grid-field>
+				<sc-grid-field data-field="vmg_nm_en"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-performance-eval-result-calcfact-adj-list',
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							peStsCcd : [],
+							appealStsCcd: [],
+							pegList:[],
+							vmgList:[],
+							addCndCcd : [],
+							evalfactTypCcd : [],
+							useYnCcd : []
+						};
+					},
+				},
+				// 평가 종류 목록
+				evalKindList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				//검색조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				//계산항목
+				calcfactList: {
+					type: Array
+				},
+				calcfactAdjList: {
+					type: Array
+				}
+			},
+			formulas: {
+				isEditable: function() {
+					return this.peInfo && (this.peInfo.pe_sts_ccd == "EVAL_RES_CALC_CMPLD");
+				}
+			},
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 호출
+			load: function(data) {
+				var me = this, param = UT.copy(data);
+				
+				me.set("peInfo", param.peInfo);
+				me.set("codes", param.codes);
+				me.applyFormula();
+				
+				me.onCalcfactSearch();
+				me.onPeQuantEvalfactSearch();
+			},
+			onCalcfactSearch : function() {
+				var me = this;
+				var param = UT.copy(me.get("peInfo"));
+				
+				me.$.findListCalcfactByPeUsed.body = param;
+				//계산항목 조회
+				UT.request(me.$.findListCalcfactByPeUsed);
+			},
+			getPeSearchParam : function() {
+				var me = this;
+				var param = UT.copy(me.get("peInfo")),
+					searchParam = me.get("searchParam");
+				
+				for(var key in searchParam){
+					param[key] = searchParam[key];
+				}
+				return param;
+			},
+			/**
+			 * SRM 운영조직 combo 변경 처리
+			 */
+			onChangeOperOrgCombo: function(e) {
+				var me = this;
+				var selectedItem = e.detail.selectedItem;
+				
+				if(!selectedItem) {
+					me.set("searchParam.org_nm", "");
+				} else {
+					me.set("searchParam.org_nm", selectedItem.org_nm);
+				}
+				
+				if(UT.isNotEmpty(me.get("evalKindList"))) {
+					me.setFilteredEvalKindCodes();
+				}
+			},
+			
+			/**
+			 * 평가종류 콤보 목록 filtering
+			 */
+			setFilteredEvalKindCodes: function() {
+				var me = this;
+				var searchParam = me.get("searchParam");
+				var evalKindList = me.get("evalKindList");
+				var filtered = evalKindList.filter(function(item) {
+					if(item.oper_org_cd === searchParam.oper_org_cd && item.eval_typ_cd === searchParam.eval_typ_cd) {
+						return item;
+					}
+				});
+				
+				me.set("codes.evalKindCodes", filtered);
+				me.$.evalKindComboBox.selectedItem = {};
+			},
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			onCellDataClicked: function(e) {
+				var me   = this,
+					data = e.detail.data,
+					item = e.detail.item;
+				
+				var dataField = item.dataField;
+				
+				if(dataField === "btn_calcfact_val") {
+					// 수정 가능 상태이거나 조정 여부 "Y"인 경우
+					if(me.formula('isEditable') || (data.adj_yn || "N") === "Y"){
+						me.onShowAdjPopup(data);
+					}
+				}
+			},
+			// grid image column 데이터에 따른 icon 처리
+			onImageChange : function(data, item) {
+				var me = this;
+				// 수정 가능 상태인 경우 "search"
+				if(me.formula('isEditable')){
+					return "link";
+				}
+				// 조정 여부 "Y"인 경우 link, "N" 이면 이미지 없음
+				else {
+					if((data.adj_yn || "N") === "Y") {
+						return "link";
+					} else {
+						return null;
+					}
+				}
+			},
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			onPeQuantEvalfactSearch: function() {
+				var me = this;
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				me.$.findListAdjCalcfactByFact.body = me.getPeSearchParam();
+				UT.request(me.$.findListAdjCalcfactByFact);
+			},
+			//수정데이터 저장
+			onSavePeSubjCalcfactAdj: function() {
+				var me = this, provider = me.$.calcfactGridPanel.getDataProvider();
+				var data = me.get("peInfo");
+				var updateItems = provider.getUpdateItems();
+				
+				if(UT.isEmpty(updateItems)) {
+					UT.alert("STD.N1700");
+					return false;
+				}
+				
+				me.$.savePeSubjCalcfactAdjList.body = {
+					peInfo: data,
+					updateCalcfacts: updateItems
+				};
+				UT.request(me.$.savePeSubjCalcfactAdjList);
+			},
+			completeUpdatePeSubjCalcfactAdjList: function(el, res) {
+				var me     = this,
+					result = res.response || {};
+				var sts = result.resultStatus;
+				
+				if(sts === "S") {	//저장성공
+					UT.completeAlert("저장", function() {
+						UT.request(me.$.findListAdjCalcfactByFact);
+					});
+				} else if(sts == "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400"); // STD.E9400	: 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+				} else {	//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 재집계
+			onReCalculateCalcfactVal: function() {
+				var me = this, data = me.get("peInfo");
+				me.$.reCalculateCalcfactVal.set("body", data);
+				UT.request(me.$.reCalculateCalcfactVal, function(e, res) {
+					var result = res.response || {};
+					var sts = result.resultStatus;
+					
+					if(sts == "S") {
+						UT.completeAlert("계산항목 값 재수집", function() {
+							me.onPeQuantEvalfactSearch();
+						});
+					} else if(sts == "INVALID_STATUS_ERR") {
+						UT.alert("STD.E9400"); // STD.E9400	: 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+			
+			// 정량항목 재계산
+			onReCalcQuantEvalfact: function() {
+				var me = this, data = me.get("peInfo");
+				me.$.reCalculateQuantEvalfact.set("body", data);
+				UT.request(me.$.reCalculateQuantEvalfact, function(e, res) {
+					var result = res.response || {};
+					var sts = result.resultStatus;
+					
+					if(sts == "S") {
+						UT.completeAlert("결과 재계산", function() {
+							me.onPeQuantEvalfactSearch();
+						});
+					} else if(sts == "INVALID_STATUS_ERR") {
+						UT.alert("STD.E9400"); // STD.E9400	: 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+			
+			//조정팝업 호출
+			onShowAdjPopup: function(param) {
+				var me = this;
+				param.editable = me.formula("isEditable");
+				var adjPopup = UT.popup("ep-performance-eval-result-calcfact-adj-detail", me, 900, 720, {
+					'complete-save': function(popup, e) {
+						me.onPeQuantEvalfactSearch();
+						popup.close();
+					}
+				}, {titleText : "조정"});
+				adjPopup.show();
+				adjPopup.getWindowContent().load(param);
+			}
+		});
+	</script>
+</dom-module>

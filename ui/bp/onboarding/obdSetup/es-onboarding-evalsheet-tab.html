@@ -1,0 +1,491 @@
+<sc-link rel="import" href="es-onboarding-evalsheet-info.html"></sc-link>
+
+<dom-module id="es-onboarding-evalsheet-tab">
+<!-- 
+/**
+ *
+ *	@description : 협력사 > 온보딩평가 설정 > 온보딩평가그룹 > 온보딩평가그룹 상세 (온보딩 평가시트 Tab)
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 온보딩 평가시트 조회 -->
+        <sc-ajax
+                id="findObdEvalsht"
+                url="findObdEvalsht.do"
+                body="{{obdEvalshtInfo}}"
+                on-response="onFindResultHandler">
+        </sc-ajax>
+
+        <!-- 온보딩 평가시트 저장 -->
+        <sc-ajax
+                id="saveObdEvalsht"
+                url="saveObdEvalsht.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+		<!-- 온보딩 평가시트 Import -->
+        <sc-ajax
+                id="saveImportObdEvalsht"
+                url="saveImportObdEvalsht.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+		<!-- 온보딩 평가시트 버전업 -->
+        <sc-ajax
+                id="saveVersionupObdEvalsht"
+                url="saveVersionupObdEvalsht.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+		
+		<!-- 온보딩 평가시트 삭제 -->
+        <sc-ajax
+                id="deleteObdEvalsht"
+                url="deleteObdEvalsht.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+
+        <!-- 온보딩 평가시트 프로세스 저장 -->
+        <sc-ajax
+                id="saveObdEvalshtPrcs"
+                url="saveObdEvalshtPrcs.do"
+                on-response="onSaveObdEvalshtPrcsResultHandler">
+        </sc-ajax>
+		
+		<!-- 온보딩 평가시트 및 프로세스 전체 저장 -->
+        <sc-ajax
+                id="saveAllObdEvalshtAndPrcses"
+                url="saveAllObdEvalshtAndPrcses.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+		
+		<!-- 온보딩 평가시트/평가템플릿 확정 저장 -->
+        <sc-ajax
+                id="saveCnfdYnObdEvalsht"
+                url="saveCnfdYnObdEvalsht.do"
+                on-response="onSaveObdEvalshtResultHandler">
+        </sc-ajax>
+
+        <cc-sub-title-bar title-text="온보딩 평가시트">
+        </cc-sub-title-bar>
+
+        <sc-tab-navigation id="tabNavi" class="fit" selected="0">
+            <es-onboarding-evalsheet-info id="evalshtInfo" title-text="개요" on-save-obd-evalsht="onSaveObdEvalsht" on-confirm-cancel-obd-evalsht="onConfirmCancelObdEvalsht" on-validate-obd-evalsht-prcs="onValidateObdEvalshtPrcs"
+											on-import-obd-evalsht="onImportObdEvalsht" on-versionup-obd-evalsht="onVersionupObdEvalsht" on-delete-obd-evalsht="onDeleteObdEvalsht"></es-onboarding-evalsheet-info>
+        </sc-tab-navigation>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-onboarding-evalsheet-tab",
+            properties: {
+				// 평가시트 저장모드
+				saveMode:{
+					type: String,
+					value: null
+				},
+				// 조회only 모드 여부
+                readonlyMode: {
+                    type : Boolean,
+                    value : false
+                },
+                oeg:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                obdEvalshtInfo:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+				obdEvalshtHis:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                obdEvalshtInfoPrcses:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+				
+				// 재조회할 프로세스(= 저장한 프로세스) 코드
+				reloadPrcsCcd:{
+                    type: String,
+                    value: null
+                },
+				//completeAlert key 값(btn Name)
+				completeAlertKey : {
+					type : String,
+					value : function(){
+						return "";
+					}
+				},
+				reloadable : {	// Save, Submit 등의 행동을 했는지 판별
+					type: Boolean,
+					value : false
+				}
+            },
+
+            initialized: function(){
+            },
+
+            /**
+             * 화면 load
+             */
+            loadScreen: function(param){
+                var me = this;
+                me.$.evalshtInfo.load(param);
+
+                var tabNavi = me.$.tabNavi;
+                me.removePrcsTab(tabNavi);
+
+                var obdEvalshtInfoPrcses = param.obdEvalshtInfoPrcses;
+                if(!UT.isEmpty(obdEvalshtInfoPrcses) && obdEvalshtInfoPrcses.length > 0){  // 온보딩 프로세스 존재
+                    var obdPrcses = obdEvalshtInfoPrcses.filter(function(item){
+                        return item.application_yn == 'Y';
+                    });
+
+                    if(!UT.isEmpty(obdPrcses) && obdPrcses.length > 0) {  // 적용대상 온보딩 프로세스 존재
+                        // 온보딩 프로세스 Tab 동적 생성
+                        me.loadEvalshtPrcsTabs(obdPrcses);
+                    }
+                }
+            },
+            /**
+             * 화면 load (온보딩 프로세스 Tab 동적 생성)
+             */
+            loadEvalshtPrcsTabs: function(obdPrcses){
+                var me = this;
+                var tabNavi = me.$.tabNavi;
+
+                // 프로세스 정렬
+                obdPrcses.sort(function(a, b)  {
+                    return a.prcs_sort - b.prcs_sort;
+                });
+
+                // 프로세스 저장 function 정의
+                var saveTabFunc = function(e){
+                    var body = e.detail
+
+                    if(!UT.isEmpty(body)){
+						me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+						
+                        body.oegInfo = me.get("oeg");
+                        me.$.saveObdEvalshtPrcs.body = body;
+                        UT.request(me.$.saveObdEvalshtPrcs);
+                    }
+                };
+				// 평가템플릿 수정모드 전환 완료 function 정의
+				var savedTabFunc = function(e){
+					var data = e.detail;
+					var param = {
+						oegInfo : me.get("oeg"),
+						obdEvalshtInfoPrcs : data,
+						reloadable		 : me.get("reloadable")
+					}
+					me.fire("saved-obd-evalsht-prcs", param);
+					
+					me.set("reloadable", false);
+				}
+
+				Polymer.Base.importLink("ui/bp/onboarding/obdSetup/es-onboarding-evalsheet-process-info.html", function(moduleId) {
+					for(var i = 0; i < obdPrcses.length; i++) {
+						var obdPrcs = obdPrcses[i];
+						
+						// 온보딩 프로세스 탭화면 생성
+						var obdPrcsTab = document.createElement(moduleId);
+						obdPrcsTab.id = obdPrcs.prcs_ccd;    // 프로세스 코드로 아이디 설정
+						obdPrcsTab.setAttribute('title', obdPrcs.prcs_ccd_nm);  // 프로세스 명으로 탭 명 설정
+						obdPrcsTab.addEventListener("save-obd-evalsht-prcs", saveTabFunc);
+						obdPrcsTab.addEventListener("saved-evaltmpl", savedTabFunc);
+						
+						// tab navigation에 생성한 헤더 탭 append
+						Polymer.dom(tabNavi).appendChild(obdPrcsTab);
+						Polymer.dom.flush();
+						
+						obdPrcs.current_evalsht = me.get("obdEvalshtInfo.current_evalsht");
+						obdPrcs.effective_evalsht = me.get("obdEvalshtInfo.effective_evalsht");
+						obdPrcs.readonlyMode = me.get("readonlyMode");
+						obdPrcsTab.load({
+							oeg: me.get("oeg"), // 운영조직 코드 포함
+							obdPrcs: obdPrcs
+						});
+					}
+				});
+            },
+            removePrcsTab : function(tabNavi) {
+                var me = this;
+                var contents = Polymer.dom(tabNavi).queryDistributedElements('*');
+                for(var i=1; i<contents.length; i++){
+                    Polymer.dom(tabNavi).removeChild(contents[i]);
+                }
+            },
+			/**
+             * 온보딩 프로세스 저장 callback
+             */
+            onSaveObdEvalshtPrcsResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+                    UT.completeAlert("저장", function(){
+						var resultData = result.resultData;
+						resultData.reloadable = me.get("reloadable");
+						
+                        me.fire("saved-obd-evalsht-prcs", resultData);
+						
+						me.set("reloadable", false);
+                    });
+                }
+            },
+
+            load: function(param){
+                var me = this;
+
+                me.set("oeg", param.oeg);
+				me.set("obdEvalshtInfo", param.obdEvalshtInfo);
+				me.set("obdEvalshtHis", param.obdEvalshtHis);
+				me.set("readonlyMode", param.readonlyMode == null ? me.get("readonlyMode") : param.readonlyMode);
+                this.onSearchObdEvalsht();
+
+                me.applyFormula();
+            },
+			reload: function(param, reloadPrcsCcd){
+				var me = this;
+				me.set("reloadPrcsCcd", reloadPrcsCcd);  // 재조회할 프로세스(= 저장한 프로세스) 코드 셋팅
+				me.load(param);
+			},
+
+            /**
+             * 온보딩 평가시트 조회
+             */
+            onSearchObdEvalsht: function(){
+                var me = this;
+                UT.request(me.$.findObdEvalsht);
+            },
+
+            /**
+             * 온보딩 평가시트 조회 callback
+             */
+            onFindResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var resultData = result.resultData;
+                    var obdEvalshtInfo = UT.isEmpty(resultData.obdEvalshtInfo) ? new Object() : resultData.obdEvalshtInfo;
+                    var obdEvalshtInfoPrcses = UT.isEmpty(resultData.obdEvalshtInfoPrcses) ? new Array() : resultData.obdEvalshtInfoPrcses;
+
+                    // 3. 온보딩 평가시트 조회
+                    me.set("obdEvalshtInfo", obdEvalshtInfo);
+                    // 4. 온보딩 평가시트 프로세스 조회
+                    me.set("obdEvalshtInfoPrcses", obdEvalshtInfoPrcses);
+
+                    var param = {
+                        oeg : me.get("oeg"),
+                        obdEvalshtInfo : me.get("obdEvalshtInfo"),
+                        obdEvalshtHis : me.get("obdEvalshtHis"),
+                        obdEvalshtInfoPrcses : me.get("obdEvalshtInfoPrcses"),
+						readonlyMode : me.get("readonlyMode")
+                    };
+
+					var reloadPrcsCcd = me.get("reloadPrcsCcd");
+					if(UT.isEmpty(reloadPrcsCcd)) {  // load
+						me.loadScreen(param);
+					}else{  // reload
+						var reloadTargetTab = me.getTargetTab(reloadPrcsCcd);
+						var obdEvalshtInfoPrcs = obdEvalshtInfoPrcses.filter(function(item){
+							if(item.prcs_ccd == reloadPrcsCcd){
+								return item;
+							}
+						});
+						
+						me.$.evalshtInfo.load(param);
+						obdEvalshtInfoPrcs[0].current_evalsht = me.get("obdEvalshtInfo.current_evalsht");
+						reloadTargetTab.load({
+							oeg: me.get("oeg"),
+							obdPrcs: obdEvalshtInfoPrcs[0]
+						});
+						me.set("reloadPrcsCcd", null);  // 초기화
+					}
+                }
+            },
+
+            /**
+             * 온보딩평가그룹 (OEG) - 온보딩 평가시트 저장
+             */
+            onSaveObdEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+				if(!UT.isEmpty(body)) {
+					var saveMode = body.obdEvalshtInfo.saveMode;
+					me.set("saveMode", saveMode);
+					
+					me.set("completeAlertKey", body.completeAlertKey);	//completeAlert Key 을 위한 button 명
+					me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+					
+					if(saveMode == "confirmSave") {  // 확정
+						me.$.saveAllObdEvalshtAndPrcses.body = body;
+						UT.request(me.$.saveAllObdEvalshtAndPrcses);
+					} else {  // 임시저장
+						me.$.saveObdEvalsht.body = body;
+						UT.request(me.$.saveObdEvalsht);
+					}
+				}
+            },
+			/**
+             * 온보딩평가그룹 (OEG) - 온보딩 평가시트 확정취소
+             */
+			onConfirmCancelObdEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+					me.set("completeAlertKey", body.completeAlertKey);	//completeAlert Key 을 위한 button 명
+					me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+					
+                    me.$.saveCnfdYnObdEvalsht.body = body;
+                    UT.request(me.$.saveCnfdYnObdEvalsht);
+                }
+            },
+			
+			/**
+             * 온보딩평가그룹 (OEG) - 평가시트 Import
+             */
+			onImportObdEvalsht: function(e){
+				var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+					me.set("completeAlertKey", body.completeAlertKey);	//completeAlert Key 을 위한 button 명
+					me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+					
+                    me.$.saveImportObdEvalsht.body = body;
+                    UT.request(me.$.saveImportObdEvalsht);
+                }
+			},
+			/**
+             * 온보딩평가그룹 (OEG) - 평가시트 버전업
+             */
+			onVersionupObdEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body.oeg)){
+					me.set("completeAlertKey", body.completeAlertKey);	//completeAlert Key 을 위한 button 명
+					me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+					
+                    me.$.saveVersionupObdEvalsht.body = body.oeg;
+                    UT.request(me.$.saveVersionupObdEvalsht);
+                }
+            },
+			/**
+             * 온보딩평가그룹 (OEG) - 평가시트 삭제
+             */
+			onDeleteObdEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+					me.set("completeAlertKey", body.completeAlertKey);	//completeAlert Key 을 위한 button 명
+					me.set("reloadable", true);	//닫기 버튼 후 reload 여부
+					
+                    me.$.deleteObdEvalsht.body = body;
+                    UT.request(me.$.deleteObdEvalsht);
+                }
+            },
+			
+            /**
+             * 온보딩평가그룹 (OEG) / 온보딩 평가시트 저장 callback
+             */
+            onSaveObdEvalshtResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var saveMode = me.get("saveMode");
+					var oegInfo = result.resultData;
+					
+					if(!UT.isEmpty(saveMode) && saveMode == "confirmSave"){
+						// 확정
+						me.$.saveCnfdYnObdEvalsht.body = {oegInfo: oegInfo, cnfdYn: "Y"};
+                		UT.request(me.$.saveCnfdYnObdEvalsht);
+						
+						me.set("saveMode", null);  // 초기화
+					}else{
+						// sheet import, delete, save 에 다 사용하는 alert msg
+						UT.completeAlert(me.get("completeAlertKey"), function(){
+							oegInfo.reloadable = me.get("reloadable");
+							me.fire("saved-obd-evalsht", oegInfo);
+							me.set("reloadable", false);
+						});
+						me.set("completeAlertKey", "");
+					}
+                }else if(UT.isNotEmpty(result) && result.resultStatus == "INVALID_STATUS_ERR"){
+					me.set("completeAlertKey", "");
+					UT.alert("STD.E9600", function(){  // 유효한 상태가 아니거나 상태가 변경된 데이터가 존재하여 요청을 수행할 수 없습니다.
+						me.fire("saved-obd-evalsht", me.get("oeg"));
+					});
+				}
+            },
+			
+			/**
+             * 온보딩 프로세스 유효성 체크
+             */
+			onValidateObdEvalshtPrcs: function(e){
+				var me = this;
+				var validateParam = e.detail;
+				var usedPrcs = validateParam.usedPrcs;
+				var saveMode = validateParam.saveMode;
+				var prcsInfoList = [];
+				
+				for(var idx in usedPrcs){  // 모든 프로세스 유효성 체크
+					var validateTargetPrcsCcd = usedPrcs[idx].prcs_ccd;
+					var validateTargetTab = me.getTargetTab(validateTargetPrcsCcd);
+					
+					me.$.tabNavi.selectItem(validateTargetTab);
+					var validateResult = validateTargetTab.validator(saveMode);
+					if(!validateResult.result){
+						// 온보딩 프로세스 유효성 체크 fail return
+						var returnInfo = {
+							validateResult: validateResult,
+							validateUnpassedPrcsCcd: validateTargetPrcsCcd
+						}
+						me.$.evalshtInfo.returnValidateResult(returnInfo);
+						return;
+					}else{
+						// 온보딩 프로세스 유효성 체크 success
+						// 저장 데이터 생성
+						var prcsInfo = validateResult.prcsInfo;
+						prcsInfoList.push(prcsInfo);
+					}
+				}
+				
+				var returnInfo = {
+					validateResult : {result: true},
+					prcsInfoList   : prcsInfoList
+				}
+				me.$.tabNavi.selectItem(me.$.evalshtInfo);
+				me.$.evalshtInfo.returnValidateResult(returnInfo);  // 온보딩 프로세스 유효성 체크 success
+			},
+			
+			getTargetTab: function(prcsCcd){
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				var tabs = tabNavi.getElementsByTagName("es-onboarding-evalsheet-process-info");
+				return tabs[prcsCcd];
+			}
+        });
+    </script>
+
+</dom-module>

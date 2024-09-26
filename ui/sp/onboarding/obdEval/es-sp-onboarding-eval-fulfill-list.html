@@ -1,0 +1,165 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 온보딩평가 수행 목록(외부 등록 Screening)
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.29
+	******************************************************************************************
+-->
+
+<dom-module id="es-sp-onboarding-eval-fulfill-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+    	<!-- 공통코드 조회 -->
+    	<sc-request-group init>
+			<!-- 협력사운영조직 콤보박스 목록 조회 -->
+			<sc-ajax
+				url="findListOorgCdAll.do"
+				body="EO"
+				content-type="text/plain"
+				last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<sc-code code="R704" value="{{codes.R704}}"></sc-code><!-- 평가업무구분 -->
+				<sc-code code="R401" value="{{codes.R401}}"></sc-code><!-- 정성평가수행상태 -->
+			</sc-code-group>
+        </sc-request-group>
+        
+        <!-- 정성평가 목록 조회 -->
+        <sc-ajax id="findListOnboardingEvalFulfill" url="findListOnboardingEvalFulfill.do" body="{{searchParam}}" last-response="{{resultList}}"></sc-ajax>
+
+ 		<cc-auth-checker check-list="auth-r"></cc-auth-checker>
+ 		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" validation-group="searchParam" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" selected-index="0" on-change="onChangeOperOrgCombo"
+								   items="{{codes.oorgCd}}" value="{{searchParam.oorg_cd}}" placeholder="선택" required="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 진행 상태"></sc-label>
+				<sc-combobox-field
+						display-field="label" value-field="data"
+						items="{{codes.R401}}" value="{{searchParam.eval_prgs_sts_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="온보딩 평가시트 명"></sc-label>
+				<sc-text-field value="{{searchParam.evalsht_nm}}" max-length="60"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" data-provider="{{resultList}}"
+				 use-state="false"
+				 use-selection="false"
+				 editable="false"
+				 on-item-click="onGridItemClick">
+			<cc-grid-toolbar></cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column	data-field="oorg_cd" header-text="운영조직" width="200" text-align="center"
+									display-field="label" value-field="data" items="{{codes.oorgCd}}" mergeable="true"></sc-combobox-column>
+				<sc-combobox-column	data-field="eval_prgs_sts_ccd" header-text="평가 진행 상태" width="110" text-align="center"
+									display-field="label" value-field="data" items="{{codes.R401}}"></sc-combobox-column>
+				<sc-date-column	data-field="fufl_dttm" header-text="수행 일자" width="100"></sc-date-column>
+				<sc-data-column	data-field="vd_nm" header-text="협력사 명" width="250" text-align="left" style-name="link"></sc-data-column>
+				<sc-data-column	data-field="oeg_nm"	header-text="온보딩평가그룹 명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column	data-field="prcs_ccd_nm"	header-text="온보딩 프로세스 명" width="250" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="oeg_cd" data-type="text"></sc-grid-field><!-- 평가그룹 코드 -->
+				<sc-grid-field data-field="evalsht_cd" data-type="text"></sc-grid-field><!-- 평가시트 코드 -->
+				<sc-grid-field data-field="evaltr_id" data-type="text"></sc-grid-field><!-- 평가자 아이디 -->
+				<sc-grid-field data-field="vd_cd" data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="erp_vd_cd" data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="oe_uuid" data-type="text"></sc-grid-field><!-- 온보딩평가 uuid -->
+				<sc-grid-field data-field="oe_prcs_uuid" data-type="text"></sc-grid-field><!-- 온보딩평가 프로세스 uuid -->
+				<sc-grid-field data-field="eval_subj_evaltr_res_uuid" data-type="text"></sc-grid-field><!-- 평가 대상 평가자 결과 uuid -->
+			</sc-grid-fields>
+		</sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-sp-onboarding-eval-fulfill-list",
+            
+             properties: {
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return{
+                            oorgCd: [], // 운영조직
+                            R704: [],    // 평가업무구분
+                            R401: []     // 평가수행상태
+                        };
+                    },
+					reset: false
+                },
+                // 조회 조건 Obejct
+                searchParam: {
+                    type: Object,
+                    value: function(){
+                        return {
+                        	eval_typ_cd: "OE" //온보딩평가
+                        };
+                    }
+                },
+                resultList: {
+                	type : Array,
+                	value : function() {
+                		return []
+                	}
+                }
+            },
+            
+            /* 화면 로딩 완료 */
+            initialized: function(){
+                var me = this;
+            },
+            
+            /* 운영조직 combo 변경 처리 */
+            onChangeOperOrgCombo: function(e) {
+                var me = this;
+				if(!me.isAttached) return;
+				
+                var selectedItem = e.detail.selectedItem;
+                if(!selectedItem){
+                    me.set("searchParam.logic_org_nm", "");
+                    return;
+                }else{
+                    me.set("searchParam.logic_org_nm", selectedItem.logic_org_nm);
+                }
+            },
+            
+            /* 조회 */
+            onSearch: function(){
+                var me = this;
+                
+                if(!me.validate('searchParam')){
+                	UT.alert("STD.E0000");
+                	return;
+                }
+                
+                UT.request(me.$.findListOnboardingEvalFulfill);
+            },
+            
+            /* 그리드 item click 이벤트 */
+            onGridItemClick : function(event) {
+            	var me = this,
+	                data = event.detail.data,
+	                item = event.detail.item;
+            	if(item.dataField === "vd_nm") {
+            		//detail 화면 호출
+            		me.fire("show-detail", data);
+            	}
+            }
+        });
+    </script>
+
+</dom-module>

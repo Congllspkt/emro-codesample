@@ -1,0 +1,544 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-vendor-reg">
+    <select id="checkDuplicatedVdInfo" resultType="map">
+        /*  sp-vendor-reg.checkDuplicatedVdInfo 신규협력사 등록 &gt; 중복체크 */
+        SELECT VD.VD_CD                   /* 협력사 코드 */
+             , VD.ERP_VD_CD               /* ERP 코드 */
+             , VD.VD_NM                   /* 협력사 명 */
+             , VD.VD_NM_EN                /* 협력사 영문 명 */
+             , VD.CEO_NM                  /* 대표 명 */
+             , VD.CEO_NM_EN               /* 대표 영문 명 */
+             , VD.BIZREGNO                /* 사업자 등록 번호 */
+             , VD.CORPNO                  /* 법인 등록 번호 */
+             , VD.TAX_ID                  /* TAX ID */
+             , VD.EU_VAT_REG_ID           /* EU VAT REG ID */
+             , US.USR_ID
+        FROM   VD VD
+        INNER JOIN USR US
+        ON (    
+        		US.TEN_ID = VD.TEN_ID
+        	AND US.VD_CD  = VD.VD_CD
+        )
+        <trim prefix="WHERE" prefixOverrides="OR">
+            <if test="p.bizregno != null and p.bizregno != ''">
+                 UPPER(VD.BIZREGNO) = UPPER(#{p.bizregno})
+            </if>
+            <if test="p.tax_id != null and p.tax_id != ''">
+                OR  UPPER(VD.TAX_ID) = UPPER(#{p.tax_id})
+            </if>
+            <if test="p.eu_vat_reg_id != null and p.eu_vat_reg_id != ''">
+                OR  UPPER(VD.EU_VAT_REG_ID) = UPPER(#{p.eu_vat_reg_id})
+            </if>
+        </trim>
+        ORDER BY US.USR_ID
+    </select>
+    <resultMap id="resultMap-findTermsList" type="map">
+	    <result column="CTMPL_CONT" javaType="string" property="ctmpl_cont" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findTermsList" resultMap="resultMap-findTermsList">
+	/* sp-reg.findTermsList : 현재일자에 유효한 약관 정보 조회 */
+		SELECT TMP.TEN_ID                       /* 테넌트 아이디 */
+			 , TMP.CTMPL_UUID                   /* 공용템플릿 UUID */
+			 , TMP.TMPL_TYP_CCD                 /* 템플릿 유형 공통코드 */
+			 , CASE WHEN (MULT.CTMPL_CONT IS NULL  ) THEN (SELECT CTMPL_CONT
+			                                         FROM CTMPL_MULTLANG
+			                                         WHERE TEN_ID = TERM.TEN_ID
+			                                           AND TERM.CTMPL_UUID = CTMPL_UUID
+			                                           AND LANG_CCD = #{p.lang_ccd})
+			 		ELSE MULT.CTMPL_CONT END AS CTMPL_CONT /* 약관 내용 */
+			 , TMP.BASC_CTMPL_CD                /* 기초 공용템플릿 코드 */
+			 , TERM.TERMCND_UUID                /* 약관 UUID */
+			 , TERM.TERMCND_TYP_CCD             /* 약관 유형 공통코드 */
+			 , TERM.TERMCND_REN_VER           /* 약관 갱신 버전 */
+			 , CASE WHEN (MULT.CTMPL_NM IS NULL OR MULT.CTMPL_NM = '') THEN (SELECT CTMPL_NM
+			                                         FROM CTMPL_MULTLANG
+			                                         WHERE TEN_ID = TERM.TEN_ID
+			                                           AND TERM.CTMPL_UUID = CTMPL_UUID
+			                                           AND LANG_CCD = #{p.locale})
+			 		ELSE MULT.CTMPL_NM END AS CTMPL_NM /* 약관 명 */
+			 , TERM.EFCT_ST_DT                  /* 적용 시작일 */
+			 , TERM.EFCT_EXP_DT                 /* 적용 종료일 */
+			 , TERM.NEW_JOIN_USE_YN             /* 신규 가입 사용 여부 */
+			 , TERM.MAND_CNST_YN                /* 필수 동의 여부 */
+		FROM CTMPL TMP /* 공용템플릿 */
+		LEFT OUTER JOIN CTMPL_MULTLANG MULT
+		ON TMP.TEN_ID = MULT.TEN_ID
+		AND TMP.CTMPL_UUID = MULT.CTMPL_UUID
+		AND MULT.LANG_CCD = #{p.locale}
+		INNER JOIN TERMCND TERM /* 약관 */
+		ON TMP.TEN_ID  = TERM.TEN_ID
+		AND TMP.CTMPL_UUID = TERM.CTMPL_UUID
+		WHERE TMP.TEN_ID = #{p.tenant}
+		<bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+		AND #{getFormatNow} BETWEEN TERM.EFCT_ST_DT AND TERM.EFCT_EXP_DT
+		AND TERM.NEW_JOIN_USE_YN = 'Y'
+	</select>
+	<insert id="insertVdInfo">
+        /* sp-vendor-reg.insertVdInfo : 협력사 마스터 등록 */
+        INSERT INTO VD(
+		       TEN_ID                  /* 테넌트 아이디 */
+             , VD_CD                   /* 협력사 코드 */
+             , VD_NM                   /* 협력사 명 */
+             , VD_NM_EN                /* 협력사 영문 명 */
+             , CEO_NM                  /* 대표 명 */
+             , CEO_NM_EN               /* 대표 영문 명 */
+             , BIZREGNO                /* 사업자 등록 번호 */
+             , HQ_BIZREGNO             /* 본사 사업자 번호 */
+             , CORPNO                  /* 법인 등록 번호 */
+             , TAX_ID                  /* TAX NO */
+             , EU_VAT_REG_ID           /* EU VAT REG NO */
+             , CTRY_CCD                /* 국가 코드 */
+             , VD_EML                  /* 이메일 */
+             , TAXNSUBJ_YN             /* 단위 과세 여부 */
+             , TAXNSUBJ_SEQNO             /* 단위 과세 번호 */
+		 	 , CEO_IMG_ATH_UUID        /* 대표자 이미지 첨부 UUID */
+			 , VD_SIZE_CCD             /* 협력사 규모 */
+	 		 , VD_ESTD_DT              /* 협력사 설립일자 */
+			 , STKMKT_TYP_CCD          /* 주식시장 유형 공통코드 */
+			 , HMPG_URL                /* 홈페이지 URL */
+			 , MAIN_TRANSN_POSS_ITEM   /* 메인 거래 가능 품목 */
+             , STS                     /* 상태 */
+             , RMK                     /* 비고 */
+             , REG_DTTM                /* 등록일 */
+             , MOD_DTTM                /* 수정일 */
+             , REGR_ID                 /* 등록자 아이디 */
+             , MODR_ID                 /* 수정자 아이디 */
+        )VALUES(
+               #{p.tenant}             /* 테넌트 아이디 */
+             , #{p.vd_cd}              /* 협력사 코드 */
+             , #{p.vd_nm}              /* 협력사 명 */
+             , #{p.vd_nm_en}           /* 협력사 영문 명 */
+             , #{p.ceo_nm}             /* 대표 명 */
+             , #{p.ceo_nm_en}          /* 대표 영문 명 */
+             , #{p.bizregno}           /* 사업자 등록 번호 */
+             , #{p.hq_bizregno}        /* 본사 사업자 번호 */
+             , #{p.corpno}             /* 법인 등록 번호 */
+             , #{p.tax_id}             /* TAX ID */
+             , #{p.eu_vat_reg_id}      /* EU VAT REG ID */
+             , #{p.ctry_ccd}           /* 국가 코드 */
+             , #{p.vd_eml}             /* 이메일 */
+             , #{p.taxnsubj_yn}        /* 단위 과세 여부 */
+             , #{p.taxnsubj_seqno}     /* 단위 과세 번호 */
+			 , #{p.ceo_img_ath_uuid}   /* 대표자 이미지 첨부 UUID */
+			 , #{p.vd_size_ccd}        /* 협력사 규모 */
+			 , #{p.vd_estd_dt}         /* 협력사 설립일자 */
+			 , #{p.stkmkt_typ_ccd}     /* 주식시장 유형 공통코드 */
+			 , #{p.hmpg_url}           /* 홈페이지 URL */
+			 , #{p.main_transn_poss_item} /* 메인 거래 가능 품목 */
+             , 'C'                     /* 상태 */
+             , #{p.rmk}                /* 비고 */
+             , #{g.now}                /* 등록일 */
+             , #{g.now}                /* 수정일 */
+             , #{p.vd_cd}              /* 등록자 아이디 */
+             , #{p.vd_cd}              /* 수정자 아이디 */
+        )
+    </insert>
+    <!-- User 정보 등록 -->
+    <insert id="insertUserInfo">
+        /* sp-vendor-reg.insertUserInfo : User 정보 등록 */
+        INSERT INTO USR(
+	           TEN_ID           /* 테넌트 아이디 */
+             , CO_CD            /* 회사 코드 */
+             , USR_ID           /* 사용자 아이디 */
+             , USR_NM           /* 사용자 명 */
+             , USR_NM_EN        /* 사용자 영문 명 */
+             , USR_TYP_CCD      /* 사용자 구분 BUYER:구매사, VD:협력사 */
+             , VD_CD            /* 협력사 일련번호*/  /* VD_SN 컬럼은 없음 */
+             , USE_YN           /* 사용 여부 */
+             , EML              /* 이메일 */
+             , PWD              /* 암호 */
+             , PWD_CHG_DTTM     /* 암호 변경 일시 */
+             , STS              /* 상태 */
+             , RMK              /* 비고 */
+             , REG_DTTM         /* 등록일 */
+             , MOD_DTTM         /* 수정일 */
+             , REGR_ID          /* 등록자 아이디 */
+             , MODR_ID          /* 수정자 아이디 */
+             , ACCT_EXP_YN      /* 계정 만료 여부 */
+             , ACCT_LCKD_YN     /* 계정 잠금 여부 */
+             , PWD_CHG_REQD_YN  /* 비밀번호 변경 필요 여부 */
+             , LAST_LOGIN_DTTM  /* 마지막 로그인 일시 */
+        ) VALUES (
+        	#{p.tenant}        /* 테넌트 아이디 */
+             , ''       /* 회사 코드 */
+             , #{p.vd_cd}         /* 사용자 아이디 */
+             , #{p.vd_nm}         /* 사용자 명 */
+             , #{p.vd_nm_en}      /* 사용자 영문 명 */
+             , 'VD'                /* 사용자 구분 BUYER:구매사, VD:협력사 */
+             , #{p.vd_cd}         /* 협력사 일련번호 */
+             , 'Y'                /* 사용 여부 */
+             , #{p.eml}           /* 이메일 */
+             , #{p.pwd}           /* 암호 */
+             , #{g.now}           /* 암호 변경 일시 */
+             , 'C'                /* 상태 */
+             , #{p.rmk}           /* 비고 */
+             , #{g.now}           /* 등록일 */
+             , #{g.now}           /* 수정일 */
+             , #{p.vd_cd}         /* 등록자 아이디 */
+             , #{p.vd_cd}         /* 수정자 아이디 */
+             , 'N'                /* 계정 만료 여부 */
+             , 'N'                /* 계정 잠금 여부 */
+             , 'Y'                /* 비밀번호 변경 필요 여부 */
+             , #{g.now}           /* 마지막 로그인 일시 */
+            )
+    </insert>
+    <insert id="insertUserAuth">
+        /* sp-vendor-reg.insertUserAuth : User 권한 등록 */
+        INSERT INTO ROLE_USR (
+	           TEN_ID            /* 테넌트 아이디 */
+             , USR_ID            /* 사용자 아이디 */
+             , ROLE_CD           /* 롤 코드 */
+             , RMK               /* 비고 */
+             , STS               /* 상태 */
+             , REG_DTTM          /* 등록일 */
+             , MOD_DTTM          /* 수정일 */
+             , REGR_ID           /* 등록자 아이디 */
+             , MODR_ID           /* 수정자 아이디 */
+        ) VALUES (
+        	#{p.tenant}       /* 테넌트 아이디 */
+             , #{p.vd_cd}        /* 사용자 아이디 */
+             ,'V100'
+             , #{p.rmk}          /* 비고 */
+             , 'C'               /* 상태 */
+             , #{g.now}          /* 등록일 */
+             , #{g.now}          /* 수정일 */
+             , #{p.vd_cd}        /* 등록자 아이디 */
+             , #{p.vd_cd}        /* 수정자 아이디 */
+         )
+    </insert>
+    <insert id="insertTermcndHist">
+	/* sp-vendor-reg.insertTermcndHist : 약관 동의 정보 추가 */
+		INSERT INTO TERMCND_CNST_HISTREC(
+		 	   TEN_ID
+			 , TERMCND_CNST_UUID
+			 , CTMPL_UUID
+			 , TERMCND_UUID
+			 , TERMCND_CNST_YN
+			 , TERMCND_CNST_DTTM
+			 , LOGIN_IP
+			 , TERMCND_CNST_USR_UUID
+			 , REGR_ID
+			 , REG_DTTM
+			 , MODR_ID
+			 , MOD_DTTM
+		) VALUES (
+			   #{p.tenant}                  /* 테넌트 아이디 */
+			 , #{p.termcnd_cnst_uuid}       /* 약관 동의 UUID */
+			 , #{p.ctmpl_uuid}              /* 공용템플릿 UUID */
+			 , #{p.termcnd_uuid}            /* 약관 UUID */
+			 <choose>
+			 <when test="p.termcnd_cnst_yn != null and p.termcnd_cnst_yn == &quot;Y&quot;">
+			 , #{p.termcnd_cnst_yn}         /* 약관 동의 여부 */
+			 </when>
+			 <otherwise>
+			 , 'N'                          /* 약관 동의 여부 */
+			 </otherwise>
+			 </choose>
+			 , #{g.now}                     /* 약관 동의 일시 */ 
+			 , #{p.login_ip}                /* 로그인 IP */
+			 , #{p.termcnd_cnst_usr_uuid}   /* 약관 동의 아이디 */
+			 , #{p.termcnd_cnst_usr_uuid}   /* 등록자 아이디 */
+			 , #{g.now}                     /* 등록일 */
+			 , #{p.termcnd_cnst_usr_uuid}   /* 수정자 아이디 */
+			 , #{g.now}                     /* 수정일 */
+		)
+	</insert>
+	<select id="findDetailRegVdInfo" resultType="map">
+	/* sp-vendor-reg.findDetailRegVdInfo : 주요정보 조회 */
+		SELECT VD.TEN_ID           /* 테넌트아이디 */
+		     , VD.VD_CD            /* 협력사 코드 */
+		     , VD.VD_ESTD_DT       /* 설립일자 */
+		     , VD.ZIPCD            /* 우편번호 */
+		     , VD.DTL_ADDR_1       /* 상세주소1 */
+		     , VD.DTL_ADDR_2       /* 상세주소2 */
+		     , VD.DTL_ADDR_EN_1    /* 상세주소영문1 */
+		     , VD.DTL_ADDR_EN_2    /* 상세주소영문2 */
+		     , VD.IND              /* 업종 */
+		     , VD.BIZTYP           /* 업태 */
+		     , VD.MAIN_TRANSN_POSS_ITEM   /* 주요생산품목 */
+		FROM  VD VD
+		WHERE VD.TEN_ID = #{g.tenant}
+		AND   VD.VD_CD  = #{g.vd_cd}
+	</select>
+	<select id="findVendorBankAccountInfo" resultType="map">
+		/* sp-vendor-reg.findVendorBankAccountInfo : 계좌정보 조회 */
+		SELECT VB.TEN_ID
+			 , VB.VD_BNKACCT_UUID         /* 협력사 계좌 UUID */
+			 , VB.BNK_CCD                 /* 은행 공통코드 */
+			 , VB.ACCTHLDR                /* 예금주 */
+			 , VB.BNKACCT_NO             /* 계좌 번호 */
+			 , VB.IBAN_CD                 /* IBAN 코드 */
+			 , VB.SWIFT_CD                /* SWIFT 코드 */
+			 , VB.MAIN_BNKACCT_YN         /* 메인 계좌 여부 */
+			 , VB.VTL_BNKACCT_YN          /* 가상 계좌 여부 */
+			 , VB.USE_YN                  /* 사용 여부 */
+			 , VB.EFCT_ST_DT              /* 유효 시작 일자 */
+			 , VB.EFCT_ED_DT              /* 유효 종료 일자 */
+			 , VB.ATHG_UUID           /* 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VB.TEN_ID
+				  AND ATHG_UUID = VB.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VD.VD_CD
+		FROM VD_BNKACCT VB
+			     INNER JOIN VD VD
+			                ON VB.TEN_ID = VD.TEN_ID
+				                AND VB.VD_CD = VD.VD_CD
+		WHERE VB.TEN_ID = #{g.tenant}
+		  AND VB.VD_CD = #{g.vd_cd}
+		ORDER BY CASE WHEN (VB.MAIN_BNKACCT_YN IS NULL OR VB.MAIN_BNKACCT_YN = '') THEN 'N' ELSE VB.MAIN_BNKACCT_YN END DESC, VB.REG_DTTM DESC
+	</select>
+	<select id="findVendorAttachmentList" resultType="map">
+		/* sp-vendor-reg.findVendorAttachmentList : 협력사 첨부파일 조회 */
+		SELECT VA.TEN_ID
+			 , VA.VD_ATHDOCPLCY_UUID    /* 협력사 첨부파일 정책 UUID */
+			 , VD.VD_CD
+			 , AC.CTRY_CCD              /* 정책 국가 코드 */
+			 , AA.ATHF_CCD AS VD_SUBMDDOC_TYP_CCD /* 첨부파일 공통코드(E032) */
+			 , AA.MAND_YN               /* 첨부파일 필수 여부 */
+			 , AA.APVL_SUBJ_YN          /* 첨부파일 결재 대상 여부 */
+			 , AA.ATHDOC_EXPLN          /* 첨부문서 설명 */
+			 , AA.REF_ATHG_UUID         /* 참조 첨부그룹 UUID */
+			 , VAF.VD_ATHF_UUID         /* 협력사 첨부파일 UUID */
+			 , VAF.ATHG_UUID        /* 협력사 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VAF.TEN_ID
+				  AND ATHG_UUID = VAF.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VAF.RMK
+		FROM VD_ATHDOCPLCY VA /* 협력사 첨부문서정책 */
+		INNER JOIN ATHDOCPLCY_ATHF AA /* 첨부문서정책 첨부파일 */
+		        ON VA.TEN_ID = AA.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AA.VD_ATHDOCPLCY_UUID
+		INNER JOIN ATHDOCPLCY_CTRY AC /* 첨부문서정책 국가 */
+		        ON VA.TEN_ID = AC.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AC.VD_ATHDOCPLCY_UUID
+		INNER JOIN VD VD /* 협력사 마스터 */
+		        ON VA.TEN_ID = VD.TEN_ID
+		        AND AC.CTRY_CCD = VD.CTRY_CCD
+		LEFT OUTER JOIN VD_ATHF VAF
+		             ON VA.TEN_ID = VAF.TEN_ID
+		             AND VD.VD_CD = VAF.VD_CD
+		             AND AA.ATHF_CCD = VAF.VD_SUBMDDOC_TYP_CCD
+		WHERE VA.TEN_ID = #{g.tenant}
+		  AND VD.VD_CD = #{g.vd_cd}
+		ORDER BY AA.MAND_YN DESC, AA.ATHF_CCD
+	</select>
+    <update id="updateBasicInfoMaster">
+        /* sp-vendor-reg.updateBasicInfoMaster 협력사마스터 수정 */
+        UPDATE VD
+        SET   ZIPCD           = #{p.zipcd}                   /* 우편 번호 */
+          ,   DTL_ADDR_1      = #{p.dtl_addr_1}              /* 상세 주소 1 */
+          ,   DTL_ADDR_2      = #{p.dtl_addr_2}              /* 상세 주소 2 */
+          ,   DTL_ADDR_EN_1   = #{p.dtl_addr_en_1}           /* 상세 주소 영문 1 */
+          ,   DTL_ADDR_EN_2   = #{p.dtl_addr_en_2}           /* 상세 주소 영문 2 */
+          ,   IND             = #{p.ind}                     /* 업종 */
+          ,   BIZTYP          = #{p.biztyp}                  /* 업태 */
+          ,   VD_ESTD_DT      = #{p.vd_estd_dt}              /* 설립 일자 */
+          ,   MAIN_TRANSN_POSS_ITEM  = #{p.main_transn_poss_item}   /* 메인 거래 가능 품목 */
+          ,   VD_MAND_FACT_SAVE_YN	 = 'Y'                          /* 협력사 필수 항목 저장 여부 */
+          ,   STS             = 'U'                          /* 상태 */
+          ,   MODR_ID         = #{g.username}                /* 수정자 아이디*/
+          ,   MOD_DTTM        = #{g.now}                     /* 수정 일시*/
+        WHERE TEN_ID          = #{g.tenant}
+        AND   VD_CD           = #{g.vd_cd}
+    </update>
+	<insert id="insertVendorBankAccountInfo">
+		/* sp-vendor-reg.insertVendorBankAccountInfo 계좌정보 신규 저장 */
+		INSERT INTO VD_BNKACCT (
+             TEN_ID
+           , VD_BNKACCT_UUID
+           , VD_CD
+           , BNK_CCD
+           , ACCTHLDR
+           , BNKACCT_NO
+           , IBAN_CD
+           , SWIFT_CD
+           , VTL_BNKACCT_YN
+           , MAIN_BNKACCT_YN
+           , USE_YN
+           , EFCT_ST_DT
+           , EFCT_ED_DT
+           , ATHG_UUID
+           , RMK
+           , STS
+           , REGR_ID
+           , REG_DTTM
+           , MODR_ID
+           , MOD_DTTM
+		)VALUES(
+		     #{g.tenant}
+	       , #{p.vd_bnkacct_uuid}
+	       , #{g.vd_cd}
+	       , #{p.bnk_ccd}
+	       , #{p.accthldr}
+	       , #{p.bnkacct_no}
+	       , #{p.iban_cd}
+	       , #{p.swift_cd}
+	       , #{p.vtl_bnkacct_yn}
+	       , #{p.main_bnkacct_yn}
+	       , #{p.use_yn}
+	       , #{p.efct_st_dt}
+	       , #{p.efct_ed_dt}
+	       , #{p.athg_uuid}
+	       , #{p.rmk}
+	       , 'C'
+	       , #{g.username}
+	       , #{g.now}
+	       , #{g.username}
+	       , #{g.now}
+	       )
+	</insert>
+	<update id="updateVendorBankAccountInfo">
+		/* sp-vendor-reg.updateVendorBankAccountInfo 계좌정보 수정 */
+		UPDATE VD_BNKACCT
+		SET BNK_CCD = #{p.bnk_ccd}
+		  , ACCTHLDR = #{p.accthldr}
+		  , BNKACCT_NO = #{p.bnkacct_no}
+		  , IBAN_CD = #{p.iban_cd}
+		  , SWIFT_CD = #{p.swift_cd}
+		  , VTL_BNKACCT_YN = #{p.vtl_bnkacct_yn}
+		  , MAIN_BNKACCT_YN = #{p.main_bnkacct_yn}
+		  , USE_YN = #{p.use_yn}
+		  , EFCT_ST_DT = #{p.efct_st_dt}
+		  , EFCT_ED_DT = #{p.efct_ed_dt}
+		  , ATHG_UUID = #{p.athg_uuid}
+		  , STS = 'U'
+		  , MODR_ID = #{g.username}
+		  , MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND VD_BNKACCT_UUID = #{p.vd_bnkacct_uuid}
+		  AND VD_CD = #{g.vd_cd}
+	</update>
+	<delete id="deleteVendorBankAccountInfo">
+		/* sp-vendor-reg.deleteVendorBankAccountInfo : 계좌정보 삭제 */
+		DELETE FROM VD_BNKACCT
+		WHERE TEN_ID = #{g.tenant}
+		  AND VD_BNKACCT_UUID = #{p.vd_bnkacct_uuid}
+		  AND VD_CD = #{g.vd_cd}
+	</delete>
+	<insert id="insertVendorAttachmentInfo">
+		/* sp-vendor-reg.insertVendorAttachmentInfo 협력사 첨부파일 신규 저장 */
+		INSERT INTO VD_ATHF (
+			TEN_ID,
+			VD_ATHF_UUID,
+			VD_CD,
+			VD_SUBMDDOC_TYP_CCD,
+			ATHG_UUID,
+			USE_YN,
+			STS,
+			RMK,
+			REGR_ID,
+			REG_DTTM,
+			MODR_ID,
+			MOD_DTTM
+		)VALUES(
+	        #{g.tenant},
+	        #{p.vd_athf_uuid},
+	        #{g.vd_cd},
+	        #{p.vd_submddoc_typ_ccd},
+	        #{p.athg_uuid},
+	        #{p.use_yn},
+	        #{p.sts},
+	        #{p.rmk},
+	        #{g.username},
+	        #{g.now},
+	        #{g.username},
+	        #{g.now}
+        )
+	</insert>
+	<update id="updateVendorAttachmentInfo">
+		/* sp-vendor-reg.updateVendorAttachmentInfo 협력사 첨부파일 수정 */
+		UPDATE VD_ATHF
+		SET   ATHG_UUID = #{p.athg_uuid}
+			, STS = #{p.sts}
+			<if test="p.rmk != null and p.rmk != ''">
+			, RMK = #{p.rmk}
+			</if>
+			, MODR_ID  = #{g.username}
+			, MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		AND VD_ATHF_UUID = #{p.vd_athf_uuid}
+	</update>
+	<resultMap id="financeInfoMap" type="java.util.HashMap">
+		<id column="TEN_ID" property="ten_id"/>
+		<id column="SUBJ_YR" property="subj_yr"/>
+		<id column="RMK" property="rmk"/>
+		<id column="REGR_TYP_CCD" property="regr_typ_ccd"/>
+		<collection javaType="java.util.ArrayList" property="cls" resultMap="fnAcctMap"/>
+	</resultMap>
+	<resultMap id="fnAcctMap" type="java.util.HashMap">
+		<id column="vd_fn_uuid" property="vd_fn_uuid"/>
+		<id column="SUBJ_YR" property="subj_yr"/>
+		<id column="VD_CD" property="vd_cd"/>
+		<id column="FN_ACCT_TYP_CCD" property="fn_acct_typ_ccd"/>
+		<result column="FN_ACCT_TYP_VAL" property="fn_acct_typ_val"/>
+	</resultMap>
+	<select id="findVendorFinanceInfo" resultMap="financeInfoMap">
+		/* sp-vendor-reg.findVendorFinanceInfo : 협력사 재무정보 조회 */
+		SELECT TEN_ID             /* 테넌트 아이디 */
+			 , MAX(VD_FN_UUID) AS VD_FN_UUID
+			 , VD_CD              /* 협력사 코드 */
+			 , SUBJ_YR            /* 대상 년도 */
+			 , REGR_TYP_CCD       /* 등록자 유형 공통코드 */
+			 , FN_ACCT_TYP_CCD    /* 재무 계정 유형 공통코드 */
+			 , FN_ACCT_TYP_VAL    /* 재무 계정 유형 값 */
+			 , RMK                /* 비고(신용평가사 TEXT 입력값 저장) */
+		FROM   VD_FN
+		WHERE  TEN_ID  = #{g.tenant}
+		AND    VD_CD   = #{g.vd_cd}
+		AND    STS    != 'D'
+		GROUP BY TEN_ID, VD_CD, SUBJ_YR, REGR_TYP_CCD, FN_ACCT_TYP_CCD, FN_ACCT_TYP_VAL, RMK
+	</select>
+	<insert id="insertVendorFinanceInfo">
+		/* vendor-reg.insertVendorFinanceInfo : 협력사 재무정보 저장 */
+		INSERT INTO VD_FN (
+			   TEN_ID                 /* 테넌트 아이디 */
+			 , VD_FN_UUID             /* 협력사 재무 UUID */
+			 , VD_CD                  /* 협력사 코드 */
+			 , SUBJ_YR                /* 대상 년도 */
+			 , REGR_TYP_CCD           /* 등록자 유형 공통코드 */
+			 , FN_ACCT_TYP_CCD        /* 재무 계정 유형 공통코드 */
+			 , FN_ACCT_TYP_VAL        /* 재무 계정 유형 값 */
+			 , STS                    /* 상태 */
+			 , RMK                    /* 비고(신용평가사 TEXT 입력값 저장) */
+			 , REGR_ID                /* 등록자 아이디 */
+			 , REG_DTTM               /* 등록 일시 */
+			 , MODR_ID                /* 수정자 아이디 */
+			 , MOD_DTTM               /* 수정 일시 */
+		) VALUES (
+			  #{g.tenant}            /* 테넌트 아이디 */
+			, #{p.vd_fn_uuid}        /* 협력사 재무 UUID */
+			, #{g.vd_cd}             /* 협력사 코드 */
+			, #{p.subj_yr}           /* 대상 년도 */
+			, #{p.regr_typ_ccd}      /* 등록자 유형 공통코드 */
+			, #{p.fn_acct_typ_ccd}   /* 재무 계정 유형 공통코드 */
+			, #{p.fn_acct_typ_val}   /* 재무 계정 유형 값 */
+			, 'C'                    /* 상태 */
+			, #{p.rmk}               /* 비고(신용평가사 TEXT 입력값 저장) */
+			, #{g.username}          /* 등록자 아이디 */
+			, #{g.now}               /* 등록 일시 */
+			, #{g.username}          /* 수정자 아이디 */
+			, #{g.now}               /* 수정 일시 */
+		)
+	</insert>
+	<update id="updateVendorFinanceInfo">
+		/* vendor-reg.updateVendorFinanceInfo : 협력사 재무정보 수정 */
+		UPDATE VD_FN
+		SET    SUBJ_YR          = #{p.subj_yr}                /* 회계 년도*/
+		  ,    FN_ACCT_TYP_VAL  = #{p.fn_acct_typ_val}        /* 재무 계정 유형 값*/
+		  ,    RMK             = #{p.rmk}                     /* 비고(신용평가사 TEXT 입력값 저장) */
+		  ,    STS             = 'U'                          /* 상태*/
+		  ,    MODR_ID         = #{g.username}                /* 수정자 아이디*/
+		  ,    MOD_DTTM        = #{g.now}                     /* 수정 일시*/
+		WHERE  TEN_ID          = #{g.tenant}
+		AND    SUBJ_YR         = #{p.subj_yr}
+		AND    VD_CD           = #{g.vd_cd}
+		AND    REGR_TYP_CCD    = #{p.regr_typ_ccd}
+		AND    FN_ACCT_TYP_CCD = #{p.fn_acct_typ_ccd}
+	</update>
+</mapper>

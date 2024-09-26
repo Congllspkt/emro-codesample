@@ -1,0 +1,155 @@
+<sc-link rel="import" href="./ep-search-vendor-list.html"></sc-link>
+
+<dom-module id="ep-new-contract">
+	<style>
+	:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스  -->
+		<!-- 사용자 운영조직 조회 -->
+		<sc-ajax id="findListOperationOrganizationByUser"
+				 url="findListOperationOrganizationByUser.do"
+				 content-type="text/plain"
+				 last-response="{{codes.oorgCd}}">
+		</sc-ajax>
+		
+		<sc-code-group>
+			<sc-code code="D003" value="{{codes.cntrdocTypCcd}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-page-title-bar>
+			<sc-button text="작성" on-click="onCreate"></sc-button>
+		</cc-page-title-bar>
+		<cc-form-panel label-width="120" column="1">
+			<cc-fieldset>
+				<sc-label text="계약서 유형"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntrdoc_typ_ccd}}" placeholder="필수" required="true"
+								   items="{{codes.cntrdocTypCcd}}" display-field="label" value-field="data"
+								   on-select="onSelectCntrdocTypCcd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field id="operorgcombobox" placeholder="필수" value="{{cntrInfo.oorg_cd}}" required="true"
+								   items="{{codes.oorgCd}}" display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{cntrInfo.vd_nm}}" class="w-150" placeholder="협력사 명" readonly="true"></sc-text-field>
+					<span style="margin:0 5px">&#47;</span>
+					<sc-text-field value="{{cntrInfo.erp_vd_cd}}" class="w-100" placeholder="코드" readonly="true" required="true"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-trigger-field trigger-cls="field-search" on-trigger-click="popupVendorList"></sc-trigger-field>
+				</div>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+
+	<!-- 스크립트 -->
+	<script>
+		Polymer({
+			is: 'ep-new-contract',
+			properties: {
+				titleText:{
+					type: String,
+					value: "계약 작성"
+				},
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							cntrdocTypCcd: [],
+							oorgCd: []
+						}
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function () {
+						return {
+							cntrdoc_typ_ccd: "",
+							ounit_cd: "",
+							oorg_cd: "",
+							erp_vd_cd: "",
+							vd_cd: "",
+							vd_nm: "",
+							bizregno: ""
+						};
+					}
+				},
+				contractorList: {
+					type: Object,
+					value: function() {
+						return [];
+					}
+				}
+			},
+
+			initialized: function() {
+				var me = this;
+
+			},
+
+			//파라미터 셋팅
+			load: function(data) {
+				var me = this;
+				
+			},
+			
+			onSelectCntrdocTypCcd: function(e) {
+				var me = this;
+				var cntrdocTypCcd = me.get("cntrInfo.cntrdoc_typ_ccd");
+				var ounitCd = ["UPRC_AGT", "PO_CNTRDOC"].indexOf(cntrdocTypCcd) > -1 ? "PO" : "EO";
+				me.set("cntrInfo.ounit_cd", ounitCd);
+				
+				me.$.findListOperationOrganizationByUser.body = ounitCd;
+				UT.request(me.$.findListOperationOrganizationByUser);
+			},
+			
+			// 계약 신규 작성
+			onCreate: function() {
+				var me = this;
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				me.fire("selected", {
+					cntrInfo: me.get("cntrInfo"),
+					contractorList: me.get("contractorList")
+				});
+			},
+			
+			// 협력사 선택 팝업
+			popupVendorList: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				if(UT.isEmpty(cntrInfo.oorg_cd)) {
+					UT.alert("STD.N3400"); //'운영조직을 선택하세요.'
+					return false;
+				}
+				
+				var vendorPopup = UT.popup("ep-search-vendor-list", me, "60%", "80%", {
+					'selected-items': function(popup, e) {
+						popup.close();
+						
+						var selectedItems = e.detail;
+						me.set("contractorList", selectedItems);
+						
+						var selected = selectedItems[0];
+						me.set("cntrInfo.vd_nm", selected.vd_nm);
+						me.set("cntrInfo.vd_cd", selected.vd_cd);
+						me.set("cntrInfo.erp_vd_cd", selected.erp_vd_cd);
+						me.set("cntrInfo.bizregno", selected.bizregno);
+					}
+				});
+				vendorPopup.show();
+				vendorPopup.getWindowContent().load(cntrInfo);
+			}
+		});
+	</script>
+</dom-module>

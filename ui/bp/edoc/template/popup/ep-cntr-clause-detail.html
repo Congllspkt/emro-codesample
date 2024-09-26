@@ -1,0 +1,136 @@
+<dom-module id="ep-cntr-clause-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 조회 -->
+		<sc-ajax id="findDynamicTmpById"
+				 url="findDynamicTmpById.do"
+				 on-response="completeFindInfo"></sc-ajax>
+
+		<!-- 저장 -->
+		<sc-ajax id="saveDynamicTmp"
+				 url="saveDynamicTmp.do"
+				 body="{{tmpInfo}}"
+				 on-response="completeSaveInfo"></sc-ajax>
+ 
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="저장" on-click="onSaveInfo" hidden="[[formula('isViewMode')]]" auth-s></sc-button>
+		</cc-page-title-bar>
+		
+		<!-- TEXTAREA 기본값 입력 -->
+		<sc-textarea-field class="h-200" value="{{tmpInfo.dflt_val}}" editable="[[formula('isViewMode')]]" max-length="1000" hidden="[[formula('isTemplate')]]"></sc-textarea-field>
+		<!-- 템플릿 에디터 -->
+		<cc-source-editor id="editor" class="flex" value="{{tmpInfo.dyn_tmpl_cont}}" editable="[[!formula('isViewMode')]]" mode="html" hidden="[[!formula('isTemplate')]]"></cc-source-editor>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'ep-cntr-clause-detail',
+			properties:{
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				tmpInfo: {
+					type: Object,
+					value: function() {
+						return {
+							is_new: false
+						};
+					}
+				},
+				isViewMode: {
+					type: Boolean,
+					value: false
+				}
+			},
+
+			formulas: {
+				isTemplate: function() {
+					var typ = this.get("tmpInfo").dat_typ_ccd;
+					return typ === "TMPL";
+				},
+				isViewMode: function() {
+					return this.get("isViewMode");
+				}
+			},
+
+			initialized: function() {
+				
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				if(param.view_mode) {
+					me.set("isViewMode", param.view_mode);
+				}
+				
+				if(UT.isEmpty(param.cntr_cl_uuid)) {
+					me.set("tmpInfo", param);
+					me.set("tmpInfo.is_new", true);
+					me.applyFormula();
+					if(param.dat_typ_ccd === "TMPL") {
+						me.$.editor.focus();
+					}
+				} else {
+					me.set("searchParam", param);
+					me.onFindInfo();
+				}
+			},
+
+			// 템플릿 상세 조회
+			onFindInfo: function() {
+				var me = this;
+				me.$.findDynamicTmpById.body = {
+					cntr_cl_uuid : me.get("searchParam.cntr_cl_uuid")
+				};
+				UT.request(me.$.findDynamicTmpById);
+			},
+
+			// 템플릿 상세 조회 완료
+			completeFindInfo: function(e, res) {
+				var me = this;
+				me.set("tmpInfo", res.response);
+				me.applyFormula();
+				if(res.response.dat_typ_ccd === "TMPL") {
+					me.$.editor.focus();
+				}
+			},
+
+			// 저장
+			onSaveInfo: function() {
+				var me = this;
+				var tmpInfo = me.get("tmpInfo");
+				
+				if(tmpInfo.dat_typ_ccd === "TMPL") {
+					me.$.editor.syncValue();
+				}
+				
+				if(tmpInfo.is_new) {
+					me.fire("save", tmpInfo);
+				} else {
+					UT.confirm("STD.N1200", function() { // 저장 하시겠습니까?
+						UT.request(me.$.saveDynamicTmp);
+					});
+				}
+			},
+
+			// 저장 완료
+			completeSaveInfo: function() {
+				var me = this;
+				UT.alert("STD.N1500", function() { // 요청이 완료되었습니다.
+					me.onFindInfo();
+				});
+			}
+		});
+	</script>
+</dom-module>

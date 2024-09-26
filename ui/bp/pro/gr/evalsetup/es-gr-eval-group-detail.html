@@ -1,0 +1,245 @@
+<sc-link rel="import" href="es-gr-eval-group-info.html"></sc-link>
+<sc-link rel="import" href="es-gr-evalsheet-tab.html"></sc-link>
+
+<dom-module id="es-gr-eval-group-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 입고/기성평가그룹 조회 -->
+		<sc-ajax
+				id="findGeg"
+				url="findGeg.do"
+				body="{{searchParam}}"
+				on-response="onFindResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성평가그룹 저장 -->
+		<sc-ajax
+				id="saveGeg"
+				url="saveGeg.do"
+				on-response="onSaveResultHandler">
+		</sc-ajax>
+		
+		<cc-page-title-bar title-text="[[titleText]]">
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<es-gr-eval-group-info id="geg" class="flex-3" on-save-geg="onSaveGeg" on-load-gr-evalsht-his="onLoadGrEvalshtHis"></es-gr-eval-group-info>
+			<div class="hspace-10"></div>
+			<es-gr-evalsheet-tab id="grEvalshtTab" class="flex-7" on-saved-gr-evalsht="onSavedGrEvalsht" on-saved-gr-evalsht-prcs="onSavedGrEvalshtPrcs"></es-gr-evalsheet-tab>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-gr-eval-group-detail",
+			properties: {
+				titleText: {
+					type: String,
+					value: "입고/기성평가 그룹"
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				geg: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				gegGemgs: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				grEvalshtInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalshtHis: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				// 재조회할 프로세스(= 저장한 프로세스) 코드
+				reloadPrcsCcd: {
+					type: String,
+					value: null
+				},
+			},
+			
+			initialized: function() {
+			},
+			
+			/**
+			 * 화면 load
+			 */
+			loadScreen: function(param) {
+				var me = this;
+				me.$.geg.load(param);
+				
+				var reloadPrcsCcd = me.get("reloadPrcsCcd");
+				if(UT.isEmpty(reloadPrcsCcd)) {  // load
+					me.$.grEvalshtTab.load(param);
+				} else {  // reload
+					me.$.grEvalshtTab.reload(param, reloadPrcsCcd);
+					me.set("reloadPrcsCcd", null);  // 초기화
+				}
+				
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				if(UT.isEmpty(param.geg_uuid)) {
+					// 신규
+					me.set("titleText", "입고/기성평가 그룹 등록");
+					me.set("geg", param);
+					
+					var param = {
+						geg: me.get("geg"),
+						gegGemgs: new Array()
+					};
+					
+					me.loadScreen(param);
+				} else {
+					// 상세
+					me.set("titleText", "입고/기성평가 그룹 상세");
+					me.set("searchParam", param);
+					this.onSearchGeg();
+				}
+			},
+			
+			/**
+			 * 입고/기성평가그룹 조회
+			 */
+			onSearchGeg: function() {
+				var me = this;
+				UT.request(me.$.findGeg);
+			},
+			
+			/**
+			 * 입고/기성평가그룹 조회 callback
+			 */
+			onFindResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					var resultData = result.resultData;
+					var gegInfo = resultData.gegInfo;
+					var gegGemgs = resultData.gegGemgs;
+					var grEvalshtHis = resultData.grEvalshtHis;
+					var grEvalshtInfo = UT.isEmpty(resultData.grEvalshtInfo) ? new Object() : resultData.grEvalshtInfo;
+					
+					// 1. 입고/기성평가그룹 Mater
+					me.set("geg", gegInfo);
+					// 2. 입고/기성평가그룹 - 입고/기성평가관리그룹
+					me.set("gegGemgs", gegGemgs);
+					// 3. 입고/기성평가그룹 - 평가시트이력 조회
+					me.set("grEvalshtHis", grEvalshtHis);
+					// 5. 입고/기성 평가시트 조회
+					me.set("grEvalshtInfo", grEvalshtInfo);
+					
+					var param = {
+						geg: me.get("geg"),
+						gegGemgs: me.get("gegGemgs"),
+						grEvalshtHis: me.get("grEvalshtHis"),
+						grEvalshtInfo: me.get("grEvalshtInfo")
+					};
+					
+					me.loadScreen(param);
+				}
+			},
+			
+			/**
+			 * 입고/기성평가그룹 (GEG) 저장
+			 */
+			onSaveGeg: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				me.$.saveGeg.body = body;
+				UT.request(me.$.saveGeg);
+			},
+			
+			/**
+			 * 입고/기성평가그룹 (GEG) 저장 callback
+			 */
+			onSaveResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					UT.completeAlert("저장", function() {
+						me.load(result.resultData);
+					});
+				}
+			},
+			
+			/**
+			 * 입고/기성 평가그룹 - 평가시트이력 상세 조회
+			 */
+			onLoadGrEvalshtHis: function(e) {
+				var me = this;
+				var data = e.detail;
+				
+				var param = {
+					geg: me.get("geg"),
+					grEvalshtInfo: data
+				}
+				me.$.grEvalshtTab.load(param);
+			},
+			
+			/**
+			 * 입고/기성평가그룹 - 평가시트 저장 후처리 재조회 요청
+			 */
+			onSavedGrEvalsht: function(e) {
+				var me = this;
+				var data = e.detail;
+				
+				me.load(data);
+			},
+			
+			/**
+			 * 입고/기성평가그룹 - 평가시트 프로세스 저장 후처리 재조회 요청
+			 */
+			onSavedGrEvalshtPrcs: function(e) {
+				var me = this;
+				var data = e.detail;
+				var gegInfo = data.gegInfo;
+				var grEvalshtInfoPrcs = data.grEvalshtInfoPrcs;
+				
+				me.set("reloadPrcsCcd", grEvalshtInfoPrcs.prcs_ccd);  // 재조회할 프로세스(= 저장한 프로세스) 코드 셋팅
+				me.load(gegInfo);
+			},
+			
+			/**
+			 * 닫기 버튼 클릭
+			 */
+			onClose: function() {
+				var me = this;
+				me.clear();
+				me.fire("close-detail");
+			},
+			clear: function() {
+				var me = this;
+				me.reset();
+			}
+		});
+	</script>
+
+</dom-module>

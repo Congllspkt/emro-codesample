@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-cat">
+    <select id="findListItemCat" resultType="map">
+        /* item-cat.findListItemCat : 품목분류관리 */
+        SELECT
+            TEN_ID
+            , ITEMCAT_LVL         /*분류 레벨 */
+            , ITEMCAT_CD          /*분류 코드 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN ITEMCAT_NM_EN
+                ELSE ITEMCAT_NM
+                END DISP_ITEMCAT_NM /*분류 명 */
+            , PAR_ITEMCAT_CD       /*상위 분류 코드 */
+            , SORT         /*정렬 순서 */
+            , RISK_MGMT_YN      /*위험 관리 여부 */
+            , ITEM_CD_MAND_YN  /*품목 코드 필수 여부 */
+            , USE_YN           /*사용 여부 */
+            , STS              /*상태 */
+            , REGR_ID           /*등록자 아이디 */
+            , REG_DTTM           /*등록 일시 */
+            , MODR_ID           /*수정자 아이디 */
+            , MOD_DTTM           /*수정 일시 */
+            , ITEMCAT_NM
+            , ITEMCAT_NM_EN       /*분류 영문 명*/
+            , ITEMCAT_PATH        /*분류 경로*/
+            , ITEMCAT_PATH_EN     /*분류 영문 경로*/
+            , MGMT_DEPT_CD         /*관리 부서*/
+            , ITEMCAT_SIMWORD     /*유사어*/
+	        , SG_CD
+	        , (SELECT CASE WHEN #{g.tenant} = 'ko_KR' THEN VMG_NM
+	                       ELSE (CASE WHEN VMG_NM_EN IS NULL OR VMG_NM_EN = '' THEN VMG_NM ELSE VMG_NM_EN END)
+	                   END SG_NM
+	             FROM VMG
+	            WHERE TEN_ID = ITEMCAT.TEN_ID
+	              AND VMG_CD = ITEMCAT.SG_CD
+	              AND STS != 'D') AS SG_NM
+        FROM ITEMCAT
+        WHERE TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.master_yn != null and p.master_yn != &quot;&quot; and p.master_yn == &quot;Y&quot;">
+                AND 1 = 1
+            </when>
+            <otherwise>
+                AND USE_YN = 'Y'
+            </otherwise>
+        </choose>
+        AND STS != 'D'
+        ORDER BY SORT ASC
+    </select>
+    <select id="findListItemCatWithCdOrNm" resultType="map">
+        /* item-cat.findListItemCatWithCdOrNm : 품목분류관리 조회조건 있을 경우 */
+        WITH  ITEMCAT_UP (TEN_ID, ITEMCAT_CD, PAR_ITEMCAT_CD) AS ( /* 해당 코드의 상위 분류 검색 */
+            <include refid="findListItemCatCd"/>
+            UNION ALL
+            SELECT
+                CAT_UP.TEN_ID
+                , CAT_UP.ITEMCAT_CD
+                , CAT_UP.PAR_ITEMCAT_CD
+            FROM ITEMCAT CAT_UP
+            INNER JOIN ITEMCAT_UP REC_UP
+            ON CAT_UP.TEN_ID = REC_UP.TEN_ID
+            AND CAT_UP.ITEMCAT_CD = REC_UP.PAR_ITEMCAT_CD
+            WHERE CAT_UP.TEN_ID = #{g.tenant}
+            AND CAT_UP.STS != 'D'
+        ), ITEMCAT_DOWN (TEN_ID, ITEMCAT_CD, PAR_ITEMCAT_CD) AS ( /* 해당 코드의 하위 분류 검색 */
+            <include refid="findListItemCatCd"/>
+            UNION ALL
+            SELECT
+                CAT_DOWN.TEN_ID
+                , CAT_DOWN.ITEMCAT_CD          /*분류 코드 */
+                , CAT_DOWN.PAR_ITEMCAT_CD
+            FROM ITEMCAT CAT_DOWN
+            INNER JOIN ITEMCAT_DOWN REC_DOWN
+            ON CAT_DOWN.TEN_ID = REC_DOWN.TEN_ID
+            AND CAT_DOWN.PAR_ITEMCAT_CD = REC_DOWN.ITEMCAT_CD
+            WHERE CAT_DOWN.TEN_ID = #{g.tenant}
+            AND CAT_DOWN.STS != 'D'
+        ), CAT_SUM AS ( /* 상위 분류와 하위 분류의 합 */
+            SELECT
+                TEN_ID
+                , ITEMCAT_CD
+            FROM ITEMCAT_UP
+            UNION
+            SELECT
+                TEN_ID
+                , ITEMCAT_CD
+            FROM ITEMCAT_DOWN
+        )
+        SELECT
+            CAT_ALL.TEN_ID
+            , CAT_ALL.ITEMCAT_LVL /*분류 레벨 */
+            , CAT_ALL.ITEMCAT_CD /*분류 코드 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT_ALL.ITEMCAT_NM_EN
+                ELSE CAT_ALL.ITEMCAT_NM
+                END DISP_ITEMCAT_NM /*분류 명 */
+            , CAT_ALL.ITEMCAT_NM
+            , CAT_ALL.ITEMCAT_NM_EN
+            , CAT_ALL.PAR_ITEMCAT_CD /*상위 분류 코드 */
+            , CAT_ALL.SORT /*정렬 순서 */
+            , CAT_ALL.RISK_MGMT_YN /*위험 관리 여부 */
+            , CAT_ALL.ITEM_CD_MAND_YN /*품목 코드 필수 여부 */
+            , CAT_ALL.USE_YN /*사용 여부 */
+            , CAT_ALL.STS /*상태 */
+            , CAT_ALL.REGR_ID /*등록자 아이디 */
+            , CAT_ALL.REG_DTTM /*등록 일시 */
+            , CAT_ALL.MODR_ID /*수정자 아이디 */
+            , CAT_ALL.MOD_DTTM /*수정 일시 */
+            , CAT_ALL.ITEMCAT_PATH /*분류 경로*/
+            , CAT_ALL.ITEMCAT_PATH_EN /*분류 영문 경로*/
+            , CAT_ALL.MGMT_DEPT_CD /*관리 부서*/
+            , CAT_ALL.ITEMCAT_SIMWORD /*유사어*/
+	        , CAT_ALL.SG_CD
+	        , (SELECT CASE WHEN #{g.tenant} = 'ko_KR' THEN VMG_NM
+	                       ELSE (CASE WHEN VMG_NM_EN IS NULL OR VMG_NM_EN = '' THEN VMG_NM ELSE VMG_NM_EN END)
+                       END SG_NM
+	             FROM VMG
+                WHERE TEN_ID = CAT_ALL.TEN_ID
+                  AND VMG_CD = CAT_ALL.SG_CD
+                  AND STS != 'D') AS SG_NM
+	    FROM CAT_SUM CAT_SUM
+        INNER JOIN ITEMCAT CAT_ALL
+        ON CAT_ALL.TEN_ID = CAT_SUM.TEN_ID
+        AND CAT_ALL.ITEMCAT_CD = CAT_SUM.ITEMCAT_CD
+        AND CAT_ALL.STS != 'D'
+        <choose>
+            <when test="p.master_yn != null and p.master_yn != &quot;&quot; and p.master_yn == &quot;Y&quot;">
+                AND 1 = 1
+            </when>
+            <otherwise>
+                AND USE_YN = 'Y'
+            </otherwise>
+        </choose>
+        ORDER BY CAT_ALL.SORT ASC
+    </select>
+    <sql id="findListItemCatCd">
+        /* item-cat.findListItemCatCd : 분류 코드 찾기 */
+        SELECT
+            TEN_ID
+            , ITEMCAT_CD /*분류 코드 */
+            , PAR_ITEMCAT_CD
+        FROM ITEMCAT
+        WHERE TEN_ID = #{g.tenant}
+        <if test="p.itemcat_cd != null and p.itemcat_cd != &quot;&quot;">
+            <bind name="itemCatCdPattern" value="'%' + p.itemcat_cd + '%'"/>
+            AND UPPER(ITEMCAT_CD) LIKE UPPER(#{itemCatCdPattern})
+        </if>
+        <if test="p.itemcat_nm != null and p.itemcat_nm != &quot;&quot;">
+            <bind name="itemCatNmPattern" value="'%' + p.itemcat_nm + '%'"/>
+            AND (UPPER(ITEMCAT_NM) LIKE UPPER(#{itemCatNmPattern}) OR UPPER(ITEMCAT_NM_EN) LIKE UPPER(#{itemCatNmPattern}))
+        </if>
+        <choose>
+            <when test="p.master_yn != null and p.master_yn != &quot;&quot; and p.master_yn == &quot;Y&quot;">
+                AND 1 = 1
+            </when>
+            <otherwise>
+                AND USE_YN = 'Y'
+            </otherwise>
+        </choose>
+        AND STS != 'D'
+    </sql>
+    <select id="checkCntUseItemCat" resultType="int">
+        /* item-cat.checkCntUseItemCat : 품목에 사용되는 분류가 있는 지 확인 */
+        SELECT
+            COUNT(ITEM_CD)
+        FROM ITEM
+        WHERE TEN_ID = #{g.tenant}
+        <if test="p.itemcat_lvl == &quot;1&quot;">
+            AND ITEMCAT_LVL_1_CD = #{p.itemcat_cd}
+        </if>
+        <if test="p.itemcat_lvl == &quot;2&quot;">
+            AND ITEMCAT_LVL_2_CD = #{p.itemcat_cd}
+        </if>
+        <if test="p.itemcat_lvl == &quot;3&quot;">
+            AND ITEMCAT_LVL_3_CD = #{p.itemcat_cd}
+        </if>
+        <if test="p.itemcat_lvl == &quot;4&quot;">
+            AND ITEMCAT_LVL_4_CD = #{p.itemcat_cd}
+        </if>
+        <if test="p.itemcat_lvl ==&quot;5&quot;">
+            AND ITEMCAT_LVL_5_CD = #{p.itemcat_cd}
+        </if>
+        AND STS != 'D'
+    </select>
+    <select id="findInfoItemCatClass" resultType="map">
+        /* item-cat.findInfoItemCatClass : 품목분류 조회*/
+        SELECT
+            ITEMCAT_CD           /*분류 코드 */
+            , ITEMCAT_LVL          /*분류 레벨 */
+            , ITEMCAT_NM           /*분류 명 */
+            , ITEMCAT_NM_EN        /*분류 영문 명*/
+            , ITEMCAT_PATH         /*분류 경로*/
+            , ITEMCAT_PATH_EN      /*분류 영문 경로*/
+            , PAR_ITEMCAT_CD       /*상위 분류 코드 */
+            , MGMT_DEPT_CD         /*관리 부서*/
+            , ITEMCAT_SIMWORD      /*유사어*/
+            , SORT                 /*정렬 순서 */
+            , RISK_MGMT_YN         /*위험 관리 여부 */
+            , ITEM_CD_MAND_YN      /*품목 코드 필수 여부 */
+            , USE_YN               /*사용 여부 */
+            , USG_EXPLN            /*용도*/
+            , RMK                  /*비고 */
+            , STS
+                , TO_CHAR(MOD_DTTM,'YYYY-MM-DD HH24:MI:SS') AS MOD_DTTM  , MODR_ID
+            , PURC_TYP_CCD     /*구매유형 */
+        FROM ITEMCAT
+        WHERE TEN_ID  = #{g.tenant}
+        AND UPPER(ITEMCAT_CD) = UPPER(#{p.itemcat_cd})
+        AND STS != 'D'
+    </select>
+    <select id="findListItemCatSimilar" resultType="map">
+        /* item-cat.findListItemCatSimilar : 유사 품목 분류 조회 */
+        SELECT
+            SIM.ITEMCAT_CD          /*분류 코드*/
+            , SIM.SIM_ITEMCAT_CD      /*유사 분류 코드*/
+            , CAT.ITEMCAT_LVL         /*분류 레벨 */
+            , CAT.ITEMCAT_CD          /*분류 코드 */
+            , CASE WHEN 'en_US' = #{g.locale} THEN CAT.ITEMCAT_NM_EN
+                ELSE CAT.ITEMCAT_NM
+                END DISP_ITEMCAT_NM
+            , CAT.ITEMCAT_NM          /*분류 명 */
+            , CAT.ITEMCAT_NM_EN          /*분류 명 영문 */
+            , CAT.PAR_ITEMCAT_CD       /*상위 분류 코드 */
+            , CAT.SORT         /*정렬 순서 */
+            , CAT.RISK_MGMT_YN      /*위험 관리 여부 */
+            , CAT.ITEM_CD_MAND_YN  /*품목 코드 필수 여부 */
+            , CAT.USE_YN           /*사용 여부 */
+            , CAT.RMK              /*비고 */
+            , CAT.ITEMCAT_NM_EN       /*분류 영문 명*/
+            , CAT.ITEMCAT_PATH        /*분류 경로*/
+            , CAT.ITEMCAT_PATH_EN     /*분류 영문 경로*/
+            , CAT.MGMT_DEPT_CD         /*관리 부서*/
+            , CAT.ITEMCAT_SIMWORD          /*동의어*/
+            , CAT.USG_EXPLN             /*용도*/
+        FROM SIM_ITEMCAT SIM  /*유사 분류 테이블*/
+        INNER JOIN ITEMCAT CAT
+        ON SIM.TEN_ID = CAT.TEN_ID
+        AND SIM.SIM_ITEMCAT_CD = CAT.ITEMCAT_CD
+        AND CAT.STS != 'D'
+        WHERE SIM.TEN_ID = #{g.tenant}
+        AND SIM.ITEMCAT_CD = #{p.itemcat_cd}
+        AND SIM.STS != 'D'
+    </select>
+    <select id="findListItemCatHistory" resultType="map">
+        /* item-cat.findListItemCatHistory : 이력조회 */
+        SELECT
+            HIS.MODR_ID
+            , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+                ELSE USR.USR_NM
+                END USR_NM
+            , UPPER(HIS.CHG_TYP_CCD) AS CHG_TYP_CCD
+            , HIS.MOD_CONT
+            , HIS.MOD_DTTM
+        FROM ITEMCAT_HISTREC HIS
+        INNER JOIN USR USR
+        ON USR.TEN_ID = HIS.TEN_ID
+        AND USR.USR_ID = HIS.MODR_ID
+        AND USR.STS != 'D'
+        WHERE HIS.TEN_ID = #{g.tenant}
+        AND HIS.ITEMCAT_CD = #{p.itemcat_cd}
+        AND HIS.STS != 'D'
+        ORDER BY HIS.MOD_DTTM DESC
+    </select>
+    <select id="checkCntItemCatClass" resultType="int">
+        /* item-cat.checkCntItemCatClass : 품목분류 조회*/
+        SELECT
+            COUNT(*)
+        FROM ITEMCAT
+        WHERE TEN_ID = #{g.tenant}
+        AND UPPER(ITEMCAT_CD) = UPPER(#{p.itemcat_cd})
+        AND STS != 'D'
+    </select>
+    <insert id="insertItemCat">
+        /* item-cat.insertItemCat : ITEMCAT(품목분류) INSERT */
+        INSERT INTO ITEMCAT (
+            TEN_ID	      /*시스템 아이디 */
+            , ITEMCAT_CD	      /*분류 코드 */
+            , ITEMCAT_LVL	      /*분류 레벨 */
+            , ITEMCAT_NM	      /*분류 명 */
+            , ITEMCAT_NM_EN	  /*분류 영문 명*/
+            , ITEMCAT_PATH	      /*분류 경로*/
+            , ITEMCAT_PATH_EN	  /*분류 영문 경로*/
+            , PAR_ITEMCAT_CD	  /*상위 분류 코드 */
+            , MGMT_DEPT_CD	      /*관리 부서*/
+            , ITEMCAT_SIMWORD	      /*유사어*/
+            , SORT	      /*정렬 순서 */
+            , RISK_MGMT_YN	  /*위험 관리 여부 */
+            , ITEM_CD_MAND_YN /*품목 코드 필수 여부 */
+            , USE_YN	      /*사용 여부 */
+            , USG_EXPLN	          /*용도*/
+            , RMK	          /*비고 */
+            , STS	          /*상태 */
+            , REGR_ID	      /*등록자 아이디 */
+            , REG_DTTM          /*등록 일시 */
+            , MODR_ID
+            , MOD_DTTM
+            , PURC_TYP_CCD	      /*구매유형 */
+        ) VALUES (
+            #{g.tenant}
+            , #{p.itemcat_cd}
+            , CAST(#{p.itemcat_lvl} AS INT)
+            , #{p.itemcat_nm}
+            , #{p.itemcat_nm_en}
+            , #{p.itemcat_path}
+            , #{p.itemcat_path_en}
+            , #{p.par_itemcat_cd}
+            , #{p.mgmt_dept_cd}
+            , #{p.itemcat_simword}
+            , CAST(#{p.sort} AS FLOAT  )
+            , #{p.risk_mgmt_yn}
+            , #{p.item_cd_mand_yn}
+            , #{p.use_yn}
+            , #{p.usg_expln}
+            , #{p.rmk}
+            , 'C'
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+            , #{p.purc_typ_ccd}
+            )
+    </insert>
+    <update id="updateItemCat">
+        /* item-cat.updateItemCat : ITEMCAT(품목분류) UPDATE */
+        UPDATE ITEMCAT
+        <trim prefix="set" prefixOverrides=",">
+            STS                 = 'U'                               /*상태 */
+            , MODR_ID           = #{g.username}                     /*수정자 아이디 */
+            , MOD_DTTM          = #{g.now}                          /*수정 일시 */
+            , ITEMCAT_LVL       = CAST(#{p.itemcat_lvl} AS INT)
+            , ITEMCAT_NM        = #{p.itemcat_nm}                   /*분류 명 */
+            , ITEMCAT_NM_EN     = #{p.itemcat_nm_en}                /*분류 영문 명*/
+            , ITEMCAT_PATH      = #{p.itemcat_path}                 /*분류 경로*/
+            , ITEMCAT_PATH_EN   = #{p.itemcat_path_en}              /*분류 영문 경로*/
+            , PAR_ITEMCAT_CD    = #{p.par_itemcat_cd}               /*상위 분류 코드 */
+            , MGMT_DEPT_CD      = #{p.mgmt_dept_cd}                 /*관리 부서*/
+            , ITEMCAT_SIMWORD   = #{p.itemcat_simword}              /*유사어*/
+            , SORT              = CAST(#{p.sort} AS FLOAT  )/*정렬 순서 */
+            , RISK_MGMT_YN      = #{p.risk_mgmt_yn}                 /*위험 관리 여부 */
+            , ITEM_CD_MAND_YN   = #{p.item_cd_mand_yn}              /*품목 코드 필수 여부 */
+            , USE_YN            = #{p.use_yn}                       /*사용 여부 */
+            , USG_EXPLN         = #{p.usg_expln}                    /*용도*/
+            , RMK               = #{p.rmk}                          /*비고 */
+            , PURC_TYP_CCD      = #{p.purc_typ_ccd}             /*구매유형 */
+        </trim>
+        WHERE TEN_ID    = #{g.tenant}
+        AND ITEMCAT_CD   = #{p.itemcat_cd}
+    </update>
+    <delete id="deleteItemCat">
+        /* item-cat.deleteItemCat : ITEMCAT(품목분류) DELETE */
+        DELETE FROM ITEMCAT
+        WHERE TEN_ID = #{g.tenant}
+        AND ITEMCAT_CD = #{p.itemcat_cd}
+    </delete>
+    <insert id="insertSimItemCat">
+        /* item-cat.insertSimItemCat : SIM_ITEMCAT(유사분류) INSERT */
+        INSERT INTO SIM_ITEMCAT (
+            TEN_ID      /*시스템 아이디*/
+            , ITEMCAT_CD        /*분류 코드*/
+            , SIM_ITEMCAT_CD    /*유사 분류 코드*/
+            , REGR_ID           /*등록자 아이디*/
+            , REG_DTTM          /*등록 일시*/
+        ) VALUES (
+            #{g.tenant}
+            , #{p.itemcat_cd}
+            , #{p.sim_itemcat_cd}
+            , #{g.username}
+            , #{g.now}
+        )
+    </insert>
+    <delete id="deleteSimItemCat">
+        /* item-cat.deleteSimItemCat : SIM_ITEMCAT(유사분류) delete */
+        DELETE FROM SIM_ITEMCAT
+        WHERE TEN_ID        = #{g.tenant}
+        AND ITEMCAT_CD      = #{p.itemcat_cd}
+        <if test="p.sim_itemcat_cd != null and p.sim_itemcat_cd != ''">
+            AND SIM_ITEMCAT_CD  = #{p.sim_itemcat_cd}
+        </if>
+    </delete>
+    <insert id="insertItemCatHistRec">
+        /* item-cat.insertItemCatHistRec : ITEMCAT_HISTREC(품목분류 이력) INSERT */
+        INSERT INTO ITEMCAT_HISTREC (
+            TEN_ID
+            , ITEMCAT_CD
+            , ITEMCAT_UUID
+            , ITEMCAT_LVL
+            , CHG_TYP_CCD
+            , MOD_CONT
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        ) VALUES (
+            #{g.tenant}
+            , #{p.itemcat_cd}
+            , #{p.itemcat_uuid}
+            , CAST(#{p.itemcat_lvl} AS INT)
+            , #{p.chg_typ_ccd}
+            , #{p.mod_cont}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+         )
+    </insert>
+    <delete id="deleteItemCatHistRec">
+        /* item-cat.deleteItemCatHistRec : ITEMCAT_HISTREC(품목분류 이력) DELETE */
+        DELETE FROM ITEMCAT_HISTREC
+        WHERE TEN_ID        = #{g.tenant}
+        AND ITEMCAT_CD    = #{p.itemcat_cd}
+    </delete>
+</mapper>

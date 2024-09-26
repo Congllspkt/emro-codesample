@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="pro-portal-widget">
+	<select id="findListPrProgress" resultType="map">
+	/* pro-portal-widget.findListPrProgress */
+	SELECT CDDT.DTLCD_SORT
+	     , COUNT(PRDT.PR_ITEM_UUID) AS CNT
+	     , CDDT.DTLCD            AS PR_ITEM_STS_CCD
+	     , CDDL.DTLCD_NM         AS PR_PROG_STS_GRP_NM
+	  FROM DTLCD CDDT
+	 INNER JOIN DTLCD_MULTLANG CDDL
+	    ON CDDL.TEN_ID  = CDDT.TEN_ID
+	   AND CDDL.CCD  = CDDT.CCD
+	   AND CDDL.DTLCD  = CDDT.DTLCD
+	   AND CDDL.LANG_CCD = #{g.locale}
+	   AND CDDL.STS    <![CDATA[<>]]> 'D'
+	  LEFT OUTER JOIN
+           ( SELECT PR.TEN_ID
+                  , PR.PR_UUID
+                  , PR.PR_NO
+                  , PR.PR_REVNO
+                  , PR.OORG_CD
+                  , PR.PR_TIT
+                  , PR.PURC_TYP_CCD
+                  , PR.PR_PURP_CCD
+                  , PR.PR_STS_CCD
+                  , PR.PR_CRTR_ID
+                  , PR.PR_REQ_DT
+                  , PR.PR_CRTR_DEPT_CD
+                  , ( SELECT MAX(CAST(A.PR_REVNO AS INT))
+                        FROM PR A
+                       WHERE A.TEN_ID = PR.TEN_ID
+                         AND A.PR_NO  = PR.PR_NO
+                         AND A.STS   != 'D' )              AS LAST_REV
+               FROM PR PR
+              WHERE PR.TEN_ID = #{g.tenant}
+                AND PR.STS   <![CDATA[<>]]> 'D'
+           ) PRHD
+        ON PRHD.TEN_ID      = CDDT.TEN_ID
+       AND PRHD.PR_REVNO      = PRHD.LAST_REV
+       AND PRHD.PR_CRTR_ID   = #{g.username}
+       AND PRHD.PR_REQ_DT <![CDATA[>=]]> #{p.from_pr_req_date}
+       <bind name="toDate" value="g.getPlusDays(p.to_pr_req_date, 1)"/>
+       AND PRHD.PR_REQ_DT <![CDATA[<]]> #{toDate}
+	  LEFT OUTER JOIN PR_ITEM PRDT
+	    ON PRDT.TEN_ID          = CDDT.TEN_ID
+	   AND PRDT.PR_UUID           = PRHD.PR_UUID
+	   AND PRDT.PR_STS_CCD     IS NOT NULL  AND PRDT.PR_STS_CCD     NOT IN ('PR_CRNG', 'PR_APVL_RPTG', 'PR_APVL_RET', 'PR_CHG_CRNG')
+	   AND PRDT.PR_ITEM_STS_CCD IS NOT NULL  AND PRDT.PR_ITEM_STS_CCD = CDDT.DTLCD
+	   AND PRDT.STS            <![CDATA[<>]]> 'D'
+     WHERE CDDT.TEN_ID = #{g.tenant}
+       AND CDDT.CCD = 'P071'
+       AND CDDT.USE_YN = 'Y'
+       AND CDDT.STS   <![CDATA[<>]]> 'D'
+     GROUP BY CDDT.DTLCD_SORT, CDDT.DTLCD, CDDL.DTLCD_NM
+     ORDER BY CDDT.DTLCD_SORT
+	</select>
+	<select id="findListPrFreqItem" resultType="map">
+	/* pro-portal-widget.findListPrFreqItem */
+	SELECT  T.ITEM_CD
+	     , T.ITEM_NM
+	     , T.ITEM_SPEC
+	     , T.CNT
+	     , T.MAX_REQ_DATE
+	     , ROW_NUMBER() OVER(ORDER BY T.ITEM_CD)  AS RN
+	  FROM ( SELECT PRDT.ITEM_CD
+	              , PRDT.ITEM_NM
+	              , PRDT.ITEM_SPEC
+	              , COUNT(PRDT.PR_ITEM_UUID)  AS CNT
+	              , MAX(PRHD.PR_REQ_DT)   AS MAX_REQ_DATE
+	           FROM ( SELECT PR.TEN_ID
+	                       , PR.PR_UUID
+	                       , PR.PR_REVNO
+	                       , PR.OORG_CD
+	                       , PR.PURC_TYP_CCD
+	                       , PR.PR_PURP_CCD
+	                       , PR.PR_STS_CCD
+	                       , PR.PR_CRTR_ID
+	                       , PR.PR_REQ_DT
+	                       , PR.PR_CRTR_DEPT_CD
+	                       , ( SELECT MAX(CAST(A.PR_REVNO AS INT))
+	                             FROM PR A
+	                            WHERE A.TEN_ID = PR.TEN_ID
+	                              AND A.PR_NO  = PR.PR_NO
+	                              AND A.STS   <![CDATA[<>]]> 'D' )  AS LAST_REV
+	                    FROM PR PR
+	                   WHERE PR.TEN_ID = #{g.tenant}
+	                     AND PR.STS   <![CDATA[<>]]> 'D'
+                    ) PRHD
+	          INNER JOIN PR_ITEM PRDT
+	             ON PRDT.TEN_ID = PRHD.TEN_ID
+	            AND PRDT.PR_UUID  = PRHD.PR_UUID
+	            AND PRDT.STS   <![CDATA[<>]]> 'D'
+	          WHERE PRHD.TEN_ID       = #{g.tenant}
+	            AND PRHD.PR_REVNO       = PRHD.LAST_REV
+	            AND PRHD.PR_CRTR_ID    = #{g.username}
+	            AND PRHD.PR_STS_CCD IN ('C', 'K') -- C:결재승인, K:승인처리
+	            AND PRHD.PR_REQ_DT <![CDATA[>=]]> #{p.from_pr_req_date}
+	            <bind name="toDate" value="g.getPlusDays(p.to_pr_req_date, 1)"/>
+	            AND PRHD.PR_REQ_DT <![CDATA[<]]> #{toDate}
+	          GROUP BY PRDT.ITEM_CD, PRDT.ITEM_NM, PRDT.ITEM_SPEC
+	          ORDER BY COUNT(PRDT.PR_ITEM_UUID) DESC
+	       ) T
+	   WHERE 1=1
+	     AND ROWNUM <![CDATA[<=]]> 5 </select>
+</mapper>

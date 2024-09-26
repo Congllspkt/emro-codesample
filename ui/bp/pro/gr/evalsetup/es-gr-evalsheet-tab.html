@@ -1,0 +1,472 @@
+<sc-link rel="import" href="es-gr-evalsheet-info.html"></sc-link>
+<sc-link rel="import" href="es-gr-evalsheet-process-info.html"></sc-link>
+
+<dom-module id="es-gr-evalsheet-tab">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 입고/기성 평가시트 조회 -->
+		<sc-ajax
+				id="findGrEvalsht"
+				url="findGrEvalsht.do"
+				body="{{grEvalshtInfo}}"
+				on-response="onFindResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성 평가시트 저장 -->
+		<sc-ajax
+				id="saveGrEvalsht"
+				url="saveGrEvalsht.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		<!-- 입고/기성 평가시트 Import -->
+		<sc-ajax
+				id="saveImportGrEvalsht"
+				url="saveImportGrEvalsht.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		<!-- 입고/기성 평가시트 버전업 -->
+		<sc-ajax
+				id="saveVersionupGrEvalsht"
+				url="saveVersionupGrEvalsht.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성 평가시트 삭제 -->
+		<sc-ajax
+				id="deleteGrEvalsht"
+				url="deleteGrEvalsht.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성 평가시트 프로세스 저장 -->
+		<sc-ajax
+				id="saveGrEvalshtPrcs"
+				url="saveGrEvalshtPrcs.do"
+				on-response="onSaveGrEvalshtPrcsResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성 평가시트 및 프로세스 전체 저장 -->
+		<sc-ajax
+				id="saveAllGrEvalshtAndPrcses"
+				url="saveAllGrEvalshtAndPrcses.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		
+		<!-- 입고/기성 평가시트/평가템플릿 확정 저장 -->
+		<sc-ajax
+				id="saveCnfdYnGrEvalsht"
+				url="saveCnfdYnGrEvalsht.do"
+				on-response="onSaveGrEvalshtResultHandler">
+		</sc-ajax>
+		
+		<cc-sub-title-bar title-text="입고/기성 평가시트">
+		</cc-sub-title-bar>
+		
+		<sc-tab-navigation id="tabNavi" class="fit" selected="0">
+			<es-gr-evalsheet-info id="evalshtInfo" title-text="정보" on-save-gr-evalsht="onSaveGrEvalsht" on-confirm-cancel-gr-evalsht="onConfirmCancelGrEvalsht" on-validate-gr-evalsht-prcs="onValidateGrEvalshtPrcs"
+										  on-import-gr-evalsht="onImportGrEvalsht" on-versionup-gr-evalsht="onVersionupGrEvalsht" on-delete-gr-evalsht="onDeleteGrEvalsht"></es-gr-evalsheet-info>
+			<es-gr-evalsheet-process-info hidden></es-gr-evalsheet-process-info>
+		</sc-tab-navigation>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-gr-evalsheet-tab",
+			properties: {
+				// 평가시트 저장모드
+				saveMode: {
+					type: String,
+					value: null
+				},
+				// 조회only 모드 여부
+				readonlyMode: {
+					type: Boolean,
+					value: false
+				},
+				changeEvaltr: {
+					type: Boolean,
+					value: false
+				},
+				geg: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalshtInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalshtInfoPrcses: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				// 재조회할 프로세스(= 저장한 프로세스) 코드
+				reloadPrcsCcd: {
+					type: String,
+					value: null
+				},
+				
+				gePrcsEvaltrs: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			initialized: function() {
+			},
+			
+			/**
+			 * 화면 load
+			 */
+			loadScreen: function(param) {
+				var me = this;
+				me.$.evalshtInfo.load(param);
+				
+				var tabNavi = me.$.tabNavi;
+				me.removePrcsTab(tabNavi);
+				
+				var grEvalshtInfoPrcses = param.grEvalshtInfoPrcses;
+				if(!UT.isEmpty(grEvalshtInfoPrcses) && grEvalshtInfoPrcses.length > 0) {  // 입고/기성 프로세스 존재
+					var grPrcses = grEvalshtInfoPrcses.filter(function(item) {
+						return item.application_yn == 'Y';
+					});
+					
+					if(!UT.isEmpty(grPrcses) && grPrcses.length > 0) {  // 적용대상 입고/기성 프로세스 존재
+						// 입고/기성 프로세스 Tab 동적 생성
+						me.loadEvalshtPrcsTabs(grPrcses);
+					}
+				}
+			},
+			/**
+			 * 화면 load (입고/기성 프로세스 Tab 동적 생성)
+			 */
+			loadEvalshtPrcsTabs: function(grPrcses) {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				
+				// 프로세스 정렬
+				grPrcses.sort(function(a, b) {
+					return a.prcs_sort - b.prcs_sort;
+				});
+				
+				// 프로세스 저장 function 정의
+				var saveTabFunc = function(e) {
+					var body = e.detail
+					
+					if(!UT.isEmpty(body)) {
+						body.gegInfo = me.get("geg");
+						me.$.saveGrEvalshtPrcs.body = body;
+						UT.request(me.$.saveGrEvalshtPrcs);
+					}
+				};
+				
+				// 평가템플릿 수정모드 전환 완료 function 정의
+				var savedTabFunc = function(e) {
+					var data = e.detail;
+					var param = {
+						gegInfo: me.get("geg"),
+						grEvalshtInfoPrcs: data
+					}
+					me.fire("saved-gr-evalsht-prcs", param);
+				}
+				
+				var currentEvalsht = me.get("grEvalshtInfo.current_evalsht");
+				for(var i = 0; i < grPrcses.length; i++) {
+					var grPrcs = grPrcses[i];
+					
+					// 입고/기성 프로세스 탭화면 생성
+					var grPrcsTab = document.createElement("es-gr-evalsheet-process-info");
+					grPrcsTab.id = grPrcs.prcs_ccd;    // 프로세스 코드로 아이디 설정
+					grPrcsTab.setAttribute('title', grPrcs.prcs_ccd_nm);  // 프로세스 명으로 탭 명 설정
+					grPrcsTab.addEventListener("save-gr-evalsht-prcs", saveTabFunc);
+					grPrcsTab.addEventListener("saved-evaltmpl", savedTabFunc);
+					
+					// tab navigation에 생성한 헤더 탭 append
+					Polymer.dom(tabNavi).appendChild(grPrcsTab);
+					Polymer.dom.flush();
+					
+					grPrcs.current_evalsht = currentEvalsht;
+					grPrcs.readonlyMode = me.get("readonlyMode");
+					grPrcs.changeEvaltr = me.get("changeEvaltr");
+					
+					var gePrcsEvaltrs = me.get("gePrcsEvaltrs") || [];
+					if(gePrcsEvaltrs.length > 0) {
+						grPrcs.gePrcsEvaltrs = gePrcsEvaltrs.filter(function(item) {
+							return grPrcs.prcs_ccd === item.prcs_ccd;
+						});
+					}
+					grPrcsTab.load(grPrcs);
+				}
+			},
+			removePrcsTab: function(tabNavi) {
+				var me = this;
+				var contents = Polymer.dom(tabNavi).queryDistributedElements('*');
+				for(var i = 1; i < contents.length; i++) {
+					Polymer.dom(tabNavi).removeChild(contents[i]);
+				}
+			},
+			/**
+			 * 입고/기성 프로세스 저장 callback
+			 */
+			onSaveGrEvalshtPrcsResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					UT.completeAlert("저장", function() {
+						me.fire("saved-gr-evalsht-prcs", result.resultData);
+					});
+				}
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				me.set("geg", param.geg);
+				me.set("grEvalshtInfo", param.grEvalshtInfo);
+				me.set("gePrcsEvaltrs", param.gePrcsEvaltrs);
+				me.set("readonlyMode", param.readonlyMode == null ? me.get("readonlyMode") : param.readonlyMode);
+				me.set("changeEvaltr", param.changeEvaltr == null ? me.get("changeEvaltr") : param.changeEvaltr);
+				this.onSearchGrEvalsht();
+				
+				me.applyFormula();
+			},
+			reload: function(param, reloadPrcsCcd) {
+				var me = this;
+				me.set("reloadPrcsCcd", reloadPrcsCcd);  // 재조회할 프로세스(= 저장한 프로세스) 코드 셋팅
+				me.load(param);
+			},
+			
+			/**
+			 * 입고/기성 평가시트 조회
+			 */
+			onSearchGrEvalsht: function() {
+				var me = this;
+				UT.request(me.$.findGrEvalsht);
+			},
+			
+			/**
+			 * 입고/기성 평가시트 조회 callback
+			 */
+			onFindResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					var resultData = result.resultData;
+					var grEvalshtInfo = UT.isEmpty(resultData.grEvalshtInfo) ? new Object() : resultData.grEvalshtInfo;
+					var grEvalshtInfoPrcses = UT.isEmpty(resultData.grEvalshtInfoPrcses) ? new Array() : resultData.grEvalshtInfoPrcses;
+					
+					// 3. 입고/기성 평가시트 조회
+					me.set("grEvalshtInfo", grEvalshtInfo);
+					// 4. 입고/기성 평가시트 프로세스 조회
+					me.set("grEvalshtInfoPrcses", grEvalshtInfoPrcses);
+					
+					var param = {
+						geg: me.get("geg"),
+						grEvalshtInfo: me.get("grEvalshtInfo"),
+						grEvalshtInfoPrcses: me.get("grEvalshtInfoPrcses"),
+						readonlyMode: me.get("readonlyMode")
+					};
+					
+					var reloadPrcsCcd = me.get("reloadPrcsCcd");
+					if(UT.isEmpty(reloadPrcsCcd)) {  // load
+						me.loadScreen(param);
+					} else {  // reload
+						var reloadTargetTab = me.getTargetTab(reloadPrcsCcd);
+						var grEvalshtInfoPrcs = grEvalshtInfoPrcses.filter(function(item) {
+							if(item.prcs_ccd == reloadPrcsCcd) {
+								return item;
+							}
+						});
+						
+						me.$.evalshtInfo.load(param);
+						grEvalshtInfoPrcs[0].current_evalsht = me.get("grEvalshtInfo.current_evalsht");
+						reloadTargetTab.load(grEvalshtInfoPrcs[0]);
+						me.set("reloadPrcsCcd", null);  // 초기화
+					}
+				}
+			},
+			
+			/**
+			 * 입고/기성평가그룹 (GEG) - 입고/기성 평가시트 저장
+			 */
+			onSaveGrEvalsht: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				if(!UT.isEmpty(body)) {
+					var saveMode = body.grEvalshtInfo.saveMode;
+					me.set("saveMode", saveMode);
+					
+					if(saveMode == "confirmSave") {  // 확정
+						me.$.saveAllGrEvalshtAndPrcses.body = body;
+						UT.request(me.$.saveAllGrEvalshtAndPrcses);
+					} else {  // 임시저장
+						me.$.saveGrEvalsht.body = body;
+						UT.request(me.$.saveGrEvalsht);
+					}
+				}
+			},
+			/**
+			 * 입고/기성평가그룹 (GEG) - 입고/기성 평가시트 확정취소
+			 */
+			onConfirmCancelGrEvalsht: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				if(!UT.isEmpty(body)) {
+					me.$.saveCnfdYnGrEvalsht.body = body;
+					UT.request(me.$.saveCnfdYnGrEvalsht);
+				}
+			},
+			
+			/**
+			 * 입고/기성평가그룹 (GEG) - 평가시트 Import
+			 */
+			onImportGrEvalsht: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				if(!UT.isEmpty(body)) {
+					me.$.saveImportGrEvalsht.body = body;
+					UT.request(me.$.saveImportGrEvalsht);
+				}
+			},
+			/**
+			 * 입고/기성평가그룹 (GEG) - 평가시트 버전업
+			 */
+			onVersionupGrEvalsht: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				if(!UT.isEmpty(body)) {
+					me.$.saveVersionupGrEvalsht.body = body;
+					UT.request(me.$.saveVersionupGrEvalsht);
+				}
+			},
+			/**
+			 * 입고/기성평가그룹 (GEG) - 평가시트 삭제
+			 */
+			onDeleteGrEvalsht: function(e) {
+				var me = this;
+				var body = e.detail;
+				
+				if(!UT.isEmpty(body)) {
+					me.$.deleteGrEvalsht.body = body;
+					UT.request(me.$.deleteGrEvalsht);
+				}
+			},
+			
+			/**
+			 * 입고/기성평가그룹 (GEG) / 입고/기성 평가시트 저장 callback
+			 */
+			onSaveGrEvalshtResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					var saveMode = me.get("saveMode");
+					var gegInfo = result.resultData;
+					
+					if(!UT.isEmpty(saveMode) && saveMode == "confirmSave") {
+						// 확정
+						me.$.saveCnfdYnGrEvalsht.body = {gegInfo: gegInfo, cnfdYn: "Y"};
+						UT.request(me.$.saveCnfdYnGrEvalsht);
+						
+						me.set("saveMode", null);  // 초기화
+					} else {
+						UT.completeAlert("저장", function() {
+							me.fire("saved-gr-evalsht", gegInfo);
+						});
+					}
+				} else if(UT.isNotEmpty(result) && result.resultStatus == "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9600", function() {  // 유효한 상태가 아니거나 상태가 변경된 데이터가 존재하여 요청을 수행할 수 없습니다.
+						me.fire("saved-gr-evalsht", me.get("geg"));
+					});
+				}
+			},
+			
+			/**
+			 * 입고/기성 프로세스 유효성 체크
+			 */
+			onValidateGrEvalshtPrcs: function(e) {
+				var me = this;
+				var validateParam = e.detail;
+				var usedPrcs = validateParam.usedPrcs;
+				var saveMode = validateParam.saveMode;
+				var prcsInfoList = [];
+				
+				for(var idx in usedPrcs) {  // 모든 프로세스 유효성 체크
+					var validateTargetPrcsCcd = usedPrcs[idx].prcs_ccd;
+					var validateTargetTab = me.getTargetTab(validateTargetPrcsCcd);
+					
+					me.$.tabNavi.selectItem(validateTargetTab);
+					var validateResult = validateTargetTab.validator(saveMode);
+					if(!validateResult.result) {
+						// 입고/기성 프로세스 유효성 체크 fail return
+						var returnInfo = {
+							validateResult: validateResult,
+							validateUnpassedPrcsCcd: validateTargetPrcsCcd
+						}
+						me.$.evalshtInfo.returnValidateResult(returnInfo);
+						return;
+					} else {
+						// 입고/기성 프로세스 유효성 체크 success
+						// 저장 데이터 생성
+						var prcsInfo = validateResult.prcsInfo;
+						prcsInfoList.push(prcsInfo);
+					}
+				}
+				
+				var returnInfo = {
+					validateResult: {result: true},
+					prcsInfoList: prcsInfoList
+				}
+				me.$.tabNavi.selectItem(me.$.evalshtInfo);
+				me.$.evalshtInfo.returnValidateResult(returnInfo);  // 입고/기성 프로세스 유효성 체크 success
+			},
+			
+			getTargetTab: function(prcsCcd) {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				var tabs = tabNavi.getElementsByTagName("es-gr-evalsheet-process-info");
+				return tabs[prcsCcd];
+			},
+			
+			getApplyEvalParameter: function() {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				var tabs = tabNavi.getElementsByTagName("es-gr-evalsheet-process-info");
+				
+				var geg = me.get("geg");
+				var grEvalshtInfo = me.get("grEvalshtInfo");
+				var grEvalshtInfoPrcses = me.get("grEvalshtInfoPrcses");
+				var evalshtPrcsEvaltrs = [];
+				for(var i = 0; i <= tabs.length - 1; i++) {
+					evalshtPrcsEvaltrs = evalshtPrcsEvaltrs.concat(tabs[i].getEvaltr());
+				}
+				return {
+					geg: geg,
+					grEvalshtInfo: grEvalshtInfo,
+					grEvalshtInfoPrcses: grEvalshtInfoPrcses,
+					evalshtPrcsEvaltrs: evalshtPrcsEvaltrs
+				};
+			}
+		});
+	</script>
+
+</dom-module>

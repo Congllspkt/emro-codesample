@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="work-task">
+	<select id="findPr" resultType="map">
+		/* work-task.findPr PR 조회 */
+		SELECT *
+		FROM PR
+		WHERE TEN_ID = #{g.tenant}
+		  AND PR_UUID  = #{p.pr_uuid}
+	</select>
+	<select id="findListPrItem" resultType="map">
+		/* work-task.findListPrItem PR_ITEM 조회 */
+		SELECT *
+		FROM PR_ITEM
+		WHERE TEN_ID     = #{g.tenant}
+		<choose>
+			<when test="p.pr_item_uuids != null">
+				AND PR_ITEM_UUID IN
+				<foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+					#{pr_item_uuid}
+				</foreach>
+			</when>
+			<when test="p.pr_uuid != null">
+				AND PR_UUID  = #{p.pr_uuid}
+				AND STS   <![CDATA[<>]]> 'D'
+			</when>
+			<otherwise>
+				AND PR_ITEM_UUID = #{p.pr_item_uuid}
+			</otherwise>
+		</choose>
+	</select>
+	<select id="findRfi" resultType="map">
+		/* work-task.findRfi RFI 조회 */
+		SELECT *
+		FROM RFI
+		WHERE TEN_ID = #{g.tenant}
+		  AND RFI_UUID = #{p.rfi_uuid}
+	</select>
+	<select id="findListRfiVendor" resultType="map">
+		/* work-task.findListRfiVendor RFI_VD 조회 */
+		SELECT *
+		FROM RFI_VD
+		WHERE TEN_ID = #{g.tenant}
+		  AND RFI_UUID = #{p.rfi_uuid}
+		  AND STS   <![CDATA[<>]]> 'D'
+	</select>
+	<select id="findRfiVendor" resultType="map">
+		/* work-task.findRfiVendor : RFI_VD 조회 */
+		SELECT *
+		FROM RFI_VD
+		WHERE TEN_ID    = #{g.tenant}
+		  AND RFI_VD_UUID = #{p.rfi_vd_uuid}
+	</select>
+	<select id="findRfx" resultType="map">
+		/* work-task.findRfx RFX 조회 */
+		SELECT *
+		FROM RFX
+		WHERE TEN_ID = #{g.tenant}
+		  AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findRfxRcpt" resultType="map">
+		/* work-task.findRfx RFX 조회 */
+		SELECT *
+		FROM RFX_REQ_RCPT
+		WHERE TEN_ID = #{g.tenant}
+		  AND RFX_REQ_RCPT_UUID = #{p.rfx_req_rcpt_uuid}
+	</select>
+	<select id="findListRfxVendor" resultType="map">
+		/* work-task.findListRfxVendor V_WP_ESPQTHD 조회 */
+		SELECT RVD.TEN_ID
+			 , RVD.RFX_UUID
+			 , RVD.RFX_VD_UUID
+			 , RVD.VD_CD
+			 , CASE WHEN (BID.RFX_BID_STS_CCD IS NULL OR BID.RFX_BID_STS_CCD = '')
+				        THEN 'RCPT_WTG'
+			        ELSE BID.RFX_BID_STS_CCD
+			END AS RFX_BID_STS_CCD
+			 , RFX.RFX_TYP_CCD
+		FROM RFX_VD RVD
+			     INNER JOIN RFX RFX
+			                ON RVD.TEN_ID = RFX.TEN_ID
+				                AND RVD.RFX_UUID = RFX.RFX_UUID
+				                AND RFX.STS != 'D'
+      LEFT OUTER JOIN RFX_BID BID
+		ON RVD.TEN_ID = BID.TEN_ID
+			AND RVD.RFX_NO = BID.RFX_NO
+			AND RVD.RFX_RND = BID.RFX_RND
+			AND RVD.VD_CD = BID.VD_CD
+			AND BID.RFX_BID_EFCT_YN = 'Y'
+			AND BID.STS != 'D'
+		WHERE RVD.TEN_ID = #{g.tenant}
+		  AND RVD.MULTRND_SUBJ_XCEPT_YN = 'N'
+		  AND RVD.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<!-- 사용 X -->
+	<select id="findRfxVendor" resultType="map">
+		/* work-task.findRfxVendor V_WP_ESPQTHD 조회 */
+		SELECT *
+		FROM V_WP_ESPQTHD
+		WHERE SYS_ID = #{g.tenant}
+		  AND APP_ID = #{p.rfx_id} || #{g.username}
+	</select>
+	<select id="findListNpeEvalSubjEvaltrRes" resultType="map">
+		/* work-task.findListNpeEvalSubjEvaltrRes EVAL_SUBJ_EVALTR_RES 조회 */
+		SELECT RBE.*
+		FROM RFX R
+			     INNER JOIN RFX_BID_EVALTR RBE
+			                ON RBE.TEN_ID   = R.TEN_ID
+				                AND RBE.RFX_UUID = R.RFX_UUID
+			     INNER JOIN EVAL_SUBJ_EVALTR_RES ESER
+			                ON ESER.TEN_ID                     = RBE.TEN_ID
+				                AND ESER.EVAL_SUBJ_EVALTR_RES_UUID  = RBE.EVAL_SUBJ_EVALTR_RES_UUID
+				                AND ESER.STS              <![CDATA[<>]]> 'D'
+		WHERE R.TEN_ID   = #{g.tenant}
+		  AND R.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findEvalSubjEvaltrRes" resultType="map">
+		/* work-task.findEvalSubjEvaltrRes EVAL_SUBJ_EVALTR_RES 조회 */
+		SELECT EVALTR_RES.TEN_ID
+			 , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+			 , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+			 , ESUBJ_RES.EVAL_TASK_TYP_CCD
+			 , EVALTR_RES.EVAL_PRGS_STS_CCD
+			 , GEP_EVALTR.EVAL_STS_CCD AS GE_EVAL_STS_CCD
+			 , RFB_EVALTR.EVAL_STS_CCD AS NPE_EVAL_STS_CCD
+		FROM EVAL_SUBJ_EVALTR_RES EVAlTR_RES
+			     INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+			                ON EVALTR_RES.TEN_ID = ESUBJ_RES.TEN_ID
+				                AND EVALTR_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+			     LEFT OUTER JOIN GE_PRCS_EVALTR GEP_EVALTR
+			                     ON EVALTR_RES.TEN_ID = GEP_EVALTR.TEN_ID
+				                     AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = GEP_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID
+			     LEFT OUTER JOIN RFX_BID_EVALTR RFB_EVALTR
+			                     ON EVALTR_RES.TEN_ID = RFB_EVALTR.TEN_ID
+				                     AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = RFB_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID
+		WHERE EVAlTR_RES.TEN_ID                    = #{g.tenant}
+		  AND EVAlTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+	</select>
+	<select id="findListPo" resultType="map">
+		/* work-task.findListPo PO 조회 */
+		SELECT *
+		FROM PO
+		WHERE TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.po_uuids != null">
+				AND PO_UUID IN
+				<foreach close=")" collection="p.po_uuids" item="po_uuid" open="(" separator=",">
+					#{po_uuid}
+				</foreach>
+			</when>
+			<otherwise>
+				AND PO_UUID = #{p.po_uuid}
+			</otherwise>
+		</choose>
+		<if test="p.purc_typ_ccd != null">
+			AND PURC_TYP_CCD = #{p.purc_typ_ccd}
+		</if>
+	</select>
+	<select id="findListPoItem" resultType="map">
+		/* work-task.findListPoItem PO_ITEM 조회 */
+		SELECT *
+		FROM PO_ITEM
+		WHERE TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.po_item_uuids != null">
+				AND PO_ITEM_ID IN
+				<foreach close=")" collection="p.po_item_uuids" item="po_item_uuid" open="(" separator=",">
+					#{po_item_uuid}
+				</foreach>
+			</when>
+			<when test="p.po_uuids != null">
+				AND PO_UUID IN
+				<foreach close=")" collection="p.po_uuids" item="po_uuid" open="(" separator=",">
+					#{po_uuid}
+				</foreach>
+				AND STS <![CDATA[<>]]> 'D'
+			</when>
+			<when test="p.gr_uuid != null">
+				AND PO_ITEM_UUID  IN ( SELECT PO_ITEM_UUID
+				FROM GR_ITEM
+				WHERE TEN_ID = #{g.tenant}
+				AND GR_UUID  = #{p.gr_uuid}
+				AND STS   <![CDATA[<>]]> 'D'
+				)
+			</when>
+			<when test="p.asn_uuid != null">
+				AND PO_ITEM_UUID  IN ( SELECT PO_ITEM_UUID
+				FROM ASN_ITEM
+				WHERE TEN_ID = #{g.tenant}
+				AND ASN_UUID  = #{p.asn_uuid}
+				AND STS   <![CDATA[<>]]> 'D'
+				)
+			</when>
+			<otherwise>
+				AND PO_UUID = #{p.po_uuid}
+			</otherwise>
+		</choose>
+		<if test="p.purc_typ_ccd != null">
+			AND PURC_TYP_CCD = #{p.purc_typ_ccd}
+		</if>
+	</select>
+	<select id="findPrevPo" resultType="map">
+		/* work-task.findPrevPo 이전 차수 PO 조회 */
+		SELECT PREV_PO.*
+		FROM PO
+			     INNER JOIN PO PREV_PO
+			                ON PREV_PO.TEN_ID  = PO.TEN_ID
+				                AND PREV_PO.PO_NO   = PO.PO_NO
+				                AND PREV_PO.PO_REVNO  = PO.PO_REVNO -1
+				                AND PREV_PO.STS    <![CDATA[<>]]> 'D'
+		WHERE PO.TEN_ID = #{g.tenant}
+		  AND PO.PO_UUID  = #{p.po_uuid}
+	</select>
+	<select id="findListCntr" resultType="map">
+		/* work-task.findListCntr CNTR 조회 */
+		SELECT *
+		FROM CNTR
+		WHERE TEN_ID  = #{g.tenant}
+		<choose>
+			<when test="p.cntr_uuids != null">
+				AND CNTR_UUID IN
+				<foreach close=")" collection="p.cntr_uuids" item="cntr_uuid" open="(" separator=",">
+					#{cntr_uuid}
+				</foreach>
+			</when>
+			<otherwise>
+				AND CNTR_UUID = #{p.cntr_uuid}
+			</otherwise>
+		</choose>
+	</select>
+	<select id="findCntrByReq" resultType="map">
+		/* work-task.findCntr findCntrByReq 조회 */
+		SELECT *
+		 FROM CNTR
+		WHERE TEN_ID  = #{g.tenant}
+		  AND CNTR_REQ_RCPT_UUID = #{p.cntr_req_rcpt_uuid}
+	</select>
+	<select id="findAsn" resultType="map">
+		/* work-task.findAsn ASN 조회 */
+		SELECT *
+		FROM ASN
+		WHERE TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.gr_uuid != null and p.gr_uuid != ''">
+				AND ASN_UUID  = (SELECT ASN_UUID FROM GR WHERE TEN_ID = #{g.tenant} AND GR_UUID = #{p.gr_uuid})
+			</when>
+			<otherwise>
+				AND ASN_UUID  = #{p.asn_uuid}
+			</otherwise>
+		</choose>
+	</select>
+	<select id="findGr" resultType="map">
+		/* work-task.findGr GR 조회 */
+		SELECT *
+		FROM GR
+		WHERE TEN_ID = #{g.tenant}
+		  AND GR_UUID  = #{p.gr_uuid}
+	</select>
+	<select id="findListGrEvalSubjEvaltrRes" resultType="map">
+		/* work-task.findListGrEvalSubjEvaltrRes EVAL_SUBJ_EVALTR_RES 조회 */
+		SELECT GR.TEN_ID
+			 , GR.GR_UUID
+			 , GR.GR_NO
+			 , GR.GR_ORDN
+			 , GR.GR_TIT
+			 , GR.ASN_UUID
+			 , GR.PO_UUID
+			 , GR.PO_NO
+			 , GR.PO_REVNO
+			 , GR.VD_CD
+			 , GR.OORG_CD
+			 , GR.GR_TYP_CCD
+			 , GR.PURC_TYP_CCD
+			 , GR.GR_DT
+			 , GR.GR_CRN_DT
+			 , GR.APVL_STS_CCD
+			 , GR.GR_STS_CCD
+			 , GR.GE_SUBJ_YN
+			 , GG_MAP.GE_UUID
+			 , GPRCS.GE_PRCS_UUID
+			 , GPRCS.GR_EVALSHT_UUID
+			 , GP_EVALTR.EVALTR_ID
+			 , GP_EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+			 , GP_EVALTR.EVAL_STS_CCD
+			 , GP_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID
+		FROM GR
+			     INNER JOIN GR_GE_MAPG GG_MAP
+			                ON GR.TEN_ID = GG_MAP.TEN_ID
+				                AND GR.GR_UUID = GG_MAP.GR_UUID
+			     INNER JOIN GE_PRCS GPRCS
+			                ON GG_MAP.TEN_ID = GPRCS.TEN_ID
+				                AND GG_MAP.GE_UUID = GPRCS.GE_UUID
+				                AND GPRCS.STS != 'D'
+     INNER JOIN GE_PRCS_EVALTR GP_EVALTR
+		ON GP_EVALTR.TEN_ID = GPRCS.TEN_ID
+			AND GP_EVALTR.GE_PRCS_UUID = GPRCS.GE_PRCS_UUID
+			AND GP_EVALTR.STS != 'D'
+			INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+			ON GP_EVALTR.TEN_ID = EVALTR_RES.TEN_ID
+			AND GP_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+		WHERE GR.TEN_ID = #{g.tenant}
+		  AND GR.STS != 'D'
+		  AND GR.GR_UUID = #{p.gr_uuid}
+	</select>
+	<select id="findListGrEvalSubjEvaltrResByEvaltr" resultType="map">
+		/* work-task.findListGrEvalSubjEvaltrResByEvaltr EVAL_SUBJ_EVALTR_RES 조회 */
+		SELECT *
+		FROM EVAL_SUBJ_EVALTR_RES
+		WHERE SYS_ID       = #{g.tenant}
+		AND EVAL_TYP_CD  = #{p.eval_typ_cd}
+		AND EVAL_KIND_CD = #{p.eval_kind_cd}
+		AND TARG_TYP_VAL = #{p.gr_no}
+			AND TARG_TYP_REV = CAST(#{p.gr_rev} AS NVARCHAR2(50))  AND EVALTR_ID    = #{p.eval_chr_id}
+	</select>
+	<select id="findContractByReq" resultType="map">
+	/* work-task.findContractByReq */
+		SELECT *
+		  FROM CNTR_REQ_RCPT
+		 WHERE TEN_ID = #{g.tenant}
+		 <if test="p.reqid != null and p.reqid !=''">
+		   AND CNTR_REQ_UUID  = #{p.reqid}
+		 </if>
+		 <if test="p.cntr_req_uuid != null and p.cntr_req_uuid !=''">
+		   AND CNTR_REQ_UUID = #{p.cntr_req_uuid}
+		 </if>
+		 <if test="p.cntr_req_rcpt_uuid != null and p.cntr_req_rcpt_uuid !=''">
+		   AND CNTR_REQ_RCPT_UUID = #{p.cntr_req_rcpt_uuid}
+		 </if>
+	</select>
+	<select id="findRequestContract" resultType="map">
+	/* work-task.findRequestContract */
+		SELECT *
+		  FROM CNTR
+		 WHERE TEN_ID = #{g.tenant}
+		 <if test="p.cntr_uuid != null and p.cntr_uuid !=''">
+		   AND CNTR_UUID = #{p.cntr_uuid}
+		 </if>
+		 <if test="p.cntr_req_rcpt_uuid != null and p.cntr_req_rcpt_uuid !=''">
+		   AND CNTR_REQ_RCPT_UUID = #{p.cntr_req_rcpt_uuid}
+		 </if>
+	</select>
+	<select id="findListReceiptReqRfx" resultType="map">
+		/* work-task.findListReceiptReqRfx */
+		SELECT *
+		  FROM RFX_REQ_RCPT
+		 WHERE TEN_ID = #{g.tenant}
+		 <if test="p.pr_uuid != null and p.pr_uuid != ''">
+		   AND PR_UUID = #{p.pr_uuid}
+		 </if>
+		 <if test="p.upcr_uuid != null and p.upcr_uuid != ''">
+		   AND UPCR_UUID = #{p.upcr_uuid}
+		 </if>
+		 <if test="p.sr_uuid != null and p.sr_uuid != ''">
+		   AND SR_UUID = #{p.sr_uuid}
+		 </if>
+	</select>
+	<select id="findListReqRfx" resultType="map">
+		SELECT *
+		  FROM RFX_REQ_RCPT
+		 WHERE TEN_ID = #{g.tenant}
+		<if test="p.pr_item_uuid != null and p.pr_item_uuid != ''">
+			AND PR_ITEM_UUID = #{p.pr_item_uuid}
+		</if>
+		<if test="p.upcr_item_uuid != null and p.upcr_item_uuid != ''">
+			AND UPCR_ITEM_UUID = #{p.upcr_item_uuid}
+		</if>
+		<if test="p.sr_item_uuid != null and p.sr_item_uuid != ''">
+			AND SR_ITEM_UUID = #{p.sr_item_uuid}
+		</if>
+		<if test="p.rfx_nxt_prcs_req_uuid != null and p.rfx_nxt_prcs_req_uuid != ''">
+			AND RFX_NXT_PRCS_REQ_UUID = #{p.rfx_nxt_prcs_req_uuid}
+		</if>
+		<if test="p.rfx_req_rcpt_uuid != null and p.rfx_req_rcpt_uuid != ''">
+			AND RFX_REQ_RCPT_UUID = #{p.rfx_req_rcpt_uuid}
+		</if>
+	</select>
+	<select id="findReqPo" resultType="map">
+		SELECT *
+		FROM PO_REQ_RCPT
+		WHERE TEN_ID = #{g.tenant}
+		<if test="p.po_req_rcpt_uuid != null and p.po_req_rcpt_uuid !=''">
+		  AND PO_REQ_RCPT_UUID = #{p.po_req_rcpt_uuid}
+		</if>
+		<if test="p.upcr_uuid != null and p.upcr_uuid !=''">
+		  AND UPCR_UUID = #{p.upcr_uuid}
+		</if>
+	</select>
+	<select id="findPoInfo" resultType="map">
+		SELECT *
+	      FROM PO
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PO_UUID = #{p.po_uuid}
+	</select>
+	<select id="errorTest" resultType="map">
+		SELECT SYS_ID
+		FROM VD
+	</select>
+</mapper>

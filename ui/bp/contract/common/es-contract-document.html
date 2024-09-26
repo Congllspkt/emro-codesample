@@ -1,0 +1,725 @@
+<sc-link rel="import" href="/ui/bp/edoc/document/es-edoc-template.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/edoc/document/es-edoc-user-file.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/eform/popup/ep-eform-template.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/eform/popup/ep-eform-template-send.html"></sc-link>
+<!--<sc-link rel="import" href="/ui/bp/eform/popup/ep-eform-template-send-multi.html"></sc-link>-->
+
+<dom-module id="es-contract-document">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 부속서류 요청 -->
+		<sc-ajax id="requestAppxToVendor"
+				url="requestAppxToVendor.do"
+				body="{{dialog}}"
+				on-response="completeReqAppx">
+		</sc-ajax>
+		<!-- 부속서류 거부 -->
+		<sc-ajax id="rejectAppxToVendor"
+				url="rejectAppxToVendor.do"
+				body="{{dialog}}"
+				on-response="completeReqAppx">
+		</sc-ajax>
+		<!-- Docusign Template 생성 -->
+		<sc-ajax id="createDocusignTemplate"
+				url="createDocusignTemplate.do"
+				body="{{cntrInfo}}"
+				on-response="completeCreateDsgnTmpl">
+		</sc-ajax>
+		<!-- Docusign Template 조회 -->
+		<sc-ajax id="findDocusignTemplate"
+				url="findDocusignTemplate.do"
+				on-response="completeFindDsgnInfo">
+		</sc-ajax>
+		<!-- Docusign Template 삭제 -->
+		<sc-ajax id="deleteDocusignTemplate"
+				url="deleteDocusignTemplate.do"
+				body="{{cntrInfo}}"
+				on-response="completeDeleteDsgnInfo">
+		</sc-ajax>
+		<!-- Docusign Envelope 생성 -->
+		<sc-ajax id="createDocusignEnvelope"
+				url="createDocusignEnvelope.do"
+				body="{{cntrInfo}}"
+				on-response="completeCreateDsgnEnvelope">
+		</sc-ajax>
+		<!-- Docusign Envelope 조회 -->
+		<sc-ajax id="findDocusignEnvelope"
+				url="findDocusignEnvelope.do"
+				on-response="completeFindDsgnInfo">
+		</sc-ajax>
+		<!-- Docusign Envelope 삭제 -->
+		<sc-ajax id="deleteDocusignEnvelope"
+				url="deleteDocusignEnvelope.do"
+				body="{{cntrInfo}}"
+				on-response="completeDeleteDsgnInfo">
+		</sc-ajax>
+		<!-- 간편 서명 Template 삭제 -->
+		<sc-ajax id="deleteEFormTemplate"
+				url="deleteEFormTemplate.do"
+				body="{{cntrInfo}}"
+				on-response="completeDeleteEFormInfo">
+		</sc-ajax>
+		<!-- AdobeSign 계약서 생성 -->
+		<sc-ajax id="onCreateAdobeSign"
+				 url="onCreateAdobeSign.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeCreateAdobeSign">
+		</sc-ajax>
+		<!-- AdobeSign 계약서 재생성 -->
+		<sc-ajax id="onReCreateAdobeSign"
+				 url="onReCreateAdobeSign.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeCreateAdobeSign">
+		</sc-ajax>
+		<!-- AdobeSign 서명 url 정보 받아오기 -->
+		<sc-ajax id="getAdobeSignUrlInfo"
+				 url="getAdobeSignUrlInfo.do"
+				 on-response="completeGetAdobeSignUrlInfo">
+		</sc-ajax>
+		<!-- AdobeSign 진행상태 체크 -->
+		<sc-ajax id="checkAdobeSignStatus"
+				 url="checkAdobeSignStatus.do"
+				 on-response="completeCheckAdobeSignStatus">
+		</sc-ajax>
+		<!-- AdobeSign 계약서 삭제 -->
+		<sc-ajax id="onDeleteAdobeSign"
+				 url="onDeleteAdobeSign.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeDeleteAdobeSign">
+		</sc-ajax>
+		<!-- AdobeSign 서명 url 조회 -->
+		<sc-ajax id="getBpAdobeSignUrlInfo"
+				 url="getBpAdobeSignUrlInfo.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeGetBpAdobeSignUrlInfo">
+		</sc-ajax>
+		
+		<!-- 공통코드 조회 -->
+		
+		
+		<!-- 화면 -->
+		<sc-pages id="pages" class="fit">
+			<div id="blank"></div>
+			<template>
+				<es-edoc-template id="edocTmpl"
+								  on-validated-create-dstmpl="validatedCreateDsgnTmpl"
+								  on-validated-create-eformtmpl="validatedCreateEFormTmpl"
+								  on-validated-create-adobesign="validatedCreateAdobeSign"></es-edoc-template>
+			</template>
+			<template>
+				<es-edoc-user-file id="edocUsrFile"
+								   on-validated-create-dstmpl="validatedCreateDsgnTmpl"
+								   on-validated-create-eformtmpl="validatedCreateEFormTmpl"
+								   on-validated-create-adobesign="validatedCreateAdobeSign"></es-edoc-user-file>
+			</template>
+		</sc-pages>
+		
+		<sc-dialog id="dialogRequestAppx" title-text="부속서류 요청 내용 작성" style="width:600px; height:280px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="요청" on-click="onRequestAppx"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{dialog.reason}}"></sc-textarea-field>
+		</sc-dialog>
+		
+		<sc-dialog id="dialogRejectAppx" title-text="부속서류 거부 사유 작성" style="width:600px; height:280px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="거부" on-click="onRejectAppx"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{dialog.reason}}"></sc-textarea-field>
+		</sc-dialog>
+	</template>
+
+	<script>
+		Polymer({
+			is: "es-contract-document",
+			properties: {
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				dialog: {
+					type: Object,
+					value: function () {
+						return {
+							cntr_uuid: "",
+							reason: ""
+						};
+					}
+				},
+				agreementId: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				}
+			},
+			
+			formulas: {
+				isTmplUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "TMPL";
+				},
+				isUserFileUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "USR_FILE";
+				},
+				isAdobeSign: function() {
+					return this.get("cntrInfo.cntr_sgnmeth_ccd") === "ADOBESIGN";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("cntrInfo", data);
+				me.applyFormula();
+				me.loadDetail();
+			},
+			
+			loadDetail: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				if(me.formula("isTmplUse")) {
+					me.$.pages.selectItem(me.$.edocTmpl);
+					me.$.edocTmpl.load(cntrInfo);
+					
+				} else if(me.formula("isUserFileUse")) {
+					me.$.pages.selectItem(me.$.edocUsrFile);
+					me.$.edocUsrFile.load(cntrInfo);
+				}
+				
+				if(me.formula("isAdobeSign")) {
+					me.set("agreementId", cntrInfo.agreement_id);
+				}
+			},
+			
+			// 부속서류 요청 내용 팝업
+			onPopupDialogRequestAppx: function() {
+				var me = this;
+				var vendorAppxList = me.$.edocTmpl.getVendorAppxList();
+				if(vendorAppxList.length < 1) {
+					UT.alert("STD.EDO3011"); // 협력사가 첨부할 부속 서류가 없습니다.
+					return;
+				}
+				
+				me.set("dialog.cntr_uuid", me.get("cntrInfo.cntr_uuid"));
+				me.set("dialog.reason", null);
+				me.$.dialogRequestAppx.show();
+			},
+			
+			// 부속서류 요청
+			onRequestAppx: function() {
+				var me = this;
+				var reason = me.get("dialog.reason");
+				if(UT.isEmpty(reason)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("부속서류 요청 내용")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				me.$.dialogRequestAppx.close();
+				
+				UT.confirm("STD.N1210", function () { // 요청하시겠습니까?
+					UT.request(me.$.requestAppxToVendor);
+				});
+			},
+			
+			// 부속서류 거부 사유 팝업
+			onPopupDialogRejectAppx: function() {
+				var me = this;
+				var vendorAppxList = me.$.edocTmpl.getVendorAppxList();
+				if(vendorAppxList.length < 1) {
+					UT.alert("STD.EDO3011"); // 협력사가 첨부할 부속 서류가 없습니다.
+					return;
+				}
+				
+				me.set("dialog.cntr_uuid", me.get("cntrInfo.cntr_uuid"));
+				me.set("dialog.reason", null);
+				me.$.dialogRejectAppx.show();
+			},
+			
+			// 부속서류 거부
+			onRejectAppx: function() {
+				var me = this;
+				var reason = me.get("dialog.reason");
+				if(UT.isEmpty(reason)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("부속서류 거부 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				me.$.dialogRejectAppx.close();
+				
+				UT.confirm("STD.N1210", function () { // 요청하시겠습니까?
+					UT.request(me.$.rejectAppxToVendor);
+				});
+			},
+			
+			completeReqAppx: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.fire("find-info");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 계약서 발신 유효성 검사
+			validateOnSendContract: function() {
+				var me = this;
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.validateOnSendContract();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.validateOnSendContract();
+				}
+			},
+			
+			// 서명 확인
+			onConfirmSign: function () {
+				var me = this;
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.onConfirmSign();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.onConfirmSign();
+				}
+			},
+			
+			// PDF 미리보기
+			onPreviewPdf: function() {
+				var me = this;
+				me.$.edocTmpl.onPreviewPdf();
+			},
+			
+			// 완료 계약서 다운로드
+			onDownloadPdf: function() {
+				var me = this;
+				DL.downloadByGrpCd(me.get("cntrInfo.sgncmpld_cntrdoc_athg_uuid"));
+			},
+			
+			// 이력 문서 다운로드
+			onDownloadHistPdf: function() {
+				var me = this;
+				DL.downloadByGrpCd(me.get("cntrInfo.cntr_histrec_athg_uuid"));
+			},
+			
+			// docusign template 생성
+			onCreateDsgnTmpl: function() {
+				var me = this;
+				// docusign template 생성 유효성 검증
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.validateOnCreateDsgnTmpl();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.validateOnCreateDsgnTmpl();
+				}
+			},
+			
+			validatedCreateDsgnTmpl: function(data) {
+				var me = this;
+				var isValidated = data.detail;
+				
+				if(isValidated) {
+					UT.request(me.$.createDocusignTemplate);
+				}
+			},
+			
+			completeCreateDsgnTmpl: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.fire("find-info");
+				
+				if(result.success) { // 성공
+					me.findDocusignTemplate(result.resultData.dsgn_uuid);
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// docusign template 조회
+			findDocusignTemplate: function(dsgnId) {
+				var me = this;
+				me.$.findDocusignTemplate.body = {
+					dsgn_uuid: dsgnId,
+					return_ui_id: "es-contract-document"
+				};
+				UT.request(me.$.findDocusignTemplate);
+			},
+			
+			completeFindDsgnInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					me.popupDocusign(result.resultData.url);
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// docusign popup
+			popupDocusign: function(url) {
+				var width = "1200";
+				var height = "900";
+				
+				var left = (screen.availWidth / 2) - (width / 2) + "";
+				var top = "100";
+				window.open(url, "docusignWindow","width=1100,height=800,top="+top+",left="+left);
+			},
+			
+			// docusign popup callback (template)
+			docusignTemplateCallBack: function(event) {
+				var me = this;
+				if(event === "Save"){
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+				}else if(event === "Cancel"){
+					UT.alert("STD.N2500");	//삭제 하였습니다.
+				}
+				me.fire("find-info");
+			},
+			
+			// docusign popup callback (envelope)
+			docusignCallBack: function(event, procType, cntrId) {
+				var me = this;
+				
+				if(event === "signing_complete") {
+					UT.alert("STD.EDO3014"); // 서명 완료 후 계약서 발송 하였습니다.
+				} else if(event === "decline") {
+					UT.alert("STD.EDO1111"); //거부 하였습니다.
+				}
+				me.fire("find-info");
+			},
+			
+			// docusign template 삭제
+			onDeleteDsgnTmpl: function() {
+				var me = this;
+				UT.request(me.$.deleteDocusignTemplate);
+			},
+			
+			completeDeleteDsgnInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					UT.alert("STD.N2500"); // 삭제하였습니다.
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+				me.fire("find-info");
+			},
+			
+			// docusign envelope 생성
+			onCreateDsgnEnvelope: function() {
+				var me = this;
+				UT.request(me.$.createDocusignEnvelope);
+			},
+			
+			completeCreateDsgnEnvelope: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.fire("find-info");
+				
+				if(result.success) { // 성공
+					me.findDocusignEnvelope(result.resultData.dsgn_uuid);
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// docusign envelope 조회
+			findDocusignEnvelope: function(dsgnId) {
+				var me = this;
+				me.$.findDocusignEnvelope.body = {
+					dsgn_uuid: dsgnId,
+					return_ui_id: "es-contract-document"
+				};
+				UT.request(me.$.findDocusignEnvelope);
+			},
+			
+			// docusign envelope 삭제
+			onDeleteDsgnEnvelope: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function () { // 삭제 하시겠습니까?
+					UT.request(me.$.deleteDocusignEnvelope);
+				});
+			},
+			
+			// 간편 서명 template 작성
+			onEditEFormTmpl: function() {
+				var me = this;
+				// 간편 서명 template 생성 유효성 검증
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.validateOnCreateEFormTmpl();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.validateOnCreateEFormTmpl();
+				}
+			},
+			
+			validatedCreateEFormTmpl: function(data) {
+				var me = this;
+				var isValidated = data.detail;
+				
+				if(isValidated) {
+					var eformPopup = UT.popup("ep-eform-template", me, '90%', '90%', {
+						"complete-save" : function(popup, e) { // 저장
+							popup.close();
+							me.fire("find-info");
+						},
+						"close" : function(popup, e) {
+							popup.close();
+							me.fire("find-info");
+						}
+					},{titleText : "간편 서명 Template"});
+					
+					eformPopup.show();
+					eformPopup.getWindowContent().load({ecntr_uuid: me.get("cntrInfo.ecntr_uuid")});
+				}
+			},
+			
+			// 간편 서명 template 삭제
+			onDeleteEFormTmpl: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function () { // 삭제 하시겠습니까?
+					UT.request(me.$.deleteEFormTemplate);
+				});
+			},
+			
+			completeDeleteEFormInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					me.fire("find-info");
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// 간편 서명 발송
+			onSendEFormsign: function() {
+				var me = this;
+				var eformPopup = UT.popup("ep-eform-template-send", me, '90%', '90%', {
+					"complete-send" : function(popup, e) { // 저장
+						popup.close();
+						me.fire("find-info");
+					},
+					"close" : function(popup, e) {
+						popup.close();
+						me.fire("find-info");
+					}
+				},{titleText : "간편 서명"});
+				
+				eformPopup.show();
+				eformPopup.getWindowContent().load({ecntr_uuid: me.get("cntrInfo.ecntr_uuid")});
+			},
+			
+			// adobesign 계약서 생성
+			onCreateAdobeSign: function() {
+				var me = this;
+				// adobesign 계약서 생성 onCreateAdobeSign 유효성 검증
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.validateOnCreateAdobeSign();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.validateOnCreateAdobeSign();
+				}
+			},
+			
+			// adobesign 계약서 재생성
+			onReCreateAdobeSign: function() {
+				var me = this;
+				UT.request(me.$.onReCreateAdobeSign);
+			},
+			
+			validatedCreateAdobeSign: function(data) {
+				var me = this;
+				var isValidated = data.detail;
+				
+				if(isValidated) {
+					UT.request(me.$.onCreateAdobeSign);
+				}
+			},
+			
+			// adobesign 계약서 생성완료 -> url 정보 받아오기
+			completeCreateAdobeSign: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if (result.resultStatus === "S") {
+					var data = result.resultData;
+					me.set("cntrInfo", data);
+					me.set("agreementId", data.agreement_id);
+					me.fire("find-info");
+					
+					// adobesign url 정보 받아오기
+					me.$.getAdobeSignUrlInfo.body = {
+						agreement_id : me.get("agreementId"),
+						popup_type : "write",
+						view_name : "AUTHORING",
+					};
+					
+					// 계약서 생성 후 계약서 확인 요청시 AdobeSign 쪽에서 생성에 시간이 필요해 딜레이 처리
+					setTimeout(function() {
+						UT.request(me.$.getAdobeSignUrlInfo)
+					}, 3000);
+					
+				} else {
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			completeGetAdobeSignUrlInfo: function(e, res) {
+				var me     = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S" ) {
+					me.openAdobeSignPopup(result.resultData);
+				} else {
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// adobesign 계약서 작성완료 후 popup 호출
+			openAdobeSignPopup: function(data) {
+				var me = this;
+				var width = "1100";
+				var left = (screen.availWidth / 2) - (width / 2) + "";
+				var top = "100";
+				
+				var adobeSignPopup = window.open(data.url, "adobesignWindow", "width=1100,height=800,top="+top+",left="+left);
+				if(data.popup_type === "write" || data.popup_type === "edit") {
+					var timer = setInterval(function() {
+						if(adobeSignPopup.closed) {
+							clearInterval(timer);
+							me.checkAdobeSignStatus(data);
+						}
+					})
+				} else if(data.popup_type === "sign") {
+					var timer = setInterval(function() {
+						if(adobeSignPopup.closed) {
+							clearInterval(timer);
+							// me.callAdobeSignLogout();
+						}
+					})
+				}
+			},
+			
+			// adobesign 로그아웃
+			callAdobeSignLogout: function() {
+				var logoutUrl = "https://secure.na4.adobesign.com/public/logout";
+				
+				var logoutPopup = window.open(logoutUrl, "adobesignWindow");
+				setTimeout(function() {
+					logoutPopup.close()
+				}, 1000);
+			},
+			
+			// adobesign 진행상태 체크
+			checkAdobeSignStatus: function(data) {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				me.$.checkAdobeSignStatus.body = {
+					ecntr_uuid: cntrInfo.ecntr_uuid,
+					agreement_id: me.get("agreementId"),
+					popup_type: data.popup_type
+				}
+				
+				UT.request(me.$.checkAdobeSignStatus)
+			},
+			
+			completeCheckAdobeSignStatus: function() {
+				var me = this;
+				me.fire("find-info");
+			},
+			
+			// adobesign 계약서 수정
+			onEditAdobeSign: function() {
+				var me = this;
+				var popupType = "edit";
+				var viewName = "AUTHORING";
+				
+				me.onViewAdobeSign(popupType, viewName);
+			},
+			
+			// adobesign 계약서 확인
+			onCheckAdobeSign: function(popupType, viewName) {
+				var me = this;
+				var popupType = "view";
+				var viewName = "DOCUMENT";
+				
+				me.onViewAdobeSign(popupType, viewName);
+			},
+			
+			// adobesign url 정보 가져오기
+			onViewAdobeSign: function(popupType, viewName) {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				// adobesign url 정보 받아오기
+				me.$.getAdobeSignUrlInfo.body = {
+					agreement_id : me.get("agreementId"),
+					popup_type: popupType,
+					view_name : viewName,
+				};
+				
+				UT.request(me.$.getAdobeSignUrlInfo)
+			},
+			
+			// adobesign 계약서 삭제
+			onDeleteAdobeSign: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function () { // 삭제 하시겠습니까?
+					UT.request(me.$.onDeleteAdobeSign);
+				});
+			},
+			
+			completeDeleteAdobeSign: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					UT.alert("STD.N2500"); // 삭제하였습니다.
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+				me.fire("find-info");
+			},
+			
+			// adobesign 발신(구매사 서명)
+			onSignAdobeSign: function() {
+				var me = this;
+				UT.request(me.$.getBpAdobeSignUrlInfo);
+			},
+			
+			completeGetBpAdobeSignUrlInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				var data = result.resultData;
+				data.popup_type = "sign";
+				
+				if(result.resultStatus === "S" ) {
+					me.openAdobeSignPopup(data);
+				} else {
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// adobesign callback
+			adobesignCallback: function(event) {
+				var me = this;
+				if(event === "completed") {
+					UT.alert("STD.EDO3014"); // 서명 완료 후 계약서 발송 하였습니다.
+				}
+				me.fire("find-info");
+			}
+			
+		});
+	</script>
+</dom-module>

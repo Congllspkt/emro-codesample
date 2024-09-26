@@ -1,0 +1,284 @@
+<sc-link rel="import" href="./popup/ep-stamptax-info.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-cntr-list-for-stamptax.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/edoc/stamptax/popup/ep-elec-stamptax-info.html"></sc-link>
+
+<dom-module id="es-stamptax-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 인지세 현황 가져오기 -->
+		<sc-ajax id="findListStampTax"
+				 url="largeFindListStampTax.do"
+				 body="{{findList.param}}"
+				 last-response="{{findList.result}}">
+		</sc-ajax>
+		
+		<!-- 인지세 정보 삭제하기 -->
+		<sc-ajax id="deleteStampTax"
+				 url="deleteStampTax.do"
+				 on-response="completeDeleteStampTax">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<sc-code-group>
+			<sc-code code="D016" value="{{codes.sttpymtmethCcd}}"></sc-code>	<!--인지세납부방법-->
+			<sc-code code="D027" value="{{codes.sttpymtStsCcd}}"></sc-code>		<!--인지세 상태-->
+			<sc-code code="C016" value="{{codes.cntrrTypCcd}}"></sc-code>		<!--사용자유형-->
+			<sc-code code="D015" value="{{codes.sttpymtRoCcd}}"></sc-code>		<!--인지세납부 비율-->
+			<sc-code code="C009" value="{{codes.useYn}}"></sc-code>				<!--사용여부-->
+		</sc-code-group>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<!-- 조회조건 -->
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="계약 일자"></sc-label>
+				<sc-period-date-field from-value="{{findList.param.cntr_from_date}}" to-value="{{findList.param.cntr_to_date}}"
+									  default-from-value="-1M" default-to-value="0d" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인지세납부상태"></sc-label>
+				<sc-combobox-field placeholder="전체" display-field="label" value-field="data" items="{{codes.sttpymtStsCcd}}" value="{{findList.param.sttpymt_sts_ccd}}"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인지세납부방법"></sc-label>
+				<sc-combobox-field placeholder="전체" display-field="label" value-field="data" items="{{codes.sttpymtmethCcd}}" value="{{findList.param.sttpymt_meth_ccd}}"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 번호"></sc-label>
+				<sc-text-field value="{{findList.param.cntr_no}}" max-length="20"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{findList.param.erp_vd_cd}}" class="w-100" placeholder="코드"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{findList.param.vd_nm}}" placeholder="협력사 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+		<sc-grid id="grid" class="flex" selection-mode="radio" use-state="false" selection-able-function="selectionAbleFn" on-selection-checked="onSelectionChecked" data-provider="{{findList.result}}" on-item-click="onItemClick" >
+			<cc-grid-toolbar>
+				<sc-button text="인지세 대상" on-click="onFindStampTax" auth-s></sc-button>
+				<sc-button text="납부" on-click="onPay" auth-s id="payBtn"></sc-button>
+				<sc-button text="삭제" on-click="onDeleteStampTax" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="sttpymt_sts_ccd" 		header-text="인지세납부상태" width="100"
+									display-field="label" value-field="data" items="{{codes.sttpymtStsCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="stax_amt" 		header-text="인지세 금액" width="90" data-type="number" format-type="integer"></sc-data-column>
+				<sc-combobox-column data-field="cntrr_typ_ccd" 		header-text="인지세납부자" width="80"
+									display-field="label" value-field="data" items="{{codes.cntrrTypCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="sttpymt_ro" 		header-text="인지세납부자 비율(%)" width="140"></sc-data-column>
+				<sc-combobox-column data-field="sttpymtmeth_ccd" 		header-text="인지세납부방법" width="100"
+									display-field="label" value-field="data" items="{{codes.sttpymtmethCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="cntr_amt"			header-text="계약 금액"	width="110" text-align="right" data-type="number" format-type="integer"></sc-data-column><!--계약금액-->
+				<sc-image-column	data-field="button_stamptax"header-text="인지세 정보"	width="80"	text-align="center" singular-source="ui/assets/img/grid/icon_link.png"></sc-image-column>
+				<sc-combobox-column data-field="refund_yn"			header-text="환급 대상 여부"	width="80"	text-align="center"
+								display-field="label" 			value-field="data"		items="{{codes.useYn}}" item-style-function="onItemStyleFn"></sc-combobox-column>
+				<sc-data-column data-field="cntr_no"			header-text="계약 번호"	 width="130" text-align="center" style-name="link"></sc-data-column>
+				<sc-data-column data-field="cntr_revno"			header-text="차수"		width="40"	text-align="center"></sc-data-column><!--차수-->
+				<sc-data-column data-field="cntr_nm"			header-text="계약 명"	width="230" text-align="left"></sc-data-column><!--계약명-->
+				<sc-date-column data-field="cntr_dt"			header-text="계약 일자"	width="100" ></sc-date-column><!--계약일자-->
+				<sc-group-column hide-child-headers="false" 	header-text="협력사"	width="300" text-align="center">
+					<sc-data-column data-field="erp_vd_cd"		header-text="코드"		width="100" text-align="center"></sc-data-column>
+					<sc-data-column data-field="vd_nm"			header-text="명"		width="200" text-align="left"></sc-data-column>
+				</sc-group-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="sttpymt_no"></sc-grid-field>
+				<sc-grid-field data-field="estax_yn"></sc-grid-field>
+				<sc-grid-field data-field="cntr_sts_ccd"></sc-grid-field>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-stamptax-list',
+
+			properties: {
+				findList: {
+					type: Object,
+					value: function () {
+						return {
+							param: {},
+							result: {}
+						}
+					}
+				},
+				codes : {
+					type:Object,
+					value : function(){
+						return {
+							useYn: []
+						}
+					}
+				}
+			},
+
+			initialized: function () {
+				var me = this;
+			},
+
+			onItemClick: function (e) {
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item;
+
+				if (item.dataField === "button_stamptax") {
+					me.stampTaxPopup(data);
+				}else if(item.dataField === "cntr_no") {
+					me.fire("show-detail", data);
+				}
+			},
+			
+			stampTaxPopup: function(data){
+				var me = this;
+				
+				if(data.sttpymtmeth_ccd === "ESTAX"){
+					me.elecStamptaxPopup(data);
+				}else if(data.sttpymtmeth_ccd === "OFFL"){
+					me.offStamptaxPopup(data);
+				}
+			},
+			
+			onSearch: function () {
+				var me = this;
+				if(!me.validate('search')){
+		 			UT.alert("STD.E0000");
+		 			return;
+		 		}
+				UT.request(me.$.findListStampTax);
+			},
+
+			offStamptaxPopup : function(data){
+				var me = this;
+				var popupElecStamptax = UT.popup("ep-stamptax-info", me, "1000", "600", {
+					"close": function (popup, e){
+						popup.close();
+					},
+					"saved": function (popup, e){
+						me.onSearch();
+					}
+				});
+				popupElecStamptax.show();
+				popupElecStamptax.getWindowContent().load(data);
+			},
+			
+			elecStamptaxPopup : function(data){
+				var me = this;
+				var popupElecStamptax = UT.popup("ep-elec-stamptax-info", me, "1000", "600", {
+					"close": function (popup, e){
+						popup.close();
+					},
+					"saved": function (popup, e){
+						me.onSearch();
+					}
+				});
+				popupElecStamptax.show();
+				popupElecStamptax.getWindowContent().load(data);
+			},
+			
+			//그리드 select 가능여부처리
+			selectionAbleFn: function(data) {
+				var sttpymtSts = data["sttpymt_sts_ccd"] || ""; // 진행상태
+				
+				return sttpymtSts === "WTG" || sttpymtSts === "PRGS";
+			},
+			
+			onSelectionChecked: function(event) {
+				var me       = this,
+					detail   = event.detail,
+					checked  = detail.checked,
+					data     = detail.data;
+				
+				if(checked) {
+					if(data.cntrr_typ_ccd === "BUYER") {
+						me.$.payBtn.hidden = false;
+					} else {
+						me.$.payBtn.hidden = true;
+					}
+				}
+			},
+			
+			onPay: function() {
+				var me = this;
+				
+				var checked = me.$.grid.getDataProvider().selectionCheckedItems();
+				var data = checked[0];
+				
+				if (checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				me.stampTaxPopup(data);
+			},
+			
+			onFindStampTax: function() {
+				var me = this;
+				
+				var cntrListPopupForStampTax = UT.popup("ep-cntr-list-for-stamptax", me, "1200", "600", {
+					"close": function(popup, e) {
+						popup.close();
+					}
+				});
+				cntrListPopupForStampTax.show();
+				cntrListPopupForStampTax.getWindowContent().load();
+				
+			},
+			
+			onDeleteStampTax: function() {
+				var me= this;
+				var selected = me.$.grid.getDataProvider().selectionCheckedItems();
+				
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				for(var i=0, len=selected.length; i<len; i++) {
+					if(selected[i].sttpymt_sts_ccd === "CMPLD" || selected[i].sttpymt_sts_ccd === "PRGS") {
+						UT.alert("STD.EDO3020"); // 인지세 납부상태가 대기 중인 건만 삭제 가능합니다.
+						return;
+					}
+				}
+				
+				UT.confirm("STD.N1300", function() { //삭제하시겠습니까 ?
+					me.$.deleteStampTax.body = {
+						stampTaxList: selected
+					};
+					UT.request(me.$.deleteStampTax);
+				});
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var styleObj = {};
+				
+				if(item.dataField === "refund_yn") {
+					if(data.refund_yn === "Y") {
+						styleObj.fontColor = "#ff0000"; //red
+						styleObj.fontWeight = "bold";
+					}
+				}
+				
+				return styleObj;
+			},
+			
+			completeDeleteStampTax: function() {
+				var me = this;
+				UT.alert("STD.N2500"); // 삭제하였습니다.
+				UT.request(me.$.findListStampTax);
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,155 @@
+<dom-module id="es-vendor-management-group-cursitu-list">
+<!--
+/**
+ *
+ * @description	:	협력사정보 > 협력사관리그룹 현황
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!-- 
+    ************************************************************************************************************
+    * Service Area
+    ************************************************************************************************************
+ -->
+        <!-- 협력사관리그룹 현황 조회 -->
+        <sc-ajax id="findListVendorManagementGroupCursitu" url="findListVendorManagementGroupCursitu.do" body="{{searchParam}}" last-response="{{resultList}}"></sc-ajax>
+ 
+        <!-- 공통코드 조회 -->
+        <sc-request-group id = "codes" init>
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="EO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorg_cd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<sc-code code="E901" value="{{codes.E901}}"></sc-code><!-- 협력사관리그룹 유형 -->
+			</sc-code-group>
+        </sc-request-group>
+<!-- 
+    ************************************************************************************************************
+    * UI Area
+    ************************************************************************************************************
+ -->        
+        <!-- 화면 -->
+        <cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" validation-group="search" search-condition-cls="label-row">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-multi-combobox-field selected-all="true" placeholder="선택없음" required="true"
+										 display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorg_cd}}"
+										 value="{{searchParam.oorg_cd}}">
+				</sc-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" placeholder="코드" on-enter="onSearch" max-length="18"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" on-enter="onSearch" max-length="128"></sc-text-field>
+				</div>
+			</cc-fieldset>
+<!--			<cc-fieldset>
+				<sc-label text="협력사관리그룹 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.E901}}" value="{{searchParam.vmg_typ_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>-->
+			<cc-fieldset>
+				<sc-label text="소싱그룹"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.vmg_cd}}" class="w-100" placeholder="코드" on-enter="onSearch" max-length="18"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{searchParam.vmg_nm}}" placeholder="소싱그룹 명" on-enter="onSearch" max-length="60"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+        
+        <sc-grid id="gridPanel" class="flex" editable="true" use-state="false" use-selection="false" on-item-click="onDataCellClicked"
+                 data-provider="{{resultList}}">
+            <cc-grid-toolbar></cc-grid-toolbar>
+            <sc-grid-columns>
+				<sc-combobox-column	data-field="oorg_cd"	header-text="운영조직"	width="170"	items="{{codes.oorg_cd}}"
+									   display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-column>
+                <sc-data-column data-field="erp_vd_cd"	header-text="협력사 코드"	width="100"	></sc-data-column>
+                <sc-data-column data-field="vd_nm"	header-text="협력사 명"	width="200"	text-align="left"	style-name="link"	></sc-data-column>
+<!--				<sc-combobox-column	data-field="vmg_typ_ccd"	header-text="협력사관리그룹 유형"	width="150"	items="{{codes.E901}}"
+													   display-field="label" value-field="data"></sc-combobox-column>-->
+                <sc-data-column data-field="vmg_cd"	header-text="소싱그룹 코드"	width="150"	></sc-data-column>
+                <sc-data-column data-field="vmg_nm"	header-text="소싱그룹 명"	width="150"	text-align="left"></sc-data-column>
+                <sc-date-column data-field="supavl_st_dt"     header-text="유효 시작 일자"     width="120" ></sc-date-column>
+                <sc-date-column data-field="supavl_ed_dt" header-text="유효 종료 일자"   width="120" ></sc-date-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field	data-field="vd_cd"	data-type="text"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+
+    </template>
+<!-- 
+    ************************************************************************************************************
+    * Script Area
+    ************************************************************************************************************
+ -->
+    <script>
+        Polymer({
+            is: "es-vendor-management-group-cursitu-list",
+            properties: {
+                /*공통코드 데이터 binding*/
+                codes: {
+                    type: Object,
+                    value:function(){
+                        return {
+							oorg_cd:[],
+							E901: []
+                        };
+                    },
+                    reset:false
+                },
+                /* 조회조건 */
+                searchParam: {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+                resultList:{
+                    type: Array,
+                    value : function() {
+                        return [];
+                    }
+                }
+            },
+
+            /* 조회 */
+            onSearch: function(){
+                var me = this;
+                
+                if(!me.validate("search")){
+                	UT.alert("STD.E0000");
+                	return;
+                }
+                UT.request(me.$.findListVendorManagementGroupCursitu);
+            },
+
+            onDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+                if(item.dataField === "vd_nm"){
+                    UT.popupVendor(me, data, function(){
+                        me.onSearch();
+                    });
+                }
+            },
+        });
+    </script>
+
+</dom-module>

@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-eformsign">
+	<select id="findCntrInfoByCntorId" resultType="map">
+	/* eformsign.findCntrInfoByCntorId : 간편서명 서명대상자ID로 계약정보 찾기(no session) */
+	SELECT ECNTR.ECNTR_UUID
+		 , ECNTR.TEN_ID
+		 , ECNTR.CNTR_HISTREC_ATHG_UUID
+		 , ECNTR.SGNCMPLD_CNTRDOC_ATHG_UUID
+		 , ECNTR.VD_CD
+	     , ECNTR.CNTR_SGNMETH_CCD
+		 , CTOR.CNTR_SGNDUSR_UUID
+		 , CTOR.CNTRR_TYP_CCD
+		 , CTOR.SGN_YN
+		 , CTOR.SGN_DTTM
+		 , CTOR.SGN_ORD
+		 , CTOR.USR_ID
+		 , CTOR.TEL
+		 , CTOR.CNTRR_EML
+		 , CNTR.CNTR_STS_CCD
+		 , CNTR.CNTR_UUID
+		 , CNTR.CNTR_NO
+		 , CNTR.CNTR_REVNO
+	  FROM ECNTR ECNTR
+	 INNER JOIN CNTR CNTR
+	    ON CNTR.TEN_ID = ECNTR.TEN_ID
+	   AND CNTR.CNTR_UUID = ECNTR.CNTR_UUID
+	 INNER JOIN CNTR_SGNDUSR CTOR
+		ON CTOR.TEN_ID = ECNTR.TEN_ID
+	   AND CTOR.ECNTR_UUID = ECNTR.ECNTR_UUID
+	 INNER JOIN CNTRDOC_CONT CRCT
+		ON CRCT.TEN_ID = CTOR.TEN_ID
+	   AND CRCT.ECNTR_UUID = CTOR.ECNTR_UUID
+	  LEFT OUTER JOIN DGTLSGN_TMPL TMPL
+		ON TMPL.TEN_ID = ECNTR.TEN_ID
+	   AND TMPL.DGTLSGN_TMPL_UUID = ECNTR.CNTRDOC_TMPL_UUID
+	 WHERE ECNTR.TEN_ID = #{g.tenant}
+	   AND CTOR.CNTR_SGNDUSR_UUID = #{p.cntr_sgndusr_uuid}
+	   AND ECNTR.STS != 'D'
+	<if test="p.usr_id != null and p.usr_id !=''">
+	   AND CTOR.USR_ID = #{p.usr_id}
+	</if>
+	<if test="p.ecntr_uuid != null and p.ecntr_uuid !=''">
+	   AND ECNTR.ECNTR_UUID = #{p.ecntr_uuid}
+	</if>
+	</select>
+	<resultMap id="resultMap-findCntrFormCont" type="map">
+		<result column="DGTLSGN_CNTRDOC_LYT_ATTR" javaType="string" property="dgtlsgn_cntrdoc_lyt_attr" typeHandler="stringClob"/>
+		<result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+		<result column="EDIT_CONTENT" javaType="string" property="edit_content" typeHandler="stringClob"/>
+		<result column="CNTRDOC_CCMPLD_CONT" javaType="string" property="orgn_content" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findDocumentConts" resultMap="resultMap-findCntrFormCont">
+	/* eformsign.findDocumentConts : 간편서명 문서 내용 조회 */
+	SELECT ECNTR_UUID
+		 , CNTRDOC_CCMPLD_CONT AS CONTENT
+		 , CNTRDOC_CRNG_CONT AS EDIT_CONTENT
+		 , CNTRDOC_CCMPLD_CONT
+		 , DGTLSGN_CNTRDOC_LYT_ATTR
+		 , DGTLSGN_CNTRDOC_TMPL_ATHG_UUID
+	  FROM CNTRDOC_CONT
+	 WHERE TEN_ID = #{g.tenant}
+	   AND ECNTR_UUID = #{p.ecntr_uuid}
+	</select>
+	<select id="findDocumentSignTarget" resultType="map">
+	/* eformsign.findDocumentSignTarget : 간편서명문서 서명 대상자 검색 */
+	SELECT T.*
+	     , T.CNTR_SGNDUSR_UUID AS EFORM_USR_ID
+		 , CASE WHEN T.CNTRR_NM IS NULL OR T.CNTRR_NM = '' THEN T.VD_NM ELSE T.CNTRR_NM END EFORM_USR_NM
+		 , T.CNTRR_TYP_CCD     AS FORMER_YN
+	  FROM (
+		SELECT  CTOR.TEN_ID
+			 , CTOR.ECNTR_UUID
+			 , CTOR.CNTR_SGNDUSR_UUID
+			 , CTOR.CNTRR_NM
+			 , CTOR.CNTRR_TYP_CCD /* 갑을여부 */
+			 , CTOR.SGN_ORD /* 서명순서 */
+			 , CTOR.SGN_YN /* 서명여부 */
+			 , CTOR.SGN_DTTM /* 서명일자 */
+			 , CTOR.CNTRR_EML
+			 , CTOR.TEL
+			 , CTOR.VD_CD
+			 , CTOR.USR_ID
+			 , USR.USR_TYP_CCD
+		     , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+		  FROM CNTR_SGNDUSR CTOR
+		  LEFT OUTER JOIN USR USR
+			ON CTOR.TEN_ID = USR.TEN_ID
+		   AND CTOR.USR_ID = USR.USR_ID
+		  LEFT OUTER JOIN VD VD
+		    ON VD.TEN_ID = CTOR.TEN_ID
+		   AND VD.VD_CD = CTOR.VD_CD
+		 WHERE CTOR.TEN_ID = #{g.tenant}
+		   AND CTOR.CNTRR_TYP_CCD = 'N'
+		   AND CTOR.SGN_YN = 'N'
+		   AND CTOR.SGN_DTTM IS NULL
+		   AND CTOR.ECNTR_UUID = #{p.ecntr_uuid}
+		ORDER BY CAST(CTOR.SGN_ORD AS INT)
+		   ) T
+		 WHERE ROWNUM = 1 </select>
+	<insert id="insertEFormSignValue">
+	/* sp-eformsign.insertEFormSignValue : 간편서명 서명값 저장 */
+	INSERT INTO JOINT_CERT_SGN_VAL (
+		 TEN_ID
+		,JOINT_CERT_SGN_VAL_UUID /*계약아이디*/
+		,ECNTR_UUID /*계약아이디*/
+		,BIZREGNO /*서명자사업번호*/
+		,USR_ID /*서명자아이디*/
+		,SGNDUSR_TYP_CCD /*서명값구분*/
+		,SGN_VAL /*서명값*/
+		,REGR_ID /*등록자아이디*/
+		,REG_DTTM /*등록일시*/
+		,MODR_ID
+		,MOD_DTTM
+	) VALUES(
+		#{g.tenant}
+	    ,#{p.joint_cert_sgn_val_uuid}
+		,#{p.ecntr_uuid}
+	    ,#{p.bizregno}
+		,#{p.usr_id}
+		,#{p.sgndusr_typ_ccd}
+		,#{p.sgn_val}
+		,#{p.usr_id}
+		,#{g.now}
+		,#{p.usr_id}
+		,#{g.now}
+	)
+	</insert>
+	<select id="findCntrInfoForHistrecPdf" resultType="map">
+	/* eformsign.findCntrInfoForHistrecPdf : 간편서명 계약서 파일 정보 조회 */
+	SELECT ECNTR.ECNTR_UUID
+	     , CNTR.CNTR_UUID
+	     , CNTR.CNTR_NO
+	     , CNTR.CNTR_REVNO
+	     , CNTR.CNTR_NM
+	     , CNTR.CNTR_PIC_ID
+	     , CASE WHEN 'ko_KR' = #{g.locale} THEN US.USR_NM ELSE US.USR_NM_EN END AS CNTR_PIC_NM
+	     , US.EML AS CNTR_PIC_EML
+		 , TO_CHAR(TO_DATE(CNTR.CNTR_EXP_DT, 'YYYYMMDD'), 'YYYY-MM-DD')  AS CNTR_END_DATE_STR
+		 , TO_CHAR(CNTR.REG_DTTM, 'YYYY-MM-DD AM HH12:MI')  AS REG_DT_STR
+	     , CNTR.TEN_ID AS SYS_ID
+	     , (SELECT LOGIC_ORG_NM
+	          FROM LOGIC_ORG
+	         WHERE TEN_ID = CNTR.TEN_ID
+	           AND LOGIC_ORG_TYP_CCD = 'COMPANY'
+	           AND LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+	           AND USE_YN = 'Y') AS SYS_NM
+	    , (SELECT DTLCD_NM
+	         FROM DTLCD_MULTLANG
+	        WHERE TEN_ID = CNTR.TEN_ID
+	          AND CCD = 'C025'
+	          AND LANG_CCD = #{g.locale}
+	          AND DTLCD = US.TMZ_CCD) AS CREATOR_TZ
+	 FROM CNTR CNTR
+	INNER JOIN ECNTR ECNTR
+	   ON ECNTR.TEN_ID = CNTR.TEN_ID
+	  AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	INNER JOIN USR US
+	   ON US.TEN_ID = CNTR.TEN_ID
+	  AND US.USR_ID = CNTR.CNTR_PIC_ID
+	WHERE CNTR.TEN_ID = #{g.tenant}
+	  AND CNTR.CNTR_UUID = #{p}
+	</select>
+	<select id="findListEFormCntrHistory" resultType="map">
+	/* eformsign.findListEFormCntrHistory : 간편서명 계약진행이력 조회 */
+	SELECT HIS.CNTR_UUID
+		 , HIS.CNTR_STS_CCD
+		 , HIS.RET_RSN
+		 , HIS.RMK
+		 , HIS.STS
+		 , HIS.REGR_ID
+		 , HIS.USR_IP
+		 , HIS.USR_WEBBR_KIND
+		 , HIS.CNTRR_EML
+		 , HIS.REG_DTTM
+		 , USR.USR_NM AS REG_NM
+		 , CASE WHEN USR.USR_NM IS NULL
+			    THEN CONCAT(CONCAT(CONCAT('서명대상자', '('), HIS.CNTRR_EML), ')')
+		        ELSE CONCAT(CONCAT(CONCAT(USR.USR_NM, '('), HIS.CNTRR_EML), ')')
+		         END AS HIS_REG_INFO
+		 , HIS.REG_DTTM AS HIS_REG_DT
+		 , CONCAT(CONCAT(CONCAT('IP : ', HIS.USR_IP), ', Browser : '), HIS.USR_WEBBR_KIND) AS HIS_ACC_INFO
+	  FROM CNTR_PRGS_HISTREC HIS
+	  LEFT OUTER JOIN USR USR
+		ON USR.TEN_ID  = HIS.TEN_ID 
+	   AND USR.USR_ID = HIS.REGR_ID
+	 WHERE HIS.TEN_ID = #{g.tenant}
+	   AND HIS.CNTR_UUID = #{p.cntr_uuid}
+	 ORDER BY HIS.REG_DTTM ASC
+	</select>
+	<resultMap id="resultMap-findListSignTargetSignValue" type="map">
+		<result column="SGN_VAL" javaType="string" property="sgn_val" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findListSignTargetSignValue" resultMap="resultMap-findListSignTargetSignValue">
+	/* eformsign.findListSignTargetSignValue : 간편서명 서명 대상자 list 서명값 조회 */
+	SELECT TOR.TEN_ID
+		 , TOR.ECNTR_UUID
+		 , TOR.CNTR_SGNDUSR_UUID
+		 , TOR.VD_CD
+		 , TOR.SGN_YN
+		 , TOR.CNTRR_TYP_CCD
+		 , TOR.CNTRR_EML
+		 , TOR.TEL
+		 , TOR.CNTRR_NM
+		 , TOR.USR_ID
+		 , TOR.SGN_DTTM AS SGN_DTTM
+		 , (CASE WHEN TOR.USR_ID IS NOT NULL
+				 THEN '회원 인증'
+				 ELSE '비회원 인증' 
+			 END ) AS SIGN_AUTH_TYP
+		 , TVL.SGN_VAL
+		 , TVL.SGNDUSR_TYP_CCD
+		 , HIS.CNTR_STS_CCD
+		 , CONCAT(CONCAT(CONCAT(TOR.CNTRR_NM, '('), HIS.CNTRR_EML), ')') AS HIS_REG_INFO
+		 , HIS.REG_DTTM, 'YYYY-MM-DD AM HH12:MI' AS HIS_REG_DT
+		 , CONCAT(CONCAT(CONCAT('IP : ', HIS.USR_IP), ', Browser : '), HIS.USR_WEBBR_KIND) AS HIS_ACC_INFO
+	  FROM CNTR_SGNDUSR TOR
+	 INNER JOIN JOINT_CERT_SGN_VAL TVL
+		ON TOR.TEN_ID = TVL.TEN_ID
+	   AND TOR.ECNTR_UUID = TVL.ECNTR_UUID
+	   AND TOR.CNTR_SGNDUSR_UUID = TVL.USR_ID
+	 INNER JOIN ECNTR ECT
+	    ON ECT.TEN_ID = TOR.TEN_ID
+	   AND ECT.ECNTR_UUID = TOR.ECNTR_UUID
+	 INNER JOIN CNTR_PRGS_HISTREC HIS
+	    ON HIS.TEN_ID = ECT.TEN_ID
+	   AND HIS.CNTR_UUID = ECT.CNTR_UUID
+	   AND HIS.CNTR_SGNDUSR_UUID = TOR.CNTR_SGNDUSR_UUID
+	WHERE TOR.TEN_ID = #{g.tenant}
+	  AND TOR.ECNTR_UUID = #{p.ecntr_uuid}
+	  AND TOR.CNTRR_TYP_CCD = 'N'
+	  AND TOR.SGN_YN = 'Y'  /* 서명대상자 서명 완료 */
+	ORDER BY TOR.SGN_ORD
+	</select>
+	<update id="updateCntrAtFile">
+	/* eformsign.updateCntrAtFile : 간편서명 계약서 감사추적 파일그룹코드 저장 */
+	UPDATE ECNTR
+	   SET CNTR_HISTREC_ATHG_UUID = #{p.cntr_histrec_athg_uuid}
+	 WHERE TEN_ID = #{g.tenant}
+	   AND ECNTR_UUID = #{p.ecntr_uuid}
+	</update>
+</mapper>

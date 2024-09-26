@@ -1,0 +1,708 @@
+<sc-link rel="import" href="es-rfx-contest-slctn.html"></sc-link>
+<sc-link rel="import" href="es-rfx-contest-slctn-result.html"></sc-link>
+
+<sc-link rel="import" href="cc-rfx-progress-state.html"></sc-link>
+<sc-link rel="import" href="ep-rfx-detail-compare.html"></sc-link>
+<sc-link rel="import" href="../nego/ep-nego-target-selection.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-cause.html"></sc-link>
+
+<dom-module id="es-rfx-contest-detail">
+	<!--
+	/**
+	 *
+	 * @description : 낙찰자 선정
+	 * @author : Yeon-u Kim
+	 * @FileName :
+	 * @Since 2016. 5. 20.
+	 * @변경이력 : [2016. 5. 20.] Yeon-u Kim 최초작성
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		
+		#container {
+			width: 80%;
+			margin: 0 auto;
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- 조회-->
+		<sc-ajax id="findRfx"
+				 url="findRfxByResult.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindRfx">
+		</sc-ajax>
+		
+		<!-- RFQ 품목별 조회 -->
+		<sc-ajax id="findListRfxItemRfxAttends"
+				 url="findListRfxItemRfxAttends.do"
+				 on-response="completeFindListRfxItemRfxAttends">
+		</sc-ajax>
+		
+		<!-- RFQ 총액별 조회 -->
+		<sc-ajax id="findListRfxAmountRfxAttends"
+				 url="findListRfxAmountRfxAttends.do"
+				 on-response="completeFindListRfxAmountRfxAttend">
+		</sc-ajax>
+		
+		<!-- RFP 총액별 종합평가 조회 -->
+		<sc-ajax id="findListRankingTotalEvalAmount"
+				 url="findListRankingTotalEvalAmount.do"
+				 on-response="completeFindListRankingTotalEvalAmount">
+		</sc-ajax>
+		
+		<!-- 가격평가 점수 평가기준 - linear -->
+		<sc-ajax id="findRfxPriEvalSetLinear"
+				 url="findRfxPriEvalSetLinear.do"
+				 body="{{rfxData}}"
+				 on-response="completeFindPriEvalSetLinear">
+		</sc-ajax>
+		
+		<!-- RFx결과품의 존재여부 확인 -->
+		<sc-ajax id="checkRfxResultApproval"
+				 url="checkRfxResultApproval.do">
+		</sc-ajax>
+		
+		<!-- RFx결과품의 삭제 -->
+		<sc-ajax id="deleteRfxResultApproval"
+				 url="deleteRfxResultApproval.do"
+				 on-response="completeDeleteRfxResultApproval">
+		</sc-ajax>
+		
+		<!-- 유찰 -->
+		<sc-ajax id="dropRfx"
+				 url="dropRfx.do"
+				 body="{{rfxData}}"
+				 on-response="completeDropRfx">
+		</sc-ajax>
+		
+		<!-- 개찰 -->
+		<sc-ajax id="openRfx"
+				 url="bypassOpenRfx.do"
+				 body="{{rfxData}}"
+				 on-response="completeOpenRfx">
+		</sc-ajax>
+		
+		<!-- 취소 -->
+		<sc-ajax id="cancelRfx"
+				 url="cancelRfx.do"
+				 body="{{rfxData}}"
+				 on-response="completeCancelRfx">
+		</sc-ajax>
+		
+		<!-- Ranking 구하기 -->
+		<sc-ajax id="computeRanking"
+				 url="computeRanking.do"
+				 body="{{rfxData}}">
+		</sc-ajax>
+		
+		<!-- 평가 재수행 -->
+		<sc-ajax id="reExecuteNpeEval"
+				 url="reExecuteNpeEval.do"
+				 body="{{rfxData}}">
+		</sc-ajax>
+		
+		<!-- 평가마감 -->
+		<sc-ajax id="forceCloseRfxEval"
+				 url="forceCloseRfxEval.do"
+				 body="{{rfxData}}">
+		</sc-ajax>
+		
+		<!-- multi-round(재견적) 요청 -->
+		<sc-ajax id="saveMultiRoundRfx"
+				 url="saveMultiRoundRfx.do">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-code-group>
+			<!--통화코드  -->
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+			<!-- 업체선정방식(총액별/품목별) -->
+			<sc-code code="P002" value="{{codes.itemSlctnTypCcd}}"></sc-code>
+			<!-- 낙찰자 선정 방식(가격 선정방식) -->
+			<sc-code code="P007" value="{{codes.slctnTypCcd}}"></sc-code>
+			<!-- RFx 유형 -->
+			<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+			<!-- 구매 유형 -->
+			<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+			<!-- RFX 목적 -->
+			<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>
+			<!-- 가격 점수 평가 방식 -->
+			<sc-code code="P060" value="{{codes.cbeTypCcd}}"></sc-code>
+			<!-- 협력사 거래 유형 -->
+			<sc-code code="E902" value="{{codes.regTyp}}"></sc-code>
+			<!-- 협력사 거래상태 -->
+			<sc-code code="E035" value="{{codes.po_poss_yn}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="{{rfxData.rfx_typ_ccd}} : {{rfxData.rfx_no}}, Rev : {{rfxData.rfx_rnd}}" i18n-disabled>
+			<sc-button text="개찰" on-click="onOpenRfx" hidden="[[!formula('showOpenBtn')]]" auth-s></sc-button>
+			<sc-button text="유찰" on-click="onDropRfx" hidden="[[!formula('dropable')]]" auth-s></sc-button>
+			<sc-button text="멀티라운드(재견적)" on-click="onMultiRound" hidden="[[!formula('multiRoundAble')]]" auth-s></sc-button>
+			<sc-button text="평가 재수행" on-click="onReExecuteNpeEval" hidden="[[!formula('evalReExecutable')]]" auth-s></sc-button>
+			<sc-button text="평가 조기 마감" on-click="onCloseRfxEval" hidden="[[!formula('evalClosable')]]" auth-s></sc-button>
+			<sc-button text="취소" on-click="onCancelRfx" hidden="[[!formula('cancelable')]]" auth-s></sc-button>
+			<sc-button text="RFX 정보" on-click="onShowRfxDetail" auth-r></sc-button>
+			<sc-button text="투찰 비교" on-click="onShowCompareRfxDetail" hidden="[[!formula('showCompareBtn')]]" auth-r></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-rfx-progress-state rfx-data="{{rfxData}}"></cc-rfx-progress-state>
+		
+		<cc-link-document id="es_rfx_link_doc" param="{{rfxData}}" app-type="RFX"></cc-link-document>
+		<!--<div class="flex page">-->
+		<cc-approval-summary app-id="{{rfxData.rfx_uuid}}" aprv-typcd="{{apvlTypCcd}}" hidden="[[!formula('requestedApproval')]]" auth-r>
+		</cc-approval-summary>
+		
+		<sc-tab-navigation id="tabNavi" class="fit" style="padding-top: 10px;">
+			<es-rfx-contest-slctn id="slctnTab" class="flex" title-text="RFX 선정 기준" on-reload="onReload" on-close="onClose"></es-rfx-contest-slctn>
+			<es-rfx-contest-slctn-result hidden></es-rfx-contest-slctn-result>
+		</sc-tab-navigation>
+		<!--</div>-->
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-rfx-contest-detail',
+			properties: {
+				toDate: {
+					type: String,
+					value: function() {
+						return UT.formatDate(new Date(), "yyyyMMdd");
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: ''
+						};
+					}
+				},
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: '',
+							purc_typ_ccd: '',
+							item_slctn_typ_ccd: '',
+							slctn_typ_ccd: '',
+							slctn_rsn: ''
+						};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							curCcd: [],
+							uomCcd: [],
+							itemSlctnTypCcd: [],
+							slctnTypCcd: [],
+							rfxTypCcd: [],
+							p2pPurcTypCcd: [],
+							rfxPurpCcd: [],
+							cbeTypCcd: [],
+							regTyp: [],
+							po_poss_yn: []
+						};
+					},
+					reset: false
+				},
+				// Url Copy
+				copyValue: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			formulas: {
+				hiddenNonPriVdRankGrid: function() {
+					var me = this;
+					if(UT.isEmpty(me.rfxData.rfx_uuid)) {
+						return false;
+					}
+					return !(me.rfxData.item_slctn_typ_ccd === "BYTOT" && me.rfxData.rfx_typ_ccd === "RFP");
+				},
+				showCompareBtn: function() {
+					return (!this.formula("isBeforeOpen") && this.rfxData.rfx_bid_cnt > 0);
+				},
+				editable: function() {
+					//마감-업체선정중/업체선정취소 상태
+					if(this.rfxData.rfx_sts_ccd === "CLSG" && ["VD_SLCTN_WTG", "VD_SLCTN_CNCL"].indexOf(this.rfxData.rfx_res_sts_ccd) > -1) {
+						//종료된 품목 존재 시 업체선정 불가
+						if((this.rfxData.item_slctn_typ_ccd === "BYITEM" && this.rfxData.has_closed_item_yn === "Y")) {
+							return false;
+						}
+						return true;
+					}
+					return false;
+				},
+				isBeforeOpen: function() {
+					// 마감-개찰전 상태
+					return (this.rfxData.rfx_sts_ccd === "CLSG" && this.rfxData.rfx_res_sts_ccd === "OPEN_WTG");
+				},
+				showOpenBtn: function() {
+					var me = this;
+					// 마감-개찰전 상태이고, 즉시개찰이 아니어야 함, RFP인 경우는 평가마감된 상태여야 함
+					return me.formula("isBeforeOpen") && me.rfxData.immed_open_use_yn === "N" && ((me.rfxData.rfx_typ_ccd === "RFQ") || (me.rfxData.rfx_typ_ccd === "RFP" && me.rfxData.npe_sts_ccd === "EVAL_ED"));
+				},
+				dropable: function() {
+					//마감-업체선정중 상태
+					return (this.rfxData.rfx_sts_ccd === "CLSG" && this.rfxData.rfx_res_sts_ccd === "VD_SLCTN_WTG");
+				},
+				cancelable: function() {
+					//업체선정취소, 유찰 상태일 때 취소 가능
+					return (this.rfxData.rfx_sts_ccd === "CLSG" && ["VD_SLCTN_CNCL", "FAILDBID"].indexOf(this.rfxData.rfx_res_sts_ccd) > -1);
+				},
+				multiRoundAble: function() {
+					//업체선정취소, 유찰 상태일 때 재견적 가능
+					return (this.formula('cancelable'));
+				},
+				evalReExecutable: function() {
+					//업체선정 가능, RFP 종합평가인 경우 평가재수행 가능
+					return (this.formula("editable") && !this.formula("hiddenNonPriVdRankGrid") && this.rfxData.npe_sts_ccd === "EVAL_ED" && this.rfxData.rfx_bid_cnt > 0);
+				},
+				evalClosable: function() {
+					// RFP인 경우 마감상태이고, 평가가 마감되지 않은 경우 평가 조기마감 가능
+					return (this.rfxData.rfx_typ_ccd === "RFP" && this.rfxData.rfx_sts_ccd === "CLSG" && this.rfxData.npe_sts_ccd !== "EVAL_ED");
+				},
+				requestedApproval: function() {
+					//선정품의중일 경우 결재상세 조회
+					return (['APVL_PRGSG', 'APVD', 'APVL_RET', 'APVL_CNCL'].indexOf(this.rfxData.rfx_slctn_apvl_sts_ccd) > -1);
+				},
+				showSlctnResult: function() {
+					return this.rfxData.rfx_sts_ccd === "ED" && this.rfxData.rfx_res_sts_ccd === "VD_SLCTN"
+				}
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				
+				me.set("searchParam.rfx_uuid", param.rfx_uuid);
+				// Url Copy Param Set
+				me.set("copyValue", {
+					app_id: param.rfx_uuid
+				});
+				me.findRfxDetail();
+			},
+			/**************************************************
+			 * 버튼 이벤트 및 상세 조회
+			 **************************************************/
+			// rfx 상세 조회
+			findRfxDetail: function() {
+				var me = this;
+				
+				UT.request(me.$.findRfx);
+			},
+			// rfx 상세 조회 후 handler
+			completeFindRfx: function(el, res) {
+				var me = this;
+				var rfxData = res.response;
+				
+				// 조회 데이터 셋팅
+				me.set("rfxData", rfxData);
+				
+				// 데이터 셋팅 후 처리
+				me.applyFormula();
+				
+				me.$.tabNavi.selectItem(me.$.slctnTab);
+				me.$.slctnTab.load(rfxData);
+				
+				me.removeResultTab();
+				if(me.formula("showSlctnResult")) {
+					me.appendResultTab();
+				}
+			},
+			appendResultTab: function() {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				
+				var resultTab = document.createElement("es-rfx-contest-slctn-result");
+				resultTab.setAttribute('title', "RFX 선정 결과 확인");  // 프로세스 명으로 탭 명 설정
+				resultTab.addEventListener('close', function() {
+					me.onClose();
+				});
+				
+				// tab navigation에 생성한 헤더 탭 append
+				Polymer.dom(tabNavi).appendChild(resultTab);
+				Polymer.dom.flush();
+				resultTab.load(me.get("rfxData"));
+			},
+			removeResultTab: function() {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				
+				var resultTab = tabNavi.querySelector("es-rfx-contest-slctn-result[title]");
+				if(!!resultTab) {
+					Polymer.dom(tabNavi).removeChild(resultTab);
+				}
+			},
+			// 작성중인 결재 존재여부 확인
+			checkRfxResultApproval: function(saveType, preConfirmed) {
+				var me = this;
+				
+				me.set('rfxData.saveType', saveType);
+				
+				me.$.checkRfxResultApproval.body = {
+					rfxData: me.get('rfxData')
+				};
+				
+				UT.request(me.$.checkRfxResultApproval, function(e, res) {
+					var result = res.response;
+					
+					if(result.resultStatus === "S") {
+						if(saveType === "dropRfx") {
+							var dropRfxCausePopup = UT.popup("ep-cause", me, 800, 210, { // 유찰 사유 입력 팝업
+								"submit": function(popup, e) {
+									
+									UT.confirm("STD.RFX1006", function() {	//"유찰 처리 하시겠습니까?"
+										popup.getWindowContent().reset();
+										popup.close();
+										me.set("rfxData.faildbid_rsn", e.detail.cause);
+										
+										me.dropRfx();
+									});
+								}
+							}, {titleText: "유찰"});
+							dropRfxCausePopup.show();
+							dropRfxCausePopup.getWindowContent().load("dropRfx");
+						} else if(saveType === 'cancelRfx') {
+							UT.confirm(((me.rfxData.has_closed_item_yn === "N") ? "STD.RFX1036" : "STD.RFX1037"), function() {	//"취소 처리 하시겠습니까?" or "종료되지 않은 품목에 대해 취소 처리 하시겠습니까?"
+								me.cancelRfx();
+							});
+						} else if(saveType === 'multiRound') {
+							var msg = me.translate("STD.RFX1039");	//"multi-round를 진행하시겠습니까?"
+							
+							if(me.rfxData.comp_typ_ccd !== "OBID" && me.rfxData.rfx_bid_cnt === 0) {
+								msg += "<br/>" + me.translate("STD.RFX1081");	//"견적 제출업체가 존재하지 않아 기존 요청업체들을 대상으로 작성하게 됩니다."
+							}
+							
+							UT.confirm(msg,
+									function() {
+										me.multiRound();
+									},
+									null, false);
+						} else if(saveType === 'nego') {
+							me.showPopupSelectionNegoTarget();
+						}
+					} else {	//작성중인 결재 존재 시
+						var saveTypeName = null;
+						if(saveType === 'dropRfx') {
+							var dropRfxCausePopup = UT.popup("ep-cause", me, 800, 210, { // 유찰 사유 입력 팝업
+								"submit": function(popup, e) {
+									
+									UT.confirm(me.translate("STD.RFX1026", null, me.translate('유찰')), function() {	//"작성중인 낙찰자 선정품의가 삭제됩니다. {0} 하시겠습니까?"
+										popup.getWindowContent().reset();
+										popup.close();
+										
+										me.set("rfxData.faildbid_rsn", e.detail.cause);
+										
+										me.deleteRfxResultApproval();	// Rfx 결과품의 삭제
+									});
+								}
+							}, {titleText: "유찰"});
+							dropRfxCausePopup.show();
+							dropRfxCausePopup.getWindowContent().load("dropRfx");
+							
+							return;
+						} else if(saveType === 'bypass') {
+							saveTypeName = me.translate('선정 완료');
+						} else if(saveType === 'cancelRfx') {
+							saveTypeName = me.translate('취소');
+						} else if(saveType === 'multiRound') {
+							saveTypeName = 'multi-Round';
+						} else if(saveType === 'nego') {
+							saveTypeName = me.translate('우선협상대상 선정');
+						}
+						
+						var msg = me.translate("STD.RFX1026", null, saveTypeName);		//작성중인 낙찰자 선정품의가 삭제됩니다. {0} 하시겠습니까?
+						if(saveType === 'multiRound') {
+							if(me.rfxData.comp_typ_ccd !== "OBID" && me.rfxData.rfx_bid_cnt === 0) {
+								msg += "<br/>" + me.translate("STD.RFX1081");	//"견적 제출업체가 존재하지 않아 기존 요청업체들을 대상으로 작성하게 됩니다."
+							}
+						}
+						UT.confirm(msg,
+								function() {
+									me.deleteRfxResultApproval();	// Rfx 결과품의 삭제
+								},
+								null, true);
+					}
+				});
+			},
+			// 개찰 버튼 클릭 시
+			onOpenRfx: function() {
+				var me = this;
+				
+				UT.confirm("STD.RFX1029", function() {
+					UT.request(me.$.openRfx);
+				});
+			},
+			// 개찰 처리 후 handler
+			completeOpenRfx: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+				
+				if(status === "S") {
+					UT.alert("STD.RFX1046");
+					me.findRfxDetail();
+				} else if(status === "RFP_EVAL_INCOMPELETED") {
+					UT.alert("STD.RFX1030");	// "비가격 평가가 완료되지 않아 개찰할 수 없습니다."
+				} else if(status === "RFX_BEFORE_OPEN_TIME") {
+					UT.alert("STD.RFX1060");	// "개찰일시가 도래하지 않았습니다."
+				} else if(status === "INVALID_STATUS_ERR") {
+					var resultData = result.resultData;
+					
+					// 이미 개찰 처리가 되어 {0} - {1} 상태입니다.
+					UT.alert(me.translate("STD.RFX1069", null, resultData.rfx_prog_sts_nm, resultData.rfx_end_sts_nm), null, true);
+					me.findRfxDetail();
+				} else if(status === "NO_COMP_RFX_PRE_INSP") {
+					UT.alert("STD.RPI004");	//"사전심사가 완료되지 않았습니다."
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 유찰 버튼 클릭시
+			onDropRfx: function() {
+				var me = this;
+				//작성중인 결재 존재여부 확인
+				me.checkRfxResultApproval('dropRfx');
+			},
+			// Rfx 결과품의 삭제
+			deleteRfxResultApproval: function() {
+				var me = this;
+				
+				me.$.deleteRfxResultApproval.body = {
+					rfxData: me.get('rfxData')
+				};
+				
+				UT.request(me.$.deleteRfxResultApproval);
+			},
+			// Rfx 결과품의 삭제 후 handler
+			completeDeleteRfxResultApproval: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				var saveType = me.rfxData.saveType;
+				if(saveType === "dropRfx") {
+					me.dropRfx();
+				} else if(saveType === 'cancelRfx') {
+					me.cancelRfx();
+				} else if(saveType === 'multiRound') {
+					me.multiRound();
+				} else if(saveType === 'nego') {
+					me.showPopupSelectionNegoTarget();
+				}
+			},
+			//유찰 처리
+			dropRfx: function() {
+				var me = this;
+				
+				UT.request(me.$.dropRfx);
+			},
+			//유찰 요청 완료시 호출되는 handler
+			completeDropRfx: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.alert("STD.RFX1047");	//"유찰 하였습니다."
+					me.findRfxDetail();		//상세 조회
+					
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findRfxDetail();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 평가 재수행 버튼 클릭 시
+			onReExecuteNpeEval: function() {
+				var me = this;
+				
+				UT.confirm("STD.RFX1055", function() {
+					UT.request(me.$.reExecuteNpeEval, function(e, res) {
+						var result = res.response;
+						
+						if(result.resultStatus === "S") {
+							UT.alert("STD.RFX1056");
+							me.findRfxDetail();
+							
+						} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+							UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+							me.findRfxDetail();
+							
+						} else {
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			// 평가 조기마감
+			onCloseRfxEval: function() {
+				var me = this;
+				
+				if(me.get("rfxData.rfx_sts_ccd") !== "CLSG" || me.get("rfxData.npe_sts_ccd") !== "EVAL_PRGSG") {
+					UT.alert("STD.RFX1058");	// "평가진행중인 경우만 평가마감이 가능합니다."
+					return;
+				}
+				
+				UT.confirm("STD.N1103", function() {	// "평가를 마감하시겠습니까?"
+					UT.request(me.$.forceCloseRfxEval, function(e, res) {
+						var result = res.response;
+						
+						if(result.resultStatus === "S") {
+							UT.completeAlert("평가 조기 마감", function() {
+								me.findRfxDetail();
+							});
+						} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+							UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+							me.findRfxDetail();
+							
+						} else {
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 취소 버튼 클릭 시
+			onCancelRfx: function() {
+				var me = this;
+				
+				//작성중인 결재 존재여부 확인
+				me.checkRfxResultApproval('cancelRfx');
+			},
+			// 취소 처리
+			cancelRfx: function(message) {
+				var me = this;
+				
+				UT.request(me.$.cancelRfx);
+			},
+			// 취소 처리 후 handler
+			completeCancelRfx: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.alert("STD.RFX1048");	//"취소 처리 하였습니다."
+					me.onClose();
+					
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findRfxDetail();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// multi-round(재견적) 버튼 클릭 시
+			onMultiRound: function() {
+				var me = this;
+				
+				if(me.rfxData.has_closed_item_yn === "Y") {
+					UT.alert("STD.RFX1035");	//"종료된 품목이 존재하여 재견적을 진행할 수 없습니다."
+					return;
+				}
+				
+				//작성중인 결재 존재여부 확인
+				me.checkRfxResultApproval('multiRound');
+			},
+			// 재견적 처리
+			multiRound: function() {
+				var me = this;
+				
+				me.$.saveMultiRoundRfx.body = {
+					rfxData: me.get("rfxData")
+				};
+				
+				UT.request(me.$.saveMultiRoundRfx, function(e, res) {
+					var result = res.response;
+					if(result.resultStatus === "S") {
+						var newId = result.resultData.rfx_uuid;
+						
+						//detail 화면으로 이동함.
+						me.fire("show-detail", {rfx_uuid: newId});
+						
+					} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+						UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+						me.findRfxDetail();
+						
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+			// RFx 상세보기
+			onShowRfxDetail: function() {
+				var me = this;
+				
+				me.fire("show-detail", {rfx_uuid: me.get("rfxData.rfx_uuid")});
+			},
+			onShowCompareRfxDetail: function() {
+				this.$.slctnTab.onShowCompareRfxDetail();
+			},
+			// 데이터 초기화
+			clearData: function() {
+				var me = this;
+				
+				//properties 초기화 및 grid provider 초기화
+				me.reset();
+			},
+			// 닫기 버튼 클릭시
+			onClose: function() {
+				var me = this;
+				
+				me.clearData();
+				me.fire('close');
+			},
+			
+			//우선협상대상 팝업 호출
+			showPopupSelectionNegoTarget: function() {
+				var me = this;
+				
+				var popupSelection = UT.popup("ep-nego-target-selection", me, 1080, 500, {
+					"selected-item": function(popup, e) {
+						//재조회 또는 상세닫기
+						UT.alert("STD.NG1002"); // 우선협상대상을 선정했습니다.
+						me.findRfxDetail();
+						popup.close();
+					}
+				}, {titleText: "우선협상대상 선정"});
+				popupSelection.show();
+				popupSelection.getWindowContent().load(me.get("rfxData"));
+			},
+			
+			onReload: function() {
+				var me = this;
+				me.findRfxDetail();
+			},
+			
+			/*_slctnResultInitialized: function(e) {
+				var me = this;
+				var contentId = e.detail.id;
+				me.set(contentId + "Initialized", true);
+				me.$.slctnResultTab.load(me.get("rfxData"));
+			}*/
+		});
+	</script>
+</dom-module>

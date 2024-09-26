@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--  -->
+<mapper namespace="sp-eval">
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVDIG) -->
+    <update id="saveListUnRegCompleteVDIG">
+        /* eval.saveListUnRegCompleteVDIG 등록심사 진행관리 - 미등록완료 저장(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = #{p.hndl_sts_cd}, 
+               HNDL_END_YN = 'Y',
+               HNDL_COMP_DATE = #{p.hndl_comp_date},
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVRRG) -->
+    <update id="saveListUnRegCompleteVRRG">
+        /* eval.saveListUnRegCompleteVRRG 등록심사 진행관리 - 미등록완료 저장(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = #{p.hndl_sts_cd},
+               APRV_TARG_YN = 'N',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVRRG) -->
+    <update id="saveListUnRegCompleteEVMA">
+        /* eval.saveListUnRegCompleteEVMA 등록심사 진행관리 - 미등록완료 저장(ESREVMA) */
+        UPDATE ESREVMA
+           SET STS = 'D'
+         WHERE SYS_ID       = #{g.tenant}
+           AND TARG_TYP_VAL IN (
+                                SELECT VD_INSP_GRP_EVAL_STP_ID
+                                  FROM ESSVIES VIES
+                                     , ESSVDIG VDIG
+                                 WHERE VDIG.SYS_ID         =  VIES.SYS_ID
+                                   AND VDIG.VD_INSP_GRP_ID =  VIES.VD_INSP_GRP_ID
+                                   AND VDIG.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+                              )
+    </update>    
+    <select id="findListEvalYear" resultType="map">
+    	 SELECT DISTINCT CAST( EVAL_YR AS INTEGER ) AS EVAL_YR
+      FROM   ESREVMA EVMA
+             INNER JOIN ESREVRS EVRS
+             ON  EVMA.SYS_ID    = EVRS.SYS_ID
+             AND EVMA.EVAL_ID   = EVRS.EVAL_ID
+             AND EVMA.EXC_STS   = (CASE WHEN EVMA.EVAL_TYP_CD = 'RE' OR EVMA.EVAL_TYP_CD = 'SE' THEN '80' ELSE '60' END)    /* 평가 마감 대상 기준 */
+             AND EVMA.STS != 'D'
+             AND EVRS.STS != 'D'
+             AND EVRS.VD_CD     = #{g.vd_cd}
+      ORDER BY CAST( EVAL_YR AS INTEGER ) DESC
+    </select>
+    <select id="findListEvalList" resultType="map">
+	/* eval.findListEvalList : 평가 리스트 */
+	SELECT * FROM (
+		SELECT EVMA.EVAL_CD,
+		    EVMA.REG_DT,
+			EVMA.EVAL_YR,	/* 평가 년도*/
+			CDDL.DTL_CD_NM AS EVAL_TYP_NM ,
+			EVAL_KIND_NM ,
+			EVAL_NM ,
+			EVAL_SCO ,
+			EVAL_CLS
+		FROM ESREVMA EVMA
+		INNER JOIN ESREVRS EVRS
+			ON EVMA.EVAL_ID = EVRS.EVAL_ID
+			AND EVMA.SYS_ID = EVRS.SYS_ID
+			AND EVMA.OPER_ORG_CD = EVRS.OPER_ORG_CD
+            AND EVMA.EVAL_TYP_CD = EVRS.EVAL_TYP_CD
+            AND EVMA.EVAL_KIND_CD = EVRS.EVAL_KIND_CD
+            AND EVMA.EVAL_CD = EVRS.EVAL_CD
+            AND EVRS.VD_CD     = #{g.vd_cd}
+			AND EVMA.SYS_ID = #{g.tenant}
+			AND EVMA.APPLY_SIM_REV = EVRS.SIM_REV
+			AND EVMA.STS != 'D'
+		INNER JOIN ESREVTP EVTP
+			ON EVMA.EVAL_TYP_CD = EVTP.EVAL_TYP_CD
+			AND EVMA.EVAL_KIND_CD = EVTP.EVAL_KIND_CD
+			AND EVMA.OPER_ORG_CD = EVTP.OPER_ORG_CD
+			AND EVTP.SYS_ID = EVMA.SYS_ID
+			AND EVTP.STS != 'D'
+		INNER JOIN ESACDDL CDDL
+			ON CDDL.DTL_CD = EVMA.EVAL_TYP_CD
+			AND CDDL.SYS_ID = #{g.tenant}
+			AND CDDL.STS != 'D'
+			AND CDDL.LANG_CD = #{g.locale}
+			AND CDDL.GRP_CD = 'R704'
+		WHERE EVMA.SYS_ID = #{g.tenant}
+			AND EVMA.OPER_ORG_CD = #{p.oper_org_cd}
+			AND EVMA.EXC_STS = (CASE WHEN EVMA.EVAL_TYP_CD = 'RE' OR EVMA.EVAL_TYP_CD = 'SE' THEN '80' ELSE '60' END)    /* 평가 마감 대상 기준 */
+			<if test="p.eval_typ_cd != null and p.eval_typ_cd !=''">
+				AND EVMA.EVAL_TYP_CD = #{p.eval_typ_cd}
+			</if>
+		) A
+		<where>
+		    1=1
+			<if test="p.eval_start_yr != null">
+				AND A.EVAL_YR = CAST(#{p.eval_start_yr} AS NVARCHAR2(18))
+			</if>
+		</where>
+		ORDER BY CAST(A.EVAL_YR AS INTEGER), A.REG_DT DESC
+    </select>
+    <select id="selectVdInspGrpAprvProgYn" resultType="String">
+    /* sp-eval.selectVdInspGrpAprvProgYn : 심사그룹의 결재 진행 여부 조회 */
+    SELECT CASE WHEN EXISTS ( SELECT 1
+                                FROM ESSVRRG VRRG
+                               INNER JOIN
+                                     ESMVDGL1 VDGL_H
+                                  ON VDGL_H.SYS_ID     = VRRG.SYS_ID
+                                 AND VDGL_H.VD_LOG_ID  = VRRG.APRV_DOCNO
+                               WHERE VRRG.SYS_ID    = #{g.tenant}
+                                 AND VRRG.VD_CD     = #{g.vd_cd}
+                                 AND VDGL_H.MOD_REV = (SELECT MAX(MOD_REV) FROM ESMVDGL1 WHERE SYS_ID = VDGL_H.SYS_ID AND VD_CD = VDGL_H.VD_CD)
+                                 AND VDGL_H.MOD_CLS IN ('F', 'E')
+                            <choose>
+                                <when test="p.checkList != null and p.checkList.size() &gt; 0">
+                                 AND VRRG.VD_INSP_GRP_ID IN
+                                    <foreach close=")" collection="p.checkList" item="item" open="(" separator=",">
+                                        #{item.vd_insp_grp_id}
+                                    </foreach>
+                                </when>
+                                <when test="p.vd_insp_grp_id != null and p.vd_insp_grp_id != ''">
+                                 AND VRRG.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+                                </when>
+                                <otherwise>
+                                 AND 1=0
+                                </otherwise>
+                            </choose>
+                            ) THEN 'Y' 
+                ELSE 'N' 
+           END AS APRV_PROG_YN 
+      FROM ESMBLNK
+    </select>
+</mapper>

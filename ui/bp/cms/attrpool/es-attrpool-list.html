@@ -1,0 +1,154 @@
+<dom-module id="es-attrpool-list">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+		
+		<sc-ajax id="findListAttributePool"
+				 url="findListAttributePool.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<sc-ajax id="deleteListAttributePool"
+				 url="deleteListAttributePool.do"
+				 on-response="completeDeleteListAttrPool">
+		</sc-ajax>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch"   auth-r>
+			<cc-fieldset>
+				<sc-label text="품목속성 코드"></sc-label>
+				<sc-text-field value="{{searchParam.iattr_cd}}" on-enter="onEnterSearch"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="품목속성 명"></sc-label>
+				<sc-text-field value="{{searchParam.iattr_nm}}" on-enter="onEnterSearch"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" data-provider="{{resultList}}" on-item-click="onDataCellClicked" selection-able-function="onSelectionAbleFunction">
+			<cc-grid-toolbar>
+				<sc-button text="추가" on-click="onAdd" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDelete" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="iattr_cd" header-text="품목속성 코드" width="100" style-name="link"></sc-data-column>
+				<sc-data-column data-field="iattr_nm" header-text="품목속성 명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="asgd_iattr_cnt" header-text="배정된 품목속성 개수" width="130" text-align="right"></sc-data-column>
+				<sc-data-column data-field="rmk" header-text="비고" width="500" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-attrpool-list',
+			
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			onSearch: function() {
+				var me = this;
+				UT.request(me.$.findListAttributePool);
+			},
+			
+			onEnterSearch: function() {
+				var me = this;
+				me.onSearch();
+			},
+			
+			onDataCellClicked: function(event) {
+				var me = this;
+				var detail = event.detail;
+				var data = detail.data;
+				var item = detail.item;
+				
+				if(item.dataField === "iattr_cd") {
+					me.fire("show-detail", data);
+				}
+			},
+			
+			onSelectionAbleFunction : function(data) {
+				var me = this;
+				
+				if(data.asgd_iattr_cnt > 0) {
+					return false;
+				} else {
+					return true;
+				}
+			},
+			
+			onAdd: function() {
+				this.fire("add-attr");
+			},
+			
+			onDelete: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var deleteRows = provider.selectionCheckedItems();
+				
+				if(UT.isEmpty(deleteRows)) {
+					UT.alert("STD.N1600");
+					return;
+				} else {
+					// 삭제전 배정된 속성이 있는지 체크
+					var deleteSize = deleteRows.length;
+					var errList = [];
+					var msg = "";
+					
+					for(var idx in deleteRows) {
+						var row = deleteRows[idx];
+						var asgnAttrCnt = row.asgd_iattr_cnt;
+						
+						if(asgnAttrCnt > 0) {
+							errList.push(row.iattr_cd);
+						}
+					}
+					
+					if(errList.length > 0) {
+						UT.alert(me.translate('STD.CMS1003', null, errList.slice()), null, true);
+						return;
+					}
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						me.$.deleteListAttributePool.body = {
+							deleteList: deleteRows
+						};
+						
+						UT.request(me.$.deleteListAttributePool);
+					});
+				}
+			},
+			
+			completeDeleteListAttrPool: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(UT.isObject(result) && result.resultStatus === "S") {
+					// [삭제] 처리가 완료되었습니다.
+					UT.completeAlert("삭제");
+					me.onSearch();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			}
+		});
+	</script>
+</dom-module>

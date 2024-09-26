@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="eval-subj-evaltr-res">
+	<select id="findEvalSubjEvaltrRes" resultType="map">
+    /* eval-subj-evaltr-res.findEvalSubjEvaltrRes : 평가대상 평가자 결과 조회 */
+    SELECT TEN_ID
+         , EVAL_SUBJ_EVALTR_RES_UUID
+         , EVAL_SUBJ_RES_UUID
+         , EVAL_PRGS_STS_CCD
+         , EVALFACT_EVALTR_AUTHTY_CCD
+         , EVALTR_ID
+         , EVALTR_SC
+         , ATHG_UUID
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+         , (SELECT COUNT(*)
+              FROM EVAL_SUBJ_RES ESUBJ_RES
+             INNER JOIN EVAL_SUBJ_EVALTR_RES TOT_EVALTR_RES
+                ON ESUBJ_RES.TEN_ID = TOT_EVALTR_RES.TEN_ID
+               AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = TOT_EVALTR_RES.EVAL_SUBJ_RES_UUID
+               AND TOT_EVALTR_RES.STS !='D'
+             WHERE ESUBJ_RES.TEN_ID = TOT_EVALTR_RES.TEN_ID
+               AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = TOT_EVALTR_RES.EVAL_SUBJ_RES_UUID
+               AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+               AND TOT_EVALTR_RES.EVAL_PRGS_STS_CCD != 'SUBM'
+             ) AS NOT_SUBM_EVALTR_CNT    /* 해당 평가의 미제출 평가자 수 */
+      FROM EVAL_SUBJ_EVALTR_RES EVALTR_RES
+     WHERE EVALTR_RES.TEN_ID = #{p.ten_id}
+     <choose>
+         <when test="p.eval_subj_evaltr_res_uuid != null and p.eval_subj_evaltr_res_uuid != ''">
+             AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+         </when>
+         <otherwise>
+             AND EVALTR_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+             AND EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD = #{p.evalfact_evaltr_authty_ccd}
+             AND EVALTR_RES.EVALTR_ID = #{p.evaltr_id}
+         </otherwise>
+     </choose>
+    </select>
+    <insert id="insertEvalSubjEvaltrRes">
+    /* eval-subj-evaltr-res.insertEvalSubjEvaltrRes : 평가대상 평가자 결과 생성 */
+    INSERT INTO EVAL_SUBJ_EVALTR_RES(
+           TEN_ID
+         , EVAL_SUBJ_EVALTR_RES_UUID
+         , EVAL_SUBJ_RES_UUID
+         , EVAL_PRGS_STS_CCD
+         , EVALFACT_EVALTR_AUTHTY_CCD
+         , EVALTR_ID
+         , EVALTR_SC
+         , ATHG_UUID
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    ) VALUES (
+           #{p.ten_id}
+         , #{p.eval_subj_evaltr_res_uuid}
+         , #{p.eval_subj_res_uuid}
+         , #{p.eval_prgs_sts_ccd}
+         , #{p.evalfact_evaltr_authty_ccd}
+         , #{p.evaltr_id}
+         , #{p.evaltr_sc}
+         , #{p.athg_uuid}
+         , 'C'
+         , #{p.rmk}
+         <choose>
+            <when test="p.dfn_regr_id != null and p.dfn_regr_id != ''">
+                , #{p.dfn_regr_id}
+            </when>
+            <otherwise>
+                , #{g.username}
+            </otherwise>
+        </choose>
+        , #{g.now}
+        <choose>
+            <when test="p.dfn_regr_id != null and p.dfn_regr_id != ''">
+                , #{p.dfn_regr_id}
+            </when>
+            <otherwise>
+                , #{g.username}
+            </otherwise>
+        </choose>
+        , #{g.now}
+    )
+    </insert>
+	<delete id="deleteEvalSubjEvaltrRes">
+	/* eval-subj-evaltr-res.deleteEvalSubjEvaltrRes : 평가대상 평가자 결과를 삭제한다. */
+    DELETE  FROM EVAL_SUBJ_EVALTR_RES EVALTR_RES
+     WHERE TEN_ID = #{p.ten_id}
+       <choose>
+           <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+               AND EXISTS ( SELECT 'X'
+                              FROM EVAL_SUBJ_RES ESRES
+                             WHERE ESRES.TEN_ID = EVALTR_RES.TEN_ID
+                               AND ESRES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+                               AND ESRES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                        )
+           </when>
+           <when test="p.req_type != null and p.req_type eq 'EVALTR'.toString()">
+               AND EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+           </when>
+           <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+               AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+           </when>
+           <otherwise>
+               AND EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+           </otherwise>
+      </choose>
+	</delete>
+    <update id="changeEvalSubjEvaltrRes">
+    /* eval-subj-evaltr-res.changeEvalSubjEvaltrRes : 평가대상 평가자 결과의 평가자 아이디 변경 */
+    UPDATE EVAL_SUBJ_EVALTR_RES
+       SET EVALTR_ID = #{p.evaltr_id}
+         , STS = 'U'
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID = #{p.ten_id}
+       AND EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+    </update>
+    <update id="updateEvalSubjEvaltrFulfill">
+    /* eval-subj-evaltr-res.updateEvalSubjEvaltrFulfill : 평가대상 평가자 첨부파일/의견 저장 */
+    UPDATE EVAL_SUBJ_EVALTR_RES
+       SET ATHG_UUID = #{p.athg_uuid}
+         , RMK = #{p.rmk}
+     WHERE TEN_ID = #{p.ten_id}
+       AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+	   AND EVALTR_ID = #{p.evaltr_id}
+    </update>
+    <update id="updateEvalSubjEvaltrSc">
+    /* eval-subj-evaltr-res.updateEvalSubjEvaltrSc : 평가자 정성평가 점수 계산 */
+    MERGE INTO EVAL_SUBJ_EVALTR_RES A
+    USING (
+           SELECT SC_RES.TEN_ID
+                , SC_RES.EVAL_SUBJ_RES_UUID
+                , SC_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                , SUM(CASE WHEN ADD_CND_CCD  != 'NA' THEN 0
+                           WHEN SC_RES.EFACTG_WGT <![CDATA[<]]> SC_RES.EFACTG_EFACT_TYP_SC THEN SC_RES.EFACTG_WGT
+                           WHEN 0 &gt; SC_RES.EFACTG_EFACT_TYP_SC THEN 0
+                           ELSE SC_RES.EFACTG_EFACT_TYP_SC
+                      END) AS NA_EVALTR_SC      /* 일반 유형 평가항목 점수 총 합 */
+                , SUM(CASE WHEN ADD_CND_CCD = 'NA' THEN 0
+                           ELSE SC_RES.EFACTG_EFACT_TYP_SC
+                      END) AS NOT_NA_EVALTR_SC  /* 일반 유형이 아닌 평가항목 점수 총 합(가점 및 감점 항목) */
+             FROM (
+                  SELECT EVALTR_EFACTG_RES.TEN_ID
+                       , EVALTR_EFACTG_RES.EVAL_SUBJ_RES_UUID
+                       , EVALTR_EFACTG_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                       , EVALTR_EFACTG_RES.EVALTMPL_EFACTG_UUID
+                       , EVALTR_EFACTG_RES.EFACTG_UUID
+                       , EVALTR_EFACTG_RES.EFACTG_WGT
+                       , EVALTR_EFACTG_RES.ADD_CND_CCD
+                       , SUM(EVALTR_EFACTG_RES.EFACT_TYP_SC) AS EFACTG_EFACT_TYP_SC   /* 평가항목군 - 평가항목유형 별 점수 (추가 조건이 가점 혹은 감점인 경우 항목군 점수에 합산하지 않고 전체 점수에 합산하기 때문.) */
+                    FROM (
+                          SELECT EVALTR_RES.TEN_ID
+                               , EVALTR_RES.EVAL_SUBJ_RES_UUID
+                               , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                               , ET_EFACTG.EVALTMPL_EFACTG_UUID
+                               , ET_EFACTG.EFACTG_UUID
+                               , ET_EFACTG.EFACTG_WGT
+                               , EFACT.ADD_CND_CCD
+                               , CASE WHEN EFACT.EVALFACT_TYP_CCD != 'QUANT' AND EFACT.ADD_CND_CCD = 'NA'
+                                           THEN (  /* 정량항목 아니고 가점/감점 항목 아닌 경우, 평가자 평가항목 스케일 합한 점수에 가중치 적용 */
+                                                 EVALTR_SCALE_RES.EVALTR_SCALE_SC
+                                                 * ((CASE WHEN ET_EFACT.EVALFACT_WGT IS NULL THEN 100 ELSE ET_EFACT.EVALFACT_WGT END) / 100)
+                                                 * ((CASE WHEN ET_EFACTG.EFACTG_WGT IS NULL THEN 100 ELSE ET_EFACTG.EFACTG_WGT END) / 100)
+                                                 )
+                                      WHEN EFACT.EVALFACT_TYP_CCD != 'QUANT' AND EFACT.ADD_CND_CCD != 'NA'
+                                           THEN ( /* 정량항목 아니고 가점 및 감점 항목인 경우, 평가자 평가항목 스케일 합한 점수에 가점 혹은 감점 적용. 가점 및 감점 항목은 가중치를 적용하지 않는다.  */
+                                                 EVALTR_SCALE_RES.EVALTR_SCALE_SC
+                                                 * (CASE WHEN EFACT.ADD_CND_CCD = 'DEDTN' THEN -1 ELSE 1 END)
+                                                 )
+                                      ELSE EFACT_RES.EVALFACT_SC /* 정량항목 점수 */
+                                  END AS EFACT_TYP_SC    /* 평가 항목 유형 점수 */
+                           FROM EVAL_SUBJ_RES ESUBJ_RES
+                          INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES   -- 평가항목 결과
+                             ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+                            AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+                            AND EFACT_RES.STS != 'D'
+                           LEFT OUTER JOIN  EVALFACT EFACT                    -- 평가항목
+                             ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+                            AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                           LEFT OUTER JOIN EVALTMPL_EVALFACT ET_EFACT        -- 평가템플릿 평가항목
+                             ON EFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+                            AND EFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EFACT.EVALTMPL_EVALFACT_UUID
+                            AND ET_EFACT.STS != 'D'
+                           LEFT OUTER JOIN EVALTMPL_EFACTG ET_EFACTG         -- 평가템플릿 평가항목군
+                             ON EFACT_RES.TEN_ID = ET_EFACTG.TEN_ID
+                            AND EFACT_RES.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+                            AND ET_EFACTG.STS != 'D'
+                          INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                             ON ESUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+                            AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+                            AND EVALTR_RES.EVALTR_ID = #{p.evaltr_id} /* 24.03.13 수정 */
+                            AND EVALTR_RES.STS != 'D'
+                           LEFT OUTER JOIN (
+                                SELECT EVALTR_EFACT_RES.TEN_ID
+                                     , EVALTR_EFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                                     , EVALTR_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                                     , SUM(EVALTR_EFACT_RES.SLCTD_SCALE_SC) AS EVALTR_SCALE_SC    /* 가감점 점수입력인 경우 ST_VAL, STP_VAL 제어 필요여부 확인 */
+                                  FROM EVALTR_EVALFACT_RES EVALTR_EFACT_RES
+                                 WHERE EVALTR_EFACT_RES.TEN_ID = #{p.ten_id}
+                                   AND EVALTR_EFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID IN (SELECT EVAL_SUBJ_EVALTR_RES_UUID
+                                                                                        FROM EVAL_SUBJ_EVALTR_RES
+                                                                                       WHERE TEN_ID = #{p.ten_id}
+	                                                                                     AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+	                                                                                     AND EVALTR_ID = #{p.evaltr_id}) /* 24.03.13 수정 */
+                                 GROUP BY EVALTR_EFACT_RES.TEN_ID, EVALTR_EFACT_RES.EVAL_SUBJ_EVALTR_RES_UUID, EVALTR_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                              ) EVALTR_SCALE_RES
+                             ON EVALTR_RES.TEN_ID = EVALTR_SCALE_RES.TEN_ID
+                            AND EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_SCALE_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                            AND EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID = EVALTR_SCALE_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                          WHERE EVALTR_RES.TEN_ID = #{p.ten_id}
+                            AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid} /* 24.03.13 수정 */
+                       ) EVALTR_EFACTG_RES
+                   GROUP BY EVALTR_EFACTG_RES.TEN_ID, EVALTR_EFACTG_RES.EVAL_SUBJ_RES_UUID, EVALTR_EFACTG_RES.EVAL_SUBJ_EVALTR_RES_UUID, EVALTR_EFACTG_RES.EVALTMPL_EFACTG_UUID
+                          , EVALTR_EFACTG_RES.EFACTG_UUID, EVALTR_EFACTG_RES.EFACTG_WGT, EVALTR_EFACTG_RES.ADD_CND_CCD
+               ) SC_RES
+           GROUP BY SC_RES.TEN_ID, SC_RES.EVAL_SUBJ_RES_UUID, SC_RES.EVAL_SUBJ_EVALTR_RES_UUID
+        ) B
+       ON (    A.TEN_ID = B.TEN_ID
+           AND A.EVAL_SUBJ_RES_UUID = B.EVAL_SUBJ_RES_UUID
+           AND A.EVAL_SUBJ_EVALTR_RES_UUID = B.EVAL_SUBJ_EVALTR_RES_UUID
+        )
+    WHEN MATCHED THEN
+         UPDATE
+            SET EVALTR_SC = /* 일반항목 점수와 가감항목 점수를 더했을 때 0점 이하면 0점, 100점 이상이면 100점, 아닐 경우 합산점수 반영 */
+                              CASE WHEN B.NA_EVALTR_SC + B.NOT_NA_EVALTR_SC <![CDATA[<]]> 0 THEN 0
+                                   WHEN B.NA_EVALTR_SC + B.NOT_NA_EVALTR_SC &gt; 100 THEN 100
+                                   ELSE B.NA_EVALTR_SC + B.NOT_NA_EVALTR_SC
+                               END
+              , MODR_ID = #{g.username}
+              , MOD_DTTM = #{g.now} </update>
+</mapper>

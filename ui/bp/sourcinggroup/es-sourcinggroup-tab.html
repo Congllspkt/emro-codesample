@@ -1,0 +1,192 @@
+<sc-link rel="import" href="es-sourcinggroup-contents.html"></sc-link>             <!-- 소싱그룹 정의서 탭 -->
+<sc-link rel="import" href="es-sourcinggroup-vd-list.html"></sc-link>              <!-- 소싱그룹 협력사 탭 -->
+<sc-link rel="import" href="es-sourcinggroup-user-list.html"></sc-link>            <!-- 소싱그룹 담당자 탭 -->
+<sc-link rel="import" href="es-sourcinggroup-item-list.html"></sc-link>            <!-- 소싱그룹 품목 탭 -->
+
+<dom-module id="es-sourcinggroup-tab">
+    <style>
+        :host {
+            @apply(--fit-layout);
+        }
+    </style>
+    
+    <template>
+    
+        <!-- 소싱그룹 정보 조회 -->   
+        <sc-ajax 
+            id="findSourcingGroupInfo"
+            url="findSourcingGroupInfo.do"
+            body="{{sgInfo}}">
+        </sc-ajax>
+        
+        <sc-tab-navigation id="tabNavi" selected-index="0" class="fit" disabled="true" >
+            <es-sourcinggroup-contents  id="sgContents"    title-text="정보"  on-complete-save-cont="onCompleteSaveContents"></es-sourcinggroup-contents>
+            <template>
+                <es-sourcinggroup-vd-list   id="sgVendorList" title-text="협력사" on-initialized="_onInitialized" on-complete-save-vendor="onCompleteSave"></es-sourcinggroup-vd-list>
+            </template>
+            <template>
+                <es-sourcinggroup-user-list id="sgUserList"   title-text="담당자" on-initialized="_onInitialized" on-complete-save-user="onCompleteSave"></es-sourcinggroup-user-list>
+            </template>
+            <template>
+                <es-sourcinggroup-item-list id="sgItemList"   title-text="품목"    on-initialized="_onInitialized" on-complete-save-item="onCompleteSave"></es-sourcinggroup-item-list>
+            </template>
+        </sc-tab-navigation>
+    </template>
+    
+    <script>
+        Polymer({
+            is : "es-sourcinggroup-tab",
+            
+            properties:{
+                /* 파라미터 데이터 binding object */
+                sgInfo : {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    },
+                    notify: true
+                },
+                sgPath: {
+                    type: String,
+                    value: ""
+                }
+            },
+
+            clear : function() {
+                var me = this;
+                var tab = me.$.tabNavi;
+                var modules = tab.items;
+                
+                me.set("sgInfo", {});
+                me.resetTabModules(modules);
+                
+                if ( UT.isNotEmpty(modules) && modules[0] && typeof modules[0].applyFormula == "function") {
+                    modules[0].applyFormula();
+                    tab.selectItem(modules[0]);
+                }
+                tab.disabled = true;
+            },
+
+            resetTabModules : function(modules){
+                var me = this;
+                var module;
+                
+                for (var i=0; i<modules.length; i++) {
+                    module = modules[i];
+                    if (module && module.isInitialized) {
+                        module.reset();
+                    }
+                }
+            },
+
+            load: function(param){
+                var me = this;
+                
+                me.clear();
+                me.set("sgInfo", param);
+                me.set("sgPath", me.getTreePath(param));
+                me.onSearchSgDetail();
+            },
+
+            getTreePath: function(param){
+                var me = this;
+                var ancestorsItems = param.ancestorsItems;
+                var treePathStr = "", sgPath;
+                
+                if(UT.isNotEmpty(ancestorsItems)){
+                    for(var i = 0,len=ancestorsItems.length; i< len; i++){
+                        var item = ancestorsItems[i];
+                        treePathStr =  item["sg_nm"] + " > " + treePathStr;
+                    }
+                    sgPath = treePathStr + me.get("sgInfo.sg_nm");
+                }else{
+                    sgPath = "";
+                }
+                return sgPath;
+            },
+
+            loadTabModules: function(modules){
+                var me = this;
+                var sgInfo = me.get("sgInfo");
+                var module;
+                
+                for (var i=0; i<modules.length; i++) {
+                    module = modules[i];
+                    if (module && module.isInitialized) {
+                        module.load(sgInfo);
+                    }
+                }
+            },
+
+            _onInitialized: function(e){
+                var me = this;
+                var target = e.target;
+
+                if (target && typeof target.load == "function") {
+                    target.load(me.get("sgInfo"));
+                }
+            },
+            
+            /**
+             * TabBar disabled 속성 제어
+             */
+            setTabBarDisabled : function(val) {
+                var me = this;
+                var tab = me.$.tabNavi;
+                var tabBar = tab.querySelector("sc-tabbar.tabbar");
+                
+                if(tab.disabled){
+                    tab.disabled = false;
+                }
+                
+                tabBar.disabled = val;
+            },
+
+            onCompleteSaveContents: function(event){
+                var me = this;
+                var data = event.detail;
+
+                UT.request(me.$.findSourcingGroupInfo, function(e, res){
+                    var result = res.response;
+                    if(result){
+                        result.sg_path = me.get("sgPath");
+                        me.set("sgInfo", result);
+                        //me.setTabBarDisabled(!result.purc_typ);
+                        me.loadTabModules([me.$.sgVendorList]);
+                    }
+                    me.onCompleteSave();
+                });
+            },
+            
+            onCompleteSave : function(){
+                var me = this;
+                me.fire("complete-save");
+            },
+
+            onSearchSgDetail: function(){
+                var me = this;
+                
+                UT.request(me.$.findSourcingGroupInfo, function(e, res){
+                    var result = res.response || {};
+                    var tab = me.$.tabNavi;
+                    var modules = (tab.items || []).concat();
+                    var sgContent = modules.splice(0,1);
+
+                    result.sg_path = me.get("sgPath");
+                    me.set("sgInfo", result);
+                    me.loadTabModules(sgContent);
+                    
+                    if(UT.isEmpty(result) || result.lvl == 1 || result.lvl == 2){
+                        me.$.tabNavi.selectIndex(0);
+                        me.setTabBarDisabled(true);
+                    }else{
+                        me.loadTabModules(modules);
+                        me.setTabBarDisabled(false);
+                    }
+                    modules = null;
+                    sgContent = null;
+                });
+            }
+        });
+    </script>
+</dom-module>

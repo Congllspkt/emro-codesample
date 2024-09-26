@@ -1,0 +1,217 @@
+<link rel="import" href="cc-evalfact-scale-list.html"></link>
+<dom-module id="cc-evaltemplate-evalfact-list">
+<!-- 
+/**
+ *
+ *	@description : 평가 항목 생성 컨포넌트
+ *  <pre>
+ 			<cc-evaltemplate-evalfact-list id="factArea" eval-template-list="{{evalTemplateList}}"></cc-evaltemplate-evalfact-list>
+ * </pre>
+ * @author : sykim
+ * @FileName : 
+ * @Since 2023. 7. 8.
+ * @변경이력 : [2023. 7. 8] sykim 최초작성
+ */
+-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		.hd-box {
+			margin: 1px;
+			border: 0;
+		}
+		.hd-title {
+			border-bottom: 0;
+			background-color: transparent;
+			font-weight: bold;
+			font-size: 16px;
+			padding: 0;
+		}
+		.hd-body {
+			background: #FFF;
+			border: 1px solid #C9C9C9;
+			padding: 24px 30px;
+			box-sizing: border-box;
+		}
+		.rmk-box {
+			border: 1px solid #E2E2E2;
+			background: #F8F8F8;
+			padding: 16px;
+			box-sizing: border-box;
+		}
+		.rmk-title {
+			border-bottom: 0;
+			padding: 5px;
+			font-weight: 500;
+			font-size: 13px;
+		}
+		.rmk-body {
+			padding :5px;
+		}
+		.attachEmptyBtn{
+			background: transparent;
+			border: 0;
+		}
+		a {
+			display: none;
+		}
+	</style>
+	
+	<template>
+        <div class="flex">
+            <template is="dom-repeat" items="{{evalTemplateList}}" as="evalTmpl">
+                <div class="vbox hd-box">
+                    <div class="hd-title">
+<!--                        <sc-label text="{{evalTmpl.evaltmpl_nm}}" i18n-disabled></sc-label>-->
+                    </div>
+					
+                    <div class="hd-body vbox">
+                        <template is="dom-repeat" items="{{evalTmpl.tmplFactGrpList}}" as="factGrp">
+                            <!-- 항목군 -->
+                            <sc-panel title-text="{{factGrp.efactg_nm}}" collapsible="false" class="eveltemplate_box" i18n-disabled>
+                                <cc-evalfact-scale-list id="scaleArea" fact-list="{{factGrp.children}}" read-only="[[readOnly]]" codes="{{codes}}" on-show-fact-expln="onShowFactExplnDialog"></cc-evalfact-scale-list>
+                            </sc-panel>
+                        </template>
+						
+                        <a name="{{evalTmpl.evaltmpl_cd}}" style="display: none"></a>
+						
+                        <sc-panel title-text="▣ [[translate('종합 의견')]]" collapsible="false" i18n-disabled>
+                            <div id="{{evalTmpl.evaltmpl_cd}}" class="rmk-box">
+                                <div class="hbox rmk-title">
+                                    <sc-label text="[[[evalTmpl.evaltmpl_nm]]] [[translate('STD.SRM1099')]]" i18n-disabled></sc-label>
+                                    <sc-spacer></sc-spacer>
+                                    <sc-button id="attCntBtn" class$="[[hasAttFile(evalTmpl.att_cnt)]] hbox" text="&nbsp;[[translate('종합 첨부')]]" i18n-disabled icon-cls="btn attach" data="[[evalTmpl]]" on-click="onOpenAttPopup" style="overflow: hidden;"></sc-button>
+                                </div> 
+                                <div class="rmk-body h-50">
+                                    <sc-textarea-field value="{{evalTmpl.rmk}}" maxLength="1000" readonly="[[readOnly]]" required="[[!readOnly]]"></sc-textarea-field>
+                                </div>
+                            </div>
+                        </sc-panel>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <sc-dialog id="dialog" title-text="[[translate('평가항목 설명')]]" style="width:450px; height:350px" modal="true" i18n-disabled>
+            <cc-form-panel>
+                <cc-fieldset>
+                    <sc-textarea-field id="fact_expln_dialog" value="" class="h-200" readonly="true"></sc-textarea-field>
+                </cc-fieldset>
+            </cc-form-panel>
+       </sc-dialog>
+    </template>
+	
+    <script>
+		Polymer({
+			is : 'cc-evaltemplate-evalfact-list',
+			properties : {
+				readOnly : {
+					type : Object,
+					notify : true,
+					value : function(){
+						return false;
+					}
+				},
+				codes : {
+                    type : Object,
+                    notify: true,
+                    value : function(){
+                        return new Object();
+                    }
+                },
+                evalTemplateList :{
+					type : Array,
+					notify: true,
+					value : function(){
+						return new Array();
+					},
+                }
+            },
+			
+			/* 평가항목 설명 */
+            onShowFactExplnDialog: function(e,data){
+            	var me = this;
+            	me.$.fact_expln_dialog.value = data.evalfact_expln;
+            	me.$.dialog.show();
+            },
+			
+            moveScroll : function(id, validFocusBox){
+                var me = this;
+                var target = document.getElementById(id);
+                me.fire("fact-area-clear");
+                
+                if(target){
+                    var mdiTabbar = document.querySelector("sc-mdi-tabbar");
+                    if (mdiTabbar && typeof mdiTabbar.scrollIntoView == "function") {
+                    // 스크롤 이동시 mdi tabbar도 영향을 받아 높이가 줄어드는 현상이 발생함
+                    // mdi tabbar element를 강제로 스크롤 영역에 위치하도록 임시 구현
+                    // target.scrollIntoView();
+                        location.hash = null; // 초기화
+                        location.hash = id;
+                        mdiTabbar.scrollIntoView();
+                    }
+                    var eventHandler = (function(target, style, e){
+                        this.removeEventListener("fact-area-clear", arguments.callee);
+                        target.onmouseover = undefined;
+                        target.setAttribute("style", style);
+                    }).bind(this, target, target.getAttribute("style"));
+                    
+                    target.setAttribute("style", "border: 2px solid " + (validFocusBox ? "red;" : "blue;"));
+                    target.onmouseover = eventHandler;
+                    me.addEventListener("fact-area-clear", eventHandler);
+                }
+            },
+			
+			/* 첨부파일 첨부 여부 */
+			hasAttFile : function(cnt){
+				return (cnt > 0) ? "attachBtn" : "attachEmptyBtn";
+			},
+		
+			/* 종합의견 첨부파일 팝업 */
+            onOpenAttPopup : function(e){
+                var me = this;
+                var btnId = e.currentTarget.id;
+                var evalTmpl = e.target.data;
+                var readOnly = me.get("readOnly");
+                
+                if(UT.isEmpty(evalTmpl)){
+                    evalTmpl = e.target.parentElement.data;
+                    if(UT.isEmpty(evalTmpl)){
+                        evalTmpl = e.target.parentElement.parentElement.data;
+                    }
+                }
+                
+                var setAthgUuid = function(uuid, cnt){
+                    var evalTemplateList = me.get("evalTemplateList");
+                    var key = evalTmpl.eval_subj_evaltr_res_uuid;
+                    for(var i = 0 ;i<evalTemplateList.length;i++){
+                        var evTmpl = evalTemplateList[i];
+                        if(evTmpl.eval_subj_evaltr_res_uuid === key){
+                            me.set("evalTemplateList."+i+".athg_uuid", uuid);
+                            me.set("evalTemplateList."+i+".att_cnt", cnt);
+                        }
+                    }
+                    
+                    var btn = document.getElementById(btnId);
+                    if(cnt > 0){
+                        btn.classList.remove("attachEmptyBtn");
+                        btn.classList.add("attachBtn");
+                    }else{
+                        btn.classList.remove("attachBtn");
+                        btn.classList.add("attachEmptyBtn");
+                    }
+                };
+                
+                UT.popupAttach(me, evalTmpl.athg_uuid, function(result) {
+                    setAthgUuid(result.athg_uuid, result.file_count);
+                }, { editable: !readOnly, title: "파일첨부" });
+            },
+			
+			onClear : function(){
+				var me = this;
+				me.set("evalTemplateList", me.getPropertyInfo("evalTemplateList").value());
+				me.fire("fact-area-clear");
+			}
+		});
+	</script>
+</dom-module>

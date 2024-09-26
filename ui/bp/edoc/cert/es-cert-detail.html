@@ -1,0 +1,295 @@
+<sc-link rel="import" href="../popup/ep-cert-passwd.html"></sc-link>
+
+<dom-module id="es-cert-detail">
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 상세정보 조회 -->
+		<sc-ajax id="findOrgCertInfo"
+				 url="findOrgCertInfo.do"
+				 on-response="completeFindOrgCertInfo">
+		</sc-ajax>
+
+		<!-- 인증서 저장 -->
+		<sc-ajax id="saveInfo"
+				 url="saveCert.do"
+				 on-response="completeSaveInfo">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-sub-title-bar title-text="조직 인증서 정보">
+			<sc-button text="저장" on-click="onSave" auth-s hidden="[[!formula('saveBtn')]]"></sc-button>
+		</cc-sub-title-bar>
+		
+		<cc-form-panel label-width="170" column="1">
+			<cc-fieldset>
+				<sc-label text="논리 조직 유형"></sc-label>
+				<sc-text-field value="{{certInfo.logic_org_typ_nm}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="논리 조직 코드"></sc-label>
+				<sc-text-field value="{{certInfo.logic_org_cd}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="논리 조직 명"></sc-label>
+				<sc-text-field value="{{certInfo.logic_org_nm}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="사업자등록번호"></sc-label>
+				<sc-text-field value="{{certInfo.bizregno}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인증서 만료 안내 메일 전송 여부"></sc-label>
+				<cc-label-tooltip text="인증서가 만료되기 전, 담당자 메일을 통해 해당 내용을 전달받을 수 있습니다."></cc-label-tooltip>
+				<sc-checkbox-field input-value="{{certInfo.exp_eml_use_yn}}" readonly="[[!formula('editable')]]"
+								checked-value="Y" un-checked-value="N" on-checkchange="onChangeMailSendYn"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="담당자 아이디"></sc-label>
+				<cc-user-search id="userSearch" value="{{certInfo.pic_nm}}" result-value="{{certInfo.pic_id}}" result-field="usr_id" on-result="onSelectedUser"
+							readonly="[[!formula('editChrEmail')]]" hide-trigger="[[!formula('editChrEmail')]]" required="[[formula('editChrEmail')]]"></cc-user-search>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="담당자 이메일"></sc-label>
+				<sc-text-field value="{{certInfo.pic_eml}}" max-length="100" readonly="[[!formula('editChrEmail')]]" required="[[formula('editChrEmail')]]"
+							placeholder="인증서 만료 안내를 받을 메일주소를 입력하세요."></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="인증서 PFX인증서 일치 여부"></sc-label>
+				<sc-label id="sameMsgLabel" text="{{certInfo.same_msg}}" ></sc-label>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인증서"></sc-label>
+				<cc-label-tooltip text="kmCert.der, kmPri.key, signCert.der, signPri.key 형식의 인증서 파일을 등록해 주세요."></cc-label-tooltip>
+				<sc-upload id="upload" class="h-250" value="{{certInfo.cert_athg_uuid}}" editable="true" extension="der,key" max-total-file-count="6"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="PFX 인증서"></sc-label>
+				<cc-label-tooltip text="cert.p12 형식의 인증서 파일을 등록해 주세요. 변환방법은 PKI 인증기관 홈페이지에 있습니다."></cc-label-tooltip>
+				<sc-upload id="pfxCertUpload" class="h-150" value="{{certInfo.pfx_cert_athg_uuid}}" editable="true" extension="pfx,p12" max-total-file-count="1"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('watermarkTypeDB')]]">
+				<sc-label text="워터마크 중앙 이미지"></sc-label>
+				<cc-label-tooltip text="PDF 생성 시 중앙에 찍히는 이미지 파일입니다."></cc-label-tooltip>
+				<sc-upload id="wmImgUpload" class="h-150" value="{{certInfo.wtm_ct_img_athg_uuid}}" editable="true" extension="jpeg,png" max-total-file-count="1"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('watermarkTypeDB')]]">
+				<sc-label text="워터마크 인증 이미지"></sc-label>
+				<cc-label-tooltip text="PDF 생성 시 우측 상단에 찍히는 이미지 파일입니다."></cc-label-tooltip>
+				<sc-upload id="wmSmallImgUpload" class="h-150" value="{{certInfo.wtm_auth_img_athg_uuid}}" editable="true" extension="jpeg,png" max-total-file-count="1"></sc-upload>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+
+	<script>
+        Polymer({
+            is: 'es-cert-detail',
+            properties: {
+                certInfo: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                watermarkType: {
+                	type: String,
+                	value: function() {
+                		return "";
+                	}
+                }
+            },
+
+            formulas : {
+				editable : function(){
+					var me = this;
+					return (UT.isNotEmpty(me.get("certInfo.bizregno")) && me.get("certInfo.bizregno").length == 10);
+				},
+            	editChrEmail : function(){
+            		var me = this;
+            		return me.formula('editable') && me.get("certInfo.exp_eml_use_yn") === "Y";
+            	},
+				saveBtn : function(){
+					var me = this;
+					return me.formula('editable') && UT.isNotEmpty(me.get("certInfo.bizregno"));
+				},
+				watermarkTypeDB: function() {
+					return this.get("watermarkType") === "DB";
+				},
+            },
+            
+            load: function(data) {
+                var me = this;
+				me.onFindInfo(data);
+            },
+
+            // 조회
+            onFindInfo: function(data) {
+                var me = this;
+                me.$.findOrgCertInfo.body = data;
+                UT.request(me.$.findOrgCertInfo);
+            },
+
+            // 저장
+            onSave: function() {
+                var me = this;
+				
+                if(!me.validate() ) {
+                    UT.alert("STD.E0000");	// 입력하신 정보를 다시 확인하여 주세요.
+                    return;
+                }
+                
+                if(me.$.upload.allFileSize < 1){
+                	UT.alert(me.translate("STD.E1001",null,me.translate("인증서")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+                	return;
+                }
+                if(me.$.pfxCertUpload.allFileSize < 1){
+                	UT.alert(me.translate("STD.E1001",null,me.translate("PFX 인증서")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+                	return;
+                }
+                
+                if(me.formula("watermarkTypeDB")) {
+                	if(me.$.wmImgUpload.allFileSize < 1){
+                    	UT.alert(me.translate("STD.E1001",null,me.translate("워터마크 중앙 이미지")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+                    	return;
+                    }
+                	if(me.$.wmSmallImgUpload.allFileSize < 1){
+                    	UT.alert(me.translate("STD.E1001",null,me.translate("워터마크 인증 이미지")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+                    	return;
+                    }
+                }
+                
+                me.onPopupPasswd(function() {
+                	if(me.formula("watermarkTypeDB")) {
+                        Promise.all([me.$.upload.upload(), me.$.pfxCertUpload.upload()
+                        		,me.$.wmImgUpload.upload(), me.$.wmSmallImgUpload.upload()]).then(function() {
+                        	me.onSaveInfo();
+                        });
+                	} else {
+                        Promise.all([me.$.upload.upload(), me.$.pfxCertUpload.upload()]).then(function() {
+                        	me.onSaveInfo();
+                        });
+                	}
+                });
+            },
+
+            onSaveInfo: function() {
+            	var me = this;
+                me.$.saveInfo.body = me.get("certInfo");
+                UT.request(me.$.saveInfo);
+            },
+            
+            // 저장 완료
+            completeSaveInfo: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(result.resultStatus === 'S'){ // 성공
+                    UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+					me.fire("saved");
+					me.onFindInfo(result.resultData);
+                } else if(result.resultStatus === 'F') {
+                	UT.alert("STD.EDO1123"); //인증서가 유효하지 않습니다.
+                } else if(result.resultStatus === 'W') {
+                	UT.alert("STD.ADM1031"); //비밀번호가 일치하지 않습니다.
+                } else { // 실패
+                	UT.alert("STD.E9999");
+                }
+            },
+            
+            onChangeMailSendYn: function(e){
+            	var me = this;
+            	
+            	if(e.detail == false && me.get("certInfo.mode") == "NEW"){
+            		me.set("certInfo.pic_eml",null);
+            		me.set("certInfo.pic_id",null);
+            		me.set("certInfo.chr_nm",null);
+            		me.set("certInfo.exp_eml_snd_dcnt",null);
+            	}
+            	me.applyFormula('editChrEmail');
+            },
+            
+            onSelectedUser: function(e){
+            	var me = this;
+            	var userInfo = e.detail;
+            	me.set("certInfo.pic_eml", userInfo.eml);
+            	me.set("certInfo.pic_id", userInfo.usr_id);
+            },
+            
+            onPopupPasswd: function(callback){
+            	var me = this;
+            	
+            	var passwdPopup = UT.popup("ep-cert-passwd", me, 500, 200, {
+					"save":function(popup,e){
+						popup.close();
+						me.set('certInfo.cert_pwd',e.detail.cert_pwd);
+					 	if (UT.isFunction(callback)) {
+							callback.call(this);
+	                 	}
+					}
+            	});
+            	
+            	passwdPopup.show();
+            	passwdPopup.getWindowContent().load();
+            },
+            
+            completeFindOrgCertInfo: function(e, res){
+            	var me = this;
+            	var result = res.response;
+            	var certInfo = result.resultData.certInfo;
+				
+				if(certInfo.cert_reg_yn == "Y"){
+					certInfo.mode = "EDIT";
+				}else if(certInfo.cert_reg_yn == "N"){
+					certInfo.mode = "NEW";
+				}
+				
+				if(certInfo.bizregno == null || certInfo.bizregno.length != 10 ){
+					certInfo.exp_eml_use_yn = "N";
+				}
+				
+				if(UT.isEmpty(certInfo.exp_eml_use_yn)){
+					certInfo.exp_eml_use_yn = "Y";
+				}
+				
+            	me.set("certInfo", certInfo);
+            	me.set("watermarkType", result.resultData.watermarkType);
+				me.applyFormula();
+				
+				if(me.formula("watermarkTypeDB")) {
+					me.$.wmImgUpload.doContentElementResize();
+					me.$.wmSmallImgUpload.doContentElementResize();
+				}
+				if(me.isCertRegistration()){
+					me.verifyCertSame();
+				}
+            },
+			isCertRegistration:function(){
+				var me = this;
+				if( me.get("certInfo.cert_reg_yn") === "Y"){
+					return true;
+				}else{
+					return false;
+				}
+			},
+			verifyCertSame:function(){
+				var me = this;
+				if( me.get("certInfo.same_yn") === "Y" ) {
+					me.$.sameMsgLabel.style.color = "black";
+					me.set("certInfo.same_msg","인증서와 PFX인증서의 업로드 날짜가 동일합니다."); // 인증서와 PFX인증서의 업로드 날짜가 동일합니다.
+				}else{
+					me.$.sameMsgLabel.style.color = "red";
+					me.set("certInfo.same_msg","인증서와 PFX인증서의 업로드 날짜가 다릅니다. 동일하게 업로드 해야합니다."); // 인증서와 PFX인증서의 업로드 날짜가 다릅니다. 동일하게 업로드 해야합니다.
+				}
+			},
+            clear:function(){
+            	var me = this;
+            	me.set("certInfo", null);
+            }
+        });
+	</script>
+</dom-module>

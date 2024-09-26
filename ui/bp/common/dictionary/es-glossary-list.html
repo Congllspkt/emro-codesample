@@ -1,0 +1,197 @@
+<dom-module id="es-glossary-list">
+
+	<style>
+        :host {
+            @apply(--hbox-layout);
+        }
+    </style>
+	
+	<template>
+    	<sc-ajax id="findListGlossary"
+                 url="findListGlossary.do"
+                 body="{{searchParam}}"
+                 last-response="{{resultList}}">
+        </sc-ajax>
+        
+        <sc-ajax id="saveListGlossary"
+                 url="saveListGlossary.do"
+                 on-response="completeSaveListGlossary">
+        </sc-ajax>
+        
+        <sc-ajax id="deleteGlossary"
+                 url="deleteGlossary.do"
+                 on-response="completeDeleteGlossary">
+        </sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+        
+    	<div class="vbox flex">
+			<cc-search-condition-panel on-search="onFindList" on-enter="onEnter" search-condition-cls="label-row" auth-r>
+				<cc-fieldset>
+					<sc-label text="논리 명"></sc-label>
+					<sc-text-field value="{{searchParam.logic_nm}}" max-length="20"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="논리 명 영문"></sc-label>
+					<sc-text-field value="{{searchParam.logic_nm_en}}" max-length="20"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="논리 명 영문 대체"></sc-label>
+					<sc-text-field value="{{searchParam.logic_nm_en_sub}}" max-length="20"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="논리 명 영문 축약"></sc-label>
+					<sc-text-field value="{{searchParam.logic_nm_en_abbr}}" max-length="20"></sc-text-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+				
+			<sc-grid id="gridPanel" class="flex" editable="[[isEditMode]]" use-state="[[isEditMode]]" use-selection="[[isEditMode]]" use-selection="[[isEditMode]]" 
+				data-provider="{{resultList}}" on-item-click="onItemClick">
+				<cc-grid-toolbar title-text="용어집 목록">
+        			<sc-button text="추가" on-click="onClickAdd" 	hidden="[[!isEditMode]]"></sc-button>
+        			<sc-button text="저장" on-click="onClickSave" 	hidden="[[!isEditMode]]"></sc-button>
+        			<sc-button text="삭제" on-click="onClickDelete" hidden="[[!isEditMode]]"></sc-button>
+					<sc-button text="[[formula('modeChangeBtnText')]]" on-click="onClickChangeBtn" auth-s i18n-disabled></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column	data-field="logic_nm"			header-text="논리 명"			width="100"	text-align="left" 	item-editable-function="onGlossaryEditable"></sc-data-column>
+					<sc-data-column	data-field="logic_nm_en"		header-text="논리 명 영문"		width="150"	text-align="left" 	item-editable-function="onGlossaryEditable"></sc-data-column>
+					<sc-data-column	data-field="logic_nm_en_sub"	header-text="논리 명 영문 대체"	width="150"	text-align="left" 	editable="[[isEditMode]]"></sc-data-column>
+					<sc-data-column	data-field="logic_nm_en_abbr"	header-text="논리 명 영문 축약"	width="150"	text-align="left" 	editable="[[isEditMode]]"></sc-data-column>
+					<sc-data-column	data-field="rmk"				header-text="비고"				width="150"	text-align="left" 	editable="[[isEditMode]]"></sc-data-column>
+					<sc-checkbox-column	data-field="del_yn"			header-text="삭제 여부"			width="100"	text-align="left" 	editable="[[isEditMode]]" display-checkbox="false"></sc-checkbox-column>
+				</sc-grid-columns>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-glossary-list',
+			properties: {
+                // 조회 조건
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                // 조회 결과
+                resultList: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                isEditMode: {
+                    type: Boolean,
+                    value : false
+                }
+            },
+            
+            formulas: {
+                modeChangeBtnText : function() {
+                    return this.isEditMode ? this.translate('취소') : this.translate("수정");
+                }
+            },
+         	/* 용어사전 editable 제어 : 신규 일 경우만 수정 가능 */
+			onGlossaryEditable: function(data, item) {
+                var me = this,
+                    provider = me.$.gridPanel.getDataProvider();
+                return (provider.getItemState(item.rowIndex) == "created");
+            },
+            /* 조회 완료 */
+            onFindList: function(){
+            	var me = this;
+            	UT.request(me.$.findListGlossary);
+            },
+
+            onEnter: function() { 
+            	var me = this;
+            	me.onFindList();
+            },
+         	/* 선택 버튼 클릭 시 */
+            onClickChangeBtn: function() {
+            	var me = this,
+            		provider = me.$.gridPanel.getDataProvider();
+                
+            	me.set("isEditMode", !me.isEditMode);
+                me.applyFormula();
+            },
+            /* 추가 버튼 클릭 시 */
+            onClickAdd: function() {
+            	var me = this,
+            		provider = me.$.gridPanel.getDataProvider();
+            	
+                var row = {
+               		logic_nm : "",
+               		logic_nm_en : "",
+					logic_nm_en_sub : "",
+					logic_nm_en_abbr : "",
+               		rmk : "",
+               		del_yn : ""
+                };
+             	// 그리드 신규행 추가
+                provider.addItemAt(0,row);
+            },
+            /* 저장 버튼 클릭 시 */
+            onClickSave: function() {
+            	var me = this;
+            	
+            	var provider = me.$.gridPanel.getDataProvider(),
+                	created = provider.getNewItems(),
+                	updated = provider.getUpdateItems();
+            	
+            	if(created.length + updated.length === 0) {
+	                UT.alert("STD.N1700"); // "변경된 내용이 없습니다"
+	                return;
+	            }
+            	
+            	UT.confirm("STD.N1200", function() { // 저장 하시겠습니까?
+	                me.$.saveListGlossary.body = {
+	                    insertList: created,
+	                    updateList: updated
+	                };
+	                UT.request(me.$.saveListGlossary);
+	            });
+            },
+            /* 저장 완료 */
+			completeSaveListGlossary: function() {
+            	var me = this;
+             
+				UT.completeAlert("저장", function(){
+					me.onFindList();
+				});
+            },
+            /* 삭제 버튼 클릭 시 */
+            onClickDelete: function() {
+            	var me = this,
+	            	message = "STD.N1300", // 삭제 하시겠습니까?
+					provider = me.$.gridPanel.getDataProvider(), 
+					checked = provider.selectionCheckedIndexes();
+            	
+	            if (checked && checked.length > 0) {
+					UT.confirm(message, function() {
+						var deleted = provider.removeItems();
+						if (UT.isNotEmpty(deleted)) {
+							me.$.deleteGlossary.body = {
+								deleteList : deleted
+							};
+							UT.request(me.$.deleteGlossary);
+						}
+					});
+				} else {
+					UT.alert("STD.N1600");	// 선택된 항목이 없습니다
+				}
+			},
+			/* 삭제 완료 */
+			completeDeleteGlossary : function() {
+				var me = this;
+				
+				UT.completeAlert("삭제", function() {
+					me.onFindList();
+				});
+			}
+		});
+	</script>
+</dom-module>

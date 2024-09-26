@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-work-task">
+	<select id="findRfiVendor" resultType="map">
+    /* sp-work-task.findRfiVendor ESBRIVD 조회 */
+    SELECT *
+      FROM RFI_VD
+     WHERE TEN_ID    = #{g.tenant}
+       AND RFI_VD_UUID = #{p.rfi_vd_uuid}
+    </select>
+    <select id="findRfxVendor" resultType="map">
+    /* sp-work-task.findRfxVendor  */
+    SELECT RVD.TEN_ID
+         , RVD.RFX_UUID
+         , RVD.RFX_VD_UUID
+         , RVD.VD_CD
+         , CASE WHEN BID.RFX_BID_STS_CCD IS NULL OR BID.RFX_BID_STS_CCD = ''
+                    THEN 'RCPT_WTG'
+                ELSE BID.RFX_BID_STS_CCD
+            END AS RFX_BID_STS_CCD
+         , RFX.RFX_TYP_CCD
+      FROM RFX_VD RVD
+     INNER JOIN RFX RFX
+        ON RVD.TEN_ID = RFX.TEN_ID
+       AND RVD.RFX_UUID = RFX.RFX_UUID
+       AND RFX.STS != 'D'
+      LEFT OUTER JOIN RFX_BID BID
+        ON RVD.TEN_ID = BID.TEN_ID
+       AND RVD.RFX_NO = BID.RFX_NO
+       AND RVD.RFX_RND = BID.RFX_RND
+       AND RVD.VD_CD = BID.VD_CD
+       AND BID.RFX_BID_EFCT_YN = 'Y'
+       AND BID.STS != 'D'
+     WHERE RVD.TEN_ID = #{g.tenant}
+       AND RVD.MULTRND_SUBJ_XCEPT_YN = 'N'
+       AND RVD.RFX_UUID = #{p.rfx_uuid}
+       AND RVD.VD_CD = #{g.username}
+    </select>
+    <select id="findListPo" resultType="map">
+    /* sp-work-task.findListPo PO 조회 */
+    SELECT *
+      FROM PO
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.po_uuids != null">
+       AND PO_UUID IN
+         <foreach close=")" collection="p.po_uuids" item="po_uuid" open="(" separator=",">
+           #{po_uuid}
+         </foreach>
+       </when>
+       <otherwise>
+       AND PO_UUID = #{p.po_uuid}
+       </otherwise>
+     </choose>
+     <if test="p.purc_typ_ccd != null">
+       AND PURC_TYP_CCD = #{p.purc_typ_ccd}
+     </if>
+    </select>
+    <select id="findListPoItem" resultType="map">
+    /* sp-work-task.findListPoItem PO_ITEM 조회 */
+    SELECT *
+      FROM PO_ITEM
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.po_item_uuids != null">
+       AND PO_ITEM_UUID IN
+         <foreach close=")" collection="p.po_item_uuids" item="po_item_uuid" open="(" separator=",">
+           #{po_item_uuid}
+         </foreach>
+       </when>
+       <when test="p.po_uuids != null">
+       AND PO_UUID IN
+         <foreach close=")" collection="p.po_uuids" item="po_uuid" open="(" separator=",">
+           #{po_uuid}
+         </foreach>
+       AND STS <![CDATA[<>]]> 'D'
+       </when>
+       <when test="p.gr_uuid != null">
+       AND PO_ITEM_UUID  IN ( SELECT PO_ITEM_UUID
+                              FROM GR_ITEM
+                             WHERE TEN_ID = #{g.tenant}
+                               AND GR_UUID  = #{p.gr_uuid}
+                               AND STS   <![CDATA[<>]]> 'D'
+                          )
+       </when>
+       <when test="p.asn_uuid != null">
+       AND PO_ITEM_UUID  IN ( SELECT PO_ITEM_UUID
+                              FROM AR_ITEM
+                             WHERE TEN_ID = #{g.tenant}
+                               AND ASN_UUID  = #{p.asn_uuid}
+                               AND STS   <![CDATA[<>]]> 'D'
+                          )
+       </when>
+       <otherwise>
+       AND PO_UUID = #{p.po_uuid}
+       </otherwise>
+     </choose>
+     <if test="p.purc_typ_ccd != null">
+       AND PURC_TYP_CCD = #{p.purc_typ_ccd}
+     </if>
+    </select>
+    <select id="findAsn" resultType="map">
+    /* sp-work-task.findAsn ASN 조회 */
+    SELECT *
+      FROM ASN
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.gr_uuid != null and p.gr_uuid != ''">
+       AND ASN_UUID  = (SELECT ASN_UUID FROM GR WHERE TEN_ID = #{g.tenant} AND GR_UUID = #{p.gr_uuid})
+       </when>
+       <otherwise>
+       AND ASN_UUID  = #{p.asn_uuid}
+       </otherwise>
+     </choose>
+    </select>
+</mapper>

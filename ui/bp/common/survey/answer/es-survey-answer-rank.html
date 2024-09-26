@@ -1,0 +1,306 @@
+<dom-module id="es-survey-answer-rank">
+	<style>
+		:host {
+			display: block;
+		}
+	</style>
+	
+	<template>
+		<div class="vbox" validation-group="answerValidation">
+			<div id="checkbox_group" class="s-block"></div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isOther')]]">
+				<div class="w-80">[[translate('기타')]]</div>
+				<sc-text-field class="w-300" value="{{subjectAnswer.surv_subj_otrs_val}}" readonly="[[!formula('editable')]]" on-change="onChangeOther"></sc-text-field>
+			</div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isAttach')]]">
+				<div class="w-80">[[translate('첨부파일')]]</div>
+				<sc-upload-field class="w-300" value="{{subjectAnswer.surv_subj_athg_uuid}}" auto-upload="true" required="[[formula('isAttachRequired')]]" readonly="[[!formula('editable')]]"></sc-upload-field>
+			</div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isComment')]]">
+				<div class="w-80">[[translate('댓글')]]</div>
+				<sc-text-field class="w-300" value="{{subjectAnswer.surv_subj_cmnt_val}}" readonly="[[!formula('editable')]]"></sc-text-field>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-answer-rank",
+			
+			properties: {
+				question: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjectAnswer: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjectAnswerOption: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				editable: {
+					type: Object,
+					value: function() {
+						return true;
+					}
+				},
+				checkedOrder: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			formulas: {
+				isRequired: function() {
+					return this.question.ans_mand_yn === "Y";
+				},
+				isOther: function() {
+					return this.question.otrs_ans_yn === "Y";
+				},
+				isComment: function() {
+					return this.question.cmnt_add_yn === "Y";
+				},
+				isAttach: function() {
+					return this.question.ath_poss_yn === "Y";
+				},
+				isAttachRequired: function() {
+					return this.formula('isAttach') && this.question.ath_mand_yn === "Y";
+				},
+				editable: function() {
+					return this.editable && this.formula('editableFromParent');
+				},
+				editableFromParent: function() {
+					var me = this;
+					var parSurvAnsOptUuid = me.question.par_surv_ans_opt_uuid;
+					if(parSurvAnsOptUuid == null) {
+						return true;
+					}
+					var parAnswer = me.question.par_answer;
+					if(parAnswer == parSurvAnsOptUuid) {
+						return true;
+					}
+					return false;
+				}
+			},
+			
+			load: function() {
+				var me = this;
+				me.set("subjectAnswer", me.question.subjectAnswer || {});
+				me.set("subjectAnswerOption", me.question.subjectAnswerOpt || {});
+				
+				var subjectAnswerOpt = me.get("subjectAnswerOption") || {};
+				var survAnsOptUuids = subjectAnswerOpt.surv_ans_opt_uuids || "";
+				var values = survAnsOptUuids.split('\,');
+				me.addAnswers();
+				me.setChecked(values);
+				this.applyFormula();
+				me.setCheckedEditable();
+			},
+			
+			addAnswers: function() {
+				var me = this;
+				var answers = me.question.answers;
+				var group = me.$.checkbox_group;
+				
+				for(var i = 0; i < answers.length; i++) {
+					var answer = answers[i];
+					var field = document.createElement("sc-checkbox-field");
+					field.id = answer.surv_ans_opt_uuid;
+					field.checkedValue = answer.surv_ans_opt_uuid;
+					field.label = answer.disp_opt_nm;
+					field.addEventListener("checkchange", function(e) {
+						me.checkchange(e.target, e.detail);
+					});
+					group.appendChild(field);
+				}
+			},
+			
+			setChecked: function(values) {
+				var me = this;
+				var group = me.$.checkbox_group;
+				
+				var field;
+				for(var i = 0; i < values.length; i++) {
+					var value = values[i];
+					if(!value) {
+						continue;
+					}
+					field = group.querySelector('[id="' + value + '"]');
+					field.value = true;
+				}
+			},
+			
+			setCheckedEditable: function() {
+				var me = this;
+				var group = me.$.checkbox_group;
+				
+				var element = group.firstChild;
+				while(element) {
+					element.readonly = !me.formula('editable');
+					element = element.nextElementSibling;
+				}
+			},
+			
+			checkchange: function(field, checked) {
+				var me = this;
+				var maxSelCnt = me.question.max_sel_cnt;
+				var checkedOrder = me.checkedOrder;
+				var rankFieldCnt = checkedOrder.length;
+				
+				if(checked && rankFieldCnt === maxSelCnt) {
+					UT.alert(me.translate("STD.SURV0015", null, maxSelCnt), null, true); // 최대 선택 개수는 {0}개 입니다.
+					field.value = false;
+					return;
+				}
+				
+				checkedOrder.forEach(box => {
+					box.classList.remove('rank-1', 'rank-2', 'rank-3');
+				});
+				
+				var checkbox = field.firstChild;
+				if(checked) {
+					// 체크되었을 때 순서 배열에 추가
+					checkedOrder.push(checkbox);
+				} else {
+					// 체크 해제되었을 때 순서 배열에서 제거
+					checkedOrder = checkedOrder.filter(item => item !== checkbox);
+				}
+				me.set("checkedOrder", checkedOrder);
+				
+				// 체크된 순서대로 순위
+				checkedOrder.forEach((box, index) => {
+					if(index < maxSelCnt) {
+						box.classList.add(`rank-${index + 1}`);
+					}
+				});
+			},
+			
+			fieldValidator: function(value) {
+				var me = this;
+				var maxSelCnt = me.question.max_sel_cnt;
+				if(UT.isNotEmpty(maxSelCnt)) {
+					if(value.length > maxSelCnt) {
+						return me.translate("STD.SURV0015", null, maxSelCnt); // 최대 선택 개수는 {0}개 입니다.
+					}
+				}
+				return true;
+			},
+			
+			validator: function() {
+				var me = this;
+				var question = me.question;
+				if(!me.validate("answerValidation")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				var ansMandYn = question.ans_mand_yn;
+				var selectedAnswers = me.selectedAnswerOption();
+				var survSubjOtrsVal = me.subjectAnswer.surv_subj_otrs_val;
+				if(ansMandYn === "Y" && UT.isEmpty(selectedAnswers) && UT.isEmpty(survSubjOtrsVal)) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				return true;
+			},
+			
+			setParentAnswer: function(parentValue) {
+				var me = this;
+				me.question.par_answer = parentValue;
+				me.applyFormula();
+				me.setCheckedEditable();
+				
+				if(!me.formula('editableFromParent')) {
+					me.clearChecked();
+					me.set("subjectAnswer.surv_subj_otrs_val", null);
+					me.set("subjectAnswer.surv_subj_athg_uuid", null);
+					me.set("subjectAnswer.surv_subj_cmnt_val", null);
+				}
+			},
+			
+			onSelectAnswer: function() {
+				var me = this;
+				me.$.answer.required = me.formula('isRequired');
+				me.set("subjectAnswer.surv_subj_otrs_val", null);
+			},
+			
+			onChangeOther: function() {
+				var me = this;
+				me.$.answer.required = false;
+				me.clearChecked();
+			},
+			
+			clearChecked: function() {
+				var me = this;
+				var checkboxGroup = me.$.checkbox_group;
+				var checkedList = checkboxGroup.querySelectorAll('[checked]');
+				for(var i = 0; i < checkedList.length; i++) {
+					checkedList[i].value = false;
+				}
+			},
+			
+			selectedAnswerOption: function() {
+				var me = this;
+				var answers = me.question.answers;
+				var checkedOrder = me.checkedOrder;
+				var values = [];
+				
+				var answerMap = {};
+				for(var i = 0; i < answers.length; i++) {
+					var answer = answers[i];
+					answerMap[answer.surv_ans_opt_uuid] = answer;
+				}
+				
+				for(var i = 0; i < checkedOrder.length; i++) {
+					var checked = checkedOrder[i];
+					var field = checked.parentElement;
+					var value = field.inputValue;
+					var answerInfo = answerMap[value];
+					
+					values.push({
+						surv_ans_opt_uuid: value,
+						opt_sc: answerInfo.opt_sc,
+						opt_rank: i + 1
+					});
+				}
+				return values;
+			},
+			
+			get getValue() {
+				var question = this.question;
+				var selectedAnswers = this.selectedAnswerOption();
+				var answers = [];
+				for(var i = 0; i < selectedAnswers.length; i++) {
+					answers.push({
+						surv_uuid: question.surv_uuid,
+						surv_sect_uuid: question.surv_sect_uuid,
+						surv_qn_uuid: question.surv_qn_uuid,
+						surv_ans_opt_uuid: selectedAnswers[i].surv_ans_opt_uuid,
+						surv_ans_opt_sc: selectedAnswers[i].opt_sc,
+						surv_ans_opt_rank: selectedAnswers[i].opt_rank
+					});
+				}
+				
+				var subjectAnswer = this.subjectAnswer;
+				return {
+					surv_uuid: question.surv_uuid,
+					surv_sect_uuid: question.surv_sect_uuid,
+					surv_qn_uuid: question.surv_qn_uuid,
+					surv_subj_ans_val: subjectAnswer.surv_subj_ans_val,
+					surv_subj_athg_uuid: subjectAnswer.surv_subj_athg_uuid,
+					surv_subj_cmnt_val: subjectAnswer.surv_subj_cmnt_val,
+					surv_subj_otrs_val: subjectAnswer.surv_subj_otrs_val,
+					answers: answers
+				};
+			}
+		})
+	</script>
+</dom-module>

@@ -1,0 +1,556 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="appeal">
+	<select id="findAppealList" resultType="map">
+    /* appeal.findAppealList : 이의제기 목록 조회 */
+    SELECT VOR.*
+      FROM (
+        SELECT VD_OBR_QFACT.TEN_ID                                                  /* 테넌트 아이디 */
+             , VD_OBR_QFACT.VD_APPEAL_QUALI_EVALFACT_UUID AS VD_APPEAL_FACT_UUID   /* 평가항목 이의제기 아이디 */
+             , VD_OBR_QFACT.APPEAL_UUID                                          /* 이의제기 UUID */
+             , VD_OBR_QFACT.EVAL_SUBJ_EVALFACT_RES_UUID AS SUBJ_RES_UUID            /* 평가 대상 평가항목 결과 UUID */
+             , VD_OBR_QFACT.VD_CD                                                   /* 협력사 코드 */
+             , VD.VD_NM                                                             /* 협력사 명 */
+             , VD.ERP_VD_CD                                                         /* ERP 협력사 코드 */
+             , VD_OBR_QFACT.APPEAL_REQ_DT                                        /* 이의제기 요청 일자 */
+             , VD_OBR_QFACT.APPEAL_RET_DT                                        /* 이의제기 반려 일자 */
+             , VD_OBR_QFACT.APPEAL_RET_RSN                                       /* 이의제기 반려 사유 */
+             , VD_OBR_QFACT.APPEAL_RCPT_DT                                       /* 이의제기 접수 일자 */
+             , VD_OBR_QFACT.VD_PIC_NM                                               /* 협력사 담당자 명 */
+             , VD_OBR_QFACT.VD_PIC_CTC                                              /* 협력사 담당자 연락처 */
+             , VD_OBR_QFACT.QUALI_EVALFACT_APPEAL_RSN AS VD_APPEAL_RSN             /* 정성항목 이의제기 사유 */
+             , VD_OBR_QFACT.APPEAL_ATHG_UUID                                    /* 이의제기 첨부 그룹 코드 */
+             , VD_OBR_QFACT.APPEAL_PRCSG_RES_CONT                                /* 이의제기 처리 결과 내용 */
+             , VD_OBR_QFACT.RMK                                                     /* 비고 */
+             , VD_OBR_QFACT.APPEAL_SUBM_STS_CCD                                  /* 이의제기 제출 상태 공통코드(R901) */
+             , VD_OBR_QFACT.VMG_OORG_UUID                                        /* 협력사관리그룹 uuid */
+             , VD_OBR_QFACT.APPEAL_PRCSG_RES_ATHG_UUID                          /* 이의제기 처리 결과 첨부그룹 UUID */
+             , OBR.APPEAL_STS_CCD                                                /* 이의제기 상태 공통코드(R304) */
+             , PE.PE_UUID                                                           /* 퍼포먼스평가 uuid */
+             , PE.OORG_CD                                                           /* 운영조직 코드 */
+             , PE.EVAL_CD                                                           /* 평가 코드 */
+             , PE.EVAL_NM                                                           /* 평가 명 */
+             , EFACT.EVALFACT_TYP_CCD                                             /* 항목유형(정성) */
+             , EFACT.EVALFACT_NM AS VD_APPEAL_FACT_NM                            /* 평가항목 명 : 이의제기 항목 명 */
+          FROM VD_APPEAL_QUALI_EVALFACT VD_OBR_QFACT /* 평가항목 이의제기 */
+         INNER JOIN APPEAL OBR /* 이의제기 */
+            ON OBR.TEN_ID = VD_OBR_QFACT.TEN_ID
+           AND OBR.APPEAL_UUID = VD_OBR_QFACT.APPEAL_UUID
+           AND OBR.STS != 'D'
+         INNER JOIN PE PE /* 퍼포먼스 평가 */
+            ON PE.TEN_ID = OBR.TEN_ID
+           AND PE.PE_UUID = OBR.PE_UUID
+           AND PE.STS != 'D'
+         INNER JOIN VD VD /* 협력사 */
+            ON VD_OBR_QFACT.TEN_ID = VD.TEN_ID
+           AND VD_OBR_QFACT.VD_CD = VD.VD_CD
+           AND VD.STS != 'D'
+         INNER JOIN EVAL_SUBJ_EVALFACT_RES ESUBJ_EFACT_RES /* 온보딩평가 요청 평가항목 결과 */
+            ON ESUBJ_EFACT_RES.TEN_ID = VD_OBR_QFACT.TEN_ID
+           AND ESUBJ_EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID = VD_OBR_QFACT.EVAL_SUBJ_EVALFACT_RES_UUID
+         INNER JOIN EVALFACT EFACT /* 평가항목 */
+            ON EFACT.TEN_ID = ESUBJ_EFACT_RES.TEN_ID
+           AND EFACT.EVALFACT_UUID = ESUBJ_EFACT_RES.EVALFACT_UUID
+         WHERE VD_OBR_QFACT.TEN_ID = #{g.tenant}
+           AND VD_OBR_QFACT.APPEAL_SUBM_STS_CCD != 'APPEAL_CRNG' /* 이의제기 제출 상태 공통코드(R901) : 임시저장 제외 */
+           AND VD_OBR_QFACT.STS != 'D'
+        <if test="p.eval_nm != null and p.eval_nm != ''">
+			<bind name="evalNm" value="'%' + p.eval_nm + '%'"/>
+			AND UPPER(PE.EVAL_NM) LIKE UPPER(#{evalNm})
+		</if>
+        <if test="p.pe_uuid != null and p.pe_uuid != ''">AND PE.PE_UUID = #{p.pe_uuid}
+        </if>
+		UNION
+		SELECT VD_OBR_CFACT.TEN_ID														/* 테넌트 아이디 */
+			 , VD_OBR_CFACT.VD_APPEAL_CALCFACT_UUID AS VD_APPEAL_FACT_UUID		/* 실적 항목 이의제기 아이디 */
+			 , VD_OBR_CFACT.APPEAL_UUID												/* 이의제기 UUID */
+			 , VD_OBR_CFACT.PE_SUBJ_CALCFACT_RES_UUID AS SUBJ_RES_UUID					/* 퍼포먼스평가 대상 계산항목 결과 UUID  */
+			 , VD_OBR_CFACT.VD_CD														/* 협력사 코드 */
+			 , VD.VD_NM																	/* 협력사 명 */
+			 , VD.ERP_VD_CD																/* ERP 협력사 코드 */
+			 , VD_OBR_CFACT.APPEAL_REQ_DT											/* 이의제기 요청 일자 */
+			 , VD_OBR_CFACT.APPEAL_RET_DT											/* 이의제기 반려 일자 */
+			 , VD_OBR_CFACT.APPEAL_RET_RSN											/* 이의제기 반려 사유 */
+			 , VD_OBR_CFACT.APPEAL_RCPT_DT											/* 이의제기 접수 일자 */
+			 , VD_OBR_CFACT.VD_PIC_NM													/* 협력사 담당자 명 */
+			 , VD_OBR_CFACT.VD_PIC_CTC													/* 협력사 담당자 연락처 */
+			 , VD_OBR_CFACT.CALCFACT_APPEAL_RSN AS VD_APPEAL_RSN					/* 계산항목 이의제기 사유 */
+			 , VD_OBR_CFACT.APPEAL_ATHG_UUID										/* 이의제기 첨부 그룹 코드 */
+			 , VD_OBR_CFACT.APPEAL_PRCSG_RES_CONT									/* 이의제기 처리 결과 내용 */
+			 , VD_OBR_CFACT.RMK															/* 비고 */
+			 , VD_OBR_CFACT.APPEAL_SUBM_STS_CCD										/* 이의제기 제출 상태 공통코드(R901) */
+			 , VD_OBR_CFACT.VMG_OORG_UUID											/* 협력사관리그룹 uuid */
+			 , VD_OBR_CFACT.APPEAL_PRCSG_RES_ATHG_UUID  							/* 이의제기 처리 결과 첨부그룹 UUID */
+			 , OBR.APPEAL_STS_CCD 													/* 이의제기 상태 공통코드(R304) */
+			 , PE.PE_UUID 																/* 퍼포먼스평가 uuid */
+			 , PE.OORG_CD 																/* 운영조직 코드 */
+			 , PE.EVAL_CD 																/* 평가 코드 */
+			 , PE.EVAL_NM 																/* 평가 명 */
+			 , 'QUANT' AS EVALFACT_TYP_CCD													/* 항목유형(정량) */
+             , CFACT.CALCFACT_NM AS VD_APPEAL_FACT_NM                                 /* 평가항목 명 : 계산 항목 명 */
+		  FROM VD_APPEAL_CALCFACT VD_OBR_CFACT										    /* 실적항목  이의제기 */
+		 INNER JOIN PE_SUBJ_CALCFACT_RES PS_CFACT_RES
+		    ON VD_OBR_CFACT.TEN_ID = PS_CFACT_RES.TEN_ID
+		   AND VD_OBR_CFACT.PE_SUBJ_CALCFACT_RES_UUID = PS_CFACT_RES.PE_SUBJ_CALCFACT_RES_UUID
+		 INNER JOIN APPEAL OBR														/* 이의제기 */
+		    ON OBR.TEN_ID = VD_OBR_CFACT.TEN_ID
+		   AND OBR.APPEAL_UUID = VD_OBR_CFACT.APPEAL_UUID
+		   AND OBR.STS != 'D'
+		 INNER JOIN PE PE																/* 퍼포먼스 평가 */
+		    ON PE.TEN_ID = OBR.TEN_ID
+		   AND PE.PE_UUID = OBR.PE_UUID
+		   AND PE.STS != 'D'
+		 INNER JOIN VD VD																/* 협력사 */
+		    ON VD_OBR_CFACT.TEN_ID = VD.TEN_ID
+		   AND VD_OBR_CFACT.VD_CD = VD.VD_CD
+		   AND VD.STS != 'D'
+		  LEFT OUTER JOIN CALCFACT CFACT
+		    ON PS_CFACT_RES.TEN_ID = CFACT.TEN_ID
+		   AND PS_CFACT_RES.CALCFACT_UUID = CFACT.CALCFACT_UUID
+		 WHERE VD_OBR_CFACT.TEN_ID = #{g.tenant}
+		   AND VD_OBR_CFACT.APPEAL_SUBM_STS_CCD != 'APPEAL_CRNG'	/* 이의제기 제출 상태 공통코드(R901) : 임시저장 제외 */
+		   AND VD_OBR_CFACT.STS != 'D'
+		<if test="p.eval_nm != null and p.eval_nm != ''">
+			<bind name="evalNm" value="'%' + p.eval_nm + '%'"/>
+			AND UPPER(PE.EVAL_NM) LIKE UPPER(#{evalNm})
+		</if>
+        <if test="p.pe_uuid != null and p.pe_uuid != ''">
+            AND PE.PE_UUID = #{p.pe_uuid}
+        </if>
+	   ) VOR
+    WHERE VOR.TEN_ID = #{g.tenant}
+        <if test="p.oorg_cd != null and p.oorg_cd != ''">
+            AND VOR.OORG_CD = #{p.oorg_cd}
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="erpVdCd" value="'%' + p.erp_vd_cd + '%'"/>
+            AND UPPER(VOR.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm != ''">
+            <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+            AND UPPER(VOR.VD_NM) LIKE UPPER(#{vdNm})
+        </if>
+        <if test="p.appeal_subm_sts_ccd != null and p.appeal_subm_sts_ccd != ''">
+            AND VOR.APPEAL_SUBM_STS_CCD = #{p.appeal_subm_sts_ccd}
+        </if>
+        <if test="p.evalfact_typ_ccd != null and p.evalfact_typ_ccd != ''">
+            AND VOR.EVALFACT_TYP_CCD = #{p.evalfact_typ_ccd}
+        </if>
+        <if test="p.vd_appeal_fact_nm != null and p.vd_appeal_fact_nm != ''">
+        <bind name="vdAppealFactNmPattern" value="'%' + p.vd_appeal_fact_nm + '%'"/>
+            AND UPPER(VOR.VD_APPEAL_FACT_NM) LIKE UPPER(#{vdAppealFactNmPattern})
+        </if>
+        ORDER BY VOR.EVAL_CD DESC, VOR.APPEAL_REQ_DT DESC
+	</select>
+	<select id="findAppealNoticeInfo" resultType="map">
+	/* appeal.findAppealNoticeInfo : 이의제기 상세 조회 */
+		SELECT OBR.TEN_ID
+			 , OBR.APPEAL_UUID
+			 , OBR.PE_UUID
+			 , OBR.APPEAL_STS_CCD
+			 , OBR.APPEAL_ST_DT
+			 , OBR.APPEAL_CLSG_DT
+			 , OBR.STS
+			 , OBR.RMK
+			 , OBR.REGR_ID
+			 , OBR.REG_DTTM
+			 , OBR.MODR_ID
+			 , OBR.MOD_DTTM
+			 , PE.EVAL_CD
+			 , PE.EVAL_NM
+		FROM APPEAL OBR
+        INNER JOIN PE PE
+           ON PE.TEN_ID = OBR.TEN_ID
+          AND PE.PE_UUID = OBR.PE_UUID
+		WHERE OBR.TEN_ID = #{g.tenant}
+		  AND OBR.PE_UUID = #{p.pe_uuid}
+		  AND OBR.STS != 'D'
+	</select>
+	<insert id="noticeAppeal">
+	/* appeal.noticeAppeal : 이의제기 통보 */
+		MERGE INTO APPEAL A
+		USING ( SELECT #{g.tenant} 				AS TEN_ID
+		             , #{p.appeal_uuid}	    AS APPEAL_UUID
+		             , #{p.pe_uuid}				AS PE_UUID
+		             , #{p.appeal_st_dt} 	AS APPEAL_ST_DT
+		             , #{p.appeal_clsg_dt} 	AS APPEAL_CLSG_DT
+		        FROM DUM_TBL
+		) B
+		ON (	A.TEN_ID = B.TEN_ID
+			AND A.PE_UUID = B.PE_UUID
+			)
+		WHEN MATCHED THEN
+			UPDATE SET APPEAL_STS_CCD = 'APPEAL_PRGSG'			/* 이의제기 진행상태 '통보'로 변경 */
+			         , APPEAL_ST_DT = #{p.appeal_st_dt}		/* 이의제기 시작 일자 */
+			         , APPEAL_CLSG_DT = #{p.appeal_clsg_dt}	/* 이의제기 종료 일자 */
+			         , RMK = #{p.rmk}								/* 비고 */
+			         , STS = 'U'										/* 상태 */
+			         , MODR_ID = #{g.username}						/* 수정자 아이디 */
+			         , MOD_DTTM = #{g.now}							/* 수정 일시 */
+		WHEN NOT MATCHED THEN
+			INSERT
+			(
+				TEN_ID
+			, APPEAL_UUID
+			, PE_UUID
+			, APPEAL_STS_CCD
+			, APPEAL_ST_DT
+			, APPEAL_CLSG_DT
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+			)
+			VALUES
+				(
+					#{g.tenant}
+				, #{p.appeal_uuid}
+				, #{p.pe_uuid}
+				, #{p.appeal_sts_ccd}
+				, #{p.appeal_st_dt}
+				, #{p.appeal_clsg_dt}
+				, 'C'
+				, #{p.rmk}
+				, #{g.username}
+				, #{g.now}
+				, #{g.username}
+				, #{g.now}
+				) </insert>
+	<select id="findAppealQualiDetail" resultType="map">
+	/* appeal.findAppealQualiDetail : 정성 평가항목 이의제기 상세 조회 */
+		SELECT VD_OBR_QFACT.TEN_ID							/* 테넌트 아이디 */
+			 , VD_OBR_QFACT.VD_APPEAL_QUALI_EVALFACT_UUID	/* 평가항목 이의제기 아이디 */
+			 , VD_OBR_QFACT.APPEAL_UUID					/* 이의제기 UUID */
+			 , VD_OBR_QFACT.EVAL_SUBJ_EVALFACT_RES_UUID 	/* 평가 대상 평가항목 결과 UUID  */
+			 , VD_OBR_QFACT.VD_CD							/* 협력사 코드 */
+			 , VD.VD_NM										/* 협력사 명 */
+			 , VD_OBR_QFACT.APPEAL_REQ_DT				/* 이의제기 요청 일자 */
+			 , VD_OBR_QFACT.APPEAL_RET_DT				/* 이의제기 반려 일자 */
+			 , VD_OBR_QFACT.APPEAL_RET_RSN				/* 이의제기 반려 사유 */
+			 , VD_OBR_QFACT.APPEAL_RCPT_DT				/* 이의제기 접수 일자 */
+			 , VD_OBR_QFACT.VD_PIC_NM						/* 협력사 담당자 명 */
+			 , VD_OBR_QFACT.VD_PIC_CTC						/* 협력사 담당자 연락처 */
+			 , VD_OBR_QFACT.QUALI_EVALFACT_APPEAL_RSN		/* 정성항목 이의제기 사유 */
+			 , VD_OBR_QFACT.APPEAL_ATHG_UUID			/* 이의제기 첨부 그룹 코드 */
+			 , VD_OBR_QFACT.APPEAL_PRCSG_RES_CONT		/* 이의제기 처리 결과 내용 */
+			 , VD_OBR_QFACT.APPEAL_SUBM_STS_CCD			/* 이의제기 제출 상태 공통코드(R901) */
+			 , VD_OBR_QFACT.VMG_OORG_UUID				/* 협력사관리그룹 uuid */
+			 , VD_OBR_QFACT.APPEAL_PRCSG_RES_ATHG_UUID  /* 이의제기 처리 결과 첨부그룹 UUID */
+			 , OBR.APPEAL_UUID 							/* 이의제기 uuid */
+			 , OBR.APPEAL_STS_CCD 						/* 이의제기 상태 공통코드(R304) */
+			 , PE.EVAL_CD 									/* 평가 코드 */
+			 , PE.EVAL_NM 									/* 평가 명 */
+			 , EFACT_RES.EVALFACT_SC						/* 평가항목 점수 */
+			 , ET_EFACTG.EFACTG_WGT 						/* 평가항목군 가중치 */
+			 , ET_EFACT.EVALFACT_WGT						/* 평가항목 가중치 */
+			 , EFACT.EVALFACT_NM 							/* 평가항목 명 */
+			 , EFACT.EVALFACT_CD 							/* 평가항목 코드 */
+			 , EFACT.EVALFACT_EXPLN							/* 평가항목 설명 */
+		 FROM VD_APPEAL_QUALI_EVALFACT VD_OBR_QFACT			/* 평가항목 이의제기 */
+        INNER JOIN APPEAL OBR							/* 이의제기 */
+            ON OBR.TEN_ID = VD_OBR_QFACT.TEN_ID
+            AND OBR.APPEAL_UUID = VD_OBR_QFACT.APPEAL_UUID
+            AND OBR.STS != 'D'
+        INNER JOIN PE PE									/* 퍼포먼스 평가 */
+            ON PE.TEN_ID = OBR.TEN_ID
+            AND PE.PE_UUID = OBR.PE_UUID
+            AND PE.STS != 'D'
+        INNER JOIN PE_PEG PPEG								/* 퍼포먼스평가 퍼포먼스평가그룹 */
+            ON PE.TEN_ID = PPEG.TEN_ID
+            AND PE.PE_UUID = PPEG.PE_UUID
+            AND PPEG.STS != 'D'
+        INNER JOIN PE_SUBJ PSUBJ							/* 퍼포먼스평가 대상 */
+            ON PPEG.TEN_ID =PSUBJ.TEN_ID
+            AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+        INNER JOIN PE_SUBJ_RES PSUBJ_RES					/* 퍼포먼스평가 대상 결과 */
+            ON PSUBJ.TEN_ID = PSUBJ_RES.TEN_ID
+            AND PSUBJ.PE_SUBJ_UUID = PSUBJ_RES.PE_SUBJ_UUID
+            AND PSUBJ_RES.SLFCK_RES_YN != 'Y'				/* 자가평가 제외 */
+        INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+            ON PSUBJ_RES.TEN_ID = ESUBJ_RES.TEN_ID
+            AND PSUBJ_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+        INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES			/* 온보딩평가 요청 평가항목 결과 */
+            ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+            AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+            AND VD_OBR_QFACT.EVAL_SUBJ_EVALFACT_RES_UUID = EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+            AND EFACT_RES.STS != 'D'
+        INNER JOIN EVALTMPL_EVALFACT ET_EFACT				/* 평가템플릿 평가항목 */
+            ON EFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+            AND EFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EFACT.EVALTMPL_EVALFACT_UUID
+        INNER JOIN EVALTMPL_EFACTG ET_EFACTG				/* 평가템플릿 평가항목군 */
+            ON EFACT_RES.TEN_ID = ET_EFACTG.TEN_ID
+            AND EFACT_RES.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+        INNER JOIN EVALFACT EFACT							/* 평가항목 */
+            ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+            AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+        INNER JOIN VD VD									/* 협력사 */
+            ON VD_OBR_QFACT.TEN_ID = VD.TEN_ID
+            AND VD_OBR_QFACT.VD_CD = VD.VD_CD
+            AND VD.STS != 'D'
+		WHERE VD_OBR_QFACT.TEN_ID = #{g.tenant}
+		  AND VD_OBR_QFACT.VD_APPEAL_QUALI_EVALFACT_UUID = #{p.vd_appeal_quali_evalfact_uuid}
+		  AND OBR.APPEAL_UUID = #{p.appeal_uuid}
+		  AND VD_OBR_QFACT.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+		  AND VD_OBR_QFACT.STS != 'D'
+	</select>
+	<update id="updateAppealQualiDetail">
+	/* appeal.updateAppealQualiDetail : 정성 평가항목 이의제기 상세정보 저장(반려 or 합의 or 처리완료) */
+		UPDATE VD_APPEAL_QUALI_EVALFACT
+		SET STS = 'U'
+		, MODR_ID = #{g.username}
+		, MOD_DTTM = #{g.now}
+		, APPEAL_SUBM_STS_CCD = #{p.appeal_subm_sts_ccd}							/* 이의제기 제출 상태 공통코드(R901) */
+		<if test="p.appeal_ret_dt != null and p.appeal_ret_dt != ''">
+			, APPEAL_RET_DT = #{p.appeal_ret_dt}										/* 이의제기 반려 일자 */
+		</if>
+		<if test="p.appeal_ret_rsn != null and p.appeal_ret_rsn != ''">
+			, APPEAL_RET_RSN = #{p.appeal_ret_rsn}									/* 이의제기 반려 사유 */
+		</if>
+		<if test="p.appeal_prcsg_res_athg_uuid != null and p.appeal_prcsg_res_athg_uuid != ''">
+			, APPEAL_PRCSG_RES_ATHG_UUID = #{p.appeal_prcsg_res_athg_uuid}			/* 이의제기 처리결과 첨부그룹 UUID */
+		</if>
+		<if test="p.appeal_rcpt_dt != null and p.appeal_rcpt_dt != ''">
+			, APPEAL_RCPT_DT = #{p.appeal_rcpt_dt}									/* 이의제기 접수 일자 */
+		</if>
+		<if test="p.appeal_prcsg_res_cont != null and p.appeal_prcsg_res_cont != ''">
+			, APPEAL_PRCSG_RES_CONT = #{p.appeal_prcsg_res_cont}						/* 이의제기 처리 결과 내용 */
+		</if>
+		WHERE TEN_ID = #{g.tenant}
+		AND VD_APPEAL_QUALI_EVALFACT_UUID = #{p.vd_appeal_quali_evalfact_uuid}
+		AND APPEAL_UUID = #{p.appeal_uuid}
+		AND VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+		AND STS != 'D'
+	</update>
+	<insert id="insertAppeal">
+	/* appeal.insertAppeal : 이의제기 통보 임시저장(insert) */
+		INSERT INTO APPEAL (
+			                    TEN_ID
+		                      , APPEAL_UUID
+		                      , PE_UUID
+		                      , APPEAL_STS_CCD
+		                      , APPEAL_ST_DT
+		                      , APPEAL_CLSG_DT
+		                      , STS
+		                      , RMK
+		                      , REGR_ID
+		                      , REG_DTTM
+		) VALUES (
+			         #{g.tenant}
+		         , #{p.appeal_uuid}
+		         , #{p.pe_uuid}
+		         , #{p.appeal_sts_ccd}
+		         , #{p.appeal_st_dt}
+		         , #{p.appeal_clsg_dt}
+		         , 'C'
+		         , #{p.rmk}
+		         , #{g.username}
+		         , #{g.now}
+		         )
+	</insert>
+	<update id="updateAppeal">
+	/* appeal.updateAppeal : 이의제기 통보 임시저장(update) */
+		UPDATE APPEAL
+		   SET APPEAL_STS_CCD = #{p.appeal_sts_ccd}
+		     , APPEAL_ST_DT = #{p.appeal_st_dt}
+		     , APPEAL_CLSG_DT = #{p.appeal_clsg_dt}
+		     , RMK = #{p.rmk}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND APPEAL_UUID = #{p.appeal_uuid}
+		   AND PE_UUID = #{p.pe_uuid}
+		   AND STS != 'D'
+	</update>
+	<update id="closeAppeal">
+	/* appeal.closeAppeal : 이의제기 종료(마감) */
+		UPDATE APPEAL
+		   SET APPEAL_STS_CCD = 'APPEAL_ED'
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND APPEAL_UUID = #{p.appeal_uuid}
+	</update>
+	<select id="findAppealCalcDetail" resultType="map">
+	/* appeal.findAppealCalcDetail : 계산항목 이의제기 상세 조회 */
+		SELECT VD_OBR_CFACT.TEN_ID							/* 테넌트 아이디 */
+			 , VD_OBR_CFACT.VD_APPEAL_CALCFACT_UUID		/* 실적항목 이의제기 아이디 */
+			 , VD_OBR_CFACT.APPEAL_UUID					/* 이의제기 UUID */
+			 , VD_OBR_CFACT.PE_SUBJ_CALCFACT_RES_UUID 		/* 퍼포먼스평가 대상 계산항목 결과 UUID  */
+			 , VD_OBR_CFACT.VD_CD							/* 협력사 코드 */
+			 , VD.VD_NM										/* 협력사 명 */
+			 , VD_OBR_CFACT.APPEAL_REQ_DT				/* 이의제기 요청 일자 */
+			 , VD_OBR_CFACT.APPEAL_RET_DT				/* 이의제기 반려 일자 */
+			 , VD_OBR_CFACT.APPEAL_RET_RSN				/* 이의제기 반려 사유 */
+			 , VD_OBR_CFACT.APPEAL_RCPT_DT				/* 이의제기 접수 일자 */
+			 , VD_OBR_CFACT.VD_PIC_NM						/* 협력사 담당자 명 */
+			 , VD_OBR_CFACT.VD_PIC_CTC						/* 협력사 담당자 연락처 */
+			 , VD_OBR_CFACT.CALCFACT_APPEAL_RSN			/* 계산항목 이의제기 사유 */
+			 , VD_OBR_CFACT.APPEAL_ATHG_UUID			/* 이의제기 첨부 그룹 코드 */
+			 , VD_OBR_CFACT.APPEAL_PRCSG_RES_CONT		/* 이의제기 처리 결과 내용 */
+			 , VD_OBR_CFACT.APPEAL_SUBM_STS_CCD			/* 이의제기 제출 상태 공통코드(R901) */
+			 , VD_OBR_CFACT.VMG_OORG_UUID				/* 협력사관리그룹 uuid */
+			 , VD_OBR_CFACT.APPEAL_PRCSG_RES_ATHG_UUID  /* 이의제기 처리 결과 첨부그룹 UUID */
+			 , OBR.APPEAL_UUID 							/* 이의제기 uuid */
+			 , OBR.APPEAL_STS_CCD 						/* 이의제기 상태 공통코드(R304) */
+			 , PE.EVAL_CD 									/* 평가 코드 */
+			 , PE.EVAL_NM 									/* 평가 명 */
+-- 			 , EFACT_RES.EVALFACT_SC						/* 평가항목 점수 */
+-- 			 , ET_EFACTG.EFACTG_WGT 						/* 평가항목군 가중치 */
+-- 			 , ET_EFACT.EVALFACT_WGT						/* 평가항목 가중치 */
+-- 			 , EFACT.EVALFACT_NM 							/* 평가항목 명 */
+-- 			 , EFACT.EVALFACT_CD 							/* 평가항목 코드 */
+-- 			 , EFACT.EVALFACT_EXPLN							/* 평가항목 설명 */
+			 , CASE WHEN VD_OBR_CFACT.APPEAL_CALCFACT_VAL IS NULL THEN 0
+			        ELSE VD_OBR_CFACT.APPEAL_CALCFACT_VAL
+					 END AS APPEAL_CALCFACT_VAL 			/* 이의제기 실적 값 : 협력사가 조정 요청한 값 */
+			 , PSUBJ_CFACT_RES.CALCFACT_VAL					/* 계산항목 값 : 구매사가 조정한 값 */
+			 , PSUBJ_CFACT_RES.INI_CALCFACT_VAL 			/* 최초 계산항목 값 : 최초 값 */
+			 , CFACT.CALCFACT_NM
+			 , CFACT.CALCFACT_CD
+		FROM VD_APPEAL_CALCFACT VD_OBR_CFACT				/* 실적항목 이의제기 */
+	    INNER JOIN APPEAL OBR							/* 이의제기 */
+	       ON OBR.TEN_ID = VD_OBR_CFACT.TEN_ID
+          AND OBR.APPEAL_UUID = VD_OBR_CFACT.APPEAL_UUID
+          AND OBR.STS != 'D'
+	    INNER JOIN PE PE									/* 퍼포먼스 평가 */
+           ON PE.TEN_ID = OBR.TEN_ID
+          AND PE.PE_UUID = OBR.PE_UUID
+          AND PE.STS != 'D'
+	    INNER JOIN PE_PEG PPEG								/* 퍼포먼스평가 퍼포먼스평가그룹 */
+           ON PE.TEN_ID = PPEG.TEN_ID
+          AND PE.PE_UUID = PPEG.PE_UUID
+          AND PPEG.STS != 'D'
+	    INNER JOIN PE_SUBJ PSUBJ							/* 퍼포먼스평가 대상 */
+           ON PPEG.TEN_ID =PSUBJ.TEN_ID
+          AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+	    INNER JOIN PE_SUBJ_RES PSUBJ_RES					/* 퍼포먼스평가 대상 결과 */
+           ON PSUBJ.TEN_ID = PSUBJ_RES.TEN_ID
+          AND PSUBJ.PE_SUBJ_UUID = PSUBJ_RES.PE_SUBJ_UUID
+          AND PSUBJ_RES.SLFCK_RES_YN != 'Y'					/* 자가평가 제외 */
+		INNER JOIN PE_SUBJ_CALCFACT_RES	PSUBJ_CFACT_RES     /* 퍼포먼스평가 요청 계산항목 결과 */
+		   ON VD_OBR_CFACT.TEN_ID = PSUBJ_CFACT_RES.TEN_ID
+		  AND VD_OBR_CFACT.PE_SUBJ_CALCFACT_RES_UUID = PSUBJ_CFACT_RES.PE_SUBJ_CALCFACT_RES_UUID
+          AND PSUBJ_RES.PE_SUBJ_RES_UUID = PSUBJ_CFACT_RES.PE_SUBJ_RES_UUID
+	    INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+           ON PSUBJ_RES.TEN_ID = ESUBJ_RES.TEN_ID
+          AND PSUBJ_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+	    INNER JOIN EVAL_SUBJ_CALCFACT_RES ESUBJ_CFACT_RES	/* 평가요청 계산항목 결과 */
+	       ON ESUBJ_RES.TEN_ID = ESUBJ_CFACT_RES.TEN_ID
+		  AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = ESUBJ_CFACT_RES.EVAL_SUBJ_RES_UUID
+-- 		  AND VD_OBR_CFACT.EVAL_SUBJ_CALCFACT_RES_UUID = ESUBJ_CFACT_RES.EVAL_SUBJ_CALCFACT_RES_UUID
+		  AND ESUBJ_CFACT_RES.STS != 'D'
+-- 	    INNER JOIN EVALTMPL_EVALFACT ET_EFACT				/* 평가템플릿 평가항목 */
+--            ON ESUBJ_CFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+--           AND ESUBJ_CFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EFACT.EVALTMPL_EVALFACT_UUID
+-- 	    INNER JOIN EVALTMPL_EFACTG ET_EFACTG				/* 평가템플릿 평가항목군 */
+--            ON ESUBJ_CFACT_RES.TEN_ID = ET_EFACTG.TEN_ID
+--           AND ESUBJ_CFACT_RES.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+-- 	    INNER JOIN EVALFACT EFACT							/* 평가항목 */
+-- 	       ON ESUBJ_CFACT_RES.TEN_ID = EFACT.TEN_ID
+--           AND ESUBJ_CFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+	    INNER JOIN VD VD									/* 협력사 */
+           ON VD_OBR_CFACT.TEN_ID = VD.TEN_ID
+          AND VD_OBR_CFACT.VD_CD = VD.VD_CD
+          AND VD.STS != 'D'
+	    INNER JOIN CALCFACT CFACT
+           ON ESUBJ_CFACT_RES.TEN_ID = CFACT.TEN_ID
+          AND ESUBJ_CFACT_RES.CALCFACT_UUID = CFACT.CALCFACT_UUID
+	      AND PSUBJ_CFACT_RES.CALCFACT_UUID = CFACT.CALCFACT_UUID
+		WHERE VD_OBR_CFACT.TEN_ID = #{g.tenant}
+		  AND VD_OBR_CFACT.VD_APPEAL_CALCFACT_UUID = #{p.vd_appeal_calcfact_uuid}
+		  AND OBR.APPEAL_UUID = #{p.appeal_uuid}
+		  AND VD_OBR_CFACT.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+		  AND VD_OBR_CFACT.STS != 'D'
+	</select>
+	<update id="updateAppealCalcDetail">
+	/* appeal.updateAppealCalcDetail : 계산항목 이의제기 상세정보 저장(반려 or 합의 or 처리완료) */
+		UPDATE VD_APPEAL_CALCFACT
+		   SET STS = 'U'
+		    , MODR_ID = #{g.username}
+		    , MOD_DTTM = #{g.now}
+		    , APPEAL_SUBM_STS_CCD = #{p.appeal_subm_sts_ccd}							/* 이의제기 제출 상태 공통코드(R901) */
+		<if test="p.appeal_ret_dt != null and p.appeal_ret_dt != ''">
+			, APPEAL_RET_DT = #{p.appeal_ret_dt}										/* 이의제기 반려 일자 */
+		</if>
+		<if test="p.appeal_ret_rsn != null and p.appeal_ret_rsn != ''">
+			, APPEAL_RET_RSN = #{p.appeal_ret_rsn}									/* 이의제기 반려 사유 */
+		</if>
+		<if test="p.appeal_prcsg_res_athg_uuid != null and p.appeal_prcsg_res_athg_uuid != ''">
+			, APPEAL_PRCSG_RES_ATHG_UUID = #{p.appeal_prcsg_res_athg_uuid}			/* 이의제기 처리결과 첨부그룹 UUID */
+		</if>
+		<if test="p.appeal_rcpt_dt != null and p.appeal_rcpt_dt != ''">
+			, APPEAL_RCPT_DT = #{p.appeal_rcpt_dt}									/* 이의제기 접수 일자 */
+		</if>
+		<if test="p.appeal_prcsg_res_cont != null and p.appeal_prcsg_res_cont != ''">
+			, APPEAL_PRCSG_RES_CONT = #{p.appeal_prcsg_res_cont}						/* 이의제기 처리 결과 내용 */
+		</if>
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_APPEAL_CALCFACT_UUID = #{p.vd_appeal_calcfact_uuid}
+		   AND APPEAL_UUID = #{p.appeal_uuid}
+		   AND VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+		   AND STS != 'D'
+	</update>
+	<select id="findListAppealVendorForMail" resultType="map">
+	/* appeal.findListAppealVendorForMail : 이의제기 통보메일 수신대상 공급사 목록 조회 */
+		SELECT PE.TEN_ID
+			 , PE.OORG_CD
+			 , PE.PE_UUID
+			 , PE.EVAL_CD
+			 , PE.EVAL_NM
+			 , PE.EVAL_SUBJ_YR
+			 , PSUBJ.PE_SUBJ_UUID
+			 , PSUBJ.PE_PEG_UUID
+			 , PSUBJ.PEG_UUID
+			 , PSUBJ.VMG_OORG_UUID
+			 , PSUBJ.VD_CD
+			 , PEG.PEG_CD
+			 , PEG.PEG_NM
+			 , PEG.PEG_EXPLN
+			 , VD.ERP_VD_CD
+			 , VD.BIZREGNO
+			 , VD.VD_NM
+			 , VD.VD_NM_EN
+			 , VD.VD_EML
+			 , CASE WHEN 'ko_KR' = 'ko_KR' THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+-- 			 , (SELECT PRE_PSUBJ.PE_SUBJ_UUID
+-- 				 FROM PE PRE_PE
+-- 				INNER JOIN PE_PEG PRE_PPEG
+-- 				   ON PRE_PE.TEN_ID = PRE_PPEG.TEN_ID
+-- 				  AND PRE_PE.PE_UUID = PRE_PPEG.PE_UUID
+-- 				  AND PRE_PPEG.STS != 'D'
+-- 				INNER JOIN PE_SUBJ PRE_PSUBJ
+-- 				   ON PRE_PPEG.TEN_ID = PRE_PSUBJ.TEN_ID
+-- 				  AND PRE_PPEG.PE_PEG_UUID = PRE_PSUBJ.PE_PEG_UUID
+-- 				  AND PRE_PSUBJ.STS != 'D'
+-- 				WHERE PRE_PE.TEN_ID = PE.TEN_ID
+-- 				  AND PRE_PE.EVAL_SUBJ_YR  <![CDATA[ < ]]>  PE.EVAL_SUBJ_YR
+-- 				  AND PRE_PE.PE_STS_CCD = 'APVD'                                  /* R301 평가진행상태 공통코드 : 승인 */
+-- 				  AND PRE_PSUBJ.VD_CD = PSUBJ.VD_CD
+-- 				  AND PRE_PSUBJ.VMG_OORG_UUID = PSUBJ.VMG_OORG_UUID
+-- 				  AND PRE_PSUBJ.PEG_UUID = PSUBJ.PEG_UUID
+-- 				) PRE_PE_SUBJ_UUID
+		 FROM PE
+		INNER JOIN PE_PEG PPEG
+		   ON PE.TEN_ID = PPEG.TEN_ID
+		  AND PE.PE_UUID = PPEG.PE_UUID
+		  AND PPEG.STS != 'D'
+		INNER JOIN PE_SUBJ PSUBJ
+		   ON PPEG.TEN_ID = PSUBJ.TEN_ID
+		  AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+		  AND PSUBJ.STS != 'D'
+		 LEFT OUTER JOIN VD
+		   ON PSUBJ.TEN_ID = VD.TEN_ID
+		  AND PSUBJ.VD_CD = VD.VD_CD
+		 LEFT OUTER JOIN PEG
+		   ON PSUBJ.TEN_ID = PEG.TEN_ID
+		  AND PSUBJ.PEG_UUID = PEG.PEG_UUID
+		WHERE PE.TEN_ID = #{g.tenant}
+		  AND PE.PE_UUID = #{p.pe_uuid}
+		ORDER BY PSUBJ.VD_CD
+	</select>
+</mapper>

@@ -1,0 +1,266 @@
+<dom-module id="es-evaltmpl-list">
+<!-- 
+/**
+ *
+ *	@description : 평가템플릿 관리 리스트
+ *  <pre>
+ * </pre>
+ * @변경이력 : [2023. 06. 01] cyhwang
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    
+    <template>
+        <!-- 콤보 목록 조회 서비스 그룹 -->
+        <sc-request-group init>
+        	<sc-code-group>
+	            <!-- 평가템플릿 확정여부 조회 -->
+	             <sc-code code="R716" value="{{codes.R716}}" ></sc-code>
+            </sc-code-group>
+            <!-- 평가업무유형 -->
+            <sc-ajax 
+                id="findListCommonCodeAttributeCode"
+                url="findListCommonCodeAttributeCode.do"
+                body="{{codes.R704.param}}"
+                last-response="{{codes.R704.result}}">
+            </sc-ajax>
+        </sc-request-group>
+        
+        <cc-auth-chceker check-list="auth-s,auth-r"></cc-auth-chceker>
+        
+        <!-- 평가템플릿 목록 조회 -->
+        <sc-ajax 
+            id="findListEvalTmpl"
+            url="findListEvalTmpl.do"
+            body="{{searchParam}}"
+            last-response="{{evalTmplList}}">
+        </sc-ajax>
+        
+        <!-- 평가템플릿 목록 삭제 -->
+        <sc-ajax 
+            id="deleteListEvalTmpl"
+            url="deleteListEvalTmpl.do"
+            on-response="onDeleteResultHandler">
+        </sc-ajax>
+        
+        <cc-page-title-bar></cc-page-title-bar>
+        
+		<cc-search-condition-panel on-search="onSearch" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="평가 업무 유형"></sc-label>
+				<sc-combobox-field items="{{codes.R704.result}}" value="{{searchParam.eval_task_typ_ccd}}" display-field="label" value-field="data"
+								   selected-index="0" required="true" placeholder="선택" readonly="[[formula('existEvalTaskTypCcd')]]">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가템플릿 명"></sc-label>
+				<sc-text-field value="{{searchParam.evaltmpl_nm}}" max-length="20" on-enter="onSearch" ></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		<sc-grid id="gridPanel" class="flex" data-provider="{{evalTmplList}}" editable="false" use-state="false"
+				 on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="신규" on-click="onAddTmpl" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteTmpl" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column	data-field="eval_task_typ_ccd"		header-text="평가 업무 유형"			width="130"
+									display-field="label"			value-field="data"			items="{{codes.R704.result}}"></sc-combobox-column>
+				<sc-data-column		data-field="evaltmpl_nm"				header-text="평가템플릿 명"		width="300"	text-align="left"	style-name="link"></sc-data-column>
+				<sc-data-column		data-field="rmk"				header-text="평가템플릿 설명"		width="350"	text-align="left"	></sc-data-column>
+				<sc-combobox-column	data-field="cnfd_yn"				header-text="확정 여부"			width="80"
+									display-field="label"			value-field="data"			items="{{codes.R716}}"></sc-combobox-column>
+				<sc-data-column		data-field="mod_nm"				header-text="작성자"			width="100"	></sc-data-column>
+				<sc-date-column		data-field="reg_dttm"	data-type="datetime"			header-text="작성 일자"		width="100"	></sc-date-column>
+				<sc-date-column		data-field="mod_dttm"	data-type="datetime"			header-text="수정 일자"			width="100"	></sc-date-column>
+				<sc-image-column	 data-field="img_evalsht"	header-text="적용된 평가시트"		width="100"
+									 image-change-function="onImageVisible"	></sc-image-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field	data-field="evaltmpl_uuid"></sc-grid-field>
+				<sc-grid-field	data-field="evaltmpl_cd"></sc-grid-field>
+				<sc-grid-field data-field="evalsht_list" data-type="object"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-dialog id="dialog"  class="vbox flex" title-text="평가시트" style="width:700px;height:400px" modal="true">
+			<sc-grid id="evalshtGridPanel"	class="flex"	use-state="false"	use-selection="false">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column	header-text="평가시트 코드"	data-field="evalsht_cd"		width="100"></sc-data-column>
+					<sc-data-column	header-text="평가시트 명"	data-field="evalsht_nm"		width="300"></sc-data-column>
+					<sc-date-column	header-text="유효 시작 일자"	data-field="efct_st_dt"		width="100"></sc-date-column>
+					<sc-date-column	header-text="유효 만료 일자"	data-field="efct_exp_dt"	width="100"></sc-date-column>
+				</sc-grid-columns>
+		</sc-dialog>
+	</template>
+    
+    <script>
+        Polymer({
+            is: "es-evaltmpl-list",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            R704 : {
+                                param : {
+									ccd : 'R704',
+									cstr_cnd_cd : 'MDCD'  //모듈구분속성 조회
+                                },
+                                result : []
+                            },                    // 평가업무유형 (공통코드 속성 조회)
+                            R716: [],          // 평가템플릿확정여부
+                        };
+                    }
+                },
+                // 조회 조건 Object
+                searchParam : {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+                // 평가템플릿목록
+				evalTmplList: {
+                    type: Array,
+                    value: function(){
+                        return [];
+                    }
+                },
+				existEvalTaskTypCcd : {
+					type : Boolean,
+					value : function() {
+						return false;
+					}
+				}
+            },
+			formulas : {
+				existEvalTaskTypCcd : function() {
+					return this.existEvalTaskTypCcd;
+				}
+			},
+			
+            initialized: function() {
+                var me = this;
+            },
+			load: function(param){
+				var me = this;
+				
+				if(UT.isNotEmpty(param.eval_task_typ_ccd)){
+					me.set("searchParam.eval_task_typ_ccd", param.eval_task_typ_ccd);
+					me.set("existEvalTaskTypCcd", true);
+				} else {
+					me.set("existEvalTaskTypCcd", false);
+				}
+				me.applyFormula();
+				if(param.reloadable != false) {
+					me.onSearch();
+				}
+			},
+            onItemClick : function(event) {
+            	var me = this,
+	                data = event.detail.data,
+	                item = event.detail.item;
+            	
+            	// 평가템플릿명 click
+            	if(item.dataField === "evaltmpl_nm") {
+                    me.fire("show-detail", UT.copy(data));
+            	} else if (item.dataField === "img_evalsht") {
+					var list = data.evalsht_list;
+					if(UT.isNotEmpty(list)) {
+						me.$.dialog.show();
+						me.$.evalshtGridPanel.setDataProvider(list);
+					}
+				}
+            },
+			
+			/**
+			 * 신규버튼 클릭 템플릿 생성
+			 */
+			onAddTmpl : function() {
+				var me = this;
+				me.fire("show-detail", UT.copy(me.get("searchParam")));
+			},
+            
+            /**
+             * 평가템플릿 목록 조회
+             */ 
+            onSearch: function() {
+                var me = this;
+                
+                if(!me.validate("search")){
+                    return UT.alert("STD.E9000", function(){
+                        me.$.gridPanel.getDataProvider().removeAll();
+                    });
+                };
+                UT.request(me.$.findListEvalTmpl);
+            },
+            
+            /**
+             * 평가템플릿 목록 삭제
+             */
+			onDeleteTmpl: function(){
+                var me = this;
+                var grid = me.$.gridPanel;
+                var provider = grid.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+                
+                if(checked.length > 0) {
+                    var message = "STD.N1300";  // 삭제하시겠습니까?
+                    var deletes = [];
+
+                    for(var i = 0, len = checked.length; i < len; i++) {
+                        var checkedItem = checked[i];
+                        
+                        if(checkedItem.cnfd_yn === 'Y'){  // 평가템플릿이 확정상태인 경우
+                            return UT.alert("STD.SRM1078");  // 확정된 평가템플릿은 삭제할 수 없습니다.
+                        }
+                        deletes.push(checkedItem);
+                    };
+
+                    UT.confirm(me.translate(message), function(btn) {
+                         me.$.deleteListEvalTmpl.set("body",{
+                             deleteList : deletes,
+							 eval_task_typ_ccd : me.searchParam.eval_task_typ_ccd
+                         });
+                         UT.request(me.$.deleteListEvalTmpl);
+                    }, null, true);
+                } else {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                }
+            },
+            
+            /**
+              * 평가템플릿 목록 삭제 callback
+              */
+            onDeleteResultHandler: function(e, res) {
+                var me = this, result = res.response || {};
+                
+                if(result.resultStatus === "S") {
+					UT.completeAlert("삭제", function() {
+                        me.onSearch();
+                    });     //삭제하였습니다.
+                } else if (result.resultStatus === "INVALID_STATUS_ERR") {
+                    return UT.alert("STD.SRM1304"); // 평가시트에 사용된 평가템플릿은 삭제할 수 없습니다.
+                } else {
+                    UT.alert("STD.E9999");
+                }
+            },
+			/* 그리드 이벤트 */
+			onImageVisible : function(data, item){
+				var dataField = item.dataField;
+				if(dataField === "img_evalsht" && UT.isNotEmpty(data["evalsht_list"])){
+					return "link";
+				} else {
+					return "";
+				}
+			},
+        });
+    </script>
+</dom-module>

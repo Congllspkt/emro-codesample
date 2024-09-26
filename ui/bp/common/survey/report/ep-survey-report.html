@@ -1,0 +1,97 @@
+<sc-link rel="import" href="es-survey-summary.html"></sc-link>
+<sc-link rel="import" href="es-survey-individual.html"></sc-link>
+
+<dom-module id="ep-survey-report">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findSurveyReport"
+				 url="findSurveyReport.do"
+				 on-response="completeFindSurveyReport">
+		</sc-ajax>
+		
+		<div class="vbox flex" style="display: block;">
+			<cc-form-panel title-text="설문" column="1">
+				<cc-fieldset>
+					<sc-label text="설문 명"></sc-label>
+					<div>[[survey.disp_surv_nm]]</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="설문 기간"></sc-label>
+					<div>[[survey.disp_surv_st_dttm]] ~ [[survey.disp_surv_ed_dttm]]</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="참여율"></sc-label>
+					<div>[[formula('partRate')]]</div>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-tab-navigation id="tabNavi" class="flex" style="margin-top: 10px;" selected="0">
+				<es-survey-summary id="summary" title-text="요약" style="padding-bottom: 20px;" survey="[[survey]]" sections="[[sections]]"></es-survey-summary>
+				<template>
+					<es-survey-individual title-text="개별 보기" survey="[[survey]]" subjects="[[subjects]]"></es-survey-individual>
+				</template>
+			</sc-tab-navigation>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-survey-report",
+			
+			properties: {
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjects: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				sections: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			formulas: {
+				partRate: function() {
+					var submCnt = new BigNumber(this.survey.subm_cnt || 0);
+					var totalCnt = new BigNumber(this.survey.tot_cnt || 0);
+					var result = submCnt.div(totalCnt).mul(100);
+					return `${result.toFixed(1)}% (${submCnt}/${totalCnt})`;
+				}
+			},
+			
+			load: function(survUuid) {
+				var me = this;
+				me.$.findSurveyReport.body = {
+					surv_uuid: survUuid
+				};
+				UT.request(me.$.findSurveyReport);
+			},
+			
+			completeFindSurveyReport: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("survey", response.survey);
+				me.set("subjects", response.subjects);
+				me.set("sections", response.sections);
+				me.applyFormula();
+				
+				me.$.summary.load();
+			},
+		})
+	</script>
+</dom-module>

@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-mail">
+	<select id="findRfxResultInfo" resultType="map">
+		/* rfx-mail.findRfxResultInfo */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , TO_CHAR(RFX.RFX_ST_DTTM,'YYYY/MM/DD HH24:MI')  AS RFX_ST_DTTM
+		     , TO_CHAR(RFX.RFX_CLSG_DTTM,'YYYY/MM/DD HH24:MI')  AS RFX_CLSG_DTTM
+		     , TO_CHAR(RFX.OPEN_DTTM,'YYYY/MM/DD HH24:MI')  AS OPEN_DTTM
+		     , PURC_PIC_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS PURC_USR_NM
+		     , USR.EML    AS PURC_EMAIL
+		  FROM RFX RFX
+		 INNER JOIN USR USR
+		    ON USR.TEN_ID = RFX.TEN_ID
+		   AND USR.USR_ID = RFX.PURC_PIC_ID
+		   AND USR.STS   != 'D'
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX.STS     != 'D'
+	</select>
+	<select id="findListRfxResultPassVd" resultType="map">
+		/* rfx-mail.findListRfxResultPassVd */
+		SELECT T.RFX_BID_UUID
+		     , VD.VD_CD
+		     , VD.ERP_VD_CD
+		     , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN RFX_BID.VD_CD
+		            ELSE VD.ERP_VD_CD
+		        END AS DISP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , T.VD_PIC_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , CASE WHEN T.VD_PIC_EML IS NOT NULL  THEN T.VD_PIC_EML
+		            WHEN VD_USR.EML IS NOT NULL  THEN VD_USR.EML
+		            ELSE VD.VD_EML
+		        END AS VD_PIC_EML
+		  FROM (
+		        SELECT RFX_BID_ITEM.RFX_BID_UUID
+		             , RFX_VD.VD_PIC_EML
+		             , RFX_VD.VD_PIC_UUID
+		          FROM RFX RFX
+		         INNER JOIN RFX_ITEM RFX_ITEM
+		            ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		         INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		            ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		           AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		           AND RFX_BID_ITEM.STS          != 'D'
+		         INNER JOIN RFX_BID RFX_BID
+		            ON RFX_BID.TEN_ID          = RFX_BID_ITEM.TEN_ID
+		           AND RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		           AND RFX_BID.STS            != 'D'
+		         INNER JOIN RFX_VD RFX_VD
+		            ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		           AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_VD.VD_CD    = RFX_BID.VD_CD
+		         WHERE RFX.TEN_ID      = #{g.tenant}
+		           AND RFX.RFX_UUID    = #{p.rfx_uuid}
+		           AND RFX_BID.SLCTN_YN    = 'Y'
+		           AND RFX.RFX_STS_CCD = 'ED'
+		           AND RFX.RFX_RES_STS_CCD = 'VD_SLCTN'
+		           AND (
+		                RFX.RFX_SLCTN_APVL_STS_CCD = 'APVD' OR
+		                RFX.RFX_SLCTN_APVL_STS_CCD = 'APVD'
+		               )
+		        GROUP BY RFX_BID_ITEM.RFX_BID_UUID, RFX_VD.VD_PIC_EML, RFX_VD.VD_PIC_UUID
+		       ) T
+		 INNER JOIN RFX_BID RFX_BID
+		    ON T.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.STS   != 'D'
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_BID.TEN_ID
+		   AND VD_USR.USR_ID = T.VD_PIC_UUID
+		   AND VD_USR.STS   != 'D'
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+	</select>
+	<select id="findListRfxResultNoPassVd" resultType="map">
+		/* rfx-mail.findListRfxResultNoPassVd */
+		SELECT T.RFX_BID_UUID
+		     , VD.VD_CD
+		     , VD.ERP_VD_CD
+		     , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN RFX_BID.VD_CD
+		            ELSE VD.ERP_VD_CD
+		        END AS DISP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , T.VD_PIC_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , CASE WHEN T.VD_PIC_EML IS NOT NULL  THEN T.VD_PIC_EML
+		            WHEN VD_USR.EML IS NOT NULL  THEN VD_USR.EML
+		            ELSE VD.VD_EML
+		        END AS VD_PIC_EML
+		  FROM (
+		        SELECT RFX_BID_ITEM.RFX_BID_UUID
+		             , RFX_VD.VD_PIC_UUID
+		             , RFX_VD.VD_PIC_EML
+		          FROM RFX RFX
+		         INNER JOIN RFX_ITEM RFX_ITEM
+		            ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		         INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		            ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		           AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		           AND RFX_BID_ITEM.STS          != 'D'
+		         INNER JOIN RFX_BID RFX_BID
+		            ON RFX_BID.TEN_ID          = RFX_BID_ITEM.TEN_ID
+		           AND RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		           AND RFX_BID.STS            != 'D'
+		         INNER JOIN RFX_VD RFX_VD
+		            ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		           AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_VD.VD_CD    = RFX_BID.VD_CD
+		         WHERE RFX.TEN_ID      = #{g.tenant}
+		           AND RFX.RFX_UUID    = #{p.rfx_uuid}
+		           AND RFX_BID.SLCTN_YN    = 'N'
+		           AND RFX.RFX_STS_CCD = 'ED'
+		           AND RFX.RFX_RES_STS_CCD = 'VD_SLCTN'
+		           AND (
+		                RFX.RFX_SLCTN_APVL_STS_CCD = 'APVD' OR
+		                RFX.RFX_SLCTN_APVL_STS_CCD = 'APVD'
+		               )
+		         GROUP BY RFX_BID_ITEM.RFX_BID_UUID, RFX_VD.VD_PIC_EML
+		       ) T
+		 INNER JOIN RFX_BID RFX_BID
+		    ON T.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.STS   != 'D'
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_BID.TEN_ID
+		   AND VD_USR.VD_PIC_UUID = T.VD_PIC_UUID
+		   AND VD_USR.STS   != 'D'
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+	</select>
+	<select id="findListRfxBidSubmit" resultType="map">
+		/* rfx-bid.findListRfxBidSubmit : 견적제출업체(공개) 제출완료 견적서 리스트 */
+		SELECT RFX_BID.TEN_ID
+		, RFX_BID.RFX_BID_UUID
+		, RFX_BID.RFX_NO
+		, RFX_BID.RFX_BID_NO
+		, RFX_BID.RFX_BID_REVNO
+		, RFX_BID.VD_CD
+		, RFX.RFX_UUID
+		, VD_OORG.OBD_TYP_CCD
+		, CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		ELSE VD.VD_NM
+		END AS VD_NM
+		, VD.ERP_VD_CD
+		, CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN RFX_BID.VD_CD
+		ELSE VD.ERP_VD_CD
+		END AS DISP_VD_CD
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.CUR_CCD
+		ELSE NULL
+		END AS CUR_CCD
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_AMT
+		ELSE NULL
+		END AS RFX_BID_AMT
+		, CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		ELSE RFX_BID.SLCTN_YN
+		END AS SLCTN_YN    /* 선정 여부 */
+		, RFX_BID.PFDBIDER_YN
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RMK
+		ELSE NULL
+		END AS RMK
+		, RFX_BID.RFX_BID_STS_CCD
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_DTTM
+		ELSE NULL
+		END AS RFX_BID_DTTM
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.VD_SUBMR_ID
+		ELSE NULL
+		END AS VD_SUBMR_ID
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		ELSE USR.USR_NM
+		END
+		ELSE NULL
+		END AS SBMT_NM
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.TEL
+		ELSE NULL
+		END AS SBMT_PHONE_NO
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.EML
+		ELSE NULL
+		END AS SBMT_EMAIL
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'GUP' THEN RFX_BID.GUP_RSN
+		ELSE NULL
+		END AS GUP_RSN
+		, RFX_BID.EVAL_SUBJ_RES_UUID
+		FROM RFX_BID RFX_BID
+		INNER JOIN RFX RFX
+		ON RFX.TEN_ID     = RFX_BID.TEN_ID
+		AND RFX_BID.RFX_NO  = RFX.RFX_NO
+		AND RFX_BID.RFX_RND = RFX.RFX_RND
+		INNER JOIN VD VD
+		ON VD.VD_CD  = RFX_BID.VD_CD
+		AND VD.TEN_ID = #{g.tenant}
+		AND VD.STS   != 'D'
+		LEFT OUTER JOIN USR USR
+		ON USR.TEN_ID = #{g.tenant}
+		AND USR.USR_ID = RFX_BID.VD_SUBMR_ID
+		INNER JOIN VD_OORG VD_OORG
+		ON VD_OORG.TEN_ID      = VD.TEN_ID
+		AND VD_OORG.VD_CD       = VD.VD_CD
+		AND VD_OORG.OORG_CD IN (
+		SELECT OORG_MAPG.CONNSUBJ_OORG_CD
+		FROM OORG_MAPG OORG_MAPG
+		WHERE OORG_MAPG.TEN_ID          = RFX.TEN_ID
+		AND OORG_MAPG.CONNSRC_OORG_CD = RFX.OORG_CD
+		AND OORG_MAPG.CONN_TYP_CCD    = 'POEO'
+		AND OORG_MAPG.CONN_YN         = 'Y'
+		)
+		AND VD_OORG.STS        != 'D'
+		<if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+			INNER JOIN RFX_PRESN RFX_PRESN
+			ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+			AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+			AND RFX_PRESN.STS     !='D'
+			INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+			ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+			AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+			AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+			AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+			AND RFX_PRESN_AFP.STS            != 'D'
+		</if>
+		WHERE RFX_BID.TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.rfx_uuid != null and p.rfx_uuid != ''">
+				AND RFX.RFX_UUID = #{p.rfx_uuid}
+			</when>
+			<otherwise>
+				AND RFX_BID.RFX_NO  = #{p.rfx_no}
+				AND RFX_BID.RFX_RND = CAST(#{p.rfx_rnd} AS INT)
+			</otherwise>
+		</choose>
+		AND RFX_BID.STS             != 'D'
+		AND RFX_BID.RFX_BID_EFCT_YN  = 'Y'
+		AND RFX_BID.RFX_BID_STS_CCD != 'CRNG'
+		<if test="p.rfx_bid_sts_ccd != null and p.rfx_bid_sts_ccd != ''">
+			AND RFX_BID.RFX_BID_STS_CCD  = #{p.rfx_bid_sts_ccd}
+		</if>
+		AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		ORDER BY RFX_BID.RFX_BID_STS_CCD DESC, RFX_BID.VD_CD
+	</select>
+	<select id="findListRfxVdBidSubmit" resultType="map">
+		/* rfx.findListRfxVdBidSubmit : 견적요청업체(수의,지명) 제출업체 견적서 리스트 */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_TIT
+		     , RFX.RFX_RND
+		     , RFX.OORG_CD
+		     , RFX.RFX_PURP_CCD
+		     , RFX.RAUC_TYP_CCD
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_CRN_DT
+		     , RFX.RFX_ST_DTTM
+		     , RFX.RFX_CLSG_DTTM
+		     , RFX.RFX_CHG_CLSG_DTTM
+		     , RFX.DOMOVRS_DIV_CCD AS RFX_DOMOVRS_DIV_CCD
+		     , RFX.DFRM_RO
+		     , RFX.PYMTMETH_DOM_CCD
+		     , RFX.PYMTMETH_DOM_EXPLN
+		     , RFX.DLVYMETH_DOM_CCD
+		     , RFX.DLVYMETH_DOM_EXPLN
+		     , RFX.PYMTMETH_OVS_CCD
+		     , RFX.PYMTMETH_OVS_EXPLN
+		     , RFX.DLVYMETH_OVS_CCD
+		     , RFX.DLVYMETH_OVS_EXPLN
+		     , RFX.PYMTMETH_DLVYMETH_CHG_POSS_YN
+		     , RFX.COMP_TYP_CCD
+		     , RFX.ITEM_SLCTN_TYP_CCD
+		     , RFX.SLCTN_TYP_CCD
+		     , RFX.AUTO_EXT_USE_YN
+		     , RFX.AUTO_EXT_TM
+		     , RFX.CNTR_ST_DT
+		     , RFX.CNTR_EXP_DT
+		     , RFX.PURC_TYP_CCD
+		     , RFX.BFG_YN
+		     , RFX.PRESN_YN
+		     , RFX.PRTL_BID_PERM_YN
+		     , RFX.COSTSTR_USE_YN
+		     , RFX.NPE_RO_VD_PUB_YN
+		     , RFX.CBE_TYP_CCD
+		     , RFX.NPE_RO
+		     , RFX.CBE_RO
+		     , RFX.BFG_DTTM
+		     , RFX.BFG_PLC
+		     , RFX.BFG_PIC_ID
+		     , RFX.PRESN_ST_DT
+		     , RFX.PRESN_CLSG_DT
+		     , RFX.PRESN_PIC_ID
+		     , RFX.RFX_BUYER_RMK
+		     , RFX.RFX_VD_RMK
+		     , RFX.BUYER_ATHG_UUID
+		     , RFX.VD_ATHG_UUID
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_RES_STS_CCD
+		     , RFX.RFX_APVL_USE_YN
+		     , RFX.RFX_APVL_STS_CCD
+		     , RFX.RFX_SLCTN_APVL_USE_YN
+		     , RFX.RFX_SLCTN_APVL_STS_CCD
+		     , RFX.AUTO_EXT_POSS_WD
+		     , RFX.OPEN_DTTM
+		     , RFX.IMMED_ST_USE_YN
+		     , RFX.IMMED_OPEN_USE_YN
+		     , (
+		        SELECT COUNT(RFX_ITEM_UUID)
+		          FROM RFX_ITEM RFX_ITEM
+		         WHERE RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		       ) AS RFX_ITEM_CNT
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		     , RFX_BID.RFX_BID_EFCT_YN
+		     , RFX_BID.DOMOVRS_DIV_CCD
+		     , RFX_BID.PYMTMETH_CCD
+		     , RFX_BID.PYMTMETH_EXPLN
+		     , RFX_BID.DLVYMETH_CCD
+		     , RFX_BID.DLVYMETH_EXPLN
+		     , RFX_VD.VD_CD
+		     , VD_OORG.OBD_TYP_CCD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , VD.ERP_VD_CD
+		     , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN RFX_VD.VD_CD
+		            ELSE VD.ERP_VD_CD
+		        END AS DISP_VD_CD
+		     , RFX_VD.VD_PIC_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , RFX_VD.VD_PIC_TEL
+		     , RFX_VD.VD_PIC_EML
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_EFCT_DT
+		            ELSE NULL
+		        END AS RFX_BID_EFCT_DT
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.CUR_CCD
+		            ELSE NULL
+		        END AS CUR_CCD
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_AMT
+		            ELSE NULL
+		        END AS RFX_BID_AMT
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.ATHG_UUID
+		            ELSE NULL
+		        END AS ATHG_UUID
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD IS NULL OR RFX_BID.RFX_BID_STS_CCD = '' THEN 'RCPT_WTG'  -- 미제출
+		            ELSE RFX_BID.RFX_BID_STS_CCD
+		        END AS RFX_BID_STS_CCD  /* 업체견적진행상태 P024 */
+		     , CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		            WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		            ELSE RFX_BID.SLCTN_YN
+		        END AS SLCTN_YN    /* 선정 여부 */
+		     , RFX_BID.PFDBIDER_YN
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RMK
+		            ELSE NULL
+		        END AS RMK
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_DTTM
+		            ELSE NULL
+		        END AS RFX_BID_DTTM
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.VD_SUBMR_ID
+		            ELSE NULL
+		        END AS VD_SUBMR_ID
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		                                                            ELSE USR.USR_NM
+		                                                        END
+		            ELSE NULL
+		        END AS SBMT_NM
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.TEL
+		            ELSE NULL
+		        END AS SBMT_PHONE_NO
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.EML
+		            ELSE NULL
+		        END AS SBMT_EMAIL
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'GUP' THEN RFX_BID.GUP_RSN
+		            ELSE NULL
+		        END AS GUP_RSN
+		  FROM RFX RFX
+		 INNER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = #{g.tenant}
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.MULTRND_SUBJ_XCEPT_YN = 'N'
+		   AND RFX_VD.STS != 'D'
+		 INNER JOIN VD VD
+		    ON VD.VD_CD  = RFX_VD.VD_CD
+		   AND VD.TEN_ID = #{g.tenant}
+		   AND VD.STS   != 'D'
+		 INNER JOIN VD_OORG VD_OORG
+		    ON VD_OORG.TEN_ID = VD.TEN_ID
+		   AND VD_OORG.VD_CD  = VD.VD_CD
+		   AND VD_OORG.OORG_CD IN (
+		                           SELECT OORG_MAPG.CONNSUBJ_OORG_CD
+		                             FROM OORG_MAPG OORG_MAPG
+		                            WHERE OORG_MAPG.TEN_ID          = RFX.TEN_ID
+		                              AND OORG_MAPG.CONNSRC_OORG_CD = RFX.OORG_CD
+		                              AND OORG_MAPG.CONN_TYP_CCD    = 'POEO'
+		                              AND OORG_MAPG.CONN_YN         = 'Y'
+		                          )
+		   AND VD_OORG.STS != 'D'
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_VD.TEN_ID
+		   AND VD_USR.VD_CD  = RFX_VD.VD_CD
+		   AND VD_USR.USR_ID = RFX_VD.VD_PIC_UUID
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID           = RFX.TEN_ID
+		   AND RFX_BID.RFX_NO           = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND          = RFX.RFX_RND
+		   AND RFX_BID.RFX_BID_EFCT_YN  = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD != 'CRNG'
+		   AND RFX_BID.VD_CD            = RFX_VD.VD_CD
+		   AND RFX_BID.STS             != 'D'
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = RFX_BID.TEN_ID
+		   AND USR.USR_ID = RFX_BID.VD_SUBMR_ID
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX.STS     != 'D'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		 ORDER BY RFX_VD.VD_CD
+	</select>
+</mapper>

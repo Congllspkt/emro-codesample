@@ -1,0 +1,735 @@
+<sc-link rel="import"  href="ep-sg-vendor-list.html"></sc-link>
+<sc-link rel="import"  href="../shared/ep-vendor-list.html"></sc-link>
+
+<dom-module id="es-vendor-acres-list">
+	<style>
+		:host{
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<!-- 실적목록 조회 -->
+		<sc-ajax id="findListVdAcres"
+				 url="findListVdAcres.do"
+				 last-response="{{dataList}}">
+		</sc-ajax>
+		
+		<!-- 행추가 전 리스트 조회 -->
+		<sc-ajax id="findListVdAcresForAdd"
+				 url="findListVdAcres.do"
+				 on-response="completeFindListVdAcresForAdd">
+		</sc-ajax>
+		
+		<!-- 실적목록 저장 -->
+		<sc-ajax id="saveVdAcresList"
+				 url="saveVdAcresList.do"
+				 on-response="completeSaveVdAcresList">
+		</sc-ajax>
+		
+		<!-- 실적목록 삭제 -->
+		<sc-ajax id="deleteVdAcresList"
+				 url="deleteVdAcresList.do"
+				 on-response="completeDeleteVdAcresList"></sc-ajax>
+		
+		<!-- excel import시 협력사명 조회  -->
+		<sc-ajax id="findSgVdNm"
+				 url="findSgVdNm.do"
+				 on-response="completeindSgVdNm" sync>
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<!-- 협력사 정량 데이터 등록유형 공통코드 -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.R997.param}}"
+					 last-response="{{codes.R997.result}}" >
+			</sc-ajax>
+			
+			<!-- 협력사 정량 데이터 등록유형 공통코드(단위 UNIT) -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.R997_UNIT.param}}"
+					 last-response="{{codes.R997_UNIT.result}}" >
+			</sc-ajax>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearchVdAcresList" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-combobox-field
+						id="operorgcombobox" selected-index="0"  placeholder="선택" required="true"
+						oper-unit-cd="SO" reset="false"
+						value="{{searchParam.oorg_cd}}">
+				</cc-operorg-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="데이터 유형"></sc-label>
+				<sc-combobox-field
+						id="dataCombobox" selected-index="0" placeholder="선택" required="true"
+						display-field="label" value-field="data" items="{{codes.R997.result}}"
+						value="{{searchParam.dat_typ_ccd}}">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="적용 년월"></sc-label>
+				<sc-period-month-field from-value="{{searchParam.appl_from_dt}}" to-value="{{searchParam.appl_to_dt}}" string-date="true"
+									   default-from-value="-2M" default-to-value="-0M" required="true">
+				</sc-period-month-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" placeholder="코드" max-length="18" on-enter="onSearchVdAcresList"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" max-length="128" on-enter="onSearchVdAcresList"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<!--<cc-fieldset>
+				<sc-label text="소싱그룹"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.sg_cd}}" class="w-100" placeholder="코드" max-length="18" on-enter="onSearchVdAcresList"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{searchParam.sg_nm}}" placeholder="소싱그룹명" max-length="128" on-enter="onSearchVdAcresList"></sc-text-field>
+				</div>
+			</cc-fieldset>-->
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" editable="true"
+				 data-provider="{{dataList}}" on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="Excel Upload" 	on-click="onExcelUpload"		auth-s></sc-button>
+				<sc-button text="추가" 			on-click="onAddRow" 			auth-s></sc-button>
+				<sc-button text="저장" 			on-click="onSave" 				auth-s></sc-button>
+				<sc-button text="삭제" 			on-click="onDelete" 			auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column 	data-field="dat_typ_ccd" 	header-text="데이터 유형"			width="220" 	text-align="left" 	items="{{codes.R997.result}}" display-field="label" value-field="data" required="true"></sc-combobox-column>
+				<sc-data-column			data-field="dat_typ_ccd"  	header-text="데이터 유형 공통코드" 	width="150"		></sc-data-column>
+				<sc-month-column 		data-field="dat_appl_yymm" 	header-text="적용 년월" 			width="100" 	editable="true"		required="true"></sc-month-column>
+				<sc-data-column			data-field="bizregno" 		header-text="사업자등록번호" 	width="100"		visible="true"		required="false"></sc-data-column>
+				<sc-data-column			data-field="erp_vd_cd"  	header-text="협력사 코드" 			width="100"		visible="true"	></sc-data-column>
+				<sc-data-column			data-field="display_vd_nm"  header-text="협력사 명"			width="150"		text-align="left"	visible="true" required="true"></sc-data-column>
+				<sc-data-column			data-field="sg_cd"  	 	header-text="소싱그룹 코드" 		width="100"		visible="[[formula('isSg')]]"			disabled="[[formula('isItem')]]"					required="true"></sc-data-column>
+				<sc-data-column			data-field="display_sg_nm"  header-text="소싱그룹 명"		width="150"		text-align="left"	visible="[[formula('isSg')]]"			disabled="[[formula('isItem')]]" required="true"></sc-data-column>
+				<sc-image-column 		data-field="sg_icon"		header-text=" "					width="30"  	text-align="left" 	visible="true"		disabled="[[formula('isItem')]]"					image-cls="search" 		image-change-function="imageChange"></sc-image-column>
+				<sc-data-column			data-field="val" 			header-text="값"				width="100"		editable="true"		text-align="right"	data-type="number" 	validator-type="integer" 		format-type="integer" 	max-length="10" required="true"></sc-data-column>
+				<sc-combobox-column		data-field="unit"			header-text="단위"				width="60" 		text-align="left" 	items="{{codes.R997_UNIT.result}}" 		display-field="cstr_cnd_val" 	value-field="data"></sc-combobox-column>
+				<sc-data-column			data-field="rmk"			header-text="비고"				width="200"		editable="true"		text-align="left"	max-length="300"></sc-data-column>
+				<sc-data-column			data-field="modr_id" 		header-text="등록자" 			width="80"		></sc-data-column>
+				<sc-date-column			data-field="mod_dttm"		header-text="등록 일시" 			width="100"		></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="vd_quant_dat_reg_uuid"	data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="oorg_cd"					data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="dat_typ_ccd"				data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="vd_cd"	 				data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="vmg_cd"	 				data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="sg_nm"	 				data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="vd_nm"	 				data-type="text"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-grid id="vdPanel" hidden="true">
+			<sc-grid-columns>
+				<sc-date-column			data-field="dat_appl_yymm"	header-text="적용 년월"			width="100" 	editable="true"		format-type="yearMonth"></sc-date-column>
+				<sc-data-column			data-field="erp_vd_cd"  	header-text="협력사 코드" 			width="100"		text-align="left"	visible="true"			required="true"></sc-data-column>
+				<sc-data-column			data-field="val" 			header-text="값"			width="100"		editable="true"		text-align="right"		editor-regex="/[0-9]/" max-length="10"></sc-data-column>
+				<sc-data-column			data-field="rmk"			header-text="비고"				width="200"		editable="true"		text-align="left"		max-length="300"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+		
+		<sc-grid id="sgPanel" hidden="true">
+			<sc-grid-columns>
+				<sc-date-column			data-field="dat_appl_yymm"	header-text="적용 년월"			width="100" 	editable="true"		format-type="yearMonth"></sc-date-column>
+				<sc-data-column			data-field="erp_vd_cd"		header-text="협력사 코드" 			width="100"		text-align="left"	visible="true"					required="true"></sc-data-column>
+				<sc-data-column			data-field="sg_cd"  	 	header-text="소싱그룹 코드" 		width="100"		text-align="left"	visible="[[formula('isSg')]]"	disabled="[[formula('isItem')]]"	required="true"></sc-data-column>
+				<sc-data-column			data-field="val" 			header-text="값"			width="100"		editable="true"		text-align="right"				editor-regex="/[0-9]/" 				max-length="10"></sc-data-column>
+				<sc-data-column			data-field="rmk"			header-text="비고"				width="200"		editable="true"		text-align="left"				max-length="300"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+		
+		<sc-grid id="itemPanel" hidden="true">
+			<sc-grid-columns>
+				<sc-date-column			data-field="dat_appl_yymm"	header-text="적용 년월"			width="100" 	editable="true"		format-type="yearMonth"></sc-date-column>
+				<sc-data-column			data-field="erp_vd_cd"  	header-text="협력사 코드" 			width="100"		text-align="left"	visible="true"					required="true"></sc-data-column>
+				<sc-data-column			data-field="item_cd"  	 	header-text="품목 코드" 			width="100"		text-align="left"	visible="[[formula('isItem')]]"	disabled="[[formula('isSg')]]"	required="true"></sc-data-column>
+				<sc-data-column			data-field="val" 			header-text="값"			width="100"		editable="true"		text-align="right"				editor-regex="/[0-9]/" 			max-length="10"></sc-data-column>
+				<sc-data-column			data-field="rmk"			header-text="비고"				width="200"		editable="true"		text-align="left"				max-length="300"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-vendor-acres-list',
+			properties : {
+				searchParam: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				dataList: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				nm: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				typeChanged: {
+					type: Boolean,
+					value: false
+				},
+				codes: {
+					type: Object,
+					value:function(){
+						return {
+							R997: {
+								param: {
+									ccd: "R997",
+									cstr_cnd_cd: "DAT_COLL_TYP"
+								},
+								result: [],
+								default: []
+							},
+							R997_UNIT: {
+								param: {
+									ccd: "R997",
+									cstr_cnd_cd: "UNIT"
+								},
+								result: [],
+								default: []
+							},
+						}
+					},
+					reset: false
+				}
+			},
+			
+			formulas: {
+				// 협력사 컬럼
+				isVd: function() {
+					var me = this;
+					var typ;
+					
+					if(me.$.dataCombobox.selectedItem) {
+						var cd = me.$.dataCombobox.selectedItem.data;
+						var arr = me.get("codes.R997.result");
+						
+						for(var i in arr) {
+							if(cd == arr[i].data) {typ = arr[i].cstr_cnd_val};
+						}
+						return typ === "VD";
+					}
+					else { return true }
+				},
+				// 소싱그룹 컬럼
+				isSg: function() {
+					var me = this;
+					var typ;
+					
+					if(me.$.dataCombobox.selectedItem) {
+						var cd = me.$.dataCombobox.selectedItem.data;
+						var arr = me.get("codes.R997.result");
+						
+						for(var i in arr) {
+							if(cd == arr[i].data) {typ = arr[i].cstr_cnd_val};
+						}
+						return typ === "VD_SG";
+					}
+					else { return true }
+				},
+				// 소싱그룹 컬럼
+				isItem: function() {
+					var me = this;
+					var typ;
+					
+					if(me.$.dataCombobox.selectedItem) {
+						var cd = me.$.dataCombobox.selectedItem.data;
+						var arr = me.get("codes.R997.result");
+						
+						for(var i in arr) {
+							if(cd == arr[i].data) {typ = arr[i].cstr_cnd_val};
+						}
+						return typ === "ITEM";
+					}
+					else { return true }
+				},
+			},
+			
+			observers : [
+				"onChangeDataTyp(searchParam.dat_typ_ccd)",
+			],
+			
+			// 실적구분 변경될때 상태 변경(실적구분을 변경한 상태에서 행추가시 다시 조회하기위해 사용)
+			onChangeDataTyp : function(param){
+				var me = this;
+				me.set("typeChanged", true);
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+				var me = this;
+				me.applyFormula();
+			},
+			load: function(){
+				var me = this;
+				me.applyFormula();
+			},
+			
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick : function(event) {
+				var me = this;
+				var data = event.detail.data,
+					item = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "sg_icon"){
+					//협력사-소싱그룹검색 팝업 호출
+					var popup = me.getSGVendorSearchPopup(event);
+					var dataTypCdCls = UT.arrayFilterChange(me.codes.R997.result, {key : "data", value : event.detail.data.dat_typ_ccd});
+					var isSg = dataTypCdCls[0].cstr_cnd_val === "VD_SG";
+					
+					var options = {
+						singleSelect : true ,
+						defaultParam : {
+							so_oper_org_cd : me.searchParam.oorg_cd,
+							conn_typ_ccd : 'SOEO',
+							ounit_cd : 'EO',
+							isSg : isSg
+						}
+					};
+					
+					popup.show();
+					popup.getWindowContent().load(options);
+				}
+				else if(item.dataField === "item_icon"){
+					//품목검색 팝업 호출
+					var itemPopup = UT.popup('ep-item-search-list', me, 800, 500, {
+						"selected-items" : function(popup, e) {
+							me.setSelectedItem(e.detail, item.rowIndex);
+							popup.close();
+						}
+					},{maximizable : true});
+					
+					var options = {
+						singleSelect : true
+					};
+					
+					itemPopup.show();
+					itemPopup.getWindowContent().load(options);
+				}
+			},
+			
+			imageChange: function(data, item) {
+				var me = this;
+				
+				switch (item.dataField) {
+					case "vd_icon":
+						return "search";
+					case "sg_icon":
+						return "search";
+					case "item_icon":
+						return "search";
+					default:
+						break;
+				}
+				return null;
+			},
+			
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			/* 실적관리 그리드 조회 */
+			onSearchVdAcresList: function(){
+				var me = this;
+				
+				if (!me.validate("search")) {
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요
+					return;
+				}
+				
+				me.$.findListVdAcres.body = me.get("searchParam");
+				UT.request(me.$.findListVdAcres);
+				
+				me.applyFormula();
+			},
+			
+			/* 실적관리 행 추가버튼 클릭 */
+			onAddRow: function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				
+				if(UT.isEmpty(me.searchParam.oorg_cd)) {
+					UT.alert("STD.N3400"); // 운영조직을 선택해야 합니다.
+					return;
+				}
+				
+				if(UT.isEmpty(me.searchParam.dat_typ_ccd)) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				if(me.searchParam.erp_vd_cd || me.searchParam.sg_cd || me.searchParam.item_cd) {
+					me.resetParam(true); // 행추가
+				}
+				if(me.get("typeChanged") == true) {
+					me.resetParam(true); // 행추가
+					me.set("typeChanged", false);
+				}
+				else {
+					me.addRow();
+				}
+				me.applyFormula();
+			},
+			
+			/*검색조건 협력사코드,소싱코드,품목코드 리셋*/
+			resetParam: function(isAddRow) { //추가버튼으로 호출(true) 엑셀업로드에서 호출(false)
+				var me = this;
+				
+				me.set("searchParam.erp_vd_cd", "");
+				me.set("searchParam.vd_nm", "");
+				me.set("searchParam.display_vd_nm", "");
+				me.set("searchParam.sg_cd", "");
+				me.set("searchParam.sg_nm", "");
+				me.set("searchParam.display_sg_nm", "");
+				me.set("searchParam.item_cd", "");
+				me.set("searchParam.item_nm", "");
+				
+				if(isAddRow) { //행추가
+					me.$.findListVdAcresForAdd.body = me.get("searchParam");
+					UT.request(me.$.findListVdAcresForAdd);
+				}
+				else { //엑셀업로드
+					me.$.findListVdAcres.body = me.get("searchParam");
+					UT.request(me.$.findListVdAcres);
+				}
+			},
+			
+			/* 조회 callback */
+			completeFindListVdAcresForAdd: function(e, res) {
+				var me = this;
+				var result = res.response;
+				me.set("dataList", result);
+				
+				me.onAddRow();
+			},
+			
+			/* 행추가 */
+			addRow: function() {
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				var user = SCSessionManager.currentUser;
+				var selectedDatTypCcd = me.get("searchParam.dat_typ_ccd");
+
+				var popup;
+				var options;
+				var datCollTypList = me.codes.R997.result.filter((code)=> code.data === selectedDatTypCcd);
+				
+				if(UT.isEmpty(datCollTypList)) {
+					return;
+				}
+				var datCollTyp= datCollTypList[0].cstr_cnd_val;
+				if(datCollTyp === 'VD_SG') { // 데이터 수집 유형이 협력사_소싱그룹인 경우
+					//협력사-소싱그룹검색 팝업 호출
+					popup = me.getSGVendorSearchPopup(null);
+
+					options = {
+						singleSelect : false ,
+						defaultParam : {
+							so_oper_org_cd : UT.copy(me.searchParam.oorg_cd),
+							conn_typ_ccd : 'SOEO',
+							ounit_cd : 'EO',
+							isSg : me.formula("isSg")
+						}
+					};
+				} else { // 데이터 유형 '협력사 사회적 이슈 건수'
+					popup = me.getVendorSearchPopup();
+
+					options = {
+						singleSelect : false ,
+						defaultParam : {
+							oorg_cd : UT.copy(me.searchParam.oorg_cd),
+							conn_typ_ccd : 'SOEO',
+							ounit_cd : 'SO'
+						}
+					}
+				}
+
+				popup.show();
+				popup.getWindowContent().load(options);
+			},
+
+			getVendorSearchPopup : function() {
+				var me = this;
+
+				var popup = UT.popup('ep-vendor-list', me, "80%", "90%", {
+					"selected-items" : function(popup, e) {
+						me.addSelectedSg(e.detail);
+						popup.close();
+					}
+				},{maximizable : true});
+
+				return popup;
+			},
+
+			getSGVendorSearchPopup : function(event) {
+				var me = this,
+					isAdd = UT.isEmpty(event);
+				var dataTypCdCls = isAdd ? "" : UT.arrayFilterChange(me.codes.R997.result, {key : "data", value : event.detail.data.dat_typ_ccd});
+				var isSg = me.formula('isSg') || (!isAdd && dataTypCdCls[0].cstr_cnd_val === "VD_SG");
+
+				// 실적구분의 유형이 소싱그룹이면 소싱그룹협력사 검색 팝업 생성
+				var popup = UT.popup('ep-sg-vendor-list', me, "80%", "90%", {
+					"selected-items" : function(popup, e) {
+						if(isAdd) {
+							me.addSelectedSg(e.detail);
+						} else {
+							me.setSelectedSg(e.detail, event.detail.item.rowIndex);
+						}
+						popup.close();
+					}
+				},{maximizable : true});
+				return popup;
+			},
+			//선택된 행 추가
+			addSelectedVd: function(selected) {
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				var user = SCSessionManager.currentUser;
+				var list = selected;
+				
+				for(var i in list) {
+					provider.addItem({
+						oorg_cd : me.searchParam.oorg_cd,
+						dat_typ_ccd : me.searchParam.dat_typ_ccd,
+						unit : me.searchParam.dat_typ_ccd,
+						bizregno : list[i].bizregno,
+						erp_vd_cd : list[i].erp_vd_cd,
+						vd_nm : list[i].vd_nm,
+						display_vd_nm : list[i].display_vd_nm || list[i].disp_vd_nm,
+						sg_cd : null,
+						item_cd : null,
+						mod_nm : user.usr_nm,
+						vd_cd : list[i].vd_cd
+					});
+				}
+			},
+			
+			//선택된 행 추가
+			addSelectedSg: function(selected) {
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				var user = SCSessionManager.currentUser;
+				var list = selected;
+				
+				for(var i in list) {
+					provider.addItem({
+						oorg_cd : me.searchParam.oorg_cd,
+						dat_typ_ccd : me.searchParam.dat_typ_ccd,
+						unit : me.searchParam.dat_typ_ccd,
+						bizregno : list[i].bizregno,
+						erp_vd_cd : list[i].erp_vd_cd,
+						vd_nm : list[i].vd_nm,
+						sg_cd : list[i].sg_cd,
+						display_sg_nm : list[i].display_sg_nm,
+						sg_nm : list[i].sg_nm,
+						item_cd : null,
+						mod_nm : user.usr_nm,
+						vd_cd : list[i].vd_cd,
+						display_vd_nm : list[i].display_vd_nm || list[i].disp_vd_nm
+					});
+				}
+			},
+			
+			/* 실적관리 그리드 저장 */
+			onSave: function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				var insertList = provider.getNewItems(),
+					updateList = provider.getUpdateItems();
+				
+				if(UT.isEmpty(insertList) && UT.isEmpty(updateList)){
+					return UT.alert("STD.N1700");
+				}
+				if(!me.$.gridPanel.validate()){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() {
+					me.$.saveVdAcresList.body = {
+						insertList: insertList,
+						updateList: updateList
+					};
+					UT.request(me.$.saveVdAcresList);
+				});
+			},
+			
+			/* 실적관리 저장 후 callback */
+			completeSaveVdAcresList: function(e, res){
+				var me = this;
+
+				UT.completeAlert("저장", function() { // 요청을 완료 하였습니다
+					me.onSearchVdAcresList();
+				});
+			},
+			/* 실적관리 삭제 */
+			onDelete: function(){
+				var me = this,
+					message = "STD.N1300", // 삭제 하시겠습니까?
+					provider = this.$.gridPanel.getDataProvider();
+				
+				var checked = provider.selectionCheckedIndexes();
+				if (checked && checked.length > 0) {
+					UT.confirm(message, function() {
+						var deleted = provider.removeItems(true);
+						if(UT.isNotEmpty(deleted)){
+							me.$.deleteVdAcresList.set("body", {
+								deletedList: deleted
+							});
+							UT.request(me.$.deleteVdAcresList);
+						}else{
+							me.$.gridPanel.validate();
+						}
+					});
+				}
+				else{
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			/* 실적관리 삭제 후 callback */
+			completeDeleteVdAcresList: function(e, res){
+				var me = this;
+
+				UT.completeAlert("삭제", function() { // 요청을 완료 하였습니다
+					me.onSearchVdAcresList();
+				});
+			},
+			
+			// 엑셀 업로드
+			onExcelUpload : function() {
+				var me = this;
+				var grid = me.$.gridPanel;
+				var template;
+				
+				if(UT.isEmpty(me.searchParam.dat_typ_ccd)) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				if(me.formula("isVd")) {
+					template = me.$.vdPanel;
+				}
+				else if(me.formula("isSg")) {
+					template = me.$.sgPanel;
+				}
+				else if(me.formula("isItem")) {
+					template = me.$.itemPanel;
+				}
+				me.resetParam(false);  //검색조건 리셋(행추가x)
+				me.applyFormula();
+				
+				// 엑셀 업로드 팝업
+				var popup = UT.popup('cc-excel-import', me, 800, 600, null, {closable: true, titleText: me.translate("엑셀 업로드")});
+				
+				var importer = popup.getContent();
+				importer.autoColumnMapping = true;
+				importer.doImport(template, function(rows) {
+					var tmp = 0;
+					rows.forEach(function(row) {
+						if(row.dat_appl_yymm) {		// date에 '/' 또는 '-' 제거
+							row.dat_appl_yymm = row.dat_appl_yymm.toString().replace(/\/|-/gi, "");
+						}
+						
+						//협력사명, 소싱그룹명 조회
+						me.$.findSgVdNm.body = {
+							erp_vd_cd : UT.toString(row.erp_vd_cd),
+							sg_cd : UT.toString(row.sg_cd)
+						}
+						UT.request(me.$.findSgVdNm);
+
+						row.bizregno = me.nm.bizregno;					// 사업자번호
+						row.vd_nm = me.nm.vd_nm; 						// 협력사명
+						row.display_vd_nm = me.nm.display_vd_nm; 						// 협력사명
+						row.sg_nm = me.nm.sg_nm;						// 소싱그룹명
+						row.display_sg_nm = me.nm.display_sg_nm;		// 소싱그룹명
+						row.vd_cd = me.nm.vd_cd;						// 협력사그룹코드
+
+						row.oorg_cd = me.searchParam.oorg_cd;				// 운영조직
+						row.dat_typ_ccd = me.searchParam.dat_typ_ccd;		// 데이터 유형
+						row.unit = me.searchParam.dat_typ_ccd;				// 단위값을 위한 변수
+						row.mod_nm = SCSessionManager.currentUser.usr_nm;	// 등록자
+					});
+					grid.getDataProvider().addItems(rows);
+					me.$.gridPanel.validate();
+				}, me);
+				
+				// 엑셀 업로드 팝업 열기
+				popup.show();
+			},
+			
+			completeindSgVdNm : function(e, res) {
+				var me = this;
+				var result = res.response || {};
+				
+				me.set("nm", result);
+			},
+			
+			// 선택된 협력사코드 세팅
+			setSelectedVd : function(selectedItem, rowIndex){
+				var me = this;
+				var grid = me.$.gridPanel,
+					provider = grid.getDataProvider();
+				
+				provider.setCellValue(rowIndex, "bizregno", selectedItem[0].bizregno);
+				provider.setCellValue(rowIndex, "erp_vd_cd", selectedItem[0].erp_vd_cd);
+				provider.setCellValue(rowIndex, "vd_cd", selectedItem[0].vd_cd);
+				provider.setCellValue(rowIndex, "vd_nm", selectedItem[0].vd_nm);
+				me.$.gridPanel.validate();
+			},
+			
+			// 선택된 소싱그룹코드 세팅
+			setSelectedSg : function(selectedItem, rowIndex){
+				var me = this;
+				var grid = me.$.gridPanel,
+					provider = grid.getDataProvider();
+				
+				provider.setCellValue(rowIndex, "bizregno", selectedItem[0].bizregno);
+				provider.setCellValue(rowIndex, "erp_vd_cd", selectedItem[0].erp_vd_cd);
+				provider.setCellValue(rowIndex, "vd_cd", selectedItem[0].vd_cd);
+				provider.setCellValue(rowIndex, "vd_nm", selectedItem[0].vd_nm);
+				provider.setCellValue(rowIndex, "display_vd_nm", selectedItem[0].vd_nm);
+				provider.setCellValue(rowIndex, "sg_cd", selectedItem[0].sg_cd);
+				provider.setCellValue(rowIndex, "sg_nm", selectedItem[0].sg_nm);
+				provider.setCellValue(rowIndex, "display_sg_nm", selectedItem[0].sg_nm);
+				me.$.gridPanel.validate();
+			},
+			
+			// 선택된 품목코드 세팅
+			setSelectedItem : function(selectedItem, rowIndex){
+				var me = this;
+				var grid = me.$.gridPanel,
+					provider = grid.getDataProvider();
+				
+				provider.setCellValue(rowIndex, "item_cd", selectedItem[0].item_cd);
+				provider.setCellValue(rowIndex, "item_nm", selectedItem[0].item_nm);
+				me.$.gridPanel.validate();
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-pp">
+    <!-- 기성요청 목록 조회 -->
+    <select id="searchProgressPaymentRequest" resultType="map">
+    /* sp-pp.searchProgressPaymentRequest: 기성요청 목록 조회 */
+           SELECT A.TEN_ID                        AS TEN_ID
+                , A.ASN_UUID                         AS ASN_UUID
+                , A.OORG_CD                   AS OORG_CD
+                , A.ASN_STS_CCD                   AS ASN_STS_CCD
+                , B.GR_STS_CCD                   AS GR_STS_CCD
+                , A.ASN_NO                            AS ASN_NO      /*기성요청번호*/
+                , A.ASN_ORDN                           AS ASN_ORDN     /*기성요청차수*/
+                , B.GR_UUID                         AS GR_UUID
+                , B.GR_NO                         AS GR_NO
+                , B.GR_ORDN                        AS GR_ORDN
+                , A.CUR_CCD                           AS CUR_CCD        /*통화*/
+                , A.ASN_AMT                  AS ASN_AMT     /*납품 합계 금액(요청금액)*/
+                , CASE WHEN B.GR_AMT IS NULL
+                            THEN 0
+                       ELSE B.GR_AMT
+                  END                             AS GR_AMT     /*납품 합계 금액(승인금액)*/
+                , A.ASN_DT                       AS ASN_DT    /*기성요청일자*/
+                , B.GR_DT                       AS GR_DT    /*기성승인일자*/
+                , A.ASN_ORDN                        AS SORT_ORD
+                , CASE WHEN B.PYMT_TYP_CCD IS NOT NULL  AND B.PYMT_TYP_CCD = 'APYMT'
+                            THEN 'Y'
+                       WHEN A.PYMT_TYP_CCD = 'APYMT' THEN 'Y'
+                       ELSE 'N'
+                   END AS APYMT_YN
+                , CASE WHEN B.PYMT_TYP_CCD IS NOT NULL  THEN B.PYMT_TYP_CCD
+                       ELSE A.PYMT_TYP_CCD
+                   END AS PYMT_TYP_CCD
+                , A.REG_DTTM
+             FROM ASN A
+             LEFT OUTER JOIN GR B
+               ON B.TEN_ID      = A.TEN_ID
+              AND B.ASN_UUID       = A.ASN_UUID
+              AND B.GR_STS_CCD = 'PP_CMPLD'  /* C:기성완료 */
+            WHERE A.TEN_ID = #{g.tenant}
+              AND A.VD_CD  = #{g.vd_cd}
+              AND A.PO_NO  = #{p.po_no}
+              AND A.STS   != 'D'
+        UNION ALL
+           SELECT GR.TEN_ID       AS TEN_ID
+                , GR.ASN_UUID         AS ASN_UUID
+                , GR.OORG_CD  AS OORG_CD
+                , ''         AS ASN_STS_CCD
+                , GR.GR_STS_CCD  AS GR_STS_CCD
+                , GR.ASN_NO         AS ASN_NO       /*기성요청번호*/
+                , GR.ASN_ORDN         AS ASN_ORDN      /*기성요청차수*/
+                , GR.GR_UUID        AS GR_UUID
+                , GR.GR_NO        AS GR_NO
+                , GR.GR_ORDN       AS GR_ORDN
+                , GR.CUR_CCD          AS CUR_CCD         /*통화*/
+                , GR.GR_AMT AS ASN_AMT       /*납품 합계 금액(요청금액)*/
+                , GR.GR_AMT AS GR_AMT       /*납품 합계 금액(승인금액)*/
+                , ''         AS ASN_DT     /*기성요청일자*/
+                , GR.GR_DT      AS GR_DT     /*기성승인일자*/
+                , GR.GR_ORDN            AS SORT_ORD
+                , CASE WHEN GR.PYMT_TYP_CCD = 'APYMT' THEN 'Y'
+                       ELSE 'N'
+                   END AS APYMT_YN
+                , GR.PYMT_TYP_CCD
+                , GR.REG_DTTM
+             FROM GR GR
+            WHERE GR.TEN_ID      = #{g.tenant}
+              AND GR.VD_CD       = #{g.vd_cd}
+              AND GR.PO_NO       = #{p.po_no}
+              AND GR.GR_STS_CCD = 'PP_CMPLD'  /* C:기성완료 */
+              AND GR.STS        != 'D'
+              AND (GR.ASN_UUID IS NULL OR GR.ASN_UUID = '')  -- AR없이 GR 생성된 선급금 등록 건
+         ORDER BY REG_DTTM DESC, ASN_NO DESC, GR_NO DESC, SORT_ORD DESC
+    </select>
+</mapper>

@@ -1,0 +1,1106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="pr-status">
+	<!-- 구매요청 임시저장 시 상태 수정 -->
+	<update id="saveDraftPrHd">
+		/* pr-status.saveDraftPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'CRNG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="saveDraftPrDt">
+		/* pr-status.saveDraftPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN #{p.pr_chg_yn} = 'N' THEN 'PR_CRNG'
+		                          ELSE 'PR_CHG_CRNG'
+		                      END
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청 결재상신 시 상태 수정 -->
+	<update id="submitApprovalPrHd">
+		/* pr-status.submitApprovalPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'APVL_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="submitApprovalPrDt">
+		/* pr-status.submitApprovalPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN #{p.pr_chg_yn} = 'N' THEN 'PR_APVL_RPTG'
+		                          ELSE 'PR_CHG_APVL_RPTG'
+		                      END
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청 결재승인 시 상태 수정 -->
+	<update id="approveApprovalPrHd">
+		/* pr-status.approveApprovalPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'APVD'
+		     , PR_REQ_DT = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="approveApprovalPrDt">
+		/* pr-status.approveApprovalPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT_WTG'
+		     , PR_ITEM_STS_CCD = 'WTG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청 결재반려 시 상태 수정 -->
+	<update id="rejectApprovalPrHd">
+		/* pr-status.rejectApprovalPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'APVL_RET'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="rejectApprovalPrDt">
+		/* pr-status.rejectApprovalPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN #{p.pr_chg_yn} = 'N' THEN 'PR_APVL_RET'
+		                          ELSE 'PR_CHG_APVL_RET'
+		                      END
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청 결재취소 시 상태 수정 -->
+	<update id="cancelApprovalPrHd">
+		/* pr-status.cancelApprovalPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'APVL_CNCL'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="cancelApprovalPrDt">
+		/* pr-status.cancelApprovalPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN #{p.pr_chg_yn} = 'N' THEN 'PR_CRNG'
+		                          ELSE 'PR_CHG_CRNG'
+		                      END
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청 결재승인처리(Bypass) 시 상태 수정 -->
+	<update id="bypassApprovalPrHd">
+		/* pr-status.bypassApprovalPrHd */
+		UPDATE PR
+		   SET PR_STS_CCD = 'APVD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<update id="bypassApprovalPrDt">
+		/* pr-status.bypassApprovalPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT_WTG'
+		     , PR_ITEM_STS_CCD = 'WTG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<!-- 구매요청변경 시 이전 차수 상태 수정 -->
+	<select id="selectPrevPrByModPrDt" resultType="map">
+		/* pr-status.selectPrevPrByModPrDt */
+		SELECT B.*
+		  FROM PR_ITEM A
+		 INNER JOIN (
+		             SELECT PREV_PRDT.TEN_ID        AS TEN_ID
+		                  , PREV_PRDT.PR_ITEM_UUID    AS PREV_PR_ITEM_ID
+		                  , CASE WHEN PRDT.PR_ITEM_UUID IS NULL OR PRDT.PR_ITEM_UUID = '' THEN 'RX' -- 구매요청변경승인 시 해당 품목 건이 삭제되어 종료
+		                         ELSE 'PR_CHG' -- 구매요청변경승인되어 종료
+		                     END   AS PR_STS_CCD
+		                  , 'PRRM' AS PR_ITEM_STS_CCD
+		               FROM PR_ITEM PREV_PRDT
+		               LEFT OUTER JOIN PR_ITEM PRDT
+		                 ON PRDT.TEN_ID  = #{g.tenant}
+		                AND PRDT.PR_UUID   = #{p.pr_uuid}
+		                AND PRDT.PR_NO   = PREV_PRDT.PR_NO
+		                AND PRDT.PR_LNO  = PREV_PRDT.PR_LNO
+		                AND PRDT.ITEM_CD = PREV_PRDT.ITEM_CD
+		              WHERE PREV_PRDT.TEN_ID = #{g.tenant}
+		                AND PREV_PRDT.PR_UUID  = #{p.prev_pr_id}
+		                AND PREV_PRDT.PR_STS_CCD IN ('PR_RCPT_WTG', 'PR_RCPT', 'PR_RET')  -- 구매요청접수대기, 구매요청접수, 구매반려 상태만 완료 처리 가능
+		            ) B
+		    ON A.TEN_ID     = B.TEN_ID
+		   AND A.PR_ITEM_UUID = B.PREV_PR_ITEM_ID
+	</select>
+	<update id="closePrevPrByModPrDt">
+		/* pr-status.closePrevPrByModPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD     = #{p.pr_sts_ccd}
+		     , PR_ITEM_STS_CCD = #{p.pr_item_sts_ccd}
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID = #{p.prev_pr_item_id}
+	</update>
+	<!-- 구매요청 반려 시 상태 수정 -->
+	<update id="returnPrDt">
+		/* pr-status.returnPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RET'
+		     , PR_ITEM_STS_CCD = 'RET'
+		     , PR_RET_RSN = #{p.pr_ret_rsn}
+		 WHERE TEN_ID     = #{g.tenant}
+		   <choose>
+		       <when test="p.pr_item_uuids != null">
+		           AND PR_ITEM_UUID IN
+		           <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		               #{pr_item_uuid}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND PR_ITEM_UUID = #{p.pr_item_uuid}
+		       </otherwise>
+		   </choose>
+	</update>
+	<!-- 구매요청 접수 시 상태 수정 -->
+	<update id="receivePrDt">
+		/* pr-status.receivePrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID     = #{g.tenant}
+		   <choose>
+		       <when test="p.pr_item_uuids != null">
+		           AND PR_ITEM_UUID IN
+		           <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		               #{pr_item_uuid}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND PR_ITEM_UUID = #{p.pr_item_uuid}
+		       </otherwise>
+		   </choose>
+	</update>
+	<!-- RFI 임시저장 시 상태 수정 -->
+	<update id="temporarySaveRfiPrDt">
+		/* pr-status.temporarySaveRfiPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFI_CRNG'
+		     , PR_ITEM_STS_CCD = 'RFI_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFI 요청 시 상태 수정 -->
+	<update id="requestRfiPrDt">
+		/* pr-status.requestRfiPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFI_REQ'
+		     , PR_ITEM_STS_CCD = 'RFI_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFI 종료 시 상태 수정 -->
+	<update id="completeRfiPrDt">
+		/* pr-status.completeRfiPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFI_CMPLD'
+		     , PR_ITEM_STS_CCD = 'RFI_PRGSG'
+		 WHERE TEN_ID      = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFI 품목 삭제 시 PR 품목 존재하는 경우 구매요청 접수 상태로 수정 -->
+	<update id="deleteRfiItemPrDt">
+		/* pr-status.deleteRfiItemPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 임시저장 시 상태 수정 -->
+	<update id="saveDraftRfxPrDt">
+		/* pr-status.saveDraftRfxPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFX_CRNG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 품목 삭제 시 PR 품목 존재하는 경우 구매요청 접수 상태로 수정 -->
+	<update id="deleteRfxItemPrDt">
+		/* pr-status.deleteRfxItemPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 진행품의 결재상신 시 상태 수정 -->
+	<update id="submitApprovalRfxProgPrDt">
+		/* pr-status.submitApprovalRfxProgPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFX_APVL_RPTG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 진행품의 결재승인 시 상태 수정 -->
+	<update id="approveApprovalRfxProgPrDt">
+		/* pr-status.submitApprovalRfxProgPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_BID_WTG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 진행품의 결재반려 시 상태 수정 -->
+	<update id="rejectApprovalRfxProgPrDt">
+		/* pr-status.rejectApprovalRfxProgPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFX_APVL_RET'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 진행품의 결재취소 시 상태 수정 -->
+	<update id="cancelApprovalRfxProgPrDt">
+		/* pr-status.cancelApprovalRfxProgPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'RFX_CRNG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 진행품의 결재승인처리 시 상태 수정 -->
+	<update id="bypassApprovalRfxProgPrDt">
+		/* pr-status.bypassApprovalRfxProgPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_BID_WTG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 시작 시 상태 수정 -->
+	<update id="startRfxPrDt">
+		/* pr-status.startRfxPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_BID_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 마감 시 상태 수정 -->
+	<update id="closeRfxPrDt">
+		/* pr-status.closeRfxPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 유찰 시 상태 수정 -->
+	<update id="dropRfxHdPrDt">
+		/* pr-status.dropRfxHdPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 취소 시 상태 수정 -->
+	<!-- RFx종료되지 않은 품목에 대한 견적 품목만 구매요청 접수 상태로 변경 -->
+	<update id="cancelRfxHdPrDt">
+		/* pr-status.cancelRfxHdPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 멀티라운드 생성 시 이전차수의 상태 수정 -->
+	<update id="multiRoundRfxPrDt">
+		/* pr-status.multiRoundRfxPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정품의 상신 시 상태 수정 -->
+	<update id="submitApprovalRfxResultPrDt">
+		/* pr-status.submitApprovalRfxResultPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VP'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정품의 승인 시 상태 수정 -->
+	<update id="approveApprovalRfxResultPrDtBySelectedItem">
+		/* pr-status.approveApprovalRfxResultPrDtBySelectedItem */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN #{p.rfx_purp_ccd} = 'SPTPURC' THEN 'PO_WTG'
+		                          WHEN #{p.rfx_purp_ccd} = 'UPRCCNTR_SGNG' THEN 'CNTR_WTG'
+		                          ELSE 'PO_WTG'
+		                      END
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.selectedPrItems" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<update id="approveApprovalRfxResultPrDtByNonSelectedItem">
+		/* pr-status.approveApprovalRfxResultPrDtByNonSelectedItem */
+		UPDATE PR_ITEM /* 미선정 품목 : 구매요청 접수 */
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.nonSelectedPrItems" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정품의 반려 시 상태 수정 -->
+	<update id="rejectApprovalRfxResultPrDt">
+		/* pr-status.rejectApprovalRfxResultPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_APVL_RET'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정품의 취소 시 상태 수정 -->
+	<update id="cancelApprovalRfxResultPrDt">
+		/* pr-status.cancelApprovalRfxResultPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정품의 결재 Bypass(승인처리) 시 상태 수정 -->
+	<update id="bypassApprovalRfxResultPrDtBySelectedItem">
+		/* pr-status.bypassApprovalRfxResultPrDtBySelectedItem */
+		UPDATE PR_ITEM /*선정 품목*/
+		   SET PR_STS_CCD = CASE WHEN #{p.rfx_purp_ccd} = 'SPTPURC' THEN 'PO_WTG'
+		                          WHEN #{p.rfx_purp_ccd} = 'UPRCCNTR_SGNG' THEN 'CNTR_WTG'
+		                          ELSE 'PO_WTG'
+		                      END
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.selectedPrItems" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<update id="bypassApprovalRfxResultPrDtByNonSelectedItem">
+		/* pr-status.bypassApprovalRfxResultPrDtByNonSelectedItem */
+		UPDATE PR_ITEM /* 미선정 품목 */
+		   SET PR_STS_CCD     = 'PR_RCPT' /*구매요청 접수*/
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.nonSelectedPrItems" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정취소 시 상태 수정  -->
+	<update id="cancelRfxResultPrDt">
+		/* pr-status.cancelRfxResultPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'VD_SLCTN_PRGSG'
+		     , PR_ITEM_STS_CCD = 'VD_SLCTN_PRGSG'
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		       #{pr_item_uuid}
+		   </foreach>
+	</update>
+	<!-- RFx 선정취소 시 상태 수정 -->
+	<update id="closeRfxResultPrDt">
+		/* pr-status.closeRfxResultPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN
+		  <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+		      #{pr_item_uuid}
+		  </foreach>
+	</update>
+	<!-- PO 임시저장 시 상태 수정 -->
+	<update id="saveDraftPoPrDt">
+		/* pr-status.saveDraftPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CRNG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 삭제 시 상태 수정 (1차수의 PO 삭제 시 해당 구매요청 품목을 구매요청접수 상태로 되돌림) -->
+	<update id="deletePoPrDt">
+		/* pr-status.deletePoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                         AND PO_REVNO = 1
+		                     )
+	</update>
+	<!-- PO 삭제 시 상태 수정 (2차수 이상의 PO 삭제 시 해당 구매요청 품목을 구매요청접수 상태로 되돌림) -->
+	<update id="deletePoItemPrDt">
+		/* pr-status.deletePoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR_RCPT'
+		     , PR_ITEM_STS_CCD = 'RCPT'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+	                          SELECT PR_ITEM_UUID
+	                            FROM PO_ITEM
+	                           WHERE TEN_ID     = #{g.tenant}
+	                             AND PO_ITEM_UUID = #{p.po_item_uuid}
+	                             AND PO_REVNO     &gt; 1
+		                     )
+	</update>
+	<!-- PO 결재상신 시 상태 수정 -->
+	<update id="submitApprovalPoPrDt">
+		/* pr-status.submitApprovalPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PP'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 결재승인 시 상태 수정 -->
+	<update id="approveApprovalPoPrDt">
+		/* pr-status.approveApprovalPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CMPLD'
+		     , PR_ITEM_STS_CCD = 'CNTR_CMPLD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 결재반려 시 상태 수정 -->
+	<update id="rejectApprovalPoPrDt">
+		/* pr-status.rejectApprovalPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PR'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 결재취소 시 상태 수정 -->
+	<update id="cancelApprovalPoPrDt">
+		/* pr-status.cancelApprovalPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CRNG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 승인처리 시 상태 수정 -->
+	<update id="bypassApprovalPoPrDt">
+		/* pr-status.bypassApprovalPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CMPLD'
+		     , PR_ITEM_STS_CCD = 'CNTR_CMPLD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- PO 해지 처리 시 상태 수정 -->
+	<update id="closePoPrDt">
+		/* pr-status.closePoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CNCL'
+		     , PR_ITEM_STS_CCD = 'CNTR_CMPLD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- 전자계약 담당자 반송 시 상태 수정 -->
+	<update id="returnElecCntrPoPrDt">
+		/* pr-status.returnElecCntrPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PW'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- 발주 전자계약 완료 시 상태 수정 -->
+	<update id="completeElecCntrPoPrDt">
+		/* pr-status.completeElecCntrPoPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'PO_CMPLD'
+		     , PR_ITEM_STS_CCD = 'CNTR_CMPLD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM PO_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND PO_UUID  = #{p.po_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 작성대기 시 상태 수정 -->
+	<update id="createDraftPriceContractPrDt">
+		/* pr-status.createDraftPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 임시저장 시 상태 수정 -->
+	<update id="saveDraftPriceContractPrDt">
+		/* pr-status.saveDraftPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 결재상신 시 상태 수정 -->
+	<update id="submitApprovalPriceContractPrDt">
+		/* pr-status.submitApprovalPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	  <!-- 단가계약 결재승인 시 상태 수정 -->
+	<update id="approveApprovalPriceContractPrDt">
+		/* pr-status.approveApprovalPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET
+<!-- 		       <choose> -->
+<!-- 		           <when test='p.cntr_use_yn == "Y"'> -->
+		               PR_STS_CCD = 'ECNTR_PRGSG'
+		             , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+<!-- 		           </when> -->
+<!-- 		           <otherwise> -->
+<!-- 		               PR_STS_CCD = 'CNTR_CMPLD' -->
+<!-- 		             , PR_ITEM_STS_CCD = 'CNTR_CMPLD' -->
+<!-- 		           </otherwise> -->
+<!-- 		       </choose> -->
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	  <!-- 단가계약 결재반려 시 상태 수정 -->
+	<update id="rejectApprovalPriceContractPrDt">
+		/* pr-status.rejectApprovalPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 결재취소 시 상태 수정 -->
+	<update id="cancelApprovalPriceContractPrDt">
+		/* pr-status.cancelApprovalPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 승인처리 시 상태 수정 -->
+	<update id="bypassApprovalPriceContractPrDt">
+		/* pr-status.bypassApprovalPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET
+<!-- 		       <choose> -->
+<!-- 		           <when test='p.cntr_use_yn == "Y"'> -->
+		               PR_STS_CCD = 'ECNTR_PRGSG'
+		             , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+<!-- 		           </when> -->
+<!-- 		           <otherwise> -->
+<!-- 		               PR_STS_CCD = 'CNTR_CMPLD' -->
+<!-- 		             , PR_ITEM_STS_CCD = 'CNTR_CMPLD' -->
+<!-- 		           </otherwise> -->
+<!-- 		       </choose> -->
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 전자계약 담당자 반송 시 상태 수정 -->
+	<update id="returnElecCntrPriceContractPrDt">
+		/* pr-status.returnElecCntrPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_WTG'
+		     , PR_ITEM_STS_CCD = 'CNTR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 단가계약 전자계약 완료 시 상태 수정 -->
+	<update id="completeElecCntrPriceContractPrDt">
+		/* pr-status.completeElecCntrPriceContractPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'CNTR_CMPLD'
+		     , PR_ITEM_STS_CCD = 'CNTR_CMPLD'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM UPRCCNTR_ITEM
+		                       WHERE TEN_ID  = #{g.tenant}
+		                         AND UPRCCNTR_UUID = #{p.uprccntr_uuid}
+		                     )
+	</update>
+	<!-- 납품예정(ASN)(협력사) -->
+	<update id="requestAsnPrDt">
+		/* pr-status.requestAsnPrDt  */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM ASN_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND ASN_UUID = #{p.asn_uuid}
+		                     )
+	</update>
+	<!-- 검수등록(입고,GR) 임시저장 -->
+	<update id="saveDraftGrPrDt">
+		/* pr-status.saveDraftGrPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM GR_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND GR_UUID  = #{p.gr_uuid}
+		                     )
+	</update>
+	<!-- 검수승인(입고,GR) 결재승인 시 상태변경 처리 -->
+	<select id="checkPoQtyWithGrQty" resultType="map">
+		/* pr-status.checkPoQtyWithGrQty */
+		SELECT X.TEN_ID          AS TEN_ID
+		     , X.PR_ITEM_UUID      AS PR_ITEM_UUID
+		     , SUM(X.SUM_PO_QTY) AS SUM_PO_QTY
+		     , SUM(X.SUM_GR_QTY) AS SUM_GR_QTY
+		  FROM (
+		        SELECT CRNT_GRDT.TEN_ID
+		             , CRNT_GRDT.PR_ITEM_UUID
+		             , 0                                                                      AS SUM_PO_QTY
+		             , SUM(CASE WHEN ALL_GRDT.GR_QTY IS NULL THEN 0 ELSE ALL_GRDT.GR_QTY END) AS SUM_GR_QTY /* GR 누적수량*/
+		          FROM GR_ITEM CRNT_GRDT
+		         INNER JOIN GR_ITEM ALL_GRDT
+		            ON ALL_GRDT.TEN_ID      = CRNT_GRDT.TEN_ID
+		           AND ALL_GRDT.PR_ITEM_UUID  = CRNT_GRDT.PR_ITEM_UUID
+		           AND ALL_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'
+		           AND ALL_GRDT.STS        != 'D'
+		         WHERE CRNT_GRDT.TEN_ID      = #{g.tenant}
+		           AND CRNT_GRDT.GR_UUID       = #{p.gr_uuid}
+		           AND CRNT_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* GC: 검수완료 */
+		           AND CRNT_GRDT.STS        != 'D'
+		         GROUP BY CRNT_GRDT.TEN_ID, CRNT_GRDT.PR_ITEM_UUID
+		         UNION ALL
+		        SELECT CRNT_GRDT.TEN_ID
+		             , CRNT_GRDT.PR_ITEM_UUID
+		             , SUM(CASE WHEN PODT.PO_QTY IS NULL THEN 0 ELSE PODT.PO_QTY END) AS SUM_PO_QTY /* PO 수량*/
+		             , 0                                                                  AS SUM_GR_QTY
+		          FROM GR_ITEM CRNT_GRDT
+		         INNER JOIN PO_ITEM PODT
+		            ON PODT.TEN_ID      = CRNT_GRDT.TEN_ID
+		           AND PODT.PR_ITEM_UUID  = CRNT_GRDT.PR_ITEM_UUID
+		           AND PODT.STS        != 'D'
+		         INNER JOIN PO POHD /* PR품목으로 RFx업체선정 시 수량분할하여 서로 다른 업체로 발주를 생성할 수도 있으므로 모든 유효 PO 수량을 SUM한다 */
+		            ON POHD.TEN_ID      = PODT.TEN_ID
+		           AND POHD.PO_UUID       = PODT.PO_UUID
+		           AND POHD.PO_STS_CCD = 'APVD'
+		           AND POHD.EFCT_PO_YN  = 'Y' /*최종 유효 PO*/
+		           AND POHD.STS        != 'D'
+		         WHERE CRNT_GRDT.TEN_ID      = #{g.tenant}
+		           AND CRNT_GRDT.GR_UUID       = #{p.gr_uuid}
+		           AND CRNT_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* GC: 검수완료 */
+		           AND CRNT_GRDT.STS        != 'D'
+		         GROUP BY CRNT_GRDT.TEN_ID, CRNT_GRDT.PR_ITEM_UUID
+		       ) X
+		 GROUP BY X.TEN_ID, X.PR_ITEM_UUID
+	</select>
+	<update id="approveApprovalGrPrDtByItem">
+		/* pr-status.approveApprovalGrPrDtByItem */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN CAST(#{p.sum_gr_qty} AS FLOAT  ) = CAST(#{p.sum_po_qty} AS FLOAT  )
+		                               THEN 'GR_CMPLD'  /* GR_CMPLD: 검수완료 */
+		                          ELSE 'GR_REQ'       /* GR_REQ: 검수진행 */
+		                      END
+		     , PR_ITEM_STS_CCD = CASE WHEN CAST(#{p.sum_gr_qty} AS FLOAT  ) = CAST(#{p.sum_po_qty} AS FLOAT  )
+		                                   THEN 'GR_CMPLD'  /* GR_CMPLD: 검수완료 */
+		                              ELSE 'GR_PRGSG'       /* GR_PRGSG: 검수진행 */
+		                          END
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID = #{p.pr_item_uuid}
+	</update>
+	<!-- 검수등록(입고,GR) 승인처리 -->
+	<update id="bypassApprovalGrPrDtByItem">
+		/* pr-status.bypassApprovalGrPrDtByItem */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN CAST(#{p.sum_gr_qty} AS FLOAT  ) = CAST(#{p.sum_po_qty} AS FLOAT  )
+		                               THEN 'GR_CMPLD'  /* GR_CMPLD: 검수완료 */
+		                          ELSE 'GR_REQ'       /* GR_REQ: 검수진행 */
+		                      END
+		     , PR_ITEM_STS_CCD = CASE WHEN CAST(#{p.sum_gr_qty} AS FLOAT  ) = CAST(#{p.sum_po_qty} AS FLOAT  )
+		                                   THEN 'GR_CMPLD'  /* GR_CMPLD: 검수완료 */
+		                              ELSE 'GR_PRGSG'       /* GR_PRGSG: 검수진행 */
+		                          END
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID = #{p.pr_item_uuid}
+	</update>
+	<!-- 납품예정 반려 -->
+	<update id="rejectRequestAsnPrDt">
+		/* pr-status.rejectRequestAsnPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM ASN_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND ASN_UUID  = #{p.asn_uuid}
+		                     )
+	</update>
+	<!-- 검수승인(입고,GR) 취소 -->
+	<update id="cancelGrPrDt">
+		/* pr-status.cancelGrPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM GR_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND GR_UUID  = #{p.gr_uuid}
+		                     )
+	</update>
+	<!-- 기성요청(협력사) -->
+	<update id="requestServiceAsnPrDt">
+		/* pr-status.requestAsnPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM ASN_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND ASN_UUID  = #{p.asn_uuid}
+		                     )
+	</update>
+	<!-- 기성등록(입고,GR) 임시저장 -->
+	<update id="saveDraftServiceGrPrDt">
+		/* pr-status.saveDraftServicePrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM GR_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND GR_UUID = #{p.gr_uuid}
+		                     )
+	</update>
+	<!-- 기성등록(입고,GR) 결재승인 -->
+	<select id="checkPoAmtWithGrAmt" resultType="map">
+		/* pr-status.checkPoAmtWithGrAmt */
+		SELECT X.TEN_ID          AS TEN_ID
+		     , X.PR_ITEM_UUID      AS PR_ITEM_UUID
+		     , SUM(X.SUM_PO_AMT) AS SUM_PO_AMT
+		     , SUM(X.SUM_GR_AMT) AS SUM_GR_AMT
+		  FROM (
+		        SELECT CRNT_GRDT.TEN_ID
+		             , CRNT_GRDT.PR_ITEM_UUID
+		             , 0                                                                      AS SUM_PO_AMT
+		             , SUM(CASE WHEN ALL_GRDT.GR_AMT IS NULL THEN 0 ELSE ALL_GRDT.GR_AMT END) AS SUM_GR_AMT /* 기성 누적 금액*/
+		          FROM GR_ITEM CRNT_GRDT
+		         INNER JOIN GR_ITEM ALL_GRDT
+		            ON ALL_GRDT.TEN_ID      = CRNT_GRDT.TEN_ID
+		           AND ALL_GRDT.PR_ITEM_UUID  = CRNT_GRDT.PR_ITEM_UUID
+		           AND ALL_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'
+		           AND ALL_GRDT.STS        != 'D'
+		         WHERE CRNT_GRDT.TEN_ID      = #{g.tenant}
+		           AND CRNT_GRDT.GR_UUID       = #{p.gr_uuid}
+		           AND CRNT_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		           AND CRNT_GRDT.STS        != 'D'
+		         GROUP BY CRNT_GRDT.TEN_ID, CRNT_GRDT.PR_ITEM_UUID
+		         UNION ALL
+		        SELECT CRNT_GRDT.TEN_ID
+		             , CRNT_GRDT.PR_ITEM_UUID
+		             , SUM(CASE WHEN PODT.PO_AMT IS NULL THEN 0 ELSE PODT.PO_AMT END) AS SUM_PO_AMT /* PO 금액*/
+		             , 0                                                                  AS SUM_GR_AMT
+		          FROM GR_ITEM CRNT_GRDT
+		         INNER JOIN PO_ITEM PODT
+		            ON PODT.TEN_ID      = CRNT_GRDT.TEN_ID
+		           AND PODT.PR_ITEM_UUID  = CRNT_GRDT.PR_ITEM_UUID
+		           AND PODT.STS        != 'D'
+		         INNER JOIN PO POHD /* PR품목으로 RFx업체선정 시 수량분할하여 서로 다른 업체로 발주를 생성할 수도 있으므로 모든 유효 PO 수량을 SUM한다 */
+		            ON POHD.TEN_ID      = PODT.TEN_ID
+		           AND POHD.PO_UUID       = PODT.PO_UUID
+		           AND POHD.PO_STS_CCD = 'APVD'
+		           AND POHD.EFCT_PO_YN  = 'Y' /*최종 유효 PO*/
+		           AND POHD.STS        != 'D'
+		         WHERE CRNT_GRDT.TEN_ID      = #{g.tenant}
+		           AND CRNT_GRDT.GR_UUID       = #{p.gr_uuid}
+		           AND CRNT_GRDT.GR_ITEM_STS_CCD = 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		           AND CRNT_GRDT.STS        != 'D'
+		         GROUP BY CRNT_GRDT.TEN_ID, CRNT_GRDT.PR_ITEM_UUID
+		       ) X
+		 GROUP BY X.TEN_ID, X.PR_ITEM_UUID
+	</select>
+	<update id="approveApprovalServiceGrPrDtByItem">
+		/* pr-status.approveApprovalServiceGrPrDtByItem */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN CAST(#{p.sum_po_amt} AS FLOAT  ) <![CDATA[<=]]> CAST(#{p.sum_gr_amt} AS FLOAT  )
+		                               THEN 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		                          ELSE 'GR_PRGSG'       /* GR_REQ: 기성진행 */
+		                      END
+		     , PR_ITEM_STS_CCD = CASE WHEN CAST(#{p.sum_po_amt} AS FLOAT  ) <![CDATA[<=]]> CAST(#{p.sum_gr_amt} AS FLOAT  )
+		                                   THEN 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		                              ELSE 'GR_PRGSG'       /* GR_PRGSG: 기성진행 */
+		                          END
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID = #{p.pr_item_uuid}
+	</update>
+	<update id="bypassApprovalServiceGrPrDtByItem">
+		/* pr-status.bypassApprovalServiceGrPrDtByItem: 기성등록(입고,GR) 결재승인 */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = CASE WHEN CAST(#{p.sum_po_amt} AS FLOAT  ) <![CDATA[<=]]> CAST(#{p.sum_gr_amt} AS FLOAT  )
+		                               THEN 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		                          ELSE 'GR_PRGSG'       /* GR_REQ: 기성진행 */
+		                      END
+		     , PR_ITEM_STS_CCD = CASE WHEN CAST(#{p.sum_po_amt} AS FLOAT  ) <![CDATA[<=]]> CAST(#{p.sum_gr_amt} AS FLOAT  )
+		                                   THEN 'GR_CMPLD'  /* GR_CMPLD: 기성완료 */
+		                              ELSE 'GR_PRGSG'       /* GR_PRGSG: 기성진행 */
+		                          END
+		 WHERE TEN_ID     = #{g.tenant}
+		   AND PR_ITEM_UUID = #{p.pr_item_uuid}
+	</update>
+	<!-- 기성요청 반려 -->
+	<update id="rejectRequestServiceAsnPrDt">
+		/* pr-status.rejectRequestServiceAsnPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM ASN_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND ASN_UUID  = #{p.asn_uuid}
+		                     )
+	</update>
+	<!-- 기성승인(입고,GR) 취소 -->
+	<update id="cancelServiceGrPrDt">
+		/* pr-status.cancelServiceGrPrDt */
+		UPDATE PR_ITEM
+		   SET PR_STS_CCD = 'GR_REQ'
+		     , PR_ITEM_STS_CCD = 'GR_PRGSG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_ITEM_UUID IN (
+		                      SELECT PR_ITEM_UUID
+		                        FROM GR_ITEM
+		                       WHERE TEN_ID = #{g.tenant}
+		                         AND GR_UUID  = #{p.gr_uuid}
+		                         AND GR_AMT &gt; 0
+		                     )
+	</update>
+	<select id="findListReferenceDocFromPRByPR" resultType="map">
+	SELECT #{p.sortkey}                                        AS SORTKEY
+					  , 'PR'                                        AS APP_TYPE
+					  , HD.PR_UUID                                    AS APP_ID
+					  , HD.PR_NO                                    AS DOC_NO
+					  , CAST(HD.PR_REVNO AS INTEGER)                  AS DOC_REV
+					  , HD.PR_STS_CCD                              AS PROG_STS
+					  , ( SELECT DTLCD_NM
+							FROM DTLCD_MULTLANG
+						   WHERE TEN_ID  = HD.TEN_ID
+							 AND CCD  = 'P011'
+							 AND DTLCD  = HD.PR_STS_CCD
+							 AND LANG_CCD = #{g.locale} )            AS STS_NM
+					  , HD.PR_TIT                                   AS DOC_TITLE
+					  , ''                                          AS MOD_TYP
+					  , ''                                          AS COMP_YN
+				   FROM PR HD
+				  WHERE HD.TEN_ID = #{g.tenant}
+					AND HD.PR_NO  = #{p.pr_no}
+					AND HD.STS   != 'D'
+	</select>
+	<select id="findListReferenceDocFromPRByPrItemIds" resultType="map">
+	SELECT #{p.sortkey}                                          AS SORTKEY
+	              , 'PR'                                         AS APP_TYPE
+	              , HD.PR_UUID                                     AS APP_ID
+	              , HD.PR_NO                       AS DOC_NO
+	              , CAST(HD.PR_REVNO AS INTEGER)                   AS DOC_REV
+	              , HD.PR_STS_CCD                               AS PROG_STS
+	              , ( SELECT DTLCD_NM
+	                    FROM DTLCD_MULTLANG
+	                   WHERE TEN_ID  = HD.TEN_ID
+	                     AND CCD  = 'P011'
+	                     AND DTLCD  = HD.PR_STS_CCD
+	                     AND LANG_CCD = #{g.locale} )             AS STS_NM
+	              , HD.PR_TIT                                    AS DOC_TITLE
+	              , ''                                           AS MOD_TYP
+	              , ''                                           AS COMP_YN
+	           FROM PR HD
+	          WHERE HD.TEN_ID = #{g.tenant}
+	            AND HD.PR_UUID IN ( SELECT PR_UUID
+	                                FROM PR_ITEM
+	                               WHERE TEN_ID     = #{g.tenant}
+	                                 AND PR_ITEM_UUID IN
+	                                     <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+										   #{pr_item_uuid}
+									   </foreach>
+	                                 AND STS        != 'D'
+	                            )
+	</select>
+	<select id="findListReferenceIds" resultType="map">
+	/* pr-status.findListReferenceIds */
+	SELECT PR_ITEM_UUID
+	FROM PR_ITEM
+	WHERE TEN_ID = #{g.tenant}
+		AND PR_UUID = #{p.pr_uuid}
+	AND STS != 'D'
+	</select>
+</mapper>

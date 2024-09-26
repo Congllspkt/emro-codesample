@@ -1,0 +1,454 @@
+<sc-link rel="import" href="../gr/es-gr-evalsheet-set-tab.html"></sc-link>
+
+<dom-module id="es-po-eval-set-detail">
+	<!--
+    /**
+     *	@description : 발주에서 입고/기성 평가 설정
+     */
+    -->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- 조회-->
+		<sc-ajax id="findPoInfo"
+				 url="findPoInfo.do"
+				 body="{{param}}"
+				 on-response="completeFindPo">
+		</sc-ajax>
+		
+		<sc-ajax id="findGeInfo"
+				 url="findGeInfo.do"
+				 on-response="completeFindGe">
+		</sc-ajax>
+		
+		<sc-ajax id="findListGemt"
+				 url="../gr/findListGemt.do">
+		</sc-ajax>
+		
+		<sc-ajax id="findListGegByGemt"
+				 url="../gr/findListGegByGemt.do"
+				 on-response="completeFindListGegByGemt">
+		</sc-ajax>
+		
+		<sc-ajax id="findGeg"
+				 url="../gr/evalsetup/findGeg.do"
+				 on-response="onFindResultHandler">
+		</sc-ajax>
+		
+		<sc-ajax id="savePoEval"
+				 url="savePoEval.do"
+				 on-response="completeSavePoEval">
+		</sc-ajax>
+		
+		<sc-ajax id="deletePoEval"
+				 url="deletePoEval.do"
+				 on-response="completeDeletePoEval">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-code-group>
+		
+		</sc-code-group>
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="[[formula('purcTypTxt')]]평가 설정">
+			<sc-button text="저장" on-click="onSave" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('isDeleteYn')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-4" style="overflow-y: auto;">
+				<cc-form-panel title-text="발주 정보" column="1">
+					<cc-fieldset>
+						<sc-label text="운영조직"></sc-label>
+						<cc-operorg-combobox-field value="{{poData.oorg_cd}}" oper-unit-cd="PO"
+												   id="operorgcombobox" readonly="true">
+						</cc-operorg-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="발주 번호/차수"></sc-label>
+						<div class="field-box">
+							<sc-text-field value="{{poData.po_no}}" class="w-150" readonly="true"></sc-text-field>
+							<span style="margin:0 5px">&#47;</span>
+							<sc-text-field value="{{poData.po_revno}}" class="w-50" readonly="true"></sc-text-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="제목"></sc-label>
+						<sc-text-field value="{{poData.po_tit}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[formula('isExistsGe')]]">
+						<sc-label text="[[formula('purcTypTxt')]]평가 유형"></sc-label>
+						<sc-combobox-field value="{{grEvalData.gemt_cd}}" display-field="gemt_nm" value-field="gemt_cd" items="{{codes.gemtList}}" placeholder="선택" required="true" on-select="onSelectGrEvalType"></sc-combobox-field>
+					</cc-fieldset>
+				</cc-form-panel>
+				
+				<cc-form-panel title-text="[[formula('purcTypTxt')]] 유형" column="1" hidden="[[!formula('selectGemt')]]">
+					<cc-fieldset>
+						<sc-label text="{{grEvalData.gemt_nm}}"></sc-label>
+						<sc-text-field value="{{grEvalData.gemgValues}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+				</cc-form-panel>
+				
+				<sc-grid id="gegGridPanel" class="flex" editable="false" use-selection="true" selection-mode="radio"
+						 data-provider="{{gegList}}" on-selection-checked="onSelectionChecked" hidden="[[formula('isExistsGe')]]">
+					<cc-grid-toolbar title-text="[[formula('purcTypTxt')]]평가그룹">
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-group-column header-text="[[formula('purcTypTxt')]]평가관리그룹" width="260" text-align="center">
+							<sc-data-column data-field="gemg_cd" header-text="코드" width="100" text-align="left"></sc-data-column>
+							<sc-data-column data-field="gemg_nm" header-text="명" width="160" text-align="left"></sc-data-column>
+						</sc-group-column>
+						<sc-group-column header-text="[[formula('purcTypTxt')]]평가그룹" width="260" text-align="center">
+							<sc-data-column data-field="geg_cd" header-text="코드" width="100" text-align="center"></sc-data-column>
+							<sc-data-column data-field="geg_nm" header-text="명" width="160" text-align="left"></sc-data-column>
+						</sc-group-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="geg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="geg_expln"></sc-grid-field>
+						<sc-grid-field data-field="gemt_uuid"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+				
+				<cc-form-panel title-text="[[formula('purcTypTxt')]]평가그룹 상세" column="1">
+					<cc-fieldset hidden="[[!formula('isExistsGe')]]">
+						<sc-label text="[[formula('purcTypTxt')]]평가그룹 코드"></sc-label>
+						<sc-text-field value="{{gegInfo.geg_cd}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('isExistsGe')]]">
+						<sc-label text="[[formula('purcTypTxt')]]평가그룹 명"></sc-label>
+						<sc-text-field value="{{gegInfo.geg_nm}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="[[formula('purcTypTxt')]]평가그룹 설명"></sc-label>
+						<sc-textarea-field value="{{gegInfo.geg_expln}}"
+										   max-length="200" class="h-50" readonly="true"></sc-textarea-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="[[formula('purcTypTxt')]]평가관리유형"></sc-label>
+						<sc-combobox-field validation-group="gemgInfo" value="{{gegInfo.gemt_uuid}}" readonly="true"
+										   items="{{codes.gemtList}}" display-field="gemt_nm" value-field="gemt_uuid"></sc-combobox-field>
+					</cc-fieldset>
+				</cc-form-panel>
+			</div>
+			
+			<div class="hspace-10"></div>
+			
+			<es-gr-evalsheet-set-tab id="grEvalshtTab" class="flex-6"></es-gr-evalsheet-set-tab>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-po-eval-set-detail',
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							gemtList: []
+						};
+					},
+					reset: false
+				},
+				param: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				poData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				gegList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				gegInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				type: {
+					type: String,
+					value: function() {
+						return "PO";
+					}
+				},
+				isView: {
+					type: Boolean,
+					value: function() {
+						return false;
+					}
+				}
+			},
+			formulas: {
+				editable: function() {
+					var poData = this.poData;
+					return !this.get("isView") && (UT.isEmpty(poData.po_sts_ccd) || poData.po_sts_ccd === "CRNG");
+				},
+				selectGemt: function() {
+					var me = this;
+					return UT.isNotEmpty(me.get("grEvalData.gemt_cd")) && !me.formula("isExistsGe");
+				},
+				isDeleteYn: function() {
+					var poData = this.poData;
+					return this.formula("editable") && UT.isNotEmpty(poData.ge_uuid);
+				},
+				isExistsGe: function() {
+					var poData = this.poData;
+					return UT.isNotEmpty(poData.ge_uuid);
+				},
+				purcTypTxt: function() {
+					var me = this;
+					var poData = me.get("poData");
+					if(poData == null) {
+						return "";
+					}
+					return poData.purc_typ_ccd === "QTY" ? "입고" : "기성";
+				}
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("isView", param.isView || false);
+				me.set("param", param);
+				me.findPoDetail();
+			},
+			
+			// Po 상세 조회
+			findPoDetail: function() {
+				var me = this;
+				UT.request(me.$.findPoInfo);
+			},
+			
+			// Po 상세 조회 후 handler
+			completeFindPo: function(el, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				// 조회 데이터 셋팅
+				me.set("poData", lastResponse);
+				// 조회 후 화면 처리
+				me.applyFormula();
+				
+				me.$.findListGemt.body = {
+					oorg_cd: me.get("poData.oorg_cd")
+				};
+				UT.request(me.$.findListGemt, function(e, res) {
+					var result = res.response;
+					me.set("codes.gemtList", result);
+					
+					if(result.length === 1) {
+						me.selectGrEvalType(result[0]);
+					}
+				});
+				
+				if(UT.isNotEmpty(me.get("poData.ge_uuid"))) {
+					me.$.findGeInfo.body = {
+						ge_uuid: me.get("poData.ge_uuid")
+					};
+					UT.request(me.$.findGeInfo);
+				}
+			},
+			
+			completeFindGe: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				var gegInfo = result.gegInfo;
+				var grEvalshtInfo = result.grEvalshtInfo;
+				var gePrcsEvaltrs = result.gePrcsEvaltrs;
+				
+				me.set("gegInfo", gegInfo);
+				
+				var param = {
+					purcTypCcd: me.get("poData.purc_typ_ccd"),
+					geg: gegInfo,
+					grEvalshtInfo: grEvalshtInfo,
+					gePrcsEvaltrs: gePrcsEvaltrs,
+					readonlyMode: true,
+					changeEvaltr: true
+				};
+				
+				me.$.grEvalshtTab.load(param);
+			},
+			
+			onSelectGrEvalType : function(event) {
+				var me = this;
+				var item = event.detail.selectedItem;
+				
+				me.selectGrEvalType(item);
+			},
+			
+			selectGrEvalType: function(data) {
+				var me = this;
+				me.set("grEvalData.gemt_cd", data.gemt_cd);
+				me.set("grEvalData.gemt_nm", data.gemt_nm);
+				me.applyFormula();
+				
+				me.$.gegGridPanel.getDataProvider().removeAll();
+				
+				me.$.findListGegByGemt.body = {
+					type: me.get("type"),
+					uuid: me.get("poData.po_uuid"),
+					oorg_cd: me.get("poData.oorg_cd"),
+					gemt_cd: data.gemt_cd
+				};
+				UT.request(me.$.findListGegByGemt);
+			},
+			
+			completeFindListGegByGemt: function(e, res) {
+				var me = this;
+				var response = res.response;
+				var gemgValues = response.gemgValues;
+				var gegs = response.gegs;
+				
+				var gemgValueStr = "";
+				if(gemgValues != null) {
+					gemgValueStr = gemgValues.join(',');
+				}
+				me.set("grEvalData.gemgValues", gemgValueStr);
+				
+				if(UT.isEmpty(gegs)) {
+					UT.alert(me.translate("STD.PO1105", null, me.formula('purcTypTxt')), null, true);
+					me.set("isView", true);
+				} else {
+					me.set("isView", false);
+					me.set("gegList", gegs);
+					
+					if(!me.formula('isExistsGe')) {
+						if(gegs.length === 1) {
+							me.$.gegGridPanel.selectionCheck(0, true, false);
+						}
+					}
+					me.$.gegGridPanel.doContentElementResize();
+				}
+				me.applyFormula();
+			},
+			
+			onSelectionChecked: function(event){
+				var me = this,
+					detail = event.detail,
+					checked = detail.checked;
+				
+				if(checked) {
+					me.set("gegInfo", detail.data);
+					
+					me.$.findGeg.body = detail.data;
+					UT.request(me.$.findGeg);
+				}
+			},
+			
+			onFindResultHandler: function(e, res) {
+				var me     = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S") {
+					var resultData = result.resultData;
+					var gegInfo = resultData.gegInfo;
+					var gegGemgs = resultData.gegGemgs;
+					var grEvalshtInfo = UT.isEmpty(resultData.grEvalshtInfo) ? new Object() : resultData.grEvalshtInfo;
+					
+					var param = {
+						purcTypCcd: me.get("poData.purc_typ_ccd"),
+						geg: gegInfo,
+						gegGemgs: gegGemgs,
+						grEvalshtInfo: grEvalshtInfo,
+						readonlyMode: true,
+						changeEvaltr: true
+					};
+					
+					me.$.grEvalshtTab.load(param);
+				}
+			},
+			
+			onSave: function() {
+				var me = this;
+				
+				var param = me.getApplyEvalParameter();
+				me.$.savePoEval.body = {
+					poData: me.get("poData"),
+					geg: param.geg,
+					grEvalshtInfo: param.grEvalshtInfo,
+					grEvalshtInfoPrcses: param.grEvalshtInfoPrcses,
+					evalshtPrcsEvaltrs: param.evalshtPrcsEvaltrs
+				};
+				UT.request(me.$.savePoEval);
+			},
+			
+			completeSavePoEval: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) {
+					UT.completeAlert("저장", function() {
+						me.findPoDetail();
+					});
+				}
+			},
+			
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+					me.$.deletePoEval.body = {
+						po_uuid: me.get("poData.po_uuid"),
+						ge_uuid: me.get("poData.ge_uuid")
+					};
+					UT.request(me.$.deletePoEval);
+				});
+			},
+			
+			completeDeletePoEval: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) {
+					UT.completeAlert("삭제", function() {
+						me.onClose();
+					});
+				}
+			},
+			
+			getApplyEvalParameter: function() {
+				var me = this;
+				var evalshtTab = me.$.grEvalshtTab;
+				
+				return evalshtTab.getApplyEvalParameter();
+			},
+			
+			onClose: function() {
+				var me = this;
+				
+				me.fire("show-detail", me.get("param"));
+				me.clearData();
+			},
+			
+			// 데이터 초기화
+			clearData : function() {
+				var me = this;
+				me.reset();
+			}
+		});
+	</script>
+</dom-module>

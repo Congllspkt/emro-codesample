@@ -1,0 +1,312 @@
+<dom-module id="es-sp-rfx-pre-insp-list">
+<!-- 
+/**
+ *
+ *	@description : 
+ *  <pre>
+ * </pre>
+ * @author : emro
+ * @FileName : 
+ * @Since 2022. 9. 13.
+ * @변경이력 : [2022. 9. 13.] emro 최초작성
+ */
+-->
+	<style>
+		:host {
+            @apply(--vbox-layout);
+        }
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findListRfxPreInsp"
+            url="findListRfxPreInsp.do"
+            body="{{searchParam}}"
+            last-response="{{resultList}}">
+        </sc-ajax>
+        
+        <sc-ajax id="checkValidRfxPreInspAppReg"
+        	url="checkValidRfxPreInspAppReg.do"
+        	on-response="completeCheckValidRfxPreInspAppReg">
+        </sc-ajax>
+		
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<!-- 코드 조회 -->
+			<sc-code-group>
+				<!-- 경쟁 유형 -->
+				<sc-code code="P211"	value="{{codes.P211}}"></sc-code>
+				<!-- 공통코드 : RFX유형  -->
+				<sc-code code="P033"	value="{{codes.P033}}"></sc-code>
+				<!-- 공통코드 : RFX상태 -->
+				<sc-code code="P013"	value="{{codes.P013}}"></sc-code>
+				<!-- 공통코드 :  마감 상태 -->
+				<sc-code code="C068"	value="{{codes.C068}}"></sc-code>
+				<!-- 공통코드 :  제출여부 -->
+				<sc-code code="C070"	value="{{codes.C070}}"></sc-code>
+				<!-- 공통코드 :  적격여부 -->
+				<sc-code code="C067"	value="{{codes.C067}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+	    
+	    <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+	    
+       <cc-page-title-bar></cc-page-title-bar>
+			
+			<cc-search-condition-panel on-search="onFindList" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cd}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="전체">
+					</cc-sp-operorg-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 사전심사 일자"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_pre_insp_dt}}" to-value="{{searchParam.to_rfx_pre_insp_dt}}" default-from-value="-1M" default-to-value="0d" string-date="false" required="true">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="경쟁 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.P211}}" value="{{searchParam.comp_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.P033}}" value="{{searchParam.rfx_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 번호"></sc-label>
+					<cc-multi-text-field value="{{searchParam.rfx_no}}" multi-value="{{searchParam.rfx_nos}}" on-enter="onFindList" title="RFX 번호"></cc-multi-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{searchParam.rfx_tit}}" max-length="50" on-enter="onFindList"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="마감 상태"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.C068}}" value="{{searchParam.close_sts}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제출 상태"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.C070}}" value="{{searchParam.subm_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<!-- 그리드 -->
+			<sc-grid id="gridPanel" class="flex" data-provider="{{resultList}}" 
+					 selection-mode="radio"
+					 use-state="false"
+					 editable="false"
+					 use-dummy="false"
+					 selection-able-function="selectionAbleFn"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="제출" on-click="onRegRfxPreInspApp" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="oorg_cd"	header-text="운영조직"	width="170"	text-align="center"	display-field="logic_org_nm"		value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="close_sts"		header-text="마감 상태"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.C068}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="subm_sts_ccd"		header-text="제출 상태"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.C070}}" item-style-function="onItemStyleFn"></sc-combobox-column>
+					<sc-combobox-column	data-field="presn_res_ccd"	header-text="심사 결과"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.C067}}"></sc-combobox-column>
+					<sc-image-column	data-field="img_disqual"	header-text="부적격 사유"	width="120"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="rfx_typ_ccd"		header-text="RFX 유형"		width="100"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.P033}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_no"			header-text="RFX 번호"		width="100"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="rfx_rnd"		header-text="진행차수"		width="90"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="rfx_tit"		header-text="제목"		width="250"	text-align="left"	></sc-data-column>
+					<sc-combobox-column	data-field="comp_typ_ccd"	header-text="경쟁 유형"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.P211}}"></sc-combobox-column>
+					<sc-date-column		data-field="rfx_presn_st_dttm"	header-text="사전심사 시작 일시"	width="150"	text-align="center"	format-type="datetime"	string-date="false"></sc-date-column>
+					<sc-date-column		data-field="rfx_presn_clsg_dttm"	header-text="사전심사 마감 일시"	width="150"	text-align="center"	format-type="datetime"	string-date="false"></sc-date-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field		data-field="dq_rsn"			data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="rfx_presn_afp_uuid"	data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="rfx_presn_uuid"				data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-dialog id="dialog" title-text="부적격 사유" title-align="left" style="width:500px; height:300px" modal="true">
+			<cc-page-title-bar>
+			</cc-page-title-bar>
+			<table class="tb-form">
+				<colgroup>
+					<col style="width:80px"></col>
+					<col></col>
+				</colgroup>
+				<tr>
+					<th><sc-label text="사유"></sc-label></th>
+					<td>
+						<sc-textarea-field class="h-150" value="{{dialogData.dq_rsn}}" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+	
+	<script>
+	Polymer({
+			is : 'es-sp-rfx-pre-insp-list',
+			properties : {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				dialogData: {
+					type: Object,
+					value : function(){
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							"P211": [], //경쟁 유형
+							"P033": [], //RFX 유형
+							"C068": [], //마감 상태
+							"C070": [], //제출상태
+							"C067": [], //심사결과(적격여부)
+							"oorgCd": []  //운영조직
+						};
+					},
+					reset: false
+				}
+			},
+			/************************************************** 
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+				var me = this;
+				me.initComboColumns();
+				me.load();
+			},
+			initComboColumns : function() {
+                var me = this;
+
+                var rfxTypCcd = me.codes.P033, filteredRfxTypCd = [];
+                if(UT.isArray(rfxTypCcd)) {
+                    for(var i = 0; i < rfxTypCcd.length; i++) {
+                        var item = rfxTypCcd[i];
+
+                        // 역경매 제외
+                        if(item["data"] !== "RAUC" && item["data"] !== "RFI") {
+                            filteredRfxTypCd.push(item);
+                        }
+                    }
+                }
+                me.set("codes.P033", filteredRfxTypCd);
+            },
+            load : function() {
+				this.onFindList();
+			},
+			onFindList: function(){
+				var me = this;
+				//검색조건의 필수값 체크
+         	    if(!me.validate('search')){
+         	    	UT.alert("STD.E0000");
+         	    	return;
+         	    }
+				UT.request(me.$.findListRfxPreInsp);
+			},
+			/************************************************** 
+			 * 그리드 이벤트
+			 **************************************************/
+			// 그리드 컬럼 스타일
+			// 제출 화면 전환
+            onItemStyleFn : function(data, item){
+	            if( data.subm_sts_ccd == "SUBM" || data.subm_sts_ccd == "CRNG"){
+	                return {
+	                    fontWeight: "bold",
+	                    fontColor: "#0e006f"
+	                };
+	            }
+            },
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_disqual"){
+                	if(!UT.isEmpty(data["presn_res_ccd"]) && data["presn_res_ccd"] === "DQ"){
+						return "link";
+                	}
+				}
+				return null;
+			},
+			selectionAbleFn : function(data) {
+  				return (["CLSG_WTG"].indexOf(data.close_sts) > -1);
+  			},
+			onItemClick : function(event) {
+				var me = this,
+		  			data = event.detail.data,
+		  			item = event.detail.item;
+				
+				if(item.dataField === "img_disqual") {
+					if(!UT.isEmpty(data.dq_rsn)){
+	                	me.onShowDialog(data.dq_rsn);
+					}
+				} else if(item.dataField === "subm_sts_ccd"){
+  					if(data.subm_sts_ccd == "SUBM" || data.subm_sts_ccd == "CRNG"){
+  						if(data.close_sts == "CLSG"){
+  							me.fire("show-app-view", data);
+  						}else{
+  							me.$.checkValidRfxPreInspAppReg.body = UT.copy(data);
+  							UT.request(me.$.checkValidRfxPreInspAppReg);
+  						}
+  					}
+  				}
+			},
+			
+			completeCheckValidRfxPreInspAppReg: function(e, res){
+				var me = this,
+    			result = res.response,
+				resultStatus = result.resultStatus,
+				resultData = result.resultData || {};
+			
+				if(resultStatus === "S"){
+					me.fire("show-app-detail", resultData);
+				}else if(resultStatus === "NO_REG_RFX_PRE_INSP"){
+					UT.alert("STD.RPI005");	//사전심사 기간이 아닙니다.
+				}else if(resultStatus === "RFX_END"){
+					UT.alert("STD.RPI006"); //해당 RFX가 종료되었습니다
+				}
+			},
+			// 검수요청 반려 dialog
+            onShowDialog: function(data) {
+            	var me = this;
+            	me.set("dialogData.dq_rsn", data);
+            	
+                me.$.dialog.show();
+            },
+            
+            // 검수요청 반려 dialog 닫기
+            onCloseDialog : function() {
+            	var me = this;
+                me.$.dialog.close();
+            },
+			/************************************************** 
+			 * 버튼 이벤트
+			 **************************************************/
+			onRegRfxPreInspApp: function(){
+				var me = this,
+				provider = me.$.gridPanel.getDataProvider(),
+				selected = provider.selectionCheckedItems();
+				
+				if(selected.length == 0){
+					UT.alert("STD.N1600");//	선택된 항목이 없습니다.
+				} else if(selected.length > 1) {
+					UT.alert("STD.N3700");//	한 개의 항목만 선택해야 합니다.
+				}
+				me.$.checkValidRfxPreInspAppReg.body = UT.copy(selected[0]);
+				UT.request(me.$.checkValidRfxPreInspAppReg);
+			}
+		});
+	</script>
+</dom-module>

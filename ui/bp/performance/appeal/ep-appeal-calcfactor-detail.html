@@ -1,0 +1,297 @@
+<dom-module id="ep-appeal-calcfactor-detail">
+	<style>
+		:host{
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<!-- 계산항목 이의제기상세조회 -->
+		<sc-ajax id="findAppealCalcDetail"
+				 url="findAppealCalcDetail.do"
+				 on-response="completeFindAppealCalcDetail">
+		</sc-ajax>
+		
+		<!-- 계산항목 이의제기저장(반려 or 합의 or 처리완료) -->
+		<sc-ajax id="saveAppealCalcDetail"
+				 url="saveAppealCalcDetail.do"
+				 on-response="completeSaveAppealCalcDetail">
+		</sc-ajax>
+		
+		<!-- 이의제기종료(마감) -->
+		<!--<sc-ajax id="closeAppeal"
+				 url="closeAppeal.do"
+				 on-response="completeCloseAppeal">
+		</sc-ajax>-->
+		
+		<cc-page-title-bar>
+			<sc-button	text="이의제기 반려"	  	on-click="onRejectObj"		auth-s		hidden="[[!formula('isVisibleBtn')]]"></sc-button>
+			<sc-button	text="이의제기 접수"	  	on-click="onRcptObj"		auth-s		hidden="[[!formula('isVisibleBtn')]]"></sc-button>
+			<sc-button  text="이의제기 처리 완료" 	on-click="onApvdObj"		auth-s  	hidden="[[!formula('isVisibleApvdBtn')]]"></sc-button>
+			<sc-button  text="이의제기 종료" 	on-click="onCloseObj"		auth-s  	hidden="true"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="fit flex">
+			<cc-form-panel validation-group="appealData">
+				<cc-fieldset>
+					<sc-label text="평가 명"></sc-label>
+					<sc-text-field value="{{appealData.eval_nm}}" readonly="true" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 명"></sc-label>
+					<sc-text-field value="{{appealData.vd_nm}}" readonly="true" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기자"></sc-label>
+					<sc-text-field value="{{appealData.vd_pic_nm}}" max-length="50"	readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기자 전화번호"></sc-label>
+					<sc-text-field value="{{appealData.vd_pic_ctc}}" readonly="true" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="이의제기 일자"></sc-label>
+					<sc-date-field value="{{appealData.appeal_req_dt}}" string-date="true" default-value="0d" readonly="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기 실적 값"></sc-label>
+					<sc-number-field value="{{appealData.appeal_calcfact_val}}" format-type="decimal" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="최초 계산항목 값"></sc-label>
+					<sc-number-field value="{{appealData.ini_calcfact_val}}" format-type="decimal" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="세부 측정 항목"></sc-label>
+					<sc-text-field value="{{appealData.calcfact_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<div class="vspace-5"></div>
+			
+			<cc-form-panel>
+				<cc-fieldset column-span="2">
+					<sc-label text="이의제기 사유"></sc-label>
+					<sc-textarea-field value="{{appealData.calcfact_appeal_rsn}}" class="h-100" max-length="500" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload class="h-200" value="{{appealData.appeal_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{appealData.appeal_ret_rsn}}" 	class="h-100" 		max-length="500"
+									   readonly="[[formula('isAppealEd')]]" 		required="true"		validation-group="appealDataRet"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="검토 의견"></sc-label>
+					<sc-textarea-field value="{{appealData.appeal_prcsg_res_cont}}" class="h-100" max-length="500"
+									   readonly="[[formula('isAppealEd')]]"	required="true"	validation-group="appealDataApvd"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="검토 자료"></sc-label>
+					<sc-upload id="upload" class="h-200" value="{{appealData.appeal_prcsg_res_athg_uuid}}" editable="[[!formula('isAppealEd')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-appeal-calcfactor-detail',
+			properties : {
+				titleText: {
+					type: "String",
+					value: "계산항목 이의제기",
+					reset: false
+				},
+				appealData: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				btnMessage: {
+					type:String,
+					value: "저장"
+				}
+			},
+			formulas: {
+				/* 이의제기진행상태가 종료가 아니고, 이의제기제출상태가 제출인 경우에만 */
+				isVisibleBtn: function(){
+					var me = this,
+						data = me.get("appealData");
+					return data.appeal_sts_ccd != 'APPEAL_ED'  && data.appeal_subm_sts_ccd === 'APPEAL_SUBM';
+				},
+				/* 이의제기제출상태가 처리완료가 아닌 경우에만 */
+				isVisibleApvdBtn: function(){
+					var me = this,
+						data = me.get("appealData");
+					return data.appeal_sts_ccd != 'APPEAL_ED' && data.appeal_subm_sts_ccd != 'APPEAL_APVD';
+				},
+				/* 이의제기제출상태가 처리완료인 경우 수정불가 */
+				isEditable: function() {
+					var me = this,
+						data = me.get("appealData");
+					return data.appeal_sts_ccd != 'APPEAL_ED' && data.appeal_subm_sts_ccd == 'APPEAL_APVD';
+				},
+				/* 이의제기상태가 종료인 경우 */
+				isAppealEd: function() {
+					var me = this,
+						data = me.get("appealData");
+					return data.appeal_sts_ccd === 'APPEAL_ED' || data.appeal_subm_sts_ccd == 'APPEAL_APVD';
+				}
+			},
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+			
+			},
+			
+			load: function(param){
+				var me = this,
+					copyParam = UT.copy(param);
+				
+				me.$.findAppealCalcDetail.body = copyParam;
+				UT.request(me.$.findAppealCalcDetail);
+			},
+			
+			// 상세조회
+			findInfo: function(){
+				var me = this;
+				UT.request(me.$.findAppealCalcDetail);
+				
+				me.applyFormula();
+			},
+			
+			// 상세조회 후 Handler
+			completeFindAppealCalcDetail: function(e, res){
+				var me = this,
+					response = res.response;
+				
+				me.set("appealData", response);
+				me.applyFormula();
+			},
+			
+			// 저장완료 후 Handler
+			completeSaveAppealCalcDetail: function(e, res){
+				var me = this,
+					response = res.response;
+				
+				if (response.resultStatus === "S") {
+					UT.completeAlert(me.get("btnMessage"), function() {
+						me.onClose();
+					});
+				}else{
+					UT.alert("STD.E9999");
+				}
+				
+			},
+			
+			// 이의제기반려 Click
+			onRejectObj: function(){
+				var me = this;
+				
+				if(!me.validate('appealDataRet')){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var appealData = me.get("appealData");
+				me.$.upload.upload().then(function () {
+					me.$.saveAppealCalcDetail.body = {
+						appealInfo : appealData,
+						saveType : "reject",
+						appealRetDt : UT.formatDate(new Date(), "yyyyMMdd") // 이의제기반려일자
+					};
+
+					// 반려하시겠습니까?
+					UT.confirm("STD.N3000",function(){
+						me.set("btnMessage", "이의제기 반려");
+						UT.request(me.$.saveAppealCalcDetail);
+					});
+				});
+			},
+			
+			// 이의제기접수 click
+			onRcptObj: function(){
+				var me = this;
+				
+				if(!me.validate('appealData')){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var appealData = me.get("appealData");
+				me.$.upload.upload().then(function () {
+					me.$.saveAppealCalcDetail.body = {
+						appealInfo: appealData,
+						saveType: "receipt",
+						appealRcptDt: UT.formatDate(new Date(), "yyyyMMdd") // 이의제기접수일자
+					}
+
+					// 접수하시겠습니까?
+					UT.confirm("STD.N1108", function() {
+						me.set("btnMessage", "이의제기 접수");
+						UT.request(me.$.saveAppealCalcDetail);
+					});
+				});
+			},
+			
+			// 이의제기처리완료 Click
+			onApvdObj: function(){
+				var me = this;
+				
+				if(!me.validate('appealDataApvd')){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var appealData = me.get("appealData");
+				me.$.upload.upload().then(function () {
+					me.$.saveAppealCalcDetail.body = {
+						appealInfo : appealData,
+						saveType : "approve",
+					};
+					
+					UT.confirm("처리완료 하시겠습니까?",function(){
+						me.set("btnMessage", "이의제기 처리 완료");
+						UT.request(me.$.saveAppealCalcDetail);
+					});
+				});
+				
+				
+			},
+
+			// 이의제기종료 Click
+			onCloseObj: function() {
+				var me  = this,
+					appealData = me.get("appealData");
+				
+				me.$.closeAppeal.body = appealData;
+				UT.request(me.$.closeAppeal);
+			},
+			
+			// 이의제기종료 후
+			// completeCloseAppeal: function(e, res) {
+			// 	var me = this,
+			// 		response = res.response;
+			//
+			// 	if(response.resultStatus === 'S') {
+			// 		UT.completeAlert("이의제기", function () {	// 요청을 완료하였습니다.
+			// 			me.findInfo();
+			// 		});
+			// 	}
+			// },
+			
+			// 닫기
+			onClose: function(){
+				var me = this;
+				me.reset();
+				me.fire("complete-save");
+			}
+		});
+	</script>
+</dom-module>

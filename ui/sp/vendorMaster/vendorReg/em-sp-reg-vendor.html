@@ -1,0 +1,236 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사 신규등록(외부)
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.14
+	******************************************************************************************
+-->
+
+<sc-link rel="import" href="es-sp-reg-step-list.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-vendor-basicinfo.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-terms-info.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-vendor-detailinfo.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-sts-info.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-req-info.html"></sc-link>
+<sc-link rel="import" href="es-sp-reg-eval-info.html"></sc-link>
+
+<dom-module id="em-sp-reg-vendor">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+   		<!-- 초기 Tenant/Locale Set Ajax-->
+        <sc-ajax id="initSessionInfo"
+                 url="initSessionInfo.do">
+        </sc-ajax>
+    
+        <div class="spregWrap">
+            <sc-toolbar style="padding-bottom: 5px; padding-top: 5px; border-bottom: 2px solid">
+                <sc-label text="[[_popupTitle(prefixTitle, stepTitle)]]" i18n-disabled></sc-label>
+            </sc-toolbar>
+
+            <div class="hbox flex">
+                <es-sp-reg-step-list id="stepList" class="flex-2" on-set-title="onSetTitle"></es-sp-reg-step-list>
+
+                <sc-pages id="pages" class="flex-6" selected="0">
+                    <es-sp-reg-vendor-basicinfo id="basicInfo" class="step-element" on-change-step="onChangeDisabledStep" on-basicinfo-next="onBasicinfoNextStep"></es-sp-reg-vendor-basicinfo>
+
+                    <template>
+                        <es-sp-reg-terms-info id="termsInfo" class="step-element" on-terms-prev="onTermsPrevStep" on-terms-next="onTermsNextStep"></es-sp-reg-terms-info>
+                    </template>
+                    <template>
+                        <es-sp-reg-vendor-detailinfo id="detailInfo" class="step-element" on-detailinfo-next="onDetailinfoNextStep"></es-sp-reg-vendor-detailinfo>
+                    </template>
+                    <template>
+                        <es-sp-reg-sts-info id="stsInfo" class="step-element" on-sts-info-prev="onStsInfoPrevStep" on-sts-info-next="onStsInfoNextStep"></es-sp-reg-sts-info>
+                    </template>
+                    <template>
+                        <es-sp-reg-req-info id="reqInfo" class="step-element" on-req-info-prev="onReqInfoPrevStep" on-req-info-next="onReqInfoNextStep"></es-sp-reg-req-info>
+                    </template>
+                    <template>
+                        <es-sp-reg-eval-info id="evalInfo" class="step-element" on-req-info-prev="onEvalInfoPrevStep"></es-sp-reg-eval-info>
+                    </template>
+                </sc-pages>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "em-sp-reg-vendor",
+            properties: {
+                prefixTitle : {
+                    type: String,
+                    value: "협력사 신규 등록"
+                },
+                stepTitle : {
+                    type : String,
+                    value : ""
+                },
+            	// 팝업 띄기전 Tanant Combo Setting Info
+                tenant: {
+                    type: String,
+                    value: function () {
+                        return "";
+                    },
+                },
+                // 팝업 띄기전 Locale Combo Setting Info
+                locale: {
+                    type: String,
+                    value: function () {
+                        return "";
+                    }
+                }
+            },
+
+            // 화면 생성 Callback
+            initialized : function() {
+                var me = this;
+
+                me.$.initSessionInfo.body = {
+                    tenant: me.tenant,
+                    locale: me.locale
+                };
+                UT.request(me.$.initSessionInfo, function (e, res) {
+                    var result = res.response;
+                    if (result.resultStatus === 'E') {
+                        UT.alert("STD.E9999", function() {
+                            me.fire("new-vendor-close");
+                        }, true);
+                    }else{
+                        me.$.basicInfo.onGlobalValueSet(me.tenant, me.locale);
+                        me.$.basicInfo.load();
+                    }
+                });
+            },
+
+            // 팝업 Title Computed Bidings
+            _popupTitle : function(prefixTitle, stepTitle) {
+                var me = this;
+                //return me.translate(prefixTitle) + ' - ' + stepTitle;
+				return stepTitle;
+            },
+
+            // Title Set
+            onSetTitle : function(e, target) {
+                var me = this;
+                var titleList = e.target.querySelectorAll('sc-label:not(.disabledStep)');  
+                var targetList = me.$.pages.querySelectorAll('.step-element');
+                var targetIndex = 0;
+                
+                for(var i=0; i<titleList.length; i++){
+                	var data = titleList[i];
+                	if(data.id === target.id){
+                		targetIndex = i;
+                		break;
+                	};
+                }
+                targetList[targetIndex].stepTitle = target.text;
+                me.stepTitle = target.text;
+            },
+
+            // Chnage CtryCcd / Terms Exists
+            onChangeDisabledStep : function(e, data){
+                var me = this;
+                me.$.stepList.setDisabledStep(data);
+            },
+
+            // Basicinfo -> TermsInfo || BaiscInfo -> DetailInfo
+            onBasicinfoNextStep : function(e, data) {
+                var me = this;
+                if(data.ctry_ccd === "KR" && data.is_terms_exists){
+                    // Korea
+                    me.$.pages.selectItem(me.$.termsInfo);
+                    me.$.termsInfo.load(data);
+                    me.$.stepList.setStep(2);
+                }else{
+                    // Etc
+                    me.$.pages.selectItem(me.$.detailInfo);
+                    me.$.detailInfo.load(data);
+                    me.$.stepList.setStep(3);
+                }
+            },
+
+            // TermsInfo -> Basicinfo
+            onTermsPrevStep : function(e, data){
+                var me = this;
+                me.$.pages.selectItem(me.$.basicInfo);
+                me.$.basicInfo.load(data);
+                me.$.stepList.setStep(1);
+            },
+
+            // TermsInfo -> DetailInfo
+            onTermsNextStep : function(e, data) {
+                var me = this;
+                me.$.pages.selectItem(me.$.detailInfo);
+                me.$.detailInfo.load(data);
+                me.$.stepList.setStep(3);
+            },
+
+            // DetailInfo -> StsInfo
+            onDetailinfoNextStep : function(e, data) {
+                var me = this;
+
+                if(data.ctry_ccd === "KR"){
+                    me.$.pages.selectItem(me.$.stsInfo);
+                    me.$.stsInfo.load(data);
+                    me.$.stepList.setStep(4);
+                }else{
+                    me.$.pages.selectItem(me.$.reqInfo);
+                    me.$.reqInfo.load(data);
+                    me.$.stepList.setStep(5);
+                }
+            },
+
+            // StsInfo -> DetailInfo
+            onStsInfoPrevStep : function(e, data){
+                var me = this;
+                me.$.pages.selectItem(me.$.detailInfo);
+                me.$.detailInfo.load(data);
+                me.$.stepList.setStep(3);
+            },
+
+            // StsInfo -> ReqInfo
+            onStsInfoNextStep : function(e, data) {
+                var me = this;
+                me.$.pages.selectItem(me.$.reqInfo);
+                me.$.reqInfo.load(data);
+                me.$.stepList.setStep(5);
+            },
+
+            // ReqInfo -> StsInfo
+            onReqInfoPrevStep : function(e, data){
+                var me = this;
+
+                if(data.ctry_ccd === "KR"){
+                    me.$.pages.selectItem(me.$.stsInfo);
+                    me.$.stsInfo.load(data);
+                    me.$.stepList.setStep(4);
+                }else{
+                    me.$.pages.selectItem(me.$.detailInfo);
+                    me.$.detailInfo.load(data);
+                    me.$.stepList.setStep(3);
+                }
+            },
+
+            // ReqInfo -> EvalInfo
+            onReqInfoNextStep : function(e, data){
+                var me = this;
+                me.$.pages.selectItem(me.$.evalInfo);
+                me.$.evalInfo.load(data);
+                me.$.stepList.setStep(6);
+            },
+
+            // EvalInfo -> ReqInfo
+            onEvalInfoPrevStep : function(e, data){
+                var me = this;
+                me.$.pages.selectItem(me.$.reqInfo);
+                me.$.reqInfo.load(data);
+                me.$.stepList.setStep(5);
+            }
+        });
+    </script>
+</dom-module>

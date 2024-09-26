@@ -1,0 +1,213 @@
+<dom-module id="es-attrgrp-list">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+		
+		<!-- 공통코드 -->
+		<sc-code-group id="codes" auto>
+			<sc-code code="MT009" value="{{codes.useYn}}"></sc-code>
+		</sc-code-group>
+		
+		<!-- 조회 -->
+		<sc-ajax id="findListAttributeGroup"
+				 url="findListAttributeGroup.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<!-- 삭제 -->
+		<sc-ajax id="deleteListAttributeGroup"
+				 url="deleteListAttributeGroup.do"
+				 on-response="completeDeleteListAttributeGroup">
+		</sc-ajax>
+
+		<cc-sub-title-bar title-text="그룹 목록"></cc-sub-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearchAttrGrp" on-enter="onEnterSearch"   auth-r>
+			<cc-fieldset>
+				<sc-label text="그룹 명"></sc-label>
+				<sc-text-field value="{{searchParam.iattr_grp_nm}}"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="품목속성 명"></sc-label>
+				<sc-text-field value="{{searchParam.iattr_nm}}"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+				
+		<sc-grid id="gridPanel" data-provider="{{resultList}}" class="flex" use-state="false" on-item-click="onDataCellClicked">
+			<cc-grid-toolbar>
+				<sc-button text="추가" on-click="onAddAttrGrp" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteAttrGrp" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="iattr_grp_cd" header-text="그룹 코드" width="110" style-name="link"></sc-data-column>
+				<sc-data-column data-field="iattr_grp_nm" header-text="그룹 명" width="150" text-align="left"></sc-data-column>
+				<sc-data-column data-field="iattr_grp_nm_en" header-text="그룹 명 영문" width="150" text-align="left"></sc-data-column>
+				<sc-data-column data-field="iattr_grp_expln" header-text="그룹 설명" width="300" text-align="left"></sc-data-column>
+				<sc-data-column data-field="scr_dspy_ord" header-text="화면 표시 순서" width="80" text-align="right"></sc-data-column>
+				<sc-data-column data-field="asgd_iattr_cnt" header-text="배정된 품목속성 개수" width="90" text-align="right"></sc-data-column>
+				<sc-data-column data-field="asgd_itemcat_cnt" header-text="배정된 품목분류 개수" width="90" text-align="right"></sc-data-column>
+				<sc-combobox-column data-field="use_yn" header-text="사용 여부" width="60" text-align="center" items="{{codes.useYn}}" display-field="label" value-field="data"></sc-combobox-column>
+			</sc-grid-columns>
+		</sc-grid>
+
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-attrgrp-list",
+			
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							useYn: []
+						}
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				}
+			},
+			
+			load : function(data) {
+				var me = this;
+				
+				//data가 있는 경우는 저장 후에 조회 하는 경우이며, 다른 두 화면을 재조회 하고 focus를 set하기 위한 로직.
+				if(UT.isNotEmpty(data)) {
+					UT.request(me.$.findListAttributeGroup, function(e, res){
+						me.fire('show-detail', data);
+						me.setFocus(data);
+					});
+				} else {
+					UT.request(me.$.findListAttributeGroup);
+				}
+			},
+			
+			/**
+			 * 속성그룹현황 조회
+			 */
+			onSearchAttrGrp: function() {
+				var me = this;
+				me.fire('reload-list');
+			},
+			
+			/**
+			 * 엔터키 입력시 호출
+			 */
+			onEnterSearch: function() {
+				var me = this;
+				me.onSearchAttrGrp();
+			},
+			
+			/**
+			 * 속성그룹관리 삭제
+			 */
+			onDeleteAttrGrp: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600");
+				} else {
+					var errList = [];
+					
+					for(var idx in selected) {
+						var row = selected[idx];
+						var asgdItemcatCnt = row.asgd_itemcat_cnt;
+						
+						if(asgdItemcatCnt > 0) {
+							errList.push(row.iattr_grp_cd);
+						}
+					}
+					
+					if(errList.length > 0) {
+						UT.alert(me.translate('STD.CMS1009', null, errList.toString()), null, true);
+						return;
+					}
+
+					UT.confirm("STD.CMS1001", function() {
+						me.$.deleteListAttributeGroup.body = {
+							deleteList: selected
+						};
+						UT.request(me.$.deleteListAttributeGroup);
+					});
+				}
+			},
+			
+			completeDeleteListAttributeGroup: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("삭제", function(){
+						me.onSearchAttrGrp();
+					});
+				} else {
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 신규 속성그룹정보 추가
+			 */
+			onAddAttrGrp: function() {
+				var me = this;
+
+				me.fire("add-detail", {
+					is_new: true,
+					scr_dspy_ord: 1,
+					use_yn: "Y"	// 사용여부
+				});
+			},
+			
+			onDataCellClicked: function(event) {
+				var me = this,
+					detail = event.detail,
+					data = detail.data,
+					item = detail.item;
+				
+				if(item.dataField === "iattr_grp_cd") {
+					me.fire('show-detail', data);
+				}
+			},
+			
+			setFocus : function(data) {
+				var me = this;
+				var grid = me.$.gridPanel;
+				var provider = grid.getDataProvider();
+				
+				var rowIndexes = provider.filterIndexes(function(item) {
+					return item.iattr_grp_cd == data.iattr_grp_cd
+				});
+				
+				if(rowIndexes.length > 0){
+					var index = rowIndexes[0];
+					grid.setCurrentCell({dataField : 'iattr_grp_cd', rowIndex : index}, true);
+				}
+			},
+			
+			onClear: function() {
+				var me = this;
+				me.reset();
+			}
+		});
+	</script>
+</dom-module>

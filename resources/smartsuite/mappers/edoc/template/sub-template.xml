@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sub-template">
+	<select id="findListEpAppForm" resultType="map">
+		/* sub-template.findListEpAppForm : 첨부서식 목록 조회 (첨부추가 팝업) */
+		SELECT APPX_TMPL_NM                                /*첨부서식명*/
+		, APPX_TYP_CCD                				   /*문서 구분*/
+		, MAND_YN                                   /*필수여부*/
+		, APPX_CRTR_TYP_CCD                                   /*첨부자 구분*/
+		, USE_YN                                    /*사용여부*/
+		, INP_FLD_EYN                              /*입력항목유무*/
+		, APPX_TMPL_UUID                           /*첨부서식번호*/
+		, APPX_TMPL_EXPLN                             /*첨부서식설명*/
+		, ATHG_UUID                                    /*첨부서식 그룹코드*/
+		FROM APPX_TMPL
+		WHERE TEN_ID  = #{g.tenant}
+		<if test="p.appx_tmpl_nm != null and p.appx_tmpl_nm != ''">
+			<bind name="pattern" value="'%' + p.appx_tmpl_nm + '%'"/>
+			AND UPPER(APPX_TMPL_NM) LIKE UPPER(#{pattern})
+		</if>
+		<if test="p.mand_yn != null and p.mand_yn != ''">
+			AND MAND_YN = #{p.mand_yn}
+		</if>
+		AND USE_YN  = 'Y'
+		ORDER BY REG_DTTM DESC
+	</select>
+	<resultMap id="resultMap-findAppCont" type="map">
+		<result column="APPX_TMPL_CONT" javaType="string" property="content" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findAppCont" resultMap="resultMap-findAppCont">
+		/* sub-template.findAppCont : 첨부서식 변경이력 서식내용조회 */
+		SELECT APPX_TMPL_CONT
+		FROM APPX_TMPL_HISTREC
+		WHERE TEN_ID           = #{g.tenant}
+		  AND APPX_TMPL_UUID  = #{p.appx_tmpl_uuid}
+		  AND APPX_TMPL_CHG_REVNO = CAST(#{p.appx_tmpl_chg_revno} AS INT)
+	</select>
+	<resultMap id="resultMap-getAppFormTextContent" type="map">
+		<result column="APPX_TMPL_CONT" javaType="string" property="appx_tmpl_cont" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="getAppFormTextContent" resultMap="resultMap-getAppFormTextContent">
+		/* sub-template.getAppFormTextContent : 첨부서식 내용 조회 (TEXT) */
+		SELECT	FAD.CNTRDOC_TMPL_UUID	                 	/*계약서식번호*/
+			 ,	FAD.APPX_TMPL_UUID	                    	/*첨부서식번호*/
+			 ,	FCT.APPX_TMPL_CONT							/* 부속서류 템플릿 */
+			 ,	FAD.CNTRDOC_TMPL_ORD						/* 부속서류 템플릿 내용 */
+		FROM	CNTRDOC_TMPL_APPX FAD
+				    INNER JOIN APPX_TMPL PFM
+				               ON	(PFM.TEN_ID = FAD.TEN_ID AND FAD.APPX_TMPL_UUID = PFM.APPX_TMPL_UUID)
+				    INNER JOIN APPX_TMPL_CONT FCT
+				               ON	(FCT.TEN_ID = PFM.TEN_ID AND FAD.APPX_TMPL_UUID = FCT.APPX_TMPL_UUID)
+		WHERE FAD.TEN_ID = #{g.tenant}
+		  AND	FAD.APPX_TMPL_UUID = PFM.APPX_TMPL_UUID
+		  AND	FAD.CNTRDOC_TMPL_UUID = #{p.cntrdoc_tmpl_uuid}
+		  AND FAD.APPX_TYP_CCD = 'TXT'
+		ORDER BY FAD.CNTRDOC_TMPL_ORD
+	</select>
+	<select id="findListAppForm" resultType="map">
+		/* sub-template.findListAppForm : 첨부서식 목록 조회 */
+		SELECT TMPL.APPX_TMPL_UUID              /*첨부서식번호*/
+		, TMPL.APPX_TMPL_NM                /*첨부서식명*/
+		, TMPL.APPX_TYP_CCD                /*문서 구분*/
+		, TMPL.APPX_CRTR_TYP_CCD                /*첨부자 구분*/
+		, TMPL.USE_YN                      /*사용여부*/
+		, TMPL.MAND_YN                     /*필수여부*/
+		, TMPL.INP_FLD_EYN                 /*입력항목유무*/
+		, TMPL.APPX_TMPL_EXPLN             /*첨부서식설명*/
+		, TMPL.ATHG_UUID                   /*첨부서식 그룹코드*/
+		, TMPL.MODR_ID                     /*수정자*/
+		, TMPL.MOD_DTTM                    /*수정일자*/
+		, CASE WHEN LENGTH(CONT.APPX_TMPL_CONT) &gt; 0  THEN 'N' ELSE 'Y'
+			    END AS CONT_EMPTY_YN /*부속서류의 내용이 비어있는지 여부*/
+		FROM APPX_TMPL TMPL
+		INNER JOIN APPX_TMPL_CONT CONT
+		ON CONT.TEN_ID = TMPL.TEN_ID
+		AND CONT.APPX_TMPL_UUID = TMPL.APPX_TMPL_UUID
+		WHERE TMPL.TEN_ID = #{g.tenant}
+		<if test="p.appx_tmpl_nm != null and p.appx_tmpl_nm != &quot;&quot;">
+			<bind name="pattern" value="'%' + p.appx_tmpl_nm + '%'"/>
+			AND UPPER(TMPL.APPX_TMPL_NM) LIKE UPPER(#{pattern})
+		</if>
+		<if test="p.appx_typ_ccd != null and p.appx_typ_ccd != &quot;&quot;">
+			AND TMPL.APPX_TYP_CCD = #{p.appx_typ_ccd}
+		</if>
+		<if test="p.appx_crtr_typ_ccd != null and p.appx_crtr_typ_ccd != &quot;&quot;">
+			AND TMPL.APPX_CRTR_TYP_CCD = #{p.appx_crtr_typ_ccd}
+		</if>
+		<if test="p.use_yn != null and p.use_yn != &quot;&quot;">
+			AND TMPL.USE_YN = #{p.use_yn}
+		</if>
+		<if test="p.mand_yn != null and p.mand_yn != &quot;&quot;">
+			AND TMPL.MAND_YN =#{p.mand_yn}
+		</if>
+		<if test="p.inp_fld_eyn != null and p.inp_fld_eyn != &quot;&quot;">
+			AND TMPL.INP_FLD_EYN = #{p.inp_fld_eyn}
+		</if>
+		ORDER BY TMPL.MOD_DTTM DESC
+	</select>
+	<select id="checkAppFormName" resultType="int">
+		/* sub-template.checkAppFormName : 첨부서식명 중복 체크 */
+		SELECT COUNT(*)
+		FROM APPX_TMPL
+		WHERE TEN_ID           = #{g.tenant}
+		  AND APPX_TMPL_NM       = #{p.appx_tmpl_nm}
+		  AND APPX_TMPL_UUID != #{p.appx_tmpl_uuid}
+	</select>
+	<update id="updateAppForm">
+		/* sub-template.updateAppForm : 첨부서식 수정 */
+		UPDATE APPX_TMPL
+		SET
+		<if test="p.appx_tmpl_nm != null and p.appx_tmpl_nm != &quot;&quot;">
+			APPX_TMPL_NM = #{p.appx_tmpl_nm},
+		</if>
+		<if test="p.appx_typ_ccd != null and p.appx_typ_ccd != &quot;&quot;">
+			APPX_TYP_CCD = #{p.appx_typ_ccd},
+		</if>
+		<if test="p.appx_crtr_typ_ccd != null and p.appx_crtr_typ_ccd != &quot;&quot;">
+			APPX_CRTR_TYP_CCD = #{p.appx_crtr_typ_ccd},
+		</if>
+		<if test="p.use_yn != null and p.use_yn != &quot;&quot;">
+			USE_YN = #{p.use_yn},
+		</if>
+		<if test="p.mand_yn != null and p.mand_yn != &quot;&quot;">
+			MAND_YN = #{p.mand_yn},
+		</if>
+		<if test="p.inp_fld_eyn != null and p.inp_fld_eyn != &quot;&quot;">
+			INP_FLD_EYN = #{p.inp_fld_eyn},
+		</if>
+		<if test="p.athg_uuid != null and p.athg_uuid != &quot;&quot;">
+			ATHG_UUID    = #{p.athg_uuid},
+		</if>
+		STS = 'U',
+		MODR_ID = #{g.username},
+		MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</update>
+	<update id="updateCntrAppForm">
+		/* sub-template.updateCntrAppForm : 계약서식의 첨부서식 수정 */
+		UPDATE CNTRDOC_TMPL_APPX
+		SET APPX_TMPL_NM    = #{p.appx_tmpl_nm},
+		    APPX_TYP_CCD = #{p.appx_typ_ccd},
+		    STS           = 'U',
+		    MODR_ID        = #{g.username},           /*수정자 ID*/
+		    MOD_DTTM        = #{g.now}                 /*첨부서식 수정일*/
+		WHERE TEN_ID        = #{g.tenant}
+		  AND APPX_TMPL_UUID   = #{p.appx_tmpl_uuid}
+	</update>
+	<insert id="insertAppForm">
+		/* sub-template.insertAppForm : 첨부서식 신규 저장 */
+		INSERT INTO APPX_TMPL (
+			TEN_ID,                     /*시스템 아이디*/
+			APPX_TMPL_UUID,            /*첨부서식번호*/
+			APPX_TMPL_NM,                 /*첨부서식명*/
+			APPX_TYP_CCD,                  /*문서 구분(TEXT:TXT,FILE:FILE)*/
+			APPX_CRTR_TYP_CCD,                    /*첨부자 구분(갑:BUYER,을:VD)*/
+			USE_YN,                     /*사용여부(Y,N)*/
+			MAND_YN,                    /*필수여부*/
+			INP_FLD_EYN,               /*입력항목유무*/
+			ATHG_UUID,                      /*첨부파일 그룹코드*/
+			RMK,                        /*기타*/
+			STS,                        /*상태*/
+			REGR_ID,                     /*등록자*/
+			REG_DTTM,						/*등록일자*/
+			MODR_ID,						/*수정자*/
+			MOD_DTTM						/*수정일자*/
+		) VALUES (
+			         #{g.tenant},
+			         #{p.appx_tmpl_uuid},
+			         #{p.appx_tmpl_nm},
+			         #{p.appx_typ_ccd},
+			         #{p.appx_crtr_typ_ccd},
+			         #{p.use_yn},
+			         #{p.mand_yn},
+			         #{p.inp_fld_eyn},
+			         #{p.athg_uuid},
+			         #{p.rmk},
+			         'C',
+			         #{g.username},
+			         #{g.now},
+			         #{g.username},
+			         #{g.now}
+		         )
+	</insert>
+	<insert id="insertAppFormCont">
+		/* sub-template.insertAppFormCont : 첨부서식 내용 신규 저장 */
+		INSERT INTO APPX_TMPL_CONT (
+			TEN_ID,
+			APPX_TMPL_UUID,            /*첨부서식번호*/
+			APPX_TMPL_CONT,				/*첨부서식 내용*/
+			RMK,                        /*기타*/
+			STS,                        /*상태*/
+			REGR_ID,                     /*등록자*/
+			REG_DTTM,						/*등록일자*/
+			MODR_ID,						/*수정자*/
+			MOD_DTTM						/*수정일자*/
+		) VALUES (
+			         #{g.tenant},
+			         #{p.appx_tmpl_uuid},
+			         '',
+			         #{p.rmk},
+			         'C',
+			         #{g.username},
+			         #{g.now},
+			         #{g.username},
+			         #{g.now}
+		         )
+	</insert>
+	<delete id="deleteAttFormHistory">
+		/* sub-template.deleteAttFormHistory : 첨부서식 내용 변경이력 삭제 */
+		DELETE
+		FROM APPX_TMPL_HISTREC
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</delete>
+	<delete id="deleteAppFormCont">
+		/* sub-template.deleteAppFormCont : 첨부서식(TEXT) 내용 삭제 */
+		DELETE
+		FROM APPX_TMPL_CONT
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</delete>
+	<resultMap id="resultMap-findListAttformHistory" type="map">
+		<result column="CHG_RSN" javaType="string" property="chg_rsn" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findListAttformHistory" resultMap="resultMap-findListAttformHistory">
+		/* sub-template.findListCntrFormHistory : 첨부서식 변경이력 조회(히스토리목록 조회) */
+		SELECT TEN_ID
+			 , APPX_TMPL_UUID
+			 , APPX_TMPL_CHG_REVNO
+			 , CHG_RSN
+			 , REGR_ID
+			 , REG_DTTM
+		FROM APPX_TMPL_HISTREC
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+		ORDER BY APPX_TMPL_CHG_REVNO ASC
+	</select>
+	<delete id="deleteAppForm">
+		/* sub-template.deleteAppForm : 첨부서식 삭제 */
+		DELETE
+		FROM APPX_TMPL
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</delete>
+	<update id="updateAppFormInSts">
+		/* sub-template.updateAppFormInSts : 계약서의 첨부서식(FILE) 갱신 */
+		UPDATE CNTR_APPX
+		SET
+		<choose>
+			<when test="p.athg_uuid !=null and p.athg_uuid !=''">
+				CNTR_APPX_STS_CCD = 'Y',
+			</when>
+			<otherwise>
+				CNTR_APPX_STS_CCD = 'N',
+			</otherwise>
+		</choose>
+		ATHG_UUID = #{p.athg_uuid}
+		WHERE
+		TEN_ID = #{g.tenant}
+		AND	CNTR_APPX_UUID = #{p.cntr_appx_uuid}
+	</update>
+	<update id="updateAppFormFile">
+		/* sub-template.updateAppFormFile : 첨부서식(FILE) 갱신 */
+		UPDATE APPX_TMPL
+		SET STS             = 'U',
+		    MODR_ID          = #{g.username},
+		    MOD_DTTM          = #{g.now},
+		    ATHG_UUID          = #{p.athg_uuid}
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</update>
+	<resultMap id="resultMap-findAppformCont" type="map">
+		<result column="APPX_TMPL_CONT" javaType="string" property="appx_tmpl_cont" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findAppformCont" resultMap="resultMap-findAppformCont">
+		/* sub-template.findAppformCont : 첨부서식(TEXT) 내용 조회 */
+		SELECT APPX_TMPL_UUID
+			 , APPX_TMPL_CONT
+		FROM APPX_TMPL_CONT
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</select>
+	<update id="updateAppFormCont">
+		/* sub-template.updateAppFormCont : 첨부서식(TEXT) 내용 갱신 */
+		UPDATE APPX_TMPL_CONT
+		SET APPX_TMPL_CONT   = #{p.appx_tmpl_cont},
+		    STS             = 'U',
+		    MODR_ID          = #{g.username},              /*수정자 ID*/
+		    MOD_DTTM          = #{g.now}                    /*첨부서식 수정일*/
+		WHERE TEN_ID          = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</update>
+	<select id="getAttDocFormSeq" resultType="String">
+		/* sub-template.getAttDocFormSeq : 첨부서식 변경이력 번호 채번 */
+		SELECT CASE WHEN MAX(COALESCE(APPX_TMPL_CHG_REVNO, 0)) IS NULL
+		            THEN 0
+		            ELSE MAX(COALESCE(APPX_TMPL_CHG_REVNO, 0))
+		        END + 1
+		FROM APPX_TMPL_HISTREC
+		WHERE TEN_ID = #{g.tenant}
+		  AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+	</select>
+	<insert id="insertAttFormHistory">
+		/* sub-template.insertAttFormHistory : 첨부서식 변경이력 저장 */
+		INSERT INTO APPX_TMPL_HISTREC (
+			TEN_ID,
+			APPX_TMPL_UUID,
+			APPX_TMPL_CHG_REVNO,
+			APPX_TMPL_CONT,
+			CHG_RSN,
+			STS,
+			REGR_ID,
+			REG_DTTM,
+			MOD_DTTM
+		) VALUES (
+			         #{g.tenant},
+			         #{p.appx_tmpl_uuid},
+			         CAST(#{p.appx_tmpl_chg_revno} AS INT),
+			         #{p.appx_tmpl_cont},
+			         #{p.chg_rsn},
+			         'C',
+			         #{g.username},
+			         #{g.now},
+			         #{g.now}
+		         )
+	</insert>
+	<resultMap id="resultMap-getAppList" type="map">
+		<result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+		<result column="EDIT_CONTENT" javaType="string" property="edit_content" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="getAppList" resultMap="resultMap-getAppList">
+		/* sub-template.getAppList */
+		SELECT A.APPX_TMPL_UUID        		AS APPX_TMPL_UUID      /*첨부서식번호*/
+			 , A.APPX_TYP_CCD          		AS APPX_TYP_CCD            /*첨부서식문서구분*/
+			 , B.APPX_TMPL_NM             	AS CNTR_APPX_NM          /*첨부서식명*/
+			 , B.APPX_CRTR_TYP_CCD               AS APPX_CRTR_TYP_CCD              /*첨부자구분*/
+			 , A.MAND_YN                	AS MAND_YN              /*필수여부*/
+			 , CASE WHEN C.APPX_TMPL_CONT IS NULL
+				        THEN NULL
+			        ELSE C.APPX_TMPL_CONT
+			END AS CONTENT
+			 , CASE WHEN B.INP_FLD_EYN = 'N'                     /*입력항목유무*/
+				        THEN 'Y'
+			        ELSE 'N'
+			END AS CHECKED_YN
+			 , CASE WHEN C.APPX_TMPL_CONT IS NULL
+				        THEN NULL
+			        ELSE C.APPX_TMPL_CONT
+			END AS EDIT_CONTENT
+			 , B.ATHG_UUID                                         /*그룹코드*/
+			 , A.CNTRDOC_TMPL_ORD
+		FROM CNTRDOC_TMPL_APPX A                                        /*계약서식별 첨부현황 정보*/
+			     INNER JOIN APPX_TMPL B                                   /*첨부양식 정보*/
+			                ON (A.TEN_ID = B.TEN_ID
+				                AND A.APPX_TMPL_UUID = B.APPX_TMPL_UUID )
+			     INNER JOIN APPX_TMPL_CONT C                                   /*첨부서식 내용관리*/
+			                ON (A.TEN_ID = C.TEN_ID
+				                AND A.APPX_TMPL_UUID = C.APPX_TMPL_UUID )
+		WHERE A.TEN_ID = #{g.tenant}
+		  AND A.CNTRDOC_TMPL_UUID = #{p.cntrdoc_tmpl_uuid}
+		ORDER BY A.CNTRDOC_TMPL_ORD
+	</select>
+</mapper>

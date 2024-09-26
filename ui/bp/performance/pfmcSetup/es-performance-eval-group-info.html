@@ -1,0 +1,527 @@
+<sc-link rel="import" href="../../vendorMaster/vdMgmtSetup/shared/ep-vendor-management-group-list.html"></sc-link>
+
+<dom-module id="es-performance-eval-group-info">
+<!-- 
+/**
+ *
+ *	@description : SRM > Performance평가 설정 > Performance평가그룹 > Performance평가그룹 상세 (Performance평가그룹 정보)
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 콤보 목록 조회 서비스 그룹 -->
+        <sc-request-group init>
+            <sc-code-group id="codes">
+                <sc-code code="C009" value="{{codes.useYn}}" ></sc-code>
+				<sc-code code="E900" value="{{codes.vmtCcd}}" ></sc-code>
+            </sc-code-group>
+        </sc-request-group>
+		
+		<!-- 퍼포먼스평가그룹 저장 전 validation 체크 -->
+        <sc-ajax
+                id="checkValidBeforeSavePeg"
+                url="checkValidBeforeSavePeg.do">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+
+        <div class="flex">
+            <cc-sub-title-bar title-text="퍼포먼스평가그룹 (PEG)">
+                <sc-button text="저장" on-click="onValidSavePeg" auth-s></sc-button>
+            </cc-sub-title-bar>
+
+            <cc-form-panel column="1" validation-group="pegInfo">
+                <cc-fieldset>
+                    <sc-label text="운영조직"></sc-label>
+                    <cc-operorg-combobox-field validation-group="vmgInfo" value="{{peg.oorg_cd}}" oper-unit-cd="SO" disabled="{{!formula('isNew')}}" required="{{formula('isNew')}}"></cc-operorg-combobox-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="퍼포먼스평가그룹 코드"></sc-label>
+                    <sc-text-field value="{{peg.peg_cd}}" readonly="true"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="퍼포먼스평가그룹 명"></sc-label>
+                    <sc-text-field value="{{peg.peg_nm}}" required="true" max-length="100"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="퍼포먼스평가그룹 설명"></sc-label>
+                    <sc-textarea-field value="{{peg.peg_expln}}"
+                                       max-length="200" class="h-50"></sc-textarea-field>
+                </cc-fieldset>
+            </cc-form-panel>
+			<cc-sub-title-bar title-text="소싱그룹"></cc-sub-title-bar>
+            <sc-grid id="vmgGridPanel" class="h-300" editable="false"
+                     data-provider="{{pegVmgs}}">
+                <cc-grid-toolbar>
+                    <sc-button text="추가" on-click="onShowPopupVmg" auth-s></sc-button>
+                    <sc-button text="삭제" on-click="onDeleteVmg" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column	data-field="vmg_cd"	header-text="소싱그룹 코드"	width="130"	text-align="center"></sc-data-column>
+                    <sc-data-column	data-field="display_vmg_nm"	header-text="소싱그룹 명"		width="150"	text-align="left"></sc-data-column>
+					<sc-combobox-column data-field="vmt_ccd"	header-text="협력사관리유형"	width="150"
+										items="{{codes.vmtCcd}}"	display-field="label" value-field="data"></sc-combobox-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="vmg_oorg_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="vmt_uuid"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+			
+			<sc-grid id="evalgrdGridPanel" class="h-300" editable="true" on-item-edit-end="onItemEditEnd" validation-group="evalgrdInfo"
+                     data-provider="{{pegEvalGrd}}">
+                <cc-grid-toolbar title-text="평가 등급">
+                    <sc-button text="추가" on-click="onAddEvalgrd" auth-s></sc-button>
+					<sc-button text="삭제" on-click="onDeleteEvalgrd" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column	data-field="eval_grd_cd"	header-text="평가 등급 코드"		width="80"	text-align="center"		max-length="1"
+									editable="true"				required="true"
+									validator-function="gridValidatorFunc"	item-editable-function="onEditableEvalGrdCd"></sc-data-column>
+					<sc-data-column	data-field="eval_grd_nm"	header-text="평가 등급 명"			width="80"	text-align="center"		max-length="60"
+									editable="true"				required="true"></sc-data-column>
+					<sc-data-column	id="stVal"	data-field="st_val"		header-text="이상"	width="80"	onEditableEvalGrdCd-align="right"		max-length="7"
+									data-type="number"			format-type="srmScore"		validator-type="srmScore"			max-value="[[formula('maxValue')]]"
+									editable="true"				required="true"				editor-regex-function="onRowRegex"></sc-data-column>
+					<sc-data-column	id="stpVal"	data-field="stp_val"	header-text="미만"	width="80"	text-align="right"		max-length="7"
+									data-type="number"			format-type="srmScore"		validator-type="srmScore"			max-value="[[formula('maxValue')]]"
+									editable="true"				required="true"				editor-regex-function="onRowRegex"></sc-data-column>
+                	<sc-data-column	data-field="sort"			header-text="정렬"	width="100"	text-align="center"		max-length="10"
+									data-type="number"			format-type="integer"		validator-type="integer"
+									editable="true"></sc-data-column>
+				</sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="peg_eval_grd_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="peg_uuid"></sc-grid-field>
+					
+                </sc-grid-fields>
+            </sc-grid>
+
+            <sc-grid id="pfmcEvalshtHisGridPanel" class="h-200" use-state="false" use-selection="false" editable="false"
+                     on-item-click="onDataCellClicked"
+                     data-provider="{{pfmcEvalshtHis}}">
+                <cc-grid-toolbar title-text="평가시트 이력"></cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column	data-field="evalsht_nm"			header-text="평가시트 명"		width="160"	text-align="left"		style-name="link"></sc-data-column>
+                    <sc-data-column	data-field="cnfd_yn"			header-text="확정 여부"		width="80"	text-align="center"></sc-data-column>
+					<sc-date-column data-field="efct_st_dt"			header-text="유효 시작 일자"	width="100"	text-align="center"		display-format="yyyy/MM/dd"></sc-date-column>
+                    <sc-date-column data-field="efct_exp_dt"		header-text="유효 만료 일자"	width="100"	text-align="center"		display-format="yyyy/MM/dd"></sc-date-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="pfmc_evalsht_uuid"></sc-grid-field>
+                    <sc-grid-field	data-field="evalsht_cd"></sc-grid-field>
+					<sc-grid-field	data-field="current_evalsht"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-performance-eval-group-info",
+            properties: {
+				// 만점
+                defaultPerfectScore : {
+                    type : Number,
+                    value : 100
+                },
+				
+                codes: {
+                    type: Object,
+                    value:  function(){
+                        return {
+                            useYn: [],
+                            vmtCcd: []
+                        };
+                    },
+                    reset: false
+                },
+                peg:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                pegVmgs:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                pfmcEvalshtHis:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+            },
+
+            formulas: {
+                isNew: function () {
+                    var me = this;
+                    var peg = me.get("peg");
+                    return UT.isEmpty(peg.peg_uuid);
+                },
+				maxValue : function(){
+                    var me = this;
+                    // 미만인 경우 값을 포함하지 않기 때문에 최대값 제한 : 만점 + 1
+                    return me.defaultPerfectScore + 1;
+                }
+            },
+
+            initialized: function(){
+            },
+            load: function(param){
+                var me = this;
+                var peg = param.peg;
+
+                me.set("peg", peg);
+                me.set("pegVmgs", param.pegVmgs);
+				me.set("pegEvalGrd", param.pegEvalGrd);
+                me.set("pfmcEvalshtHis", param.pfmcEvalshtHis);
+
+                me.applyFormula();
+            },
+
+            /**
+             * 협력사관리그룹 선택 팝업 조회
+             */
+            onShowPopupVmg: function() {
+                var me = this;
+                var peg = me.get("peg");
+
+                if(!me.validate("vmgInfo")) {
+                    UT.alert("STD.E9000");  // 필수항목 입력여부를 확인해야 합니다.
+                    return;
+                }
+
+                var param = {
+                    oorg_cd : peg.oorg_cd,
+                    use_yn : "Y"    // VMG 사용여부
+                };
+
+                // 협력사관리그룹 팝업 호출
+                var vmgPopup = UT.popup('ep-vendor-management-group-list', me, 800, 600, {
+                    "add-row-vmg" : function(popup, e) {
+                        var selectionItems = e.detail;
+
+                        var datas = [];
+                        for(var i=0; i< selectionItems.length; i++){
+                            var data = selectionItems[i];
+                            datas.push({
+                                vmg_cd  : data.vmg_cd,
+								vmg_nm : data.vmg_nm,
+                                display_vmg_nm : data.display_vmg_nm,
+                                vmg_oorg_uuid : data.vmg_oorg_uuid,
+								vmt_ccd : data.vmt_ccd,
+								vmt_uuid : data.vmt_uuid
+                            });
+                        }
+
+                        me.onAddRowVmg(datas);  // 협력사관리그룹 추가
+                        popup.close();
+                    }
+                });
+                vmgPopup.show();
+                vmgPopup.getWindowContent().load(param);
+            },
+            /**
+             * 협력사관리그룹 추가
+             */
+            onAddRowVmg: function(rows) {
+                var me = this;
+                var provider = me.$.vmgGridPanel.getDataProvider();
+                var target = provider.getItems();  // 비교 대상
+
+                if(rows.length === 0){
+                    UT.alert("STD.N1600");  //선택된 항목이 없습니다.
+                    return;
+                }
+
+                var filtered = rows.filter(function(item){
+                    var exist = false;
+                    for (var i = 0, len = target.length; i < len; i++) {
+                        if (target[i].vmg_oorg_uuid === item.vmg_oorg_uuid) {
+                            exist = true;
+                            break;
+                        }
+                    }
+                    return !exist;
+                });
+
+                provider.addItems(filtered);
+
+                dupCnt = rows.length - filtered.length;
+                if(dupCnt > 0){
+                    // 중복 데이터 {0}건 제외 후 추가하였습니다
+                    UT.alert(me.translate("STD.N2010",null, dupCnt),null,true);
+                }
+            },
+
+            /**
+             * 퍼포먼스평가그룹 (PEG) 저장 전 validation
+             */
+            onValidSavePeg: function(){
+                var me = this;
+                var vmgProvider = this.$.vmgGridPanel.getDataProvider();
+                var targetVmgList = vmgProvider.getItems();
+				var evalgrdProvider = me.$.evalgrdGridPanel.getDataProvider();
+				var evalgrdList = evalgrdProvider.getItems();
+
+                // '퍼포먼스평가그룹 Master' 정보 validate
+                if(!me.validate("pegInfo")) {
+                    UT.alert("STD.E0000");
+                    return;
+                }
+
+				// '평가 등급' 정보 validate
+                if(UT.isEmpty(evalgrdList)){
+                	UT.alert("STD.SRM1306");  // 평가 등급 정보를 입력하세요.
+                	return;
+                }
+				if(!me.validate("evalgrdInfo")) {
+                    UT.alert("STD.E0000");
+                    return;
+                }
+				if(!me.isValidEvalgrdRange()){
+                    return;
+                }
+
+                var body = {
+                    pegInfo : me.get("peg"),
+					targetVmgInfo : {
+						insertTargetVmgList : vmgProvider.getNewItems(),
+						deleteTargetVmgList : vmgProvider.getRemoveItems()
+					},
+					evalgrdInfo : {
+						insertEvalgrdList : evalgrdProvider.getNewItems(),
+						updateEvalgrdList : evalgrdProvider.getUpdateItems(),
+						deleteEvalgrdList : evalgrdProvider.getRemoveItems()
+					}
+                };
+				
+				me.$.checkValidBeforeSavePeg.body = body;
+                UT.request(me.$.checkValidBeforeSavePeg, function(e, res) {
+					var result = res.response;
+				
+					if(result.resultStatus === "S") {
+						me.onSavePeg(body, null);
+					}else if(result.resultStatus === "INVALID_STATUS_ERR"){
+						// [todo jhj] 협력사관리그룹을 peg 간 중복등록을 어디까지 허용할지 확정 필요
+						// ex) 서로 다른 oorg 인 경우, 협력사관리그룹 중복등록 가능
+						// ex) 서로 다른 peg 종류 (정기평가, 안전환경평가, 품질평가...)인 경우, 협력사관리그룹 중복등록 가능
+						// 다른 평가그룹에 연결된 협력사 관리 그룹 noti message주석 처리
+						// 바로 저장 실행
+						me.onSavePeg(body, null);
+						
+						// 2024.01.25 유효성 검사 후 alert 메세지 주석.
+						// var invalidData = result.resultData;
+						// var insertInvalidByUsingVmgDataList = invalidData.insertInvalidByUsingVmgDataList;  // 다른 평가그룹에서 사용중인 협력사관리그룹
+						// var insertInvalidByBeforeCrngVmgDataList = invalidData.insertInvalidByBeforeCrngVmgDataList;  // 다른 평가그룹으로 평가통보 전 평가요청 정보가 존재하는 협력사관리그룹
+						// var deleteInvalidByBeforeCrngVmgDataList = invalidData.deleteInvalidByBeforeCrngVmgDataList;  // 해당 평가그룹으로 평가통보 전 평가요청 정보가 존재하는 협력사관리그룹
+						//
+						// var msg = "";
+						// if(!UT.isEmpty(insertInvalidByUsingVmgDataList) && insertInvalidByUsingVmgDataList.length > 0) {
+						// 	// 다른 평가그룹과 연결된 협력사관리그룹이 존재합니다. <br>기존 연결 삭제 후 해당 평가그룹에 협력사관리그룹이 연결됩니다.
+						// 	//msg += me.translate("STD.SRM1066");
+						// 	insertInvalidByUsingVmgDataList.forEach(function(item) {
+						// 		// [평가그룹 코드/명 : {0}/{1}] - [협력사관리그룹 코드/명 : {2}/{3}]
+						// 		msg += "<br/>" + me.translate("STD.SRM1341", null, item.peg_cd, item.peg_nm, item.vmg_cd, item.vmg_nm);
+						// 	});
+						// 	msg += "<br/><br/>";
+						// }
+						// if(!UT.isEmpty(insertInvalidByBeforeCrngVmgDataList) && insertInvalidByBeforeCrngVmgDataList.length > 0) {
+						// 	// 다른 평가그룹과 연결되어 통보 이전 상태의 평가요청 정보가 존재하는 협력사관리그룹이 존재합니다. <br>기존 연결 삭제 후 해당 평가그룹에 협력사관리그룹이 연결되며 요청 중인 평가정보 수정이 필요합니다.
+						// 	//msg += me.translate("STD.SRM1340");
+						// 	insertInvalidByBeforeCrngVmgDataList.forEach(function(item) {
+						// 		// [평가 코드/명 : {0}/{1}] - [평가그룹 코드/명 : {2}/{3}] - [협력사관리그룹 코드/명 : {4}/{5}]
+						// 		msg += "<br/>" + me.translate("STD.SRM1345", null, item.eval_cd, item.eval_nm, item.peg_cd, item.peg_nm, item.vmg_cd, item.vmg_nm);
+						// 	});
+						// 	msg += "<br/><br/>";
+						// }
+						// if(!UT.isEmpty(deleteInvalidByBeforeCrngVmgDataList) && deleteInvalidByBeforeCrngVmgDataList.length > 0) {
+						// 	// 현재 평가 작성중인 협력사관리그룹이 존재합니다. <br>저장 시 요청 대상에서 제외됩니다.
+						// 	//msg += me.translate("STD.SRM1343");
+						// 	deleteInvalidByBeforeCrngVmgDataList.forEach(function(item) {
+						// 		// [평가 코드/명 : {0}/{1}] - [협력사관리그룹 코드/명 : {2}/{3}]
+						// 		msg += "<br/>" + me.translate("STD.SRM1342", null, item.eval_cd, item.eval_nm, item.vmg_cd, item.vmg_nm);
+						// 	});
+						// 	msg += "<br/><br/>";
+						// }
+						// msg += me.translate("STD.N1200");  // 저장하시겠습니까?
+						//
+						// me.onSavePeg(body, msg);
+					}
+				});
+            },
+			/**
+             * 퍼포먼스평가그룹 (PEG) 저장
+             */
+			onSavePeg: function(body, msg){
+				var me = this;
+				
+				UT.confirm(msg == null ? me.translate("STD.N1200") : msg, function() {  // 저장 하시겠습니까?
+					me.fire("save-peg", body);
+				}, null, true);
+			},
+
+            /**
+             * 퍼포먼스 협력사관리그룹 삭제
+             */
+            onDeleteVmg: function(){
+                var me = this
+                  , provider = me.$.vmgGridPanel.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+
+                if(checked.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                } else {
+                    provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+                }
+            },
+
+            /**
+             * 퍼포먼스 평가그룹 - 평가시트이력 상세 조회
+             */
+            onDataCellClicked: function(event) {
+                var me = this;
+                var data = event.detail.data,
+                    dataField = event.detail.item.dataField;
+
+                if(dataField == "evalsht_nm") {
+                    // 퍼포먼스 평가그룹 - 평가시트이력 상세 조회
+                    me.fire("load-pfmc-evalsht-his", data);
+                }
+            },
+			
+			/* 평가 등급 그리드 제어, 평가 등급 코드 editable */
+			onEditableEvalGrdCd : function(data, item){
+                var me = this;
+                var provider = me.$.evalgrdGridPanel.getDataProvider();
+                
+                return (provider.getItemState(item.rowIndex) === 'created');    //신규 데이터인 경우에만 수정 가능 (eval_cls_cd : key 컬럼 기존데이터인경우 수정 불가)
+            },
+			/* 평가 등급 그리드 제어, 평가 등급 코드 유효성 체크 */
+            gridValidatorFunc: function(headerText, dataField, data){
+                var me = this;
+                
+                if(dataField === "eval_grd_cd"){
+                    // 코드 중복 체크
+                    var provider = me.$.evalgrdGridPanel.getDataProvider(),
+						rows = provider.getItems();
+                    var unique_check = {};
+                    for (var i=0, len = rows.length; i<len; i++) {
+                        if(typeof unique_check[rows[i].eval_grd_cd] == "undefined"){
+                            unique_check[rows[i].eval_grd_cd] = 0;
+                        } else {
+                            return me.translate("STD.E1000", null, me.translate(headerText));   // '{0}'에 동일한 값이 존재합니다.
+                        }
+                    }
+                }
+                return true;
+            },
+			onItemEditEnd : function(e){
+                var me = this, detail = e.detail,
+                item = detail.item,
+                dataField = item.dataField,
+                newValue = detail.newValue,
+                oldValue = detail.oldValue,
+                provider = detail.provider;
+                
+                if(dataField == "eval_grd_cd"){
+                    var regExp = /[^a-zA-Z]/;
+                    if(!UT.isString(newValue) || regExp.test(newValue)){
+                        provider.setItemAt(item.rowIndex, {eval_grd_cd : oldValue});
+                    }else{
+                        provider.setItemAt(item.rowIndex, {eval_grd_cd : newValue.toUpperCase()});
+                    }
+                }
+            },
+			/* 평가 등급 그리드 제어, 평가점수범위 유효성 체크 */
+			onRowRegex: function(data, item) {
+				var me = this;
+				switch (item.dataField) {
+					case "st_val":
+					case "stp_val":
+						return CCPrecManager.regex("srmScore");
+					default:
+						return null;
+				}
+			},
+			/* 평가 등급 구간 유효성 확인 */
+            isValidEvalgrdRange: function() {
+                var me = this,
+                    grid = me.$.evalgrdGridPanel,
+                    provider = grid.getDataProvider();
+                var targetList = provider.getItems();
+                
+                var minText = me.$.stVal.headerText,
+                    maxText = me.$.stpVal.headerText;
+            
+                for(var i=0; i<targetList.length; i++){
+                    var chkSection = targetList[i];
+                    var chkCnt = 0;
+                    
+                    if(parseFloat(chkSection.st_val) >= parseFloat(chkSection.stp_val)) {
+                    	var minStr = minText + "[" + chkSection.st_val + "]",
+                    	    maxStr = maxText + "[" + chkSection.stp_val + "]";
+                        UT.alert(me.translate("STD.E1010",null, minStr , maxStr),null,true);    // minText은(는) maxText 보다 작은 값으로 입력하십시오
+                        return false;
+                    }
+                    
+                    for(var j=0; j<targetList.length; j++){
+                        var target = targetList[j];
+
+                        if(target && (i != j)){
+                            if(parseFloat(chkSection.stp_val) <= parseFloat(target.stp_val)
+                                    && parseFloat(chkSection.stp_val) > parseFloat(target.st_val)) {
+                                chkCnt++;
+                            }
+                            if(parseFloat(chkSection.st_val) < parseFloat(target.stp_val)
+                                    && parseFloat(chkSection.st_val) >= parseFloat(target.st_val)) {
+                                chkCnt++;
+                            }
+                        }
+                    }
+                    
+                    if(chkCnt > 0) {
+                        UT.alert("STD.SRM1056");  // 평가 등급 점수 구간은 중첩 등록이 불가능합니다.
+                        return false;
+                    }
+                }
+                return true;
+            },
+			
+			/**
+             * 평가 등급 추가
+             */
+            onAddEvalgrd : function() {
+                var me = this
+				  , provider = me.$.evalgrdGridPanel.getDataProvider();
+
+                provider.addItem();
+            },
+			
+			/**
+             * 평가 등급 삭제
+             */
+            onDeleteEvalgrd : function() {
+                var me = this;
+            	var provider = me.$.evalgrdGridPanel.getDataProvider();
+            	var deleteRows = provider.selectionCheckedItems();
+            	
+            	if(UT.isEmpty(deleteRows)){
+            		UT.alert("STD.N1600");
+            	}else{
+					provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+            	}
+            },
+        });
+    </script>
+
+</dom-module>

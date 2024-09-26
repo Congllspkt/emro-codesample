@@ -1,0 +1,159 @@
+<sc-link rel="import" href="/ui/bp/common/survey/execute/es-survey-section.html"></sc-link>
+
+<dom-module id="es-survey-individual">
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+	<template>
+		<sc-ajax id="findSurveyExecute"
+				 url="findSurveyExecute.do"
+				 on-response="completeFindSurveyExecute">
+		</sc-ajax>
+		
+		<div class="hbox" style="overflow: hidden;">
+			<sc-grid id="gridPanel" style="width: 300px;height: 580px; margin-right: 5px;" use-selection="false" use-state="false" use-dummy="false" show-number-line="false" column-fit-style="even" data-provider="{{subjects}}" on-item-click="onItemClick">
+				<sc-grid-columns>
+					<!--<sc-data-column data-field="surv_subj_info_id" header-text="대상 정보" width="100" text-align="center"></sc-data-column>
+					<sc-data-column data-field="disp_surv_subj_info_nm" header-text="대상 명" width="200" text-align="left"></sc-data-column>-->
+					<sc-date-column data-field="surv_subj_subm_dttm" header-text="제출 일시" width="150" text-align="center" style-name="link"></sc-date-column>
+					<sc-data-column data-field="surv_subj_sc" header-text="점수" width="80" text-align="right" format-type="number"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="surv_uuid"></sc-grid-field>
+					<sc-grid-field data-field="surv_subj_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			<div class="vbox" style="width: 100%;height: 580px">
+				<sc-pages id="pages" selected="0" class="page" style="height: 100%;overflow: auto;"></sc-pages>
+				<div style="align-self: center;">
+					<sc-button text="이전" on-click="onPreviousPage" hidden="[[!formula('visiblePreviousBtn')]]"></sc-button>
+					<sc-button text="다음" on-click="onNextPage" hidden="[[!formula('visibleNextBtn')]]"></sc-button>
+				</div>
+			</div>
+		</div>
+		
+		<es-survey-section hidden></es-survey-section>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-individual",
+			
+			properties: {
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjects: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			formulas: {
+				visiblePreviousBtn: function() {
+					var pages = this.$.pages;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === 0) {
+						return false;
+					}
+					return true;
+				},
+				visibleNextBtn: function() {
+					var pages = this.$.pages;
+					var childrenCount = pages.childElementCount;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === childrenCount - 1) {
+						return false;
+					}
+					return true;
+				},
+			},
+			
+			initialized: function() {
+			},
+			
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "surv_subj_subm_dttm") {
+					me.loadExecute(data.surv_subj_uuid);
+				}
+			},
+			
+			loadExecute: function(survSubjUuid) {
+				var me = this;
+				me.clearForm();
+				me.$.findSurveyExecute.body = {
+					surv_subj_uuid: survSubjUuid
+				};
+				UT.request(me.$.findSurveyExecute);
+			},
+			
+			completeFindSurveyExecute: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				var survey = response.survey;
+				var sections = response.sections;
+				
+				me.set("survey", survey);
+				me.applyFormula();
+				
+				var forms = me.$.pages;
+				forms.set("selected", 0);
+				
+				for(var i = 0; i < sections.length; i++) {
+					var section = sections[i];
+					me.addSection(forms, section, i + 1);
+				}
+				me.applyFormula();
+			},
+			
+			addSection: function(sectionForms, section, number) {
+				var me = this;
+				var survey = me.get("survey");
+				
+				var sectionForm = document.createElement("es-survey-section");
+				sectionForm.set("editable", false);
+				sectionForm.set("survey", survey);
+				sectionForm.set("number", number);
+				
+				Polymer.dom(sectionForms).appendChild(sectionForm);
+				Polymer.dom.flush();
+				sectionForm.load(section);
+			},
+			
+			onPreviousPage: function() {
+				var me = this;
+				me.$.pages.selectPrevious();
+				me.applyFormula();
+			},
+			
+			onNextPage: function() {
+				var me = this;
+				me.$.pages.selectNext();
+				me.applyFormula();
+			},
+			
+			clearForm: function() {
+				var me = this;
+				var pages = me.$.pages;
+				
+				var element = pages.lastChild;
+				while(element) {
+					pages.removeChild(element);
+					element = pages.lastChild;
+				}
+			}
+		})
+	</script>
+</dom-module>

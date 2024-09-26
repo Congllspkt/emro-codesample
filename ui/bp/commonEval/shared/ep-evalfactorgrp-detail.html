@@ -1,0 +1,232 @@
+<dom-module id="ep-evalfactorgrp-detail">
+<!-- 
+/**
+ *
+ *	@description : 평가항목 관리 > 평가항목군추가 팝업
+ *  <pre>
+ * </pre>
+ * @변경이력 : [2023. 06. 14] cyhwang
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+
+        <!-- 평가항목군 조회 -->
+        <sc-ajax 
+            id="findEvalFactorGrp"
+            url="findEvalFactorGrp.do"
+			last-response="{{evalFactorGrpList}}"
+            on-response="completeFindEvalFactorGrp">
+        </sc-ajax>
+        
+        <!-- 평가항목군 저장 -->
+        <sc-ajax 
+            id="saveEvalFactorGrp"
+            url="saveEvalFactorGrp.do"
+            on-response="onSaveResultHandler">
+        </sc-ajax>
+		
+		<!-- 평가항목군 삭제 -->
+		<sc-ajax
+				id="deleteEvalFactorGrp"
+				url="deleteEvalFactorGrp.do"
+				on-response="onDeleteResultHandler">
+		</sc-ajax>
+<!--  
+    화면
+-->
+	
+		<sc-grid id="gridPanel" is-tree="false" use-state="true" class="flex" editable="true"
+				 on-item-click="onDataCellClicked">
+			<cc-grid-toolbar>
+				<sc-button text="추가" on-click="onAddRow" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteFactorGrp" auth-s></sc-button>
+				<sc-button text="저장" on-click="onSaveEvalFactorGrp" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column	data-field="efactg_nm"		header-text="평가항목군 명" max-length="100"	width="400"	text-align="left"	editable="true" required="true"></sc-data-column>
+				<sc-data-column	data-field="rmk"			header-text="비고" max-length="1000"	width="300"	editable="true" text-align="left"></sc-data-column>
+				<sc-data-column	data-field="mod_nm"			header-text="수정자"		width="100"></sc-data-column>
+				<sc-date-column	data-field="mod_dttm"		header-text="수정 일자"		width="100"></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field	data-field="efactg_uuid"></sc-grid-field>
+				<sc-data-column	data-field="efactg_cd"></sc-data-column>
+			</sc-grid-fields>
+		</sc-grid>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "ep-evalfactorgrp-detail",
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "평가항목군 정보"
+				},
+                //평가항목군 정보
+                evalFactorGrpData : {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+				//평가항목군 정보
+				evalFactorGrpList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+            },
+            
+            formulas : {
+            },
+
+            initialized: function() {
+                var me = this;
+            },
+            
+            /**
+             * 평가항목 그룹정보 setting
+             */
+            load: function() {
+                var me = this;
+                me.onFindEvalFactorGrp();
+            },
+			
+            /**
+             * 평가항목군 조회
+             */
+            onFindEvalFactorGrp: function() {
+                var me = this;
+                UT.request(me.$.findEvalFactorGrp);
+            },
+            
+            /**
+             * 평가항목 조회 callback 
+             */
+            completeFindEvalFactorGrp: function(e, res) {
+                var me = this;
+				var list = me.get("evalFactorGrpList");
+				me.$.gridPanel.setDataProvider(list);
+            },
+			
+			onAddRow : function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				
+				// 그리드 신규행 추가
+				provider.addItem();
+			},
+            
+            onSaveEvalFactorGrp : function(){
+                var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var created = provider.getNewItems(),
+					updated = provider.getUpdateItems();
+				var efactgList = [];
+				var rows = provider.getItems();
+				
+				
+				if(created.length + updated.length === 0) {
+					UT.alert("STD.N1700"); // "변경된 내용이 없습니다"
+					return;
+				}
+				
+                // 데이터 유효성 확인
+                if(!me.validate()){
+                    UT.alert('STD.E9000');
+                    return;
+                }
+                
+				// 평가항목군 명 중복 확인
+				for(var i=0; i<rows.length; i++){
+					if(i==0){
+						efactgList.push(rows[i].efactg_nm);
+						continue;
+					}
+					for(var j=0; j<efactgList.length-1;j++){
+						if(efactgList[j] == rows[i].efactg_nm){
+							UT.alert("STD.SRM1346"); // 평가항목군 명은 중복 등록이 불가능합니다.
+							
+							return;
+						} else {
+							efactgList.push(rows[i].efactg_nm);
+							continue;
+						}
+					}
+				}
+				
+                //저장하시겠습니까?
+                UT.confirm("STD.N1200", function(){
+					me.$.saveEvalFactorGrp.body = {
+						updateList: updated,
+						insertList: created
+					}
+                    UT.request(me.$.saveEvalFactorGrp);
+                });
+            },
+            
+            /**
+             * 저장 완료 event handler
+             */
+            onSaveResultHandler: function(e, res) {
+                var me = this;
+                var result = res.response;
+                if (UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						me.fire("complete-save");
+					});
+                }else if(UT.isObject(result) && result.resultStatus === "D"){
+					UT.alert("STD.SRM1346"); // 평가항목군 명은 중복 등록이 불가능합니다.
+				}else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+			
+			// 평가항목군 삭제
+			onDeleteFactorGrp: function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider();
+				var deletes = provider.selectionCheckedItems();
+				var deleteItemSize = deletes.length;
+				
+				if (deleteItemSize > 0) {
+					var message = "STD.N1300";  // 삭제하시겠습니까?
+					
+					UT.confirm(message, function(btn) {
+						me.$.deleteEvalFactorGrp.set("body",{
+							deleteList: deletes
+						});
+						UT.request(me.$.deleteEvalFactorGrp);
+					});
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			
+			onDeleteResultHandler: function(e, res) {
+				var me = this;
+				var result = res.response || {};
+				if (result.resultStatus === "S") {
+					UT.completeAlert("삭제", function() {
+						me.onFindEvalFactorGrp();
+					});
+				} else if(result.resultStatus === "INVALID_STATUS_ERR"){
+					UT.alert("STD.SRM1314");	// 평가템플릿에 사용된 평가항목군은 삭제할 수 없습니다.
+				}else{
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+		});
+    </script>
+
+</dom-module>

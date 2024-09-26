@@ -1,0 +1,662 @@
+<sc-link rel="import"  href="../shared/ep-onboarding-eval-reqinfo.html"></sc-link>
+<sc-link rel="import"  href="../shared/ep-onboarding-eval-detail-score-info.html"></sc-link>
+<sc-link rel="import"  href="../shared/ep-onboarding-eval-detail-eval-info.html"></sc-link>
+<sc-link rel="import"  href="../obdSetup/ep-onboarding-evalsheet-detail.html"></sc-link>
+<!--<sc-link rel="import" href="../../shared/ep-user-list.html"></sc-link>-->
+<!--
+    ******************************************************************************************
+    ** @Program-name    : 온보딩평가 모니터링
+    ** @Description     : 협력사 > 온보딩평가 모니터링 목록을 조회합니다.
+    ** @Author          : yjPark
+    ** @Create Date     : 2023.06.18
+    ** @History         : 2023.06.18 yjPark 최초작성
+    ******************************************************************************************
+-->
+<dom-module id="es-onboarding-eval-monitoring-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!-- 
+    ************************************************************************************************************
+    * Service Area
+    ************************************************************************************************************
+ -->
+        <!-- 온보딩평가 요청목록 조회 -->
+        <sc-ajax id="findListReqOnboardingEval" url="findListReqOnboardingEval.do" body="{{searchParam}}" last-response="{{oeReqList}}"></sc-ajax>
+        
+        <!-- 온보딩평가 상세프로세스 목록 조회 -->
+        <sc-ajax id="findListOnboardingEvalProcess" url="findListOnboardingEvalProcess.do" on-response="completeFindListOnboardingEvalProcess"></sc-ajax>
+
+        <!-- 평가마감 저장 -->
+        <sc-ajax id="saveListOnboardingEvalComplete" url="saveListOnboardingEvalComplete.do" on-response="completeSaveListOnboardingEvalComplete"></sc-ajax>
+        
+        <!-- 조건부합격 저장 -->
+        <sc-ajax id="saveProcessConditionalPass" url="saveProcessConditionalPass.do" on-response="completeSaveProcessConditionalPass"></sc-ajax>
+
+        <!-- 프로세스이동 저장 -->
+        <sc-ajax id="saveMoveNextPrcsProcess" url="saveMoveNextPrcsProcess.do" on-response="completeSaveMoveNextPrcsProcess"></sc-ajax>
+        
+        <!-- 공통코드 조회 -->
+        <sc-request-group id="codes" init>
+			<sc-code code="E008" value="{{codes.oeResStsCcd}}" ></sc-code><!-- 온보딩평가 요청 상태 -->
+			<sc-ajax
+					id="findListOperationOrganizationByUser"
+					url="findListOperationOrganizationByUser.do"
+					body="EO"
+					content-type="text/plain"
+					last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+            <!-- 진행상태 콤보박스 목록 조회 -->
+            <sc-ajax
+                url="findOePrgsStsCcd.do"
+                body="A"
+                content-type="text/plain" 
+                last-response="{{codes.oePrgsStsCcd}}">
+            </sc-ajax>
+        </sc-request-group>
+        
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+ <!-- 
+    ************************************************************************************************************
+    * UI Area
+    ************************************************************************************************************
+ -->
+		<cc-page-title-bar></cc-page-title-bar>
+        <!-- 화면 -->
+        <div class="vbox flex-6">
+			
+			<cc-search-condition-panel on-search="onSearch" search-condition-cls="label-row" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<sc-multi-combobox-field selected-all="true" required="true"
+											 display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"
+											 value="{{searchParam.oorg_cd}}" placeholder="선택">
+					</sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" placeholder="코드" max-length="18" on-enter="onSearch"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" max-length="128" on-enter="onSearch"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="요청 일자"></sc-label>
+					<sc-period-date-field
+							from-value="{{searchParam.from_date}}" to-value="{{searchParam.to_date}}" string-date="true">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<!--<cc-fieldset>
+					<sc-label text="처리상태"></sc-label>
+					<sc-combobox-field
+							display-field="label" value-field="data"
+							items="{{codes.oePrgsStsCcd}}" value="{{searchParam.oe_prgs_sts_ccd}}" placeholder="전체">
+					</sc-combobox-field>
+				</cc-fieldset>-->
+			</cc-search-condition-panel>
+
+            <sc-grid id="oeReqGridPanel" class="flex" use-state="false" selection-mode="radio"
+                     data-provider="{{oeReqList}}"
+					 on-item-click="onDgGridDataCellClicked">
+                <cc-grid-toolbar title-text="온보딩평가 요청 목록">
+                    <sc-button text="평가 마감" on-click="onSaveOnboardingEvalComplete" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column		data-field="erp_vd_cd"			header-text="협력사 코드"			width="100"></sc-data-column>
+                    <sc-data-column		data-field="vd_nm"				header-text="협력사 명"			width="150"		text-align="left"	style-name="link"></sc-data-column>
+                    <sc-image-column	data-field="req_info"			header-text="요청 소싱그룹"			width="120"		singular-source="ui/assets/img/grid/icon_link.png"></sc-image-column>
+                    <sc-combobox-column	data-field="oe_prgs_sts_ccd"		header-text="진행 상태"			width="150"
+										items="{{codes.oePrgsStsCcd}}"	display-field="label"			value-field="data"></sc-combobox-column>
+					<sc-combobox-column	data-field="oe_res_sts_ccd"		header-text="결과 상태"			width="150"
+										   items="{{codes.oeResStsCcd}}"	display-field="label"		value-field="data"></sc-combobox-column>
+                    <sc-data-column		data-field="oeg_nm"				header-text="온보딩평가그룹"		width="150"		text-align="left"	style-name="link"></sc-data-column>
+					<sc-image-column	data-field="img_obd_evalsht"	header-text="평가시트"			image-cls="link"	width="110"></sc-image-column>
+                    <sc-date-column		data-field="oe_req_dt"			header-text="요청 일자"			width="100"></sc-date-column>
+                    <sc-combobox-column	data-field="oorg_cd"			header-text="요청 운영조직"		width="180"
+										items="{{codes.oorgCd}}"		display-field="logic_org_nm"	value-field="oorg_cd"></sc-combobox-column>
+                    <sc-date-column		data-field="oe_ed_dt"		header-text="평가 종료 일자"		width="140"></sc-date-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field		data-field="vd_cd"				data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="oe_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="vmg_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="vmg_cd"				data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="vmt_ccd"			data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="vmg_typ_ccd"		data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="oeg_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field		data-field="obd_evalsht_uuid"	data-type="text"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </div>
+
+		<div class="vbox flex-4">
+        	<sc-grid id="oePrcsGridPanel" class="flex-4" use-state="false" selection-mode="radio"
+                	 on-selection-checked="onDetailGridItemChecked"
+					 on-item-click="onDetailGridDataCellClicked">
+            	<cc-grid-toolbar title-text="온보딩평가 프로세스">
+                	<sc-button text="조건부 합격" on-click="onShowConditionalPassPopup" hidden="[[!formula('onShowConditionalPassState')]]" auth-s></sc-button>
+                	<sc-button text="프로세스 이동" on-click="onMoveNextPrcs" hidden="[[!formula('onMoveNextPrcsBtnState')]]" auth-s></sc-button>
+            	</cc-grid-toolbar>
+            	<sc-grid-columns>
+                	<sc-data-column		data-field="prcs_nm"					header-text="프로세스 명"				width="200"		text-align="left"></sc-data-column>
+                	<sc-data-column		data-field="prcs_sort"					header-text="프로세스 정렬"			width="100"		text-align="right"	data-type="number"	format-type="integer"></sc-data-column>
+<!--                	<sc-data-column		data-field="prcs_wgt"					header-text="가중치"					width="100"		text-align="right"	data-type="number"	format-type="percent"></sc-data-column>-->
+                	<sc-data-column		data-field="oe_req_res_sts_nm"			header-text="프로세스 상태"			width="200"></sc-data-column>
+                	<sc-image-column	data-field="prcs_conl_pass_rsn_link"	header-text="사유"					width="50"
+										image-change-function="onImageChange"></sc-image-column>
+                	<sc-data-column		data-field="eval_prog"					header-text="평가 진행"				width="130"
+										item-label-function="onLabelFunction"></sc-data-column>
+                	<sc-image-column	data-field="req_eval_info"				header-text="온보딩평가 정보"			width="100"		image-change-function="onImageChange"></sc-image-column>
+                	<sc-data-column		data-field="eval_sco"					header-text="[[translate('평가 점수')]]/[[translate('합격 점수')]]"		width="180"		text-align="right"	style-name="link" i18n-disabled></sc-data-column>
+                	<sc-date-column		data-field="eval_cmpld_dt"				header-text="프로세스 완료 일자"			width="130"></sc-date-column>
+					
+					<sc-data-column		data-field="auto_prcsg_yn"				header-text="자동 처리"				width="80"></sc-data-column>
+					<sc-data-column		data-field="remark"						header-text="비고"					width="200"		text-align="left"
+										item-label-function="onLabelFunction"></sc-data-column>
+                	<sc-data-column		data-field="ptnl_vd_slctn_crtra_yn"		header-text="잠재 협력사 선정 기준 여부"			width="110"></sc-data-column>
+            	</sc-grid-columns>
+            	<sc-grid-fields>
+                	<sc-grid-field		data-field="vd_cd"						data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="oe_uuid"					data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="oorg_cd"					data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="obd_evalsht_prcs_uuid"		data-type="text"></sc-grid-field>
+                	<sc-grid-field		data-field="oe_prcs_uuid"				data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="prcs_ccd"					data-type="text"></sc-grid-field>
+                	<sc-grid-field		data-field="oe_prcs_sts_ccd"			data-type="text"></sc-grid-field>
+                	<sc-grid-field		data-field="oeg_uuid"					data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="oeg_cd"						data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="vmg_uuid"					data-type="text"></sc-grid-field>
+                	<sc-grid-field		data-field="vmg_cd"						data-type="text"></sc-grid-field>
+                	<sc-grid-field		data-field="prcs_conl_pass_rsn"			data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="no_evaltr_yn"				data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="eval_end_cnt"				data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="eval_tot_cnt"				data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+        	</sc-grid>
+		</div>
+        
+        <sc-dialog id="dialog" title-text="{{causeInfo.title}}" style="width:500px; height:500px" modal="true" i18n-disabled>
+            <cc-page-title-bar>
+                <sc-button text="조건부 합격" on-click="onSaveConditionalPass" hidden="[[!formula('isEditPassSts')]]" auth-s></sc-button>
+            </cc-page-title-bar>
+            <table class="tb-form" validation-group="forceCause">
+                <colgroup>
+                    <col style="width:120px">
+                    <col>
+                </colgroup>
+                <tr>
+                    <th><sc-label text="협력사 명"></sc-label></th>
+                    <td>
+                        <sc-label text="{{causeInfo.item.vd_nm}}" i18n-disabled></sc-label>
+                    </td>
+                </tr>
+                <tr>
+                    <th><sc-label text="프로세스 명"></sc-label></th>
+                    <td>
+                        <sc-label text="{{causeInfo.item.prcs_nm}}" i18n-disabled></sc-label>
+                    </td>
+                </tr>
+                <tr>
+                    <th><sc-label text="프로세스 상태"></sc-label></th>
+                    <td>
+                        <sc-label text="{{causeInfo.item.oe_req_res_sts_nm}}" i18n-disabled></sc-label>
+                    </td>
+                </tr>
+                <tr>
+                    <th><sc-label text="평가 점수"></sc-label></th>
+                    <td>
+                        <sc-label text="{{causeInfo.item.eval_sco}}" i18n-disabled></sc-label>
+                    </td>
+                </tr>
+                <tr>
+                    <th><sc-label text="사유"></sc-label></th>
+                    <td>
+                        <sc-textarea-field value="{{causeInfo.item.prcs_conl_pass_rsn}}" class="h-200" max-length="1000" required="{{causeInfo.editable}}" readonly="{{!causeInfo.editable}}"></sc-textarea-field>
+                    </td>
+                </tr>
+            </table>
+        </sc-dialog>
+    </template>
+ <!-- 
+    ************************************************************************************************************
+    * Script Area
+    ************************************************************************************************************
+ -->    
+    <script>
+        Polymer({
+            is: "es-onboarding-eval-monitoring-list",
+            
+            properties:  {
+                /*공통코드 데이터 binding*/
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return {
+							oorgCd: [],
+							oePrgsStsCcd: [],
+							oeResStsCcd: []
+                        };
+                    },
+                    reset: false
+                },
+				/* 조회조건 */
+				searchParam: {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				/* 상세프로세스목록 조회조건 */
+				searchPrcsParam: {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				
+                oeReqList:{
+                    type: Array,
+                    value: function(){
+                        return [];
+                    }
+                },
+                oePrcsList:{
+                    type: Array,
+                    value: function(){
+                        return [];
+                    }
+                },
+                /* 그리드 체크 아이템 */
+                checkedItem: {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+                causeInfo : {
+                    type : Object,
+                    value : function(){
+                        return {
+                            item : {
+								prcs_conl_pass_rsn : "",
+								oe_prcs_sts_ccd : ""
+                            },
+                            editable : false,
+                            title : "",
+                            stsCls : ""
+                        };
+                    }
+                },
+                hasActivatedStep : {
+                    type: Boolean,
+                    value: false
+                },
+                hasFailedStep : {
+                    type: Boolean,
+                    value: false
+                }
+            },
+
+            formulas:{
+				onShowConditionalPassState: function() {
+                    var checkedItem = this.checkedItem;
+					oePrcsStsCcd = checkedItem.oe_prcs_sts_ccd;
+
+					return (oePrcsStsCcd != "PRCS_PASS" && oePrcsStsCcd != "PRCS_CONL_PASS");
+                },
+                onMoveNextPrcsBtnState: function() {
+                    var checkedItem = this.checkedItem;
+                    var autoPrcsgYn = checkedItem.auto_prcsg_yn;
+
+					return (autoPrcsgYn === "N");
+                },
+                isEditPassSts : function(){
+                    var data = this.causeInfo;
+                    return (data.stsCls == "PRCS_CONL_PASS") ? (data.editable) : false;
+                }
+            },
+            
+			// grid image column 데이터에 따른 icon 처리
+            onImageChange : function(data, item){
+                if(item.dataField === "prcs_conl_pass_rsn_link" && data.oe_prcs_sts_ccd == "PRCS_CONL_PASS"){
+                    return "link";
+                } else if(item.dataField === "req_eval_info" && data.eval_subj_res_uuid){
+					return "link";
+				} else{
+                    return "";
+                }
+            },
+			
+			onLabelFunction: function(data, item) {
+                var me = this;
+                var dataField = item.dataField;
+				
+                if(dataField =="remark" && data.isLeaf) {
+                    if(data.no_evaltr_yn === "Y") {
+                        return "평가담당자 미지정";
+                    }
+                } else if (dataField == "eval_prog" && data["eval_tot_cnt"]) {
+                    return (data["eval_end_cnt"] || "0") + " / " + data["eval_tot_cnt"]
+                }
+                return null;
+            },
+
+			/* 온보딩평가 그리드 클릭 */
+            onDgGridDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+				
+                if(item.dataField === "vd_nm"){
+                    UT.popupVendor(me, data, function(){
+                        me.onSearch();
+                    });
+                }
+                else if(item.dataField === "oeg_nm"){
+                    // 그리드 checkbar 선택
+                    this.$.oeReqGridPanel.selectionCheck(item.rowIndex, true, true);
+
+                    me.set("searchPrcsParam",data);
+
+                    // 상세 프로세스 목록 조회
+                    me.onSearchEvalDetail();
+                }
+                else if(item.dataField === "req_info"){
+                    var evalReqInfoPopup = UT.popup("ep-onboarding-eval-reqinfo", me, 550, 450, null,{titleText:"요청 소싱그룹"});
+                    evalReqInfoPopup.show();
+                    evalReqInfoPopup.getWindowContent().load(data);
+                }
+				else if(item.dataField === "img_obd_evalsht") {
+					var sheetPop = UT.popup("ep-onboarding-evalsheet-detail", me, 1200, 700, {}, {titleText: me.translate("평가시트")});
+					sheetPop.show();
+					sheetPop.getWindowContent().load(data);
+				}
+            },
+
+			/* 온보딩평가상세절차 그리드 클릭 */
+            onDetailGridDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+				
+                if(item.dataField === "req_eval_info"){
+                    if(data.eval_subj_res_uuid){
+                        var evalDetailEvalPopup = UT.popup("ep-onboarding-eval-detail-eval-info", me, '90%', '90%', {
+                            "complete-save" : function(popup,e){
+                                me.onSearchEvalDetail();
+                            },
+                            "complete-eval" : function(popup,e){
+                                me.onSearch();
+                                popup.close();
+                            }
+                        },{titleText : "온보딩평가 정보"});
+                        evalDetailEvalPopup.show();
+                        evalDetailEvalPopup.getWindowContent().load({param:data, editable: (data.evaltr_typ_ccd !== "VD")});
+                    }/*else{
+                        UT.alert("STD.VS1002");
+                    }*/
+                }
+                else if(item.dataField === "prcs_conl_pass_rsn_link"){
+                    var oePrcsStsCcd = data.oe_prcs_sts_ccd;
+                    if(oePrcsStsCcd == "PRCS_CONL_PASS"){
+                        me.onShowForceCauseDialog(data, data.oe_prcs_sts_ccd, false);
+                    }else{
+                        return;
+                    }
+                }
+                else if(item.dataField === "eval_sco"){
+                    var evalDetailPopup = UT.popup("ep-onboarding-eval-detail-score-info", me, "70%", "60%");
+                    evalDetailPopup.show();
+                    evalDetailPopup.getWindowContent().load(data);
+                }
+            },
+
+			/* 온보딩평가상세절차 그리드 선택 */
+            onDetailGridItemChecked: function(e){
+                var me = this,
+                    detail = e.detail,
+                    nodeIndex = detail.nodeIndex,
+                    data = detail.data;
+                var checkedItem = {};
+                checkedItem.nodeIndex = nodeIndex;
+                checkedItem.auto_prcsg_yn = data.auto_prcsg_yn;
+                checkedItem.pre_oe_fcd_pass_tcappl_yn = data.pre_oe_fcd_pass_tcappl_yn;
+				checkedItem.oe_prcs_sts_ccd = data.oe_prcs_sts_ccd;
+
+                me.set('checkedItem', checkedItem);
+
+                me.applyFormula();
+            },
+            
+            /* 조회 */
+            onSearch: function(){
+                var me = this,
+                    provider = me.$.oePrcsGridPanel.getDataProvider();
+				
+                if(!me.validate("search")){
+                    UT.alert("STD.E0000");
+                    return;
+                }
+				
+                if(!UT.isEmpty(provider)){
+					provider.removeAll();
+				}
+				
+                UT.request(me.$.findListReqOnboardingEval);
+            },
+            
+            /* 상세프로세스목록 조회 */
+            onSearchEvalDetail:  function(){
+                var me = this;
+                // 상세프로세스목록 조회 시 넘겨줄 파라미터 setting
+                me.$.findListOnboardingEvalProcess.body = me.searchPrcsParam;
+                me.set('checkedItem', {});
+                me.applyFormula();
+                UT.request(me.$.findListOnboardingEvalProcess);
+            },
+            /* 상세프로세스목록 조회 완료 후 callback */
+            completeFindListOnboardingEvalProcess: function(e, res){
+                var me = this,
+                    result = res.response;
+
+                // 프로세스 상태 확인(불합격/수행중인 프로세스 존재여부)
+                me.checkStepStatus(result);
+                me.$.oePrcsGridPanel.setDataProvider(result);
+            },
+            
+            /* 평가마감 */
+            onSaveOnboardingEvalComplete: function(){
+                var me = this,
+                    provider = this.$.oeReqGridPanel.getDataProvider();
+
+                var checked = provider.selectionCheckedItems();
+                if(checked.length == 0){
+                    UT.alert("STD.N1600");
+                    return;
+                }
+                
+                if(checked.length == 1){
+                    UT.confirm("STD.N1103", function() {
+                        me.$.saveListOnboardingEvalComplete.body = {checkList: checked};
+                        UT.request(me.$.saveListOnboardingEvalComplete);
+                    });
+                }
+                
+            },
+            /* 평가마감 후 callback */
+            completeSaveListOnboardingEvalComplete: function(e, res){
+                var me = this;
+                me.onSearch();
+            },
+            
+            /* 조건부합격 팝업 조회 */
+            onShowConditionalPassPopup: function(){
+                var me = this,
+                    provider = this.$.oePrcsGridPanel.getDataProvider();
+
+                var checked = provider.selectionCheckedItems();
+                if(checked.length == 0){
+                    UT.alert("STD.N1600");
+                    return;
+                }
+                
+                var data = checked[0];
+				/* var oePrcsStsCcd = checked[0].oe_prcs_sts_ccd;
+                
+                if(oePrcsStsCcd == "PRCS_PASS" || oePrcsStsCcd == "PRCS_CONL_PASS") {
+                    UT.alert("STD.VS1008");
+                    return;
+                }*/
+                
+                me.onShowForceCauseDialog(data, "PRCS_CONL_PASS", true);
+            },
+			/* 조건부합격 팝업 */
+            onShowForceCauseDialog : function(data, cls, editable){
+                var me=this,
+                    vdInfo = me.get("searchPrcsParam");
+                    title = "";
+                
+                if(cls == "PRCS_CONL_PASS"){
+                    title = me.translate("조건부 합격 사유");
+                }
+                
+                if(editable){
+                    data.prcs_conl_pass_rsn = "";
+                }
+                data.vd_nm = vdInfo.vd_nm;
+                data.vd_cd = vdInfo.vd_cd;
+                data.erp_vd_cd = vdInfo.erp_vd_cd;
+                
+                me.set("causeInfo.item", data);
+                me.set("causeInfo.stsCls", cls);
+                me.set("causeInfo.title", title);
+                me.set("causeInfo.editable", editable);
+                
+                me.applyFormula();
+                me.validate("forceCause");
+                me.$.dialog.show();
+            },
+            
+            /* 조건부합격 저장 */
+            onSaveConditionalPass : function(){
+                var me = this,
+                    cInfo = me.get("causeInfo"),
+                    data = cInfo.item,
+                    cls = cInfo.stsCls;
+                var oePrcsStsCcd = data.oe_prcs_sts_ccd,
+                    message = "";
+                
+                if(!me.validate("forceCause")){
+                    UT.alert("STD.E0000");
+                    return;
+                }
+                
+                if(oePrcsStsCcd != "PRCS_PASS" && oePrcsStsCcd != "PRCS_FLR") {
+                    message = "STD.VS1006";  // 온보딩 프로세스가 진행중입니다. 조건부 합격 처리 하시겠습니까?
+                } else if(oePrcsStsCcd == "PRCS_FLR") {
+                    message = "STD.VS1007";  // 현재 불합격한 상태입니다. 조건부 합격 처리 하시겠습니까?
+                }
+            
+                UT.confirm(message, function() {
+                    data.oe_prcs_sts_ccd = cls;
+                    me.$.saveProcessConditionalPass.body = data;
+                    UT.request(me.$.saveProcessConditionalPass);
+                });
+            },
+            /* 조건부합격 callback */
+            completeSaveProcessConditionalPass: function(e, res){
+                var me = this,
+                    result = res.response;
+
+                if(UT.isObject(result) && result.resultStatus === "S"){
+                    UT.completeAlert("조건부 합격", function(){
+                        me.$.dialog.close();
+                        if (UT.isNotEmpty(result.resultData.complete_prcs_yn)) {
+							// 프로세스 종료 여부와 상관없이 평가 요청 상태에 변화가 있으므로 전체 재조회
+                            me.onSearch();
+                        } else {
+                            me.onSearchEvalDetail();
+                        }
+                    });
+                } else {
+                    UT.alert("STD.E9999");
+                } 
+            },
+            
+            /* 프로세스이동 버튼 클릭시 호출 */
+            onMoveNextPrcs: function(){
+                var me = this,
+                    provider = this.$.oePrcsGridPanel.getDataProvider();
+                var checkedIndexes = provider.selectionCheckedIndexes();
+                
+                if(checkedIndexes.length == 0){
+                    return UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                }
+                
+                if (me.get("hasActivatedStep")) { // 모든 프로세스에 대해 수행중이거나 평가대기인 프로세스 존재여부 확인
+                    return UT.alert("STD.VS1087"); // 온보딩 프로세스가 진행중입니다. 다음 프로세스로 이동할 수 없습니다.
+                }
+                if (me.get("hasFailedStep")) { // 모든 프로세스에 대해 불합격한 프로세스 존재 여부 확인
+                    return UT.alert("STD.VS1088"); // 불합격된 온보딩 프로세스입니다. 다음 프로세스로 이동할 수 없습니다.
+                }
+                
+                var item = provider.getItemAt(checkedIndexes[0]);
+                if (!(item.oe_prcs_sts_ccd.includes("PASS"))) { // 선택한 프로세스 상태 확인
+                    return UT.alert("STD.VS1012"); // 선행 프로세스가 합격된 이후 이동이 가능합니다.
+                }
+                
+                UT.confirm("STD.VS1013", function(){  // 다음 단계 프로세스를 진행 하시겠습니까?
+                    me.$.saveMoveNextPrcsProcess.body = item || {};
+                    UT.request(me.$.saveMoveNextPrcsProcess);
+                });
+            },
+            /* 프로세스이동 callback */
+            completeSaveMoveNextPrcsProcess: function(e, res){
+                var me = this;
+                var result = res.response || {};
+                
+				if(UT.isObject(result) && result.resultStatus === "S"){
+                    UT.completeAlert("프로세스 이동", function(){
+                        if (result.resultData.complete_prcs_yn == "Y") {
+                            me.onSearch();
+                        } else {
+                            me.onSearchEvalDetail();
+                        }
+                    });
+                } else if (result.resultStatus == "INVALID_STATUS_ERR") {
+                    UT.alert("STD.E9400", function() {  // 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+                        me.onSearchEvalDetail();
+                    });
+                } else {
+                    UT.alert("STD.E9999");  // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                }
+            },
+            
+            // 프로세스 상태 확인(불합격/수행중인 프로세스 존재여부)
+            checkStepStatus : function(list){
+                var me = this;
+                var activated = false,
+                    failed = false;
+                
+                list = list || [];
+                
+                for (var i=0, len=list.length; i<len; i++) {
+                    var oePrcsStsCcd = list[i].oe_prcs_sts_ccd;
+                    if (["EVAL_WTG", "EVAL_PRGSG"].indexOf(oePrcsStsCcd) != -1) {
+                        activated = true;
+                    } else if (oePrcsStsCcd == "PRCS_FLR") {
+                        failed = true;
+                    }
+                }
+                me.set("hasActivatedStep", activated);
+                me.set("hasFailedStep", failed);
+            }
+        });
+    </script>
+
+</dom-module>

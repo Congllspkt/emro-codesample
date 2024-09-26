@@ -1,0 +1,439 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="es-taxbill-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+		<!-- 세금계산서 정보 조회 -->
+		<sc-ajax id="findTaxBill"
+				 url="findTaxBill.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- 송장 아이디들로 세금계산서 일반 정보 조회 -->
+		<sc-ajax id="findTaxBillDefaultDataByInvoice"
+				 url="findTaxBillDefaultDataByInvoice.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- 세금계산서 역발행요청 -->
+		<sc-ajax id="requestTaxBill"
+				 url="requestTaxBill.do">
+		</sc-ajax>
+		
+		<!-- 세금계산서 역발행요청 취소(삭제) -->
+		<sc-ajax id="deleteTaxBill"
+				 url="deleteTaxBill.do"
+				 body="{{taxbillData}}">
+		</sc-ajax>
+		
+		<sc-request-group id="codes" init>
+			<sc-code-group>
+				<!-- 진행상태 -->
+				<sc-code code="P204" value="{{codes.taxbillStsCcd}}"></sc-code>
+			</sc-code-group>
+			<!-- 세금코드 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.taxTypCcdParam}}"
+					 last-response="{{codes.taxTypCcd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="세금계산서 상세">
+			<sc-button text="발행 요청" on-click="onRequest" auth-s hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="발행 요청 취소" on-click="onDelete" auth-s hidden="[[!formula('cancelable')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex">
+			<cc-form-panel title-text="일반 정보" validation-group="taxbillData" column="4" label-width="170">
+				<sc-label text="협력사" class="column-span-2" style="text-align: center"></sc-label>
+				<sc-label text="구매사" class="column-span-2" style="text-align: center"></sc-label>
+				<cc-fieldset column-span="2">
+					<sc-label text="협력사 사업자등록번호"></sc-label>
+					<sc-label text="{{taxbillData.vd_bizregno}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="구매사 사업자등록번호"></sc-label>
+					<sc-label text="{{taxbillData.buyer_bizregno}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 명"></sc-label>
+					<sc-label text="{{taxbillData.disp_vd_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 대표자 명"></sc-label>
+					<sc-label text="{{taxbillData.disp_vd_ceo_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매사 명"></sc-label>
+					<sc-label text="{{taxbillData.disp_buyer_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매사 대표자 명"></sc-label>
+					<sc-label text="{{taxbillData.disp_buyer_ceo_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="협력사 주소"></sc-label>
+					<sc-label text="{{taxbillData.disp_vd_addr}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="구매사 주소"></sc-label>
+					<sc-label text="{{taxbillData.disp_buyer_addr}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 업태"></sc-label>
+					<sc-label text="{{taxbillData.vd_biztyp}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 업종"></sc-label>
+					<sc-label text="{{taxbillData.vd_ind}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매사 업태"></sc-label>
+					<sc-label text="{{taxbillData.buyer_biztyp}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매사 업종"></sc-label>
+					<sc-label text="{{taxbillData.buyer_ind}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="협력사 담당자 이메일"></sc-label>
+					<sc-text-field value="{{taxbillData.vd_pic_eml}}" readonly="{{!formula('editable')}}" validator-type="email"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="구매사 담당자 명"></sc-label>
+					<cc-user-search value-class="w-150" result-class="w-100" value="{{taxbillData.buyer_pic_nm}}" result-field="usr_id" result-value="{{taxbillData.buyer_pic_id}}" disabled="true" hide-trigger="true"></cc-user-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="발행 일자"></sc-label>
+					<sc-date-field value="{{taxbillData.publ_dt}}" default-value="0d" string-date="true" class="date" required="true" readonly="{{!formula('editable')}}"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="합계 금액"></sc-label>
+					<sc-number-field class="w-150 align-right" value="{{taxbillData.ttl_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="공급 금액"></sc-label>
+					<sc-number-field class="w-150 align-right" value="{{taxbillData.sup_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="부가세 금액"></sc-label>
+					<sc-number-field class="w-150 align-right" value="{{taxbillData.vat_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="세금 유형"></sc-label>
+					<div class="field-box" style="width: 100%;">
+						<sc-combobox-field class="w-300" value="{{taxbillData.tax_typ_ccd}}" items="{{codes.taxTypCcd}}" display-field="label" value-field="data" readonly="true" on-change="onChangeTaxCd"></sc-combobox-field>
+						<sc-label text="과세 율"></sc-label>
+						<sc-text-field value="{{taxbillData.tax_rate}}" class="w-50 align-right" readonly="true" input-cover="true" format-type="decimal"></sc-text-field>
+						<sc-label text="%" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="세금계산서 상태"></sc-label>
+					<sc-combobox-field value="{{taxbillData.taxbill_sts_ccd}}" display-field="label" value-field="data" items="{{codes.taxbillStsCcd}}" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="gridPanel" class="flex" editable="false" use-state="false" use-selection="false" aggregate="true"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar title-text="품목 정보">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="taxbill_lno" header-text="항번" width="60" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100"></sc-data-column>
+					<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="250" text-align="left"></sc-data-column>
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left"></sc-data-column>
+					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="90" image-change-function="onImageChangeFn" visible="[[formula('hasNoCdItem')]]"></sc-image-column>
+					<sc-data-column data-field="inv_qty" header-text="수량" width="80" text-align="right"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="inv_uprc" header-text="단가" width="120" text-align="right"
+									data-type="number" format-type="price" aggregate-title="합계"></sc-data-column>
+					<sc-date-column data-field="pstgdt" header-text="전기일자" width="80"></sc-date-column>
+					<sc-data-column data-field="sup_amt" header-text="공급 금액" width="140" text-align="right"
+									data-type="number" format-type="amt"
+									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-data-column data-field="vat_amt" header-text="부가세 금액" width="120" text-align="right" editable="false"
+									data-type="number" format-type="amt"
+									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-data-column data-field="inv_lno" header-text="송장 항번" width="70" data-type="number"></sc-data-column>
+					<sc-data-column data-field="inv_no" header-text="송장 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="cnfdinv_pic_nm" header-text="송장확정 담당자 명" width="120"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="taxbill_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="inv_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="inv_uuid"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+					<sc-grid-field data-field="tax_typ_ccd"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is: "es-taxbill-detail",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							taxbillStsCcd: [],
+							taxTypCcd: [],
+							taxTypCcdParam: {
+								ccd: "C031",
+								cstr_cnd_cd: "TAXN_RATE"
+							}
+						}
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				taxbillData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				}
+			},
+			formulas: {
+				// 수정 가능여부
+				editable: function() {
+					var me = this;
+					// 신규작성
+					return UT.isEmpty(me.get("taxbillData.taxbill_uuid"));
+				},
+				// 취소 가능여부
+				cancelable: function() {
+					var me = this;
+					// 역발행요청
+					return me.get("taxbillData.taxbill_sts_ccd") === "REVISSUE_REQ";
+				},
+				// 무코드품목 존재여부
+				hasNoCdItem: function() {
+					var me = this;
+					return me.get("taxbillData.has_no_cd_item") === "Y";
+				}
+			},
+			initialized: function() {
+			
+			},
+			// 세금코드 변경 시 : vat, 총 송장금액 계산
+			onChangeTaxCd: function(e) {
+				var me = this;
+				var taxTypCcd = me.get("taxbillData.tax_typ_ccd");
+				
+				// 세금코드에 따른 과세율
+				var taxRate = 0;
+				var taxCodes = me.get("codes.taxTypCcd");
+				for(var i = 0, len = taxCodes.length; i < len; i++) {
+					var taxCode = taxCodes[i];
+					if(taxCode["data"] === taxTypCcd) {
+						taxRate = taxCode["cstr_cnd_val"] || 0;
+						break;
+					}
+				}
+				me.set("taxbillData.tax_rate", taxRate);
+			},
+			load: function(param) {
+				var me = this;
+				me.set("searchParam", param);
+				
+				if(UT.isEmpty(param.taxbill_uuid) && UT.isNotEmpty(param.inv_uuids)) {
+					me.findTaxBillByInvIds();
+				} else {
+					me.findTaxBill();
+				}
+			},
+			reload: function() {
+				var me = this;
+				me.findTaxBill();
+			},
+			// GR 품목 아이디로 송장 일반 정보 조회
+			findTaxBillByInvIds: function() {
+				var me = this;
+				UT.request(me.$.findTaxBillDefaultDataByInvoice, function(e, res) {
+					var result = res.response;
+					me.set("taxbillData", result.taxbillData);
+					// taxbillData.publ_dt -> readonly 속성 제거로 인한 로직 추가
+					var today = UT.formatDate(new Date(), "yyyy/MM/dd");
+					me.set("taxbillData.publ_dt", today);
+					
+					var provider = me.$.gridPanel.getDataProvider();
+					provider.addItems(result.taxbillItems);
+					
+					me.applyFormula();
+				});
+			},
+			// 송장 정보 조회
+			findTaxBill: function() {
+				var me = this;
+				UT.request(me.$.findTaxBill, function(e, res) {
+					var result = res.response;
+					me.set("taxbillData", result.taxbillData);
+					me.$.gridPanel.setDataProvider(result.taxbillItems);
+
+					me.applyFormula();
+					me.onChangeTaxCd();
+				});
+			},
+			// grid on-item-click
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item;
+				
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			// grid column image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			// 저장/확정 시 validation
+			isValid: function() {
+				var me = this;
+				
+				if(!me.validate("taxbillData")) {
+					UT.alert("STD.E0000");	// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					return false;
+				}
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				if(provider.getItemSize() == 0) {
+					UT.alert("STD.PR1002"); //"품목 정보가 없습니다."
+					return false;
+				}
+				
+				return true;
+			},
+			// 저장 파라미터 설정
+			get saveParam() {
+				var me = this;
+				var taxbillData = me.get("taxbillData");
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				return {
+					"taxbillData": taxbillData,
+					"insertTaxBillItems": provider.getNewItems(),
+					"invUuids": UT.getArrayValuesByKey(provider.getItems(), "inv_uuid")
+				};
+			},
+			// 발행요청
+			onRequest: function() {
+				var me = this;
+				
+				if(me.isValid()) {
+					UT.confirm("STD.TX1001", function() {	// 세금계산서 발행을 요청 하시겠습니까?
+						me.$.requestTaxBill.body = me.saveParam;
+						UT.request(me.$.requestTaxBill, function(e, res) {
+							var result = res.response;
+							
+							if(result.resultStatus === "S") {
+								UT.alert("STD.TX1002");	// 세금계산서 발행을 요청 하였습니다.
+								
+								me.set("searchParam.taxbill_uuid", result.resultData.taxbill_uuid);
+								me.reload();
+							} else {
+								me.failureMessageHandler(result);
+							}
+						});
+					});
+				}
+			},
+			failureMessageHandler: function(result) {
+				var me = this;
+				
+				if(result.resultStatus === "IV_STATE_ERR") {				// 송장 상태 오류
+					var resultData   = result.resultData,
+						invalidItems = resultData.invalid_datas || [],
+						notExistIds  = resultData.not_exist_ids || [];
+					
+					// STD.E9400 : "유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다."
+					var msg = me.translate("STD.E9400");
+					
+					invalidItems.forEach(function(invalidItem) {
+						// [송장번호 : {0}] 은(는) '{1}' 상태입니다.
+						msg += "<br/>" + me.translate("STD.IV1006", null, invalidItem.inv_no, invalidItem.inv_sts_ccd_nm);
+					});
+					
+					if(UT.isNotEmpty(msg)) {
+						UT.alert(msg, null, true);
+					}
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {	// 상태변경
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.reload();
+				} else if(result.resultStatus === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					me.onClose();
+				} else {
+					UT.alert("STD.E9999");	// 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			// 발행요청취소
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.TX1003", function() {	// 발행요청을 취소 하시겠습니까?
+					UT.request(me.$.deleteTaxBill, function(e, res) {
+						var result = res.response;
+						if(result.resultStatus === "S") {
+							UT.alert("STD.TX1004");	// 발행요청을 취소 하였습니다.
+							me.onClose();
+						} else {
+							me.failureMessageHandler(result);
+						}
+					});
+				});
+			},
+			// 닫기
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("show-list");
+			},
+			// 금액 합계
+			onAmtAggregateFn: function(dataField, datas) {
+				var me = this;
+				
+				if(dataField === "sup_amt") {
+					return me.get("taxbillData.sup_amt");
+					
+				} else if(dataField === "vat_amt") {
+					return me.get("taxbillData.vat_amt");
+				}
+				return null;
+			},
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber
+		});
+	</script>
+</dom-module>

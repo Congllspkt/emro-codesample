@@ -1,0 +1,471 @@
+<dom-module id="ep-item-contract-history">
+	<style>
+       :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+	
+	<template>
+		
+		<sc-ajax id="findList"
+				 url="findListItemContractHistory.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<!-- 사용자 구매 운영조직 조회 -->
+			<sc-ajax id="findListOperationOrganizationByUser"
+	            url="findListOperationOrganizationByUser.do"
+	            body="PO"
+	            content-type="text/plain"
+	            last-response="{{codes.oorgCd}}">
+	        </sc-ajax>
+	        <sc-code-group>
+		    	<!-- 계약유형 -->
+		    	<sc-code code="P049"	value="{{codes.cntrTypCd}}"></sc-code>
+		    	<!-- 거래이력 조회기준 -->
+		    	<sc-code code="P087"	value="{{codes.searchTypCd}}"></sc-code>
+	    	</sc-code-group>
+	    </sc-request-group>
+	    
+	    <cc-page-title-bar title-text="계약/발주 이력">
+       	</cc-page-title-bar>
+       	
+		<div class="hbox flex">
+			<div class="vbox flex">
+				<cc-search-condition-panel on-search="onFindList" validation-group="search">
+					<cc-fieldset column-span="2">
+								<sc-label text="운영조직"></sc-label>
+								<cc-operorg-multi-combobox-field class="w-150" id="operorgcombobox" oper-unit-cd="PO" value="{{searchParam.oorg_cds}}"
+										placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+								<sc-label text="품목 코드"></sc-label>
+								<sc-text-field value="{{searchParam.item_cd}}" on-enter="onFindList" readonly></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+								<sc-label text="조회 기준"></sc-label>
+								<sc-combobox-field value="{{searchParam.search_typ}}" display-field="label" value-field="data" items="{{codes.searchTypCd}}" selected-index="0" placeholder="필수" required="true"></sc-combobox-field>
+					</cc-fieldset>
+				</cc-search-condition-panel>
+				
+				<sc-grid id="gridPanel" class="flex" collapsible="false" use-dummy="false"
+						 editable="false"
+						 use-state="false"
+						 use-selection="false">
+					<cc-grid-toolbar></cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-combobox-column	data-field="oorg_cd"	header-text="운영조직"		width="170"	text-align="center" display-field="logic_org_nm"	value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+						<sc-data-column		data-field="vd_cd"			header-text="협력사 코드"		width="100"	text-align="center"></sc-data-column>
+						<sc-data-column		data-field="vd_nm"			header-text="협력사 명"			width="200"	text-align="left"></sc-data-column>
+						<sc-data-column		data-field="po_uprc"		header-text="단가"				width="100"	text-align="right"	data-type="number"		format-type="price"></sc-data-column>
+						<sc-data-column		data-field="uprccntr_qty"		header-text="수량"				width="80"	text-align="right"	data-type="number"		format-type="qty"></sc-data-column>
+						<sc-data-column		data-field="uprccntr_amt"		header-text="금액"				width="140"	text-align="right"	data-type="number"		format-type="amt"></sc-data-column>
+						<sc-date-column		data-field="uprccntr_dt"		header-text="발주 등록 일자"			width="100"	text-align="center"	visible="[[!showPeriod]]"></sc-date-column>
+						<sc-date-column		data-field="uprc_efct_st_dt"		header-text="계약 시작 일자"		width="100"	text-align="center"	visible="[[showPeriod]]"></sc-date-column>
+						<sc-date-column		data-field="uprc_efct_exp_dt"		header-text="계약 만료 일자"		width="100"	text-align="center"	visible="[[showPeriod]]"></sc-date-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field	data-field="uprccntr_no"></sc-grid-field>
+						<sc-grid-field	data-field="uprccntr_revno"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+			<div class="fit flex">
+				<div id="itemCntrHistoryChart" style="width:100%; height:100%"></div>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-item-contract-history',
+			behaviors:[
+				Polymer.SCResizableBehavior
+			],
+			properties : {
+				codes : {
+					type  : Object,
+					value : function() {
+						return {
+							oorgCd   : [],
+							cntrTypCd   : [],
+							searchTypCd : []
+						}
+					},
+					reset : false
+				},
+				searchParam : {
+					type  : Object,
+					value : function() {
+						return {
+							item_cd : ""
+						}
+					}
+				},
+				showPeriod : {
+					type  : Boolean,
+					value : function() {
+						return false;
+					}
+				}
+			},
+			listeners:{
+				'sc-resize':'doContentElementResize'
+			},
+			doContentElementResize: function() {
+				Polymer.dom.addDebouncer(this.debounce('_debounceGridResize', this._doContentElementResize, 100));
+			},
+			_doContentElementResize: function() {
+				var me = this;
+				
+				if(!me.isVisible(true) || !me.chartMain) {
+					return;
+				}
+				if(me.chartMain){
+                    me.chartMain.resize();
+                }
+			},
+			initialized : function() {
+				
+			},
+			load : function(itemCd) {
+				var me = this;
+				
+				me.set("searchParam.item_cd", itemCd);
+				me.onFindList();
+			},
+			onFindList : function() {
+				var me = this;
+				
+				if(!me.validate('search')) {
+          	    	UT.alert("STD.E0000");
+                     return;
+                }
+				UT.request(me.$.findList, function(e, res) {
+					var result = res.response,
+						cntrItems = result.cntrItems;
+					
+					me.$.gridPanel.setDataProvider(cntrItems);
+					
+					// 차트 초기화
+					me.clearChart();
+					
+					// 조회기준
+					if(me.get("searchParam.search_typ") === "PO") {
+						me.set("showPeriod", false);
+						me.initLineChart(cntrItems);
+					} else {
+						me.set("showPeriod", true);
+						me.initColumnRangeChart(result.cntrItemsByPrice);
+					}
+				});
+			},
+			// 차트 초기화
+			clearChart : function() {
+				var me = this;
+				
+				if(me.$.itemCntrHistoryChart.firstElementChild) {
+					me.$.itemCntrHistoryChart.removeChild(me.$.itemCntrHistoryChart.firstElementChild);
+				}
+			},
+			// colorCode 랜덤 생성
+			getRandomColorCode : function() {
+				return "#" + Math.round(Math.random() * 0xffffff).toString(16);
+			},
+			// 조회기준이 "발주"인 경우 line chart
+			initLineChart : function(cntrItems) {
+				var me = this;
+				
+				var cntrItemDatas = [], totCnt = cntrItems.length;
+				for(var i=totCnt; i>0; i--) {
+					var cntrDate = cntrItems[i-1].uprccntr_dt,
+						price    = cntrItems[i-1].po_uprc;
+					
+					// 발주 등록 일자 별 단가
+					cntrItemDatas[totCnt-i] = [UT.toTime(UT.toDate(cntrDate, "yyyyMMdd")), price];
+				}
+				// console.log("cntrItemDatas", cntrItemDatas);
+				
+				var xTitle = me.translate("발주 등록 일자"),
+					yTitle = me.translate("단가"),
+					sName  = me.translate("발주 단가");
+				
+				me.chartContainer = new DLChart.ChartComponent(false, me.$.itemCntrHistoryChart, {
+					type  : "line",
+					xAxes : {
+						title : xTitle,
+						type  : "datetime",
+						grid  : {
+							styles : {
+								line : "#C2C2C2, 1px, dashed"
+							}
+						},
+						tick  : {
+							styles : {
+								datetimeFormat : "yyyy/MM/dd"
+							}
+						}
+					},
+					yAxes : {
+						title  : yTitle,
+						tick   : {
+							styles : {
+								numberFormat : "#,##0.00"
+							}
+						}
+					},
+					series : [{
+			        	name    : sName,
+			        	items   : cntrItemDatas,
+			        	fields  : "label,value",
+			        	label   : false,
+			        	styles  : {
+			        		line      : "#7cb5ec",
+			        		fill      : "#7cb5ec",
+			        		shapeSize : 6,
+			        		shapeName : "diamond",
+			        	},
+			        	tooltip : {
+			        		text : "<b>${series}</b><br>${label:yyyy/MM/dd}: ${value: #,##0.00}"
+			        	}
+			        }],
+			        legend : {
+			        	position : "bottom",
+			        	//layout   : "vertical",
+			        	itemStyles : {
+			        		fontBold : true
+			        	}
+			        }
+				});
+			
+				me.chartMain = me.chartContainer.chartView();
+				/*
+				$('#itemCntrHistoryChart').highcharts({
+					chart: {
+			            zoomType: 'x'
+			        },
+			        title : {
+						text: null
+					},
+					xAxis : {
+						type : 'datetime',
+						labels: {
+				            formatter: function () {
+				                return Highcharts.dateFormat('%Y/%m/%d', this.value);
+				            }
+				        },
+				        //tickInterval: 7 * 24 * 3600 * 1000, //one week
+				        tickWidth : 0,
+				        gridLineWidth : 1,
+					},
+					yAxis: {
+			            title: {
+			                text: null
+			            },
+			            min : 0,
+			            labels: {
+			                align: 'right',
+			                format: '{value:.,0f}'
+			            },
+			            showFirstLabel: false
+			        },
+					legend: {
+			            enabled : false
+			        },
+			        plotOptions: {
+			        	line: {
+			        		marker: {
+			        			enabled: true,
+			        			radius:3,
+			        			states : {
+			        				hover : {
+			        					enabled : true
+			        				}
+			        			}
+			                },
+			                lineWidth: 2
+				        },
+			        },
+			        tooltip: {
+			            formatter: function () {
+			                return Highcharts.dateFormat('%Y/%m/%d', this.x) + ' : ' + Highcharts.numberFormat(this.y, 2, '.', ',');
+			            }
+			        },
+			        series : [{
+			        	name : '단가',
+			        	data : cntrItems
+			        }]
+				});
+				*/
+			},
+			// 조회기준이 "단가계약"인 경우 columnrange chart
+			initColumnRangeChart : function(cntrItemsByPrice) {
+				var me = this;
+				
+				var cntrSeries = [], prices = [],
+					minTime, maxTime,
+					priceCnt = cntrItemsByPrice.length;
+				
+				for(var i=0; i<priceCnt; i++) {
+					var cntrItems = cntrItemsByPrice[i],
+						price     = SCFormatter.format('price', cntrItems.po_uprc);
+					
+					prices[i] = price;
+					
+					var cntrInfos = cntrItems.cntrInfos;
+					for(var j=0, len=cntrInfos.length; j<len; j++) {
+						var cntrInfo = cntrInfos[j],
+							applySd = cntrInfo.uprc_efct_st_dt,
+							applyEd = cntrInfo.uprc_efct_exp_dt;
+						
+						var applySdTime = UT.toTime(UT.toDate(applySd, "yyyyMMdd")),
+							applyEdTime = UT.toTime(UT.toDate(applyEd, "yyyyMMdd"));
+						
+						// [단가계약 시작일, 단가계약 종료일]
+						var data = Array.apply(null, Array(priceCnt)).map(function() { return [null, null] });
+						data[i] = [applySdTime, applyEdTime];
+						
+						// 시리즈 별 색상
+						var colorCode = me.getRandomColorCode();
+						
+						cntrSeries.push({
+							name      : cntrInfo.uprccntr_no + "/" + cntrInfo.uprccntr_revno,
+							label     : false,
+							items     : data,
+							//itemWidth : 0.1,
+							styles    : {
+								fill : colorCode
+							},
+							tooltip   : {
+								//포맷 추후 변경
+								//text : "<b>${series} (" + cntrInfo.vd_nm + ")</b><br>${low:yyyy/MM/dd} ~ ${high:yyyy/MM/dd} : ${label}"
+								text : "<b>${series} (" + cntrInfo.vd_nm + ")</b><br>" + UT.formatDate(applySdTime, "yyyy/MM/dd") + " ~ " + UT.formatDate(applyEdTime, "yyyy/MM/dd") + " : ${label}"
+							}
+						});
+						
+						if(!minTime || minTime > applySdTime) {
+							minTime = applySdTime;
+						}
+						if(!maxTime || maxTime < applyEdTime) {
+							maxTime = applyEdTime;
+						}
+					}
+				}
+				// console.log("cntrSeries", cntrSeries);
+				
+				var config = {
+					type   : "barrange",
+					xAxes  : {
+						title      : me.translate("단가"),
+						categories : prices
+					},
+					yAxes  : {
+						type  : "datetime",
+						title : me.translate("계약 기간"),
+						tick  : {
+							styles : {
+								datetimeFormat : "yyyy/MM/dd",
+								textRotation   : -45
+							}
+						},
+						grid  : {
+							styles : {
+								line : "#aaa,1px,dotted"
+							}
+						}
+					},
+			        legend : {
+			        	position   : "bottom",
+			        	itemStyles : {
+			        		fontBold : true
+			        	}
+			        }
+				};
+				
+				// series는 하나 이상 존재해야 함
+				if(cntrSeries.length === 0) {
+					cntrSeries.push({});
+					config.legend = false;
+				}
+				config.series = cntrSeries;
+				
+				// 최소/최대값 지정
+				var minute = 1000 * 60, hour = minute * 60, day = hour * 24;
+				if(minTime && maxTime) {
+					config.yAxes.minValue = minTime - day;
+					config.yAxes.maxValue = maxTime + day;
+				}
+				
+				me.chartContainer = new DLChart.ChartComponent(false, me.$.itemCntrHistoryChart, config);
+				
+				me.chartMain = me.chartContainer.chartView();
+				
+				/*
+				$('#itemCntrHistoryChart').highcharts({
+					chart: {
+						type: 'columnrange',
+				        inverted: true,
+			            zoomType: 'y'
+					},
+					title : {
+						text : null
+					},
+					xAxis : {
+						title: {
+			                text: null
+			            },
+			            categories : prices,
+			            labels: {
+			                align: 'right',
+			                format: '{value:.,0f}'
+			            },
+			            tickWidth : 0,
+				        gridLineWidth : 2,
+					},
+					yAxis : {
+						type : 'datetime',
+						title: {
+			                text: null
+			            },
+						labels: {
+				            formatter: function () {
+				                return Highcharts.dateFormat('%Y/%m/%d', this.value);
+				            }
+				        },
+				        min : minTime,
+				        max : maxTime,
+				        //tickInterval: 7 *24 * 3600 * 1000, //one week
+				        tickWidth : 0,
+				        gridLineWidth : 1,
+					},
+					legend: {
+			            enabled : true
+			        },
+			        plotOptions: {
+			        	columnrange : {
+			        		dataLabels : {
+			        			enabled : true,
+			        			formatter: function () {
+			        				return Highcharts.dateFormat('%Y/%m/%d', this.y);
+			                  	}
+			        		}
+			        	},
+			        	column: {
+		                    pointPadding : 0.2,
+		                    borderWidth : 0,
+		                },
+			        },
+			        tooltip: {
+			            formatter: function () {
+			            	var point = this.series.data[this.point.index];
+			                return this.series.name + "<br/>" + Highcharts.dateFormat('%Y/%m/%d', point.low) + "~" + Highcharts.dateFormat('%Y/%m/%d', point.high) + "<br/>" + Highcharts.numberFormat(this.x, 2, '.', ',');
+			            }
+			        },
+			        series: cntrSeries
+				});
+				*/
+			}
+		});
+	</script>
+</dom-module>

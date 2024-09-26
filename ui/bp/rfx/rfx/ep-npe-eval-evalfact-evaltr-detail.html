@@ -1,0 +1,211 @@
+<dom-module id="ep-npe-eval-evalfact-evaltr-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findListCompareNpeEvalfactEvaltr"
+				 url="findListCompareNpeEvalfactEvaltr.do"
+				 on-response="completeFindListCompareNpeEvalfactEvaltr">
+		</sc-ajax>
+		
+		<sc-grid id="gridPanel" class="flex" use-dummy="false" editable="false" show-tooltip="true" use-state="false" use-selection="false"
+				 aggregate-group="true"
+				 aggregate-group-columns="{{aggregateGroupColumns}}">
+			<!-- 그리드 toolbar -->
+			<cc-grid-toolbar>
+				<sc-button text="새로고침" on-click="onSearch"></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="eval_req_uuid"></sc-grid-field>
+				<sc-grid-field data-field="efactg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<template id="defaultColumnsTemplate">
+			<sc-grid-columns id="defaultColumns">
+				<sc-data-column data-field="dummy" width="0"></sc-data-column>
+				<sc-data-column data-field="efactg_nm" header-text="평가항목군" width="160" text-align="center" aggregate-title="총점" aggregate-text-align="center"></sc-data-column>
+				<sc-data-column data-field="evalfact_nm" header-text="평가항목" width="150" text-align="center" aggregate-function="onAggregateFunction" aggregate-label-function="onAggregateLabelFunction" aggregate-text-align="center"></sc-data-column>
+			</sc-grid-columns>
+		</template>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-npe-eval-evalfact-evaltr-detail",
+			
+			behaviors : [
+				Polymer.Templatizer
+			],
+			
+			properties: {
+				rfxId: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				},
+				scoreFormat: {
+					type: String,
+					value: "srmScore"
+				},
+				aggregateGroupColumns: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			initialized: function() {
+			
+			},
+			
+			load: function(rfxId) {
+				var me = this;
+				me.set("rfxId", rfxId);
+				me.onSearch();
+			},
+			
+			onSearch: function() {
+				var me = this;
+				me.$.findListCompareNpeEvalfactEvaltr.body = {
+					rfx_uuid: me.get("rfxId")
+				};
+				UT.request(me.$.findListCompareNpeEvalfactEvaltr);
+			},
+			
+			completeFindListCompareNpeEvalfactEvaltr: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.setDynamicCols(result.vendorList, result.evaltrList);
+				
+				me.$.gridPanel.setDataProvider(result.evalfactValueList);
+			},
+			
+			setDynamicCols: function(vendorList, evaltrList) {
+				var me = this;
+				var columns = UT.templateColumns(me, '#defaultColumnsTemplate', '#defaultColumns');
+				var groupCol, col;
+				
+				for(var i = 0; i < vendorList.length; i++) {
+					var vendorInfo = vendorList[i];
+					
+					groupCol = me.createVendorGroupColumn({
+						headerText: vendorInfo.disp_vd_nm,
+						width: 200
+					});
+					
+					for(var j = 0; j < evaltrList.length; j++) {
+						var evaltrInfo = evaltrList[j];
+						
+						col = me.createScoreColumn({
+							dataField: vendorInfo.eval_subj_res_uuid + "_" + evaltrInfo.eval_pic_id,
+							headerText: evaltrInfo.disp_eval_pic_nm,
+							width: 100
+						});
+						me.addColumn(groupCol, col);
+					}
+					
+					col = me.createScoreColumn({
+						dataField: vendorInfo.eval_subj_res_uuid + "_avg_sco",
+						headerText: this.translate('평균'),
+						width: 80
+					});
+					me.addColumn(groupCol, col);
+					me.addColumn(columns, groupCol);
+				}
+				
+				me.$.gridPanel.setColumns(columns);
+				me.set("aggregateGroupColumns", ["dummy", "efactg_nm"]);
+			},
+			
+			// 협력사 별 그룹 컬럼 생성
+			createVendorGroupColumn : function(option){
+				var me = this;
+				var groupCol;
+				option = option || {}
+				// 일반 컬럼 생성
+				groupCol = document.createElement('sc-group-column');
+				groupCol.headerText = option.headerText;
+				groupCol.width = option.width;
+				
+				return groupCol;
+			},
+			
+			// 평가 점수 컬럼 생성
+			createScoreColumn : function(option){
+				var me = this;
+				var col;
+				
+				option = option || {};
+				// 일반 컬럼 생성
+				col = document.createElement('sc-data-column');
+				col.dataField = option.dataField;
+				col.headerText = option.headerText;
+				col.width = option.width;
+				
+				col.textAlign = "right";
+				col.formatType = me.scoreFormat;
+				col.dataType = "number";
+				
+				col.aggregateKind = "sum";
+				col.aggregateFormat = me.scoreFormat;
+				col.aggregateTextAlign = "right";
+				
+				return col;
+			},
+			
+			// 컬럼 추가
+			addColumn : function(cols, col) {
+				var me = this;
+				var newWidth;
+				
+				if (!cols || !col) {
+					return;
+				}
+				
+				if (col.childElementCount) {
+					// 그룹컬럼인 경우 너비 재 계산
+					newWidth = 0;
+					for (var i=0; i < col.children.length; i++) {
+						newWidth += col.children[i].width;
+					}
+					col.width = Math.max(newWidth, col.width || 0);
+					// 그리드컬럼에 그룹컬럼을 추가
+					cols.push(col);
+				} else {
+					// 그룹컬럼에 컬럼 추가
+					cols.appendChild(col);
+				}
+			},
+			
+			onAggregateFunction: function(dataField, datas) {
+				return "";
+			},
+			
+			onAggregateLabelFunction: function(datas, value, isFooter, groupFieldIndex) {
+				var me = this;
+				var result = '';
+				if (isFooter) {
+					result = '합계';
+				} else {
+					var dataField = me.$.gridPanel.provider.getFieldName(groupFieldIndex);
+					if (dataField === 'efactg_nm') {
+						result = this.translate('소계');
+					} else {
+						result = this.translate('합계');
+					}
+				}
+				return result;
+			},
+		});
+	</script>
+</dom-module>

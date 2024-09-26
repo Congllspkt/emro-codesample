@@ -1,0 +1,992 @@
+<sc-link rel="import" href="../../shared/ep-vendor-list.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="ep-rm-shared-detail.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-perform.html"></sc-link>
+
+<dom-module id="es-fi-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+	
+		<cc-code-constraint code-param="{{codes.setupParam}}" value="{{codes.setupInfo}}"></cc-code-constraint>
+
+        <sc-request-group init>
+            <sc-code-group>
+                <!-- 단위 -->
+                <sc-code code="C007"	value="{{codes.comboUnitCode}}"></sc-code>
+            </sc-code-group>
+        </sc-request-group>
+
+        <sc-ajax id="findInfoFieldIntro" url="findInfoFieldIntro.do" on-response="completeFindInfo"></sc-ajax>
+        <sc-ajax id="tempSaveFieldIntro" url="tempSaveFieldIntro.do" on-response="completeTempSave"></sc-ajax>
+        <sc-ajax id="notifyFieldIntro" url="notifyFieldIntro.do" on-response="completeNotify"></sc-ajax>
+        <sc-ajax id="cancelFieldIntro" url="cancelFieldIntro.do" body="{{fiData}}" on-response="completeCancel"></sc-ajax>
+        <sc-ajax id="deleteFieldIntro" url="deleteFieldIntro.do" body="{{fiData}}" on-response="completeDelete"></sc-ajax>
+        <sc-ajax id="confirmFieldIntro" url="confirmFieldIntro.do" on-response="completeConfirm"></sc-ajax>
+        <sc-ajax id="reservationNowStartRemoteMeeting" body="{{fiData}}" url="reervationNowStartRemoteMeeting.do" on-response="callConferenceStartGetUrl" ></sc-ajax>
+        <sc-ajax id="nowStartRemoteMeeting" body="{{fiData}}" url="nowStartRemoteMeeting.do" on-response="callConferenceStartGetUrl" ></sc-ajax>
+        <sc-ajax id="validateRemoteMeetingExist" body="{{fiData}}" url="validateRemoteMeetingExist.do" on-response="onCheckRemoteMeetExist" ></sc-ajax>
+
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <cc-page-title-bar title-text="현장설명회 정보">
+            <sc-button text="저장" on-click="onTempSave" hidden="[[!formula('editable')]]" auth-s></sc-button>
+            <sc-button text="[[rmExistText]]" on-click="onValidateRemoteMeetingExist" hidden="[[!formula('isRemoteMeetAble')]]" auth-s></sc-button>
+            <!--<sc-button text="예약회의 참석" on-click="onRemoteMeetingReservationStart" hidden="[[!formula('isRemoteMeetAble')]]" auth-s></sc-button>-->
+            <sc-button text="협력사 통보" on-click="onNotify" hidden="[[!formula('notable')]]" auth-s></sc-button>
+            <sc-button text="통보 취소" on-click="onCancel" hidden="[[!formula('isNotify')]]" auth-s></sc-button>
+            <sc-button text="삭제" on-click="onDelete" hidden="[[!formula('deletable')]]" auth-s></sc-button>
+            <sc-button text="협력사 참석 확정" on-click="onAttendConfirm" hidden="[[!formula('isDefinable')]]" auth-s></sc-button>
+            <sc-button text="화상회의 내용 공유" on-click="onRemoteMeetingShared" hidden="[[!formula('isSharedRemoteY')]]" auth-s></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <div class="flex page">
+            <cc-form-panel title-text="일반 정보" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{fiData.oorg_cd}}" selected-index="0" placeholder="필수" required="true" readonly="[[!formula('isNew')]]" on-change="onChangeOperOrgCd"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="현장설명회 번호"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_no}}" readonly></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field required="true" value="{{fiData.sitebrfg_tit}}" readonly="[[!formula('editable')]]" max-length="100"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자"></sc-label>
+					<cc-user-search value="{{fiData.sitebrfg_pic_nm}}" result-field="usr_id" result-value="{{fiData.sitebrfg_pic_id}}" on-result="onUserSearch" readonly="[[!formula('editable')]]" hide-trigger="[[!formula('editable')]]" required="true"></cc-user-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자 부서"></sc-label>
+					<cc-dept-search value="{{fiData.sitebrfg_inchr_dept_nm}}" result-field="dept_cd" result-value="{{fiData.sitebrfg_inchr_dept_cd}}" readonly="[[!formula('editable')]]" hide-trigger="[[!formula('editable')]]" required="true"></cc-dept-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자 연락처"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_pic_ctc}}" readonly="[[!formula('editable')]]" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18" required="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[!formula('showRmYn')]]">
+					<div class="field-box">
+						<sc-label text="화상회의 여부"></sc-label>
+						<cc-label-tooltip text="화상회의 여부 선택 시 현장설명회를 비대면 화상설명회로 개설 할 수 있으며, 설명회 일자 15분 전 회의 개설 버튼을 통해 화상회의 개설이 필요합니다."></cc-label-tooltip>
+					</div>
+					<sc-checkbox-field input-value="{{fiData.vconf_use_yn}}" readonly="[[!formula('editable')]]" checked-value="Y" un-checked-value="N" on-click="onRemoteMeetingTimeSet"></sc-checkbox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+	
+			<cc-form-panel title-text="일정 및 장소" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="일자"></sc-label>
+					<div class="field-box" style="width:100%" validation-group="fiDate">
+						<sc-date-field id="fiStartDt" class="w-100" required="true" value="{{fiData.sitebrfg_st_dttm}}"
+									   default-value="1d"
+									   readonly="[[!formula('editable')]]"
+									   validator="fiStartDateValidator">
+						</sc-date-field>
+						<span style="margin-right:5px;"></span>
+						<sc-number-field id="fiStartDtHour" class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="disp_time" required="true"
+										 value="{{fiData.sitebrfg_st_dttm_hour}}"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="fiStartDateValidator">
+						</sc-number-field>
+<!--						<sc-label text=":" style="margin:0 2px;" i18n-disabled></sc-label>-->
+						<span style="margin:0 2px;">:</span>
+						<sc-number-field id="fiStartDtMin" class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="disp_time" required="true"
+										 value="{{fiData.sitebrfg_st_dttm_min}}"
+										 regex="/^[0-5]?[0-9]$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="fiStartDateValidator">
+						</sc-number-field>
+				
+<!--						<sc-label text="~" style="margin:0 3px" i18n-disabled></sc-label>-->
+						<span style="margin:0 3px;">~</span>
+						
+						<sc-date-field id="fiEndDt" class="w-100" value="{{fiData.sitebrfg_clsg_dttm}}" hidden="true"></sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field id="fiEndDtHour" class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="disp_time" required="true"
+										 value="{{fiData.sitebrfg_clsg_dttm_hour}}"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="fiEndDateValidator">
+						</sc-number-field>
+<!--						<sc-label text=":" style="margin:0 2px" i18n-disabled></sc-label>-->
+						<span style="margin:0 2px;">:</span>
+						<sc-number-field id="fiEndDtMin" class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="disp_time" required="true"
+										 value="{{fiData.sitebrfg_clsg_dttm_min}}"
+										 regex="/^[0-5]?[0-9]$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="fiEndDateValidator">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="장소"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_plc}}" readonly="[[!formula('editable')]]" max-length="200" required="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매사 비고"></sc-label>
+					<sc-textarea-field value="{{fiData.sitebrfg_buyer_rmk}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 비고"></sc-label>
+					<sc-textarea-field value="{{fiData.sitebrfg_vd_rmk}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+            <cc-form-panel form-cls="label-column" title-text="첨부파일" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="내부용"></sc-label>
+					<sc-upload id="upload_in" class="h-200" value="{{fiData.buyer_athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사용"></sc-label>
+					<sc-upload id="upload_out" class="h-200" value="{{fiData.vd_athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+	
+			<sc-grid id="itemGridPanel" class="h-300" collapsible="true" aggregate=true use-dummy="false"
+                     editable="[[formula('editable')]]"
+                     use-state="[[formula('editable')]]"
+                     use-selection="[[formula('editable')]]"
+                     on-item-click="onItemClick">
+                <cc-grid-toolbar title-text="품목 정보">
+                    <sc-button text="무코드 품목 추가"	on-click="onAddNoCdItem" hidden="[[!formula('editable')]]" auth-s></sc-button>
+                    <sc-button text="품목 추가" on-click="onShowFiCateItemPopup" hidden="[[!formula('editable')]]" auth-s></sc-button>
+                    <sc-button text="삭제" on-click="onDeleteFiItem" hidden="[[!formula('editable')]]" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column	data-field="sitebrfg_lno" header-text="항번" width="60" data-type="number" text-align="center" editable="false"></sc-data-column>
+                    <sc-data-column	data-field="disp_item_cd" header-text="품목 코드"	width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="품목 명"				width="280">
+						<sc-data-column		data-field="item_nm" 		width="250" text-align="left" item-editable-function="onItemEditableFn"	max-length="500" required="true"></sc-data-column>
+						<sc-image-column	data-field="img_item_cd"	image-change-function="onImageChangeFn"	width="30"	text-align="center" editable="false"></sc-image-column>
+					</sc-group-column>
+                    <sc-data-column data-field="item_spec" header-text="품목 규격"	 width="250" text-align="left" item-editable-function="onItemEditableFn"	max-length="1000"
+                                    item-style-function="onItemStyleFn"	validator-function="gridValidatorFn"></sc-data-column>
+                    <sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="60"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+                                     image-change-function="onImageChangeFn"></sc-image-column>
+                    <sc-combobox-column	data-field="uom_ccd" header-text="UOM" width="60" text-align="center" item-editable-function="onItemEditableFn"	 required="true"
+                                           display-field="data" value-field="data" items="{{codes.comboUnitCode}}"></sc-combobox-column>
+                    <sc-data-column	data-field="sg_cd" header-text="소싱그룹 코드"	width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column	data-field="sg_nm" header-text="소싱그룹 명"	width="160"	text-align="center"	editable="false"></sc-data-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="sitebrfg_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_spec_dtl"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+
+            <sc-grid id="vdGridPanel" class="h-300" collapsible="true" use-dummy="false"
+                     editable="[[formula('editable')]]"
+                     use-state="[[formula('editable')]]"
+                     use-selection="[[formula('editable')]]">
+                <cc-grid-toolbar title-text="협력사 정보">
+                    <sc-button text="협력사 검색"	on-click="onShowPopupVendor" hidden="[[!formula('editable')]]" auth-s></sc-button>
+                    <sc-button text="삭제" on-click="onDeleteFiVendor" hidden="[[!formula('editable')]]" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column data-field="disp_vd_cd" header-text="협력사 코드" width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column	data-field="vd_nm" header-text="협력사 명" width="200" text-align="left" editable="false"></sc-data-column>
+                    <sc-data-column data-field="vd_pic_nm" header-text="협력사 담당자"	 width="200" text-align="center" editable="false"></sc-data-column>
+                    <sc-data-column	data-field="vd_pic_ctc" header-text="협력사 담당자 전화" width="150" text-align="left"	editable="true"	max-length="18"
+                                       editor-maskre="/[0-9\-+]/" hangul-restrict="true"></sc-data-column>
+                    <sc-data-column	data-field="vd_pic_eml" header-text="협력사 담당자 이메일"	 width="150" text-align="left" editable="true" max-length="100"
+                                       validator-function="vdGridValidatorFn"></sc-data-column>
+                    <sc-checkbox-column data-field="atnd_confm_yn" header-text="참석 확인 여부" visible="[[formula('isAfterNotify')]]" display-checkbox="false"></sc-checkbox-column>
+                    <sc-checkbox-column data-field="atnd_yn" header-text="참석 여부" visible="[[formula('isEnd')]]" display-checkbox="false"></sc-checkbox-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-griFId-field	data-field="sitebrfg_vd_uuid"	    data-type="text"></sc-griFId-field>
+                    <sc-grid-field	data-field="sitebrfg_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="vd_cd"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="vd_pic_uuid"		data-type="text"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </div>
+
+        <sc-dialog id="dialog_attend_confirm" title-text="협력사 참석 확정" title-align="left" style="width:630px;height:380px" modal="true" draggable="true" >
+            <sc-grid id="vdAttendPanel" class="h-300" collapsible="true" use-dummy="false" use-selection="false"
+                     editable="true">
+                <cc-grid-toolbar title-text="협력사 정보">
+                    <sc-button text="확정"	on-click="onConfirm" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column data-field="disp_vd_cd" header-text="협력사 코드" width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column	data-field="vd_nm" header-text="협력사 명" width="200" text-align="left" editable="false"></sc-data-column>
+                    <sc-checkbox-column data-field="atnd_confm_yn" header-text="참석 확인 여부" editable="false" display-checkbox="false"></sc-checkbox-column>
+                    <sc-checkbox-column data-field="atnd_yn" header-text="참석 여부" editable="true" display-checkbox="false"></sc-checkbox-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="sitebrfg_vd_uuid"	    data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="sitebrfg_uuid"			data-type="text"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </sc-dialog>
+    </template>
+    <script>
+        Polymer({
+            is: "es-fi-detail",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            P094: [],
+                            comboUnitCode: [],
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+                            setupInfo:[]
+                        };
+                    },
+                    reset: false
+                },
+
+                fiData: {
+
+                    type: Object,
+                    value: function() {
+                        return {
+                            rmExistCheck:{
+                                type: Boolean,
+                                value: false
+                            },
+                            vconf_use_yn:{
+                                type: String,
+                                value: "N"
+                            },
+                            vconf_sts_ccd:{
+                                type: String,
+                                value: ""
+                            }
+                        };
+                    }
+                },
+
+                rmExistText :{
+                    type: String,
+                    value : ""
+                }
+
+            },
+
+            formulas: {
+                // 신규 상태
+                isNew: function() {
+                    return (UT.isEmpty(this.fiData.sitebrfg_uuid) && this.fiData.is_new === true);
+                },
+                // 수정가능 상태 : 신규상태 or 저장(T) or 통보취소(D)
+                editable: function() {
+                    return (this.formula('isNew') || this.fiData.sitebrfg_sts_ccd === "CRNG" || this.fiData.sitebrfg_sts_ccd === "NOFN_CNCL");
+                },
+
+                // 통보 가능 상태 : 신규상태 or 저장(T) or 통보취소(D)
+                notable: function() {
+                    return this.formula('editable') || this.fiData.sitebrfg_sts_ccd === "NOFN_CNCL";
+                },
+
+                // 통보(P) 상태
+                isNotify: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "NOFN";
+                },
+
+                isRemoteMeetAble: function() {
+                    return this.formula('isNotify') && this.fiData.vconf_use_yn === "Y" && !(this.vconf_sts_ccd == "VCONF_CRN" || this.vconf_sts_ccd == "VCONF_CRN_WTG");
+                },
+
+                // 통보 이후 상태 : 참석 예정 여부 column 활성 여부
+                isAfterNotify: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "NOFN" || this.fiData.sitebrfg_sts_ccd === "SITEBRFG_ED";
+                },
+
+                // 참석여부 확정 가능 상태 : 설명회 종료(C), 참석 여부 미확정
+                isDefinable: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "SITEBRFG_ED" && this.fiData.vd_atnd_cnfd_yn === "N";
+                },
+                isSharedRemoteY: function() {
+                    return (this.fiData.sitebrfg_sts_ccd === "SITEBRFG_ED" && this.fiData.vconf_use_yn === "Y");
+                },
+
+                // 첨석 여부 확정 상태
+                isEnd: function () {
+                    return this.fiData.sitebrfg_sts_ccd === "SITEBRFG_ED" && this.fiData.vd_atnd_cnfd_yn === "Y";
+                },
+
+                // 삭제 가능 상태 : 저장(T)
+                deletable: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "CRNG";
+                },
+
+                // 무코드 품목 포함 여부
+                hasNoCdItem: function() {
+                    return this.fiData.has_no_cd_item === "Y";
+                },
+                showRmYn: function() {
+                    return this.get("codes.setupInfo.rfx_sitebrfg_vconf") === "Y";
+                },
+            },
+
+            //운영조직 변경 시 호출
+            onChangeOperOrgCd : function(e) {
+                var me = this;
+
+                if(!e.isTrusted) {
+                    if(me.formula('isNew')) {
+                        var itemProvider = me.$.itemGridPanel.getDataProvider();
+                        var vdProvider   = me.$.vdGridPanel.getDataProvider();
+
+                        if(SCUtil.isFunction(itemProvider.getItemSize) && (vdProvider.getItemSize() > 0) ) {
+                            UT.alert("STD.RFX1033", function() { // "운영조직 변경시 품목 및 협력사 목록 정보가 초기화 됩니다."
+                                itemProvider.removeAll();
+                                vdProvider.removeAll();
+                            });
+
+
+                        }
+                    }
+                }
+            },
+
+            onUserSearch: function(e){
+                var me = this;
+                var result = e.detail;
+                if(UT.isNotEmpty(result)){
+                    me.set("fiData.sitebrfg_inchr_dept_cd",result.dept_cd || "");
+                    me.set("fiData.sitebrfg_inchr_dept_nm",result.dept_nm || "");
+                    me.set("fiData.sitebrfg_pic_ctc",result.phone_no);
+                }
+            },
+            load: function(data) {
+                var me = this;
+                if(data.sitebrfg_uuid){
+                    me.set("fiData.sitebrfg_uuid", data.sitebrfg_uuid);
+                    me.onFindInfo();
+                } else { // 신규
+                    me.fiData.is_new = true;
+                    me.applyFormula();
+                }
+
+
+
+            },
+
+            onFindInfo: function() {
+                var me = this;
+                me.$.findInfoFieldIntro.body = {sitebrfg_uuid : me.fiData.sitebrfg_uuid};
+                UT.request(me.$.findInfoFieldIntro);
+            },
+
+            completeFindInfo: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                var fiData = UT.convertDtToDayHourMin(result.fiData);
+                me.set("fiData", fiData);
+                me.$.itemGridPanel.setDataProvider(result.fiItems);
+                me.$.vdGridPanel.setDataProvider(result.fiVendors);
+
+                // 화상회의 예약 프로세스 여부
+                me.set("rmReservation",result.rmReservationYN);
+
+                // 화상회의 개설된 내역이 있는지 없는지 check
+                me.set("fiData.rmExistCheck",result.rmExistCheck);
+
+                if(result.rmExistCheck){
+                    me.set("rmExistText",me.translate("화상회의 참석"));
+                }else{
+                    me.set("rmExistText",me.translate("화상회의 개설"));
+                }
+
+                me.applyFormula();
+
+            },
+
+            onTempSave: function() {
+                var me = this;
+
+                if(!me.isValid()){
+                    return;
+                }
+
+                UT.confirm("STD.N1200", function() { // 저장 하시겠습니까?
+                    me.onSave(me.$.tempSaveFieldIntro);
+                });
+            },
+
+            completeTempSave: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                UT.completeAlert("저장", function() {
+                    me.set("fiData.sitebrfg_uuid", result.sitebrfg_uuid);
+                    me.onFindInfo();
+                });
+            },
+
+            onNotify: function() {
+                var me = this;
+
+                if(!me.isValid()){
+                    return;
+                }
+
+                if(!me.validate("fiDate")){
+                    UT.alert("STD.E0000");
+                    return false;
+                }
+
+                UT.confirm("STD.N4600", function() { // 협력사 통보 하시겠습니까?
+                    me.onSave(me.$.notifyFieldIntro);
+                });
+            },
+
+            completeNotify: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if (result.resultStatus == "E") { // 종료된 회의인 경우
+                    UT.alert(result.result_message, function(){
+                        me.onFindInfo();
+                    });
+                }else {
+                    UT.alert("STD.N4700", function () { //협력사 통보를 완료 하였습니다.
+                        me.set("fiData.sitebrfg_uuid", result.sitebrfg_uuid);
+                        me.onFindInfo();
+                    });
+                }
+            },
+
+            // 화면 생성 완료
+            initialized: function() {
+                var me = this;
+                me.applyFormula('showRmYn');
+            },
+
+            isValid: function() {
+                var me = this;
+                if(!me.validate()){
+                    UT.alert("STD.E0000");
+                    return false;
+                }
+
+                var itemProvider = me.$.itemGridPanel.getDataProvider();
+                if(itemProvider.getItemSize() < 1) {
+                    UT.alert("STD.PR1002"); //'품목 정보가 없습니다.'
+                    return false;
+                }
+
+                var vdProvider = me.$.vdGridPanel.getDataProvider();
+                if(vdProvider.getItemSize() < 1) {
+                    UT.alert("STD.RFX1019"); //"업체를 한개이상 선택하세요."
+                    return false;
+                }
+                return true;
+            },
+
+            onSave: function(ajax) {
+                var me = this;
+                Promise.all([me.$.upload_in.upload(), me.$.upload_out.upload()]).then(function() {
+                    var fiData = me.getFiData(),
+                        itemProvider = me.$.itemGridPanel.getDataProvider(),
+                        vdProvider   = me.$.vdGridPanel.getDataProvider();
+
+                    ajax.body = {
+                        fiData          : fiData,
+                        insertFiItems   : itemProvider.getNewItems(),
+                        updateFiItems   : itemProvider.getUpdateItems(),
+                        deleteFiItems   : itemProvider.getRemoveItems() || [],
+                        insertFiVendors : vdProvider.getNewItems(),
+                        updateFiVendors : vdProvider.getUpdateItems(),
+                        deleteFiVendors : vdProvider.getRemoveItems() || []
+                    };
+                    UT.request(ajax);
+                });
+            },
+
+            getFiData : function() {
+                var me = this;
+                return UT.convertDayHourMinToDt(me.get("fiData"));
+            },
+
+
+            fiStartDateValidator: function() {
+                var me = this;
+                me.set("fiData.sitebrfg_clsg_dttm", me.fiData.sitebrfg_st_dttm);
+                var fiData = me.getFiData();
+
+                var fiStartTime = UT.toTime(fiData.sitebrfg_st_dttm),
+                    nowDate = new Date();
+
+                if(fiStartTime === null || fiStartTime <= nowDate.getTime()){
+                    return me.translate("STD.E1013", null, me.translate("현장설명회 시작 일시"), me.translate("현재 일시"));
+                }
+
+                var rmYn = me.get("fiData.vconf_use_yn");
+
+                //화상회의 시작시 15분 후로 저장
+                var rmDateTenMinAfter = new Date();
+                rmDateTenMinAfter.setMinutes(rmDateTenMinAfter.getMinutes() + 14); // time 으로 구분지어 버리니, 초 까지 계산되어 정확한 15분을 체크가 되지 않아 14분 이상으로 체크
+
+                return true;
+            },
+
+
+            onRemoteMeetingTimeSet : function(event){
+                var me = this,checked = event.detail;
+
+                if(event.currentTarget.value){
+					/* var rmDateTenMinAfter = new Date();
+					   //rmDateTenMinAfter.setHours(rmDateTenMinAfter.getHours() + 24);
+					   rmDateTenMinAfter.setMinutes(rmDateTenMinAfter.getMinutes() + 15);
+					   me.set("fiData.fi_start_dt",rmDateTenMinAfter);
+					   me.set("fiData.fi_start_dt_hour",rmDateTenMinAfter.getHours());
+					   me.set("fiData.fi_start_dt_min",rmDateTenMinAfter.getMinutes());
+
+					   var rmDateOneDayAfter = rmDateTenMinAfter;
+					   rmDateOneDayAfter.setHours(rmDateOneDayAfter.getHours()+1);
+					   me.set("fiData.fi_end_dt",rmDateOneDayAfter);
+					   me.set("fiData.fi_end_dt_hour",rmDateOneDayAfter.getHours());
+					   me.set("fiData.fi_end_dt_min",rmDateOneDayAfter.getMinutes());*/
+
+                    me.set("fiData.sitebrfg_plc","화상회의");
+                }
+            },
+
+            fiEndDateValidator: function() {
+                var me = this,
+                    fiData = me.getFiData(),
+                    fiStartTime = UT.toTime(fiData.sitebrfg_st_dttm),
+                    fiEndTime = UT.toTime(fiData.sitebrfg_clsg_dttm);
+
+                if(fiEndTime === null || fiStartTime >= fiEndTime) {
+                    return me.translate("STD.E1013", null, me.translate("현장설명회 종료 시간"), me.translate("현장설명회 시작 시간"));
+                }
+
+                return true;
+            },
+
+            getNewItemLno: function(provider) {
+                var maxNo = 10;
+                if(provider.getItemSize() > 0) {
+                    var allRows = provider.getItems();
+
+                    var maxRow = allRows.reduce(function(a, b) {
+                        if(!a.sitebrfg_lno) a.sitebrfg_lno = 0;
+                        if(!b.sitebrfg_lno) b.sitebrfg_lno = 0;
+                        return (a.sitebrfg_lno > b.sitebrfg_lno) ? a : b;
+                    });
+                    maxNo = parseInt(maxRow.sitebrfg_lno, 10) + 10;
+                }
+                return maxNo;
+            },
+
+            // 협력사 참석 여부 확정버튼
+            onAttendConfirm: function() {
+                var me = this,
+                    vendorList = me.$.vdGridPanel.getDataProvider().getItems();
+                me.$.dialog_attend_confirm.show();
+                me.$.vdAttendPanel.setDataProvider(vendorList);
+            },
+
+            // 협력사 참석 확정 처리
+            onConfirm: function() {
+                var me = this;
+
+                UT.confirm("STD.N5000", function() { // 확정 하시겠습니까?
+                    var vdAttendProvider = me.$.vdAttendPanel.getDataProvider();
+                    me.$.confirmFieldIntro.body = {
+                        sitebrfg_uuid : me.fiData.sitebrfg_uuid,
+                        vendors : vdAttendProvider.getItems()
+                    }
+                    UT.request(me.$.confirmFieldIntro);
+                });
+
+            },
+
+            completeConfirm: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                UT.alert("STD.N5100", function() {// 확정 되었습니다.
+                    me.$.dialog_attend_confirm.close();
+                    me.onFindInfo();
+                });
+            },
+
+            // grid item click 이벤트
+            onItemClick : function(e) {
+                var me = this;
+                var data = e.detail.data,
+                    item = e.detail.item,
+                    provider = e.detail.provider;
+
+                if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                    //현재 row 인덱스를 담아둔다.
+                    me.rowIndex = item.rowIndex;
+
+                    me.showDetailSpec(data, provider);
+                } else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					me.showItemContractHistory(data["item_cd"]);
+				}
+            },
+
+            // 상세규격 팝업
+            showDetailSpec: function(data, provider) {
+                var me = this;
+
+                var readonly =  !me.formula('editable');
+                var popup = UT.popup('ep-item-detail-spec', me, 400, 260, {
+                    "clear-dtl-spec": function(popup, e) {
+                        provider.setItemAt(me.rowIndex, {
+                            "item_spec_dtl": null
+                        });
+                        popup.close();
+                    },
+                    "apply-dtl-spec": function(popup, e) {
+                        var dtlSpec = e.detail.item_spec_dtl;
+
+                        provider.setItemAt(me.rowIndex, {
+                            "item_spec_dtl": dtlSpec
+                        });
+                        popup.close();
+                    }
+                });
+                popup.show();
+                popup.getWindowContent().load(data, readonly);
+            },
+
+            // 화상회의 공유 화면
+            onRemoteMeetingShared: function() {
+                var me = this;
+                var popup = UT.popup('ep-rm-shared-detail', me, 750 ,"80%", {
+                },{titleText: "협력사 화상회의 공유"});
+                popup.show();
+                popup.getWindowContent().load(me.get('fiData'));
+            },
+
+            // 무코드 추가
+            onAddNoCdItem: function() {
+                var me = this;
+                var fiData = me.get('fiData');
+                var provider = me.$.itemGridPanel.getDataProvider();
+                var itemLno = me.getNewItemLno(provider);
+                var defaultUnit = me.codes.comboUnitCode.length > 0 ? me.codes.comboUnitCode[0].data : null;
+
+                var addRow = {
+                    sitebrfg_lno  : itemLno,
+                    oorg_cd   : fiData.oorg_cd,	//운영조직
+                    uom_ccd       : defaultUnit,
+                    item_cd_crn_typ_ccd : 'CDLS' //구매품목유형: 미등록
+                };
+                provider.addItem(addRow);
+                me.set("fiData.has_no_cd_item", "Y");
+                me.applyFormula("hasNoCdItem");
+            },
+
+            // 품목 추가 버튼 클릭시
+            onShowFiCateItemPopup : function() {
+                var me = this;
+
+                if(!me.fiData.oorg_cd) {
+                    UT.alert("STD.N3400"); //'운영조직 선택하세요.'
+                    return false;
+                }
+
+                var param = {
+                    oorg_cd  : me.fiData.oorg_cd
+                };
+
+                UT.popupItemSearch(me, param, function(selectedItems) {
+                    // 품목정보 리스트 추가
+                    me.onAddItemList(selectedItems);
+                });
+            },
+
+            // 품목정보 리스트 추가
+            onAddItemList : function(selectedList) {
+                var me = this;
+
+                if(selectedList.length > 0) {
+                    var fiData = me.get('fiData');
+                    var provider = me.$.itemGridPanel.getDataProvider();
+                    var itemLno = me.getNewItemLno(provider);
+
+                    for(var i=0; i<selectedList.length; i++) {
+                        var selected = selectedList[i];
+
+                        var addRow = {
+                            sitebrfg_lno  : itemLno,
+                            oorg_cd   : fiData.oorg_cd,	//운영조직
+                            disp_item_cd  : selected.item_cd,
+                            item_cd       : selected.item_cd,		//품목코드
+                            item_nm       : selected.item_nm,		//품목코드
+                            item_spec          : selected.item_spec,			//규격
+                            uom_ccd       : selected.uom_ccd,	//단위 (기본단위)
+                            sg_cd         : selected.sg_cd,			//소싱그룹코드
+                            sg_nm         : selected.sg_nm,
+                            item_cd_crn_typ_ccd : 'ITEM_CD'						//구매품목유형: 등록
+                        };
+                        provider.addItem(addRow);
+                        itemLno += 10;
+                    }
+                } else {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                }
+            },
+
+            onShowPopupVendor: function() {
+                var me = this;
+
+                if(!me.fiData.oorg_cd) {
+                    UT.alert("STD.N3400"); //'운영조직을 선택하세요.'
+                    return false;
+                }
+
+                var vdProvider   = me.$.vdGridPanel.getDataProvider();
+                var itemProvider = me.$.itemGridPanel.getDataProvider(),
+                    itemRows = itemProvider.getItems();
+                var itemSGUniqueList = itemRows.reduce(function(a, b){
+                    if(!UT.isEmpty(b.sg_cd) && a.indexOf(b.sg_cd) < 0){
+                        a.push(b.sg_cd);
+                    }
+                    return a;
+                }, []);
+
+                //popup defaultParam
+                var defaultParam = {
+                    co_cd       : SCSessionManager.currentUser.co_cd,
+                    oorg_cd     : me.fiData.oorg_cd,
+                    conn_typ_ccd: "POEO",
+                    item_sgs    : itemSGUniqueList,
+					obd_job_type_code : "FI" // 온보딩 유형
+                };
+
+                var vendorPopup = UT.popup('ep-vendor-list', me, "80%", "95%", {
+                    'selected-items' : function(popup, e) {
+                        me.addVdList(e.detail);
+                    }
+                }, {maximizable : true, titleText : "협력사 검색"});
+                vendorPopup.show();
+                vendorPopup.getWindowContent().load({'defaultParam':defaultParam});
+            },
+
+            // 협력사 리스트 추가
+            addVdList : function(selectedList) {
+                var me = this;
+
+                var provider = me.$.vdGridPanel.getDataProvider();
+
+                var dupCnt = 0;
+                if(selectedList.length > 0) {
+                    for(var i=0; i<selectedList.length; i++) {
+                        var selected = selectedList[i];
+
+                        if(provider.filterItem({disp_vd_cd:selected.disp_vd_cd}) === null) {
+                            var addRow = {
+                                vd_cd           : selected.vd_cd,
+                                erp_vd_cd       : selected.erp_vd_cd,
+                                disp_vd_cd      : selected.disp_vd_cd,
+                                vd_nm           : selected.disp_vd_nm,
+                                vd_pic_uuid       : selected.chr_id,
+                                vd_pic_nm       : selected.chr_nm,
+                                vd_chr_mobile   : selected.chr_mobile,
+                                vd_pic_eml    : selected.chr_email,
+                                vd_chr_contract : selected.chr_phone_no,
+                            };
+                            provider.addItem(addRow);
+                        } else {
+                            dupCnt++;
+                        }
+                    }
+                    if(dupCnt > 0) {
+                        UT.alert(me.translate("STD.N2010",null,dupCnt),null,true); // 중복 데이터 {0}건 제외 후 추가하였습니다
+                    }
+                } else {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                }
+            },
+
+            // 그리드 item-style-function
+            onItemStyleFn: function(data, item) {
+                var me = this,
+                    styleObj = {};
+
+                if(item.dataField === "item_spec" && me.onItemEditableFn(data, item)) {
+                    styleObj = {
+                        iconLocation : "leftSide",
+                        iconOffset   : 0,
+                        iconPadding  : 0,
+                        paddingLeft  : 0,
+                        paddingTop   : 0,
+                        iconUrl      : "bower_components/sc-grid/resources/img/icon_required.png"
+                    };
+                }
+                return styleObj;
+            },
+            // 그리드 image-change-function
+            onImageChangeFn: function(data, item){
+                if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+                    return "link";
+                } else if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                    return "link";
+                }
+                return null;
+            },
+
+            // grid item editable function
+            onItemEditableFn : function(data, item) {
+                if(["item_nm", "item_spec"].indexOf(item.dataField) > -1) {
+                    return data["item_cd_crn_typ_ccd"] === "CDLS";
+                } else {
+                    return this.formula('editable');
+                }
+            },
+
+            onDeleteFiItem : function() {
+                var me = this;
+
+                var provider = me.$.itemGridPanel.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+
+                if(checked.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                } else {
+                    UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+                        provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+                        me.set("fiData.has_no_cd_item", (provider.filterItem({item_cd_crn_typ_ccd : "CDLS"}) != null) ? "Y" : "N");
+                        me.applyFormula("hasNoCdItem");
+
+                        if(me.formula('editable')) {
+                            var itemLno = 0;
+                            provider.setItemAtBatch(true, function(index, data){
+                                itemLno += 10;
+                                return {"sitebrfg_lno" : itemLno}
+                            });
+                        }
+                    });
+                }
+            },
+
+            onDeleteFiVendor : function() {
+                var me = this;
+
+                var provider = me.$.vdGridPanel.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+
+                if(checked.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                } else {
+                    UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+                        provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워주고, db에서 삭제해야 할 데이터 목록울 리턴한다.
+                    });
+                }
+            },
+
+            // 통보 취소
+            onCancel: function() {
+                var me = this;
+
+                UT.confirm("STD.N5200", function () { // 취소하시겠습니까?
+                    UT.request(me.$.cancelFieldIntro);
+                });
+            },
+
+            completeCancel: function() {
+                var me = this;
+                UT.alert("STD.N5300", function() {
+                    me.onFindInfo();
+                });
+            },
+
+            // 삭제
+            onDelete: function() {
+                var me = this;
+                UT.confirm("STD.N1300", function() { // 삭제하시겠습니까?
+                    UT.request(me.$.deleteFieldIntro);
+                });
+            },
+
+
+            completeDelete: function() {
+                var me = this;
+                UT.alert("STD.N2500", function() {
+                    me.onClose();
+                });
+            },
+
+
+            onClose: function() {
+                var me = this;
+                me.reset();
+                me.fire("show-list");
+            },
+
+
+            //예약 화상회의 바로 개설
+            onRemoteMeetingReservationStart: function () {
+                var me = this;
+                UT.request(me.$.reservationNowStartRemoteMeeting);
+            },
+
+
+            // 화상회의 존재여부에 따른 체크
+            onCheckRemoteMeetExist:function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if (result.resultStatus == "E") { // 종료된 회의인 경우
+                    UT.alert(result.result_message, function(){
+                        me.onFindInfo();
+                    });
+                }else{
+                    if(result.check){
+                        UT.request(me.$.nowStartRemoteMeeting);
+                    }else{
+                        UT.confirm(result.result_message, function() {
+                            UT.request(me.$.nowStartRemoteMeeting);
+                        },function () {
+                            me.onFindInfo();
+                        });
+                    }
+                }
+            },
+
+            // 회의 참석&개설 여부에 따라 참석의 경우 화상회의가 존재하지않으면 개설하겠냐는 Confirm 과 개설일 경우 이미 존재하는 화상회의가 존재한다고 참석하겠냐는 내용으로 가야함.
+            onValidateRemoteMeetingExist(){
+                var me = this;
+                UT.request(me.$.validateRemoteMeetingExist);
+            },
+
+            callConferenceStartGetUrl : function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(result.resultStatus === "E" || UT.isEmpty(result.url)) {
+                    UT.alert(result.result_message, function(){
+                        me.onFindInfo();
+                    });
+                }else{
+                    window.open(result.url,"_blank");
+                }
+            },
+			// 품목 별 계약 및 발주 이력 조회
+			showItemContractHistory: function(itemCd) {
+				var me = this;
+
+				var itemHistoryPopup = UT.popup("ep-item-perform", me, "90%", "80%", null, {titleText : I18N.translate("품목 정보")});
+				itemHistoryPopup.show();
+				itemHistoryPopup.getWindowContent().load({item_cd: itemCd});
+			}
+        })
+    </script>
+</dom-module>

@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="peg-setup">
+    <!-- 퍼포먼스평가그룹 목록 조회 -->
+    <select id="findListPeg" resultType="map">
+    /* peg-setup.findListPeg: 퍼포먼스평가그룹 목록 조회 */
+        SELECT P.TEN_ID                  /* 테넌트 아이디 */
+             , P.PEG_UUID                /* 퍼포먼스평가그룹 UUID */
+             , EFCT_SHT.PFMC_EVALSHT_UUID       /* 퍼포먼스 평가시트 UUID */
+             , P.OORG_CD                 /* 운영조직 코드 */
+             , P.PEG_CD                  /* 퍼포먼스평가그룹 코드 */
+             , P.PEG_NM                  /* 퍼포먼스평가그룹 명 */
+             , P.PEG_EXPLN               /* 퍼포먼스평가그룹 명 설명 */
+             , EFCT_SHT.EVALSHT_NM             /* 평가시트 명 */
+             , (CASE WHEN EFCT_SHT.CNFD_YN IS NULL OR EFCT_SHT.CNFD_YN = '' THEN 'N' ELSE EFCT_SHT.CNFD_YN END) AS CNFD_YN  /* 평가시트 확정 여부 */
+             , (CASE WHEN EFCT_SHT.PFMC_EVALSHT_UUID IS NULL OR EFCT_SHT.PFMC_EVALSHT_UUID = '' THEN 'N'
+                     WHEN EFCT_SHT.PFMC_EVALSHT_UUID = CRNT_SHT.PFMC_EVALSHT_UUID THEN 'N'
+                     ELSE 'Y'
+                 END) AS VERSIONUP_SHT_EXIST_YN  /* 버전업 평가시트 존재 여부 */
+             , P.STS
+             , P.RMK
+             , P.REGR_ID
+             , P.REG_DTTM
+             , P.MODR_ID
+             , P.MOD_DTTM
+             , (SELECT COUNT(PVMG.VMG_OORG_UUID)
+                  FROM PEG_VMG PVMG     /* PVMG : 퍼포먼스평가그룹 퍼포먼스그룹 */
+                 WHERE PVMG.TEN_ID = P.TEN_ID
+                   AND PVMG.PEG_UUID = P.PEG_UUID
+                   AND PVMG.STS != 'D') AS NUM_OF_VMG  /* 협력사관리그룹 수 */
+          FROM PEG P    /* P : 퍼포먼스평가그룹 */
+          LEFT OUTER JOIN (
+                  SELECT PES.*
+                       , ROW_NUMBER() OVER(PARTITION BY PES.PEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC) RK
+                   FROM PFMC_EVALSHT PES
+                  WHERE PES.TEN_ID = #{g.tenant}
+                    AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PES.EFCT_ST_DT, 'YYYYMMDD')
+                    AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PES.EFCT_EXP_DT, 'YYYYMMDD')  AND PES.CNFD_YN ='Y'
+                    AND PES.STS != 'D'
+             ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+            ON P.TEN_ID = EFCT_SHT.TEN_ID
+           AND P.PEG_UUID = EFCT_SHT.PEG_UUID
+           AND EFCT_SHT.RK = 1
+          LEFT OUTER JOIN (
+                     SELECT TEN_ID, PEG_UUID, PFMC_EVALSHT_UUID, CURRENT_EVALSHT_RANK
+                       FROM (
+                               SELECT TEN_ID, PEG_UUID, PFMC_EVALSHT_UUID, RANK() OVER (PARTITION BY PEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC) AS CURRENT_EVALSHT_RANK
+                                 FROM PFMC_EVALSHT
+                                WHERE TEN_ID    = #{g.tenant}
+                                  AND STS != 'D'
+                            ) x
+                      WHERE CURRENT_EVALSHT_RANK = 1
+                          ) CRNT_SHT
+            ON CRNT_SHT.TEN_ID = P.TEN_ID
+           AND CRNT_SHT.PEG_UUID = P.PEG_UUID
+       <trim prefix="WHERE" prefixOverrides="AND">
+           AND P.TEN_ID = #{g.tenant}
+           AND P.STS != 'D'
+         <if test="p.oorg_cd != null and p.oorg_cd != ''">
+           AND P.OORG_CD            = #{p.oorg_cd}          /* 운영조직 코드 */
+         </if>
+         <if test="p.peg_cd != null and p.peg_cd != ''">
+           <bind name="pegCd" value="'%' + p.peg_cd+ '%'"/>
+           AND UPPER(P.PEG_CD) LIKE UPPER(#{pegCd})         /* 퍼포먼스평가그룹 코드 */
+         </if>
+         <if test="p.peg_nm != null and p.peg_nm != ''">
+           <bind name="pegNm" value="'%' + p.peg_nm+ '%'"/>
+           AND UPPER(P.PEG_NM) LIKE UPPER(#{pegNm})       /* 퍼포먼스평가그룹 명 */
+         </if>
+         <if test="p.cnfd_yn != null and p.cnfd_yn != ''">
+           AND (CASE WHEN EFCT_SHT.CNFD_YN IS NULL OR EFCT_SHT.CNFD_YN = '' THEN 'N' ELSE EFCT_SHT.CNFD_YN END) = #{p.cnfd_yn}
+         </if>
+       </trim>
+        ORDER BY P.OORG_CD, P.PEG_CD
+    </select>
+    <!-- 퍼포먼스평가그룹 삭제 상태 변경 (sts = 'D')-->
+    <update id="updatePegByDelete">
+        /* peg-setup.updatePegByDelete : 퍼포먼스평가그룹 삭제(STS = 'D') */
+        UPDATE PEG                  /* 퍼포먼스평가그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}        /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}              /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND PEG_UUID = #{p.peg_uuid}                     /* 퍼포먼스평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 퍼포먼스 협력사관리그룹 삭제 상태 변경 (sts = 'D')-->
+    <update id="updateVmgStsByDelete">
+        /* peg-setup.updateVmgStsByDelete : 퍼포먼스 협력사관리그룹 삭제(STS = 'D') */
+        UPDATE PEG_VMG                  /* 퍼포먼스평가그룹 협력사관리그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}        /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND PEG_UUID = #{p.peg_uuid}                     /* 퍼포먼스평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 퍼포먼스평가그룹 Mater 저장 (Insert) -->
+    <insert id="insertPegMaster">
+        /* peg-setup.insertPegMaster : 퍼포먼스평가그룹 Mater 저장 */
+        INSERT INTO PEG        /* 퍼포먼스평가그룹  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                /* 테넌트 아이디 */
+            , PEG_UUID              /* 퍼포먼스평가그룹 UUID */
+            , OORG_CD               /* 운영조직 코드 */
+            , PEG_CD                /* 퍼포먼스평가그룹 코드 */
+            , PEG_NM                /* 퍼포먼스평가그룹 명 */
+            , PEG_EXPLN             /* 퍼포먼스평가그룹 설명 */
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.peg_uuid}
+            , #{p.oorg_cd}
+            , #{p.peg_cd}
+            , #{p.peg_nm}
+            , #{p.peg_expln}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 퍼포먼스평가그룹 Mater 수정 -->
+    <update id="updatePegMaster">
+        /* peg-setup.updatePegMaster : 퍼포먼스평가그룹 Mater 수정 */
+        UPDATE PEG        /* 퍼포먼스평가그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID               = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM               = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , PEG_NM               = #{p.peg_nm}                /* 퍼포먼스평가그룹 명 */
+            , PEG_EXPLN            = #{p.peg_expln}             /* 퍼포먼스평가그룹 설명 */
+        </trim>
+        WHERE TEN_ID = #{g.tenant}                             /* 시스템 아이디 */
+        AND PEG_UUID = #{p.peg_uuid}                           /* 퍼포먼스평가그룹 UUID */
+    </update>
+    <select id="findPegInfoInUsingVmg" resultType="map">
+        /* peg-setup.findPegInfoInUsingVmg: 협력사관리그룹을 사용 중인 타 퍼포먼스평가그룹 정보 조회 */
+        SELECT P.TEN_ID
+             , P.OORG_CD
+             , P.PEG_UUID
+             , P.PEG_CD
+             , P.PEG_NM
+             , VO.VMG_OORG_UUID
+             , V.VMG_UUID
+             , V.VMG_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN V.VMG_NM ELSE CASE WHEN V.VMG_NM_EN IS NULL OR V.VMG_NM_EN = '' THEN V.VMG_NM ELSE V.VMG_NM_EN END END AS VMG_NM
+          FROM PEG_VMG PVMG   /* PVMG : 퍼포먼스평가그룹 협력사관리그룹 */
+         INNER JOIN PEG P
+            ON P.TEN_ID   = PVMG.TEN_ID
+           AND P.PEG_UUID = PVMG.PEG_UUID
+           AND P.STS     != 'D'
+         INNER JOIN VMG_OORG VO
+            ON VO.TEN_ID   = PVMG.TEN_ID
+           AND VO.VMG_OORG_UUID = PVMG.VMG_OORG_UUID
+           AND VO.USE_YN    ='Y'
+           AND VO.STS       != 'D'
+         INNER JOIN VMG V
+            ON V.TEN_ID   = VO.TEN_ID
+           AND V.VMG_UUID = VO.VMG_UUID
+           AND V.STS     != 'D'
+         WHERE PVMG.TEN_ID              = #{g.tenant}
+           AND PVMG.VMG_OORG_UUID       = #{p.vmg_oorg_uuid}
+           AND PVMG.STS                != 'D'
+    </select>
+    <!-- 퍼포먼스평가그룹 - 협력사관리그룹 저장 -->
+    <insert id="insertPegVmg">
+        /* peg-setup.insertPegVmg : 퍼포먼스평가그룹 - 협력사관리그룹 저장 */
+        INSERT INTO PEG_VMG        /* 퍼포먼스평가그룹 퍼포먼스그룹 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                /* 테넌트 아이디 */
+            , PEG_UUID              /* 퍼포먼스평가그룹 UUID */
+            , VMG_OORG_UUID         /* 협력사관리그룹 운영조직 UUID */
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.peg_uuid}
+            , #{p.vmg_oorg_uuid}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+	<!-- 퍼포먼스평가그룹 - 협력사관리그룹 삭제 (delete) -->
+    <delete id="deletePegVmg">
+        /* peg-setup.deletePegVmg : 퍼포먼스평가그룹 - 협력사관리그룹 삭제 (delete) */
+        DELETE FROM PEG_VMG    /* 퍼포먼스평가그룹 퍼포먼스그룹 */
+         WHERE TEN_ID          = #{g.tenant}
+         <if test="p.peg_uuid != null and p.peg_uuid != ''">
+           AND PEG_UUID        = #{p.peg_uuid}
+         </if>
+           AND VMG_OORG_UUID   = #{p.vmg_oorg_uuid}
+    </delete>
+	<insert id="insertEvalgrd">
+        /* peg-setup.insertEvalgrd : 퍼포먼스평가그룹 - 평가등급 저장 */
+        INSERT INTO PEG_EVAL_GRD        /* 퍼포먼스평가그룹 평가등급 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID
+            , PEG_EVAL_GRD_UUID
+            , PEG_UUID
+            , EVAL_GRD_CD
+            , EVAL_GRD_NM
+            , ST_VAL
+            , STP_VAL
+            , SORT
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , RANDOMUUID  , #{p.peg_uuid}
+            , #{p.eval_grd_cd}
+            , #{p.eval_grd_nm}
+            , #{p.st_val}
+            , #{p.stp_val}
+            , #{p.sort}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <update id="updateEvalgrd">
+        /* peg-setup.updateEvalgrd : 퍼포먼스평가그룹 - 평가등급 수정 */
+        UPDATE PEG_EVAL_GRD        /* 퍼포먼스평가그룹 평가등급 */
+        <trim prefix="SET" prefixOverrides=",">
+              EVAL_GRD_NM        = #{p.eval_grd_nm}
+            , ST_VAL             = #{p.st_val}
+            , STP_VAL            = #{p.stp_val}
+            , SORT               = #{p.sort}
+            , STS                = 'U'
+            , MODR_ID            = #{g.username}
+            , MOD_DTTM           = #{g.now}
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID           = #{g.tenant}
+            AND PEG_EVAL_GRD_UUID = #{p.peg_eval_grd_uuid}
+        </trim>
+    </update>
+	<update id="deleteEvalgrd">
+        /* peg-setup.deleteEvalgrd : 퍼포먼스평가그룹 - 평가등급 수정 */
+        UPDATE PEG_EVAL_GRD        /* 퍼포먼스평가그룹 평가등급 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS                = 'D'
+            , MODR_ID            = #{g.username}
+            , MOD_DTTM           = #{g.now}
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID           = #{g.tenant}
+            AND PEG_EVAL_GRD_UUID = #{p.peg_eval_grd_uuid}
+        </trim>
+    </update>
+    <!-- 퍼포먼스평가그룹 Mater 조회 -->
+    <select id="findPegMaster" resultType="map">
+        /* peg-setup.findPegMaster: 퍼포먼스평가그룹 Mater 조회 */
+        SELECT P.TEN_ID                  /* 테넌트 아이디 */
+             , P.PEG_UUID                /* 퍼포먼스평가그룹 UUID */
+             , EFCT_SHT.PFMC_EVALSHT_UUID        /* 퍼포먼스 평가시트 UUID */
+             , P.OORG_CD                 /* 운영조직 코드 */
+             , P.PEG_CD                  /* 퍼포먼스평가그룹 코드 */
+             , P.PEG_NM                  /* 퍼포먼스평가그룹 명 */
+             , P.PEG_EXPLN               /* 퍼포먼스평가그룹 명 설명 */
+             , P.STS
+             , P.RMK
+             , P.REGR_ID
+             , P.REG_DTTM
+             , P.MODR_ID
+             , P.MOD_DTTM
+        FROM PEG P    /* P : 퍼포먼스평가그룹 */
+        LEFT OUTER JOIN (
+                  SELECT PES.*
+                       , ROW_NUMBER() OVER(PARTITION BY PES.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                   FROM PFMC_EVALSHT PES
+                  WHERE PES.TEN_ID = #{g.tenant}
+                    AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PES.EFCT_ST_DT, 'YYYYMMDD')
+                    AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PES.EFCT_EXP_DT, 'YYYYMMDD')  AND PES.CNFD_YN ='Y'
+                    AND PES.STS != 'D'
+             ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+            ON P.TEN_ID = EFCT_SHT.TEN_ID
+           AND P.PEG_UUID = EFCT_SHT.PEG_UUID
+           AND EFCT_SHT.RK = 1
+       WHERE P.TEN_ID    = #{g.tenant}
+         AND P.PEG_UUID  = #{p.peg_uuid}
+    </select>
+    <!-- 퍼포먼스평가그룹 - 협력사관리그룹 조회 -->
+    <select id="findListPegVmg" resultType="map">
+        /* peg-setup.findListPegVmg: 퍼포먼스평가그룹 - 협력사관리그룹 조회 */
+        SELECT PVMG.TEN_ID                  /* 테넌트 아이디 */
+             , PVMG.PEG_UUID                /* 퍼포먼스평가그룹 UUID */
+             , PVMG.VMG_OORG_UUID        /* 협력사관리그룹 UUID */
+             , VMG.VMG_CD
+             , VMG.VMG_NM
+             , VMG.VMG_NM_EN
+             , PVMG.STS
+             , PVMG.RMK
+             , PVMG.REGR_ID
+             , PVMG.REG_DTTM
+             , PVMG.MODR_ID
+             , PVMG.MOD_DTTM
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+             , VMT.VMT_CCD
+        FROM PEG_VMG PVMG   /* PVMG : 퍼포먼스평가그룹 협력사관리그룹 */
+        LEFT OUTER JOIN VMG_OORG  VO /* VMG_OORG : 협력사관리그룹 운영조직 */
+          ON VO.TEN_ID         = PVMG.TEN_ID
+         AND VO.VMG_OORG_UUID  = PVMG.VMG_OORG_UUID
+         AND VO.USE_YN         = 'Y'
+         AND VO.STS            != 'D'
+        LEFT OUTER JOIN VMG
+          ON VMG.TEN_ID = VO.TEN_ID
+         AND VMG.VMG_UUID = VO.VMG_UUID
+         AND VMG.STS != 'D'
+        LEFT OUTER JOIN VMT
+          ON VMG.TEN_ID = VMT.TEN_ID
+         AND VMG.VMT_UUID = VMT.VMT_UUID
+       WHERE PVMG.TEN_ID              = #{g.tenant}
+         AND PVMG.PEG_UUID            = #{p.peg_uuid}
+         AND PVMG.STS                != 'D'
+    </select>
+	<select id="findListPegEvalGrd" resultType="map">
+        /* peg-setup.findListPegEvalGrd: 퍼포먼스평가그룹 - 평가등급 조회 */
+        SELECT TEN_ID
+             , PEG_EVAL_GRD_UUID
+             , PEG_UUID
+             , EVAL_GRD_CD
+             , EVAL_GRD_NM
+             , ST_VAL
+             , STP_VAL
+             , SORT
+             , STS
+             , RMK
+             , REGR_ID
+             , REG_DTTM
+             , MODR_ID
+             , MOD_DTTM
+        FROM PEG_EVAL_GRD
+       WHERE TEN_ID              = #{g.tenant}
+         AND PEG_UUID            = #{p.peg_uuid}
+         AND STS                != 'D'
+    </select>
+</mapper>

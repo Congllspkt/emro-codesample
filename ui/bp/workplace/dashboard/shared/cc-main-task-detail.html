@@ -1,0 +1,298 @@
+<!--
+    ******************************************************************************************
+    ** Description     : cc-main-task-detail
+    ** Author          : hj.jang
+    ******************************************************************************************
+-->
+<dom-module id="cc-main-task-detail">
+    <template>
+        
+        <div class="contents flexBox_row mainTask bg_lgrey" on-click="onClickTask" data-state="all" style="background: #fff;">
+           	<!-- Main Work dom-repeat -->
+          		<template is="dom-repeat" items="[[mainTaskList]]" index="index">
+           		<div class$="taskBox [[item.selectedIndex]] taskCard mainTC [[convertTaskCardClass(item)]]" data-main-task-uuid$="[[item.main_task_uuid]]">
+           			<div class="taskHead" clickable data-task-status="all">
+					    <b class$="[[getIconClass(index)]] mainTaskName">[[item.display_main_task_nm]]</b>
+					    <b class="count number">[[item.taskCount]]</b>
+					</div>
+					<div class="taskDataGrid">
+						<ul>
+							<li class="delay" data-task-status="delay" clickable>
+								<span>Delay</span>
+								<span class="number text_delay">[[item.delay_tot_cnt]]</span>
+							</li>
+							<li class="normal" data-task-status="norm" clickable>
+								<span>Normal</span>
+								<span class="number text_normal">[[item.norm_tot_cnt]]</span>
+							</li>
+							<li class="imminent" data-task-status="immnt" clickable>
+								<span>Imminent</span>
+								<span class="number text_imminent">[[item.immnt_tot_cnt]]</span>
+							</li>
+							<li class="new" data-task-status="new" clickable>
+								<span>New</span>
+								<span class="number text_new">[[item.new_tot_cnt]]</span>
+							</li>
+						</ul>
+						<div class="statusLine">
+							<span class="bg_delay delay" clickable title="[[convertTitle(item, 'delay')]]" style$="width:[[item.delay.width]] "  data-state="delay"></span>
+							<span class="bg_imminent imminent" clickable title="[[convertTitle(item, 'imminent')]]" style$="width:[[item.imminent.width]]"  data-state="immnt"></span>
+							<span class="bg_normal normal" clickable title="[[convertTitle(item, 'normal')]]" style$="width:[[item.normal.width]]"  data-state="normal"></span>
+						</div>
+					    <!-- 
+					    <div class="statusBar">
+					    	<span class="red"    style$="left:[[item.red.left]]; width:[[item.red.width]]" clickable title="[[convertTitle(item, 'delay')]]"></span>
+					    	<span class="orange" style$="left:[[item.orange.left]]; width:[[item.orange.width]]" clickable title="[[convertTitle(item, 'imminent')]]"></span>
+					    	<span class="green"  style$="left:[[item.green.left]]; width:[[item.green.width]]" clickable title="[[convertTitle(item, 'normal')]]"></span>
+				    	</div> 
+				    	-->
+					</div>
+					<div class="list">
+						<ul>
+							<template is="dom-repeat" items="[[item.taskList]]" index="index" as="taskInfo">
+								<li class$="[[convertTickTitClass(taskInfo)]]" clickable on-click="onClickDetailTask" data-dat-src-logic-nm$="[[taskInfo.dat_src_logic_nm]]" data-menu-cd$="[[taskInfo.menu_cd]]" data-task-uuid$="[[taskInfo.task_uuid]]">
+									<span class="date">[[taskInfo.snd_dttm]]</span>
+									<span>[[taskInfo.task_tit]] </span>
+								</li>
+							</template>
+						</ul>
+					</div>
+				</div>
+				<template is="dom-if" if="[[!isLastIndex(index)]]">
+					<div class$="[[convertFlowTypClass(item)]]"></div>
+				</template>
+			</template>
+				
+        </div>
+        </sc-panel>
+    </template>
+    <script>
+		Polymer({
+			is: "cc-main-task-detail",
+
+			behaviors:[
+				Polymer.CCFlowBehavior,
+				Polymer.SCResizableBehavior,
+                Polymer.CCModuleBehavior,
+				Polymer.CCWorkplaceBehavior
+			],
+            
+            properties: {
+			    statusData: {
+			    	type: Object,
+                    value: function () {
+                        return {};
+					}
+                },
+                mainTaskList : {
+                	type : Array,
+                	value : function(){return[];}
+                },
+                selectedItem: {
+                	type: Object,
+                	value: function(){
+                		return {};
+                	}
+                }
+            },
+            
+            initialized: function() {
+            	var me = this;
+				me.load();
+            },
+            
+			refresh: function () {
+				var me = this;
+				me.load();
+			},
+
+            load: function () {
+                var me = this;
+				/* UT.request(me.$.findListNewMainWorkStatusCount); */
+			},
+
+			onClickTask: function (e) {
+				var me = this,
+					target = e.target,
+					state = target.dataset.state;
+				
+				// 부모 탐색
+				var taskBox = UT.closest(e.target, "div.taskBox");
+				
+				if(taskBox && taskBox.dataset.mainTaskUuid) {
+					var list = me.querySelectorAll("div.taskBox");
+
+					for(var i=0; i<list.length; i++) {
+						list[i].classList.remove("on");
+	                }
+					taskBox.classList.add("on");
+					
+					var target = e.target;
+					if(target.hasAttribute("clickable") && UT.isNotEmpty(e.target.dataset.taskStatus)) {
+						var seriesStatus;
+						var prefix = "series_";
+						seriesStatus = prefix + e.target.dataset.taskStatus;
+
+						me.fire("item-click", {
+							main_task_uuid: taskBox.dataset.mainTaskUuid,
+							display_main_task_nm: taskBox.querySelector(".mainTaskName").innerText,
+							seriesStatus: seriesStatus,
+							state : state
+						});
+                    }
+				}
+			},
+
+			completeFindListNewMainWorkStatusCount: function (e, res) {
+                var me = this;
+                var result = res.response || [];
+                
+                var selectedItem = me.get("selectedItem");
+                
+				result.forEach(function (r) {
+					
+					//widget에서 선택한 workStatus가 있는 경우 처리
+					if(UT.isNotEmpty(selectedItem) && r.main_task_uuid === selectedItem.main_task_uuid){
+						r.selectedIndex = " on";
+					}else{
+						r.selectedIndex = "";
+					}
+					var all = new BigNumber(r.delay_tot_cnt || 0).add(new BigNumber(r.immnt_tot_cnt || 0)).add(new BigNumber(r.norm_tot_cnt || 0)).toFixed();
+					
+					r.red = {};        // 지연
+					r.orange = {};     // 임박(경고)
+					r.green = {};      // 일반
+					r.taskCount = all; // 전체 카운트 설정
+					
+					if(all == 0){
+						r.red.left = "0";
+						r.orange.left = "0";
+						r.green.left = "0";
+						r.red.width = "0%";
+						r.orange.width = "0%";
+						r.green.width = "0%";
+						return;
+					}
+					
+					var redRate = new BigNumber((new BigNumber(r.delay_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var orangeRate = new BigNumber((new BigNumber(r.immnt_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var redAndOrangeRate = redRate.plus(orangeRate);
+					var greenRate = (r.norm_tot_cnt === 0) ? new BigNumber(0) : (new BigNumber(100)).minus(redAndOrangeRate);
+					
+					r.red.left = "0%";
+					r.red.width = redRate.toFixed() + "%";
+					
+					r.orange.left = redRate.toFixed() + "%";
+					r.orange.width = orangeRate.toFixed() + "%";
+					
+					r.green.left = redAndOrangeRate.toFixed() + "%";
+					r.green.width = greenRate.toFixed() + "%";
+				});
+				
+				me.set("mainTaskList", result);
+			},
+			
+			isLastIndex : function(index){
+				return ((this.mainTaskList.length -1) == index);
+			},
+			
+			getIconClass : function(index){
+				return "wicon_" + (index + 1);
+			},
+			
+			getStatusCount: function (count) {
+                return count ? count: 0;
+			},
+			
+			convertTitle: function(item, type) {
+				var me = this,
+					//title = (UT.isNotEmpty(item.display_main_task_nm)) ? "[" + item.display_main_task_nm + "] " : "";
+					title = "";
+				if(type === "delay") {
+					title += me.translate("Delay") + " : " + item.delay_tot_cnt;
+				} else if(type === "imminent") {
+					title += me.translate("Imminent") + " : " + item.immnt_tot_cnt;
+				} else if(type === "normal") {
+					title += me.translate("Normal") + " : " + item.norm_tot_cnt;
+				}
+				return title;
+			},
+			convertFlowTypClass: function(item) {
+				if(UT.isNotEmpty(item)) {
+					return "arrowM_" + item.flow_typ_cd || 4;
+				}
+				return "";
+			},
+			convertTickTitClass : function(taskInfo) {
+				if(UT.isNotEmpty(taskInfo)) {
+					if(taskInfo.delay_yn == "Y") {
+						return "text_delay";
+					} else if(taskInfo.immnt_yn == "Y") {
+						return "text_imminent";
+					} else if(taskInfo.new_yn == "Y") {
+						return "new";
+					}
+					return "";
+				}
+			},
+			convertTaskCardClass : function(mainWork) {
+				var delayTotCnt = new BigNumber(mainWork.delay_tot_cnt || 0);
+				var normTotCnt = new BigNumber(mainWork.norm_tot_cnt || 0);
+				var immntTotCnt = new BigNumber(mainWork.immnt_tot_cnt || 0);
+				var totCnt = delayTotCnt + normTotCnt + immntTotCnt;
+				
+				if(totCnt == 0) {
+					return "disable";
+				} else if(delayTotCnt.gte(normTotCnt) && delayTotCnt.gte(immntTotCnt)) {
+					return "delay";
+				} else if(normTotCnt.gte(delayTotCnt) && normTotCnt.gte(immntTotCnt)) {
+					return "normal";
+				} else if(immntTotCnt.gte(delayTotCnt) && immntTotCnt.gte(normTotCnt)) {
+					return "imminent";
+				}
+			},
+			onClickDetailTask : function(e) {
+				var me = this,
+					target = e.target,
+					menuCd = target.dataset.menuCd,
+					taskUuid = target.dataset.taskUuid;
+				var datSrcLogicNm = target.dataset.datSrcLogicNm;
+				
+				if(UT.isNotEmpty(menuCd) && UT.isNotEmpty(taskUuid)) {
+					var data = { menu_cd : menuCd, task_uuid : taskUuid,dat_src_logic_nm : datSrcLogicNm};
+					me.createTaskModule(menuCd, data);
+					// var data = { menu_cd : menuCd, task_uuid : taskUuid};
+                    // //상세 조회 화면 호출
+                    // UT.createWindowByMenuId(menuCd, function(module) {
+                    //    // module._beforeRegister(Polymer.CCWorkplaceBehavior);
+                    //    	me._workplaceAppIdByDetailId(module,data);
+                    // });
+				}
+			},
+			_workplaceAppIdByDetailId: function(module,data){
+            	var me = this;
+           		var param = {app_id: data.task_uuid, task_uuid: data.task_uuid};
+				
+				if(data.menu_cd === "PRO10130") {	// 구매요청접수
+					param.prcs_cd = "PR_ITEM";
+				} else if(data.menu_cd === "INV14000") {	// 기성현황
+					var datSrcLogicNm = UT.isString(data.dat_src_logic_nm) ? data.dat_src_logic_nm.toUpperCase() : null;
+					if(datSrcLogicNm.indexOf("ASN") > -1) {			// 기성대기인 경우 AR
+						param.prcs_cd = "ASN";
+					} else if(datSrcLogicNm.indexOf("GR") >  -1) {	// 기성임시저장인 경우 GR
+						param.prcs_cd = "GR";
+					} else {
+						param.prcs_cd = "PO";
+					}
+				}
+           		module.params = param;
+           		module.initialized();
+            },
+			// mdi에서 menu 정보
+			_getMenuInfo: function(menuCd) {
+				var menuInfo = SCMenuManager.getMenuNode(menuCd);
+				return menuInfo;
+			}
+		});
+    </script>
+</dom-module>

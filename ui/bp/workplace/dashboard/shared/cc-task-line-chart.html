@@ -1,0 +1,296 @@
+<!--
+    ******************************************************************************************
+    ** Description     : cc-task-line-chart
+    ** Author          : choijh
+    ******************************************************************************************
+-->
+<dom-module id="cc-task-line-chart">
+    <template>
+        <sc-ajax id="findListTaskStatusCount"
+                 url="findListTaskStatusCount.do"
+                 body="{{searchParam}}">
+        </sc-ajax>
+        <sc-ajax id="findListMainTask"
+        		 url="findListMainTask.do"
+        		 on-response="completefindListMainTask"></sc-ajax>
+
+        <div class="graphTab">
+            <ul on-click="onListClick">
+            	<template id="mainWorkTemplate" is="dom-repeat" items="[[mainTaskList]]" index="index" as="mainTask" on-dom-change="completeCreateMainTask">
+            		<li data-main-task-uuid$="[[mainTask.main_task_uuid]]">
+            			<span>[[translate(mainTask.display_main_task_nm)]]</span>
+            			<template is="dom-if" if="[[!isLastIndex(index)]]">
+            				<span class="bar"></span>
+            			</template>
+           			</li>
+            	</template>
+            	<!-- 
+                <li data-main-task-uuid="WRK_BP01"><span>구매요청</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP03"><span>RFI</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP04"><span>RFx</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP06"><span>역경매</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP07"><span>단가계약</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP08"><span>발주</span><span class="bar"></span></li>
+                <li data-main-task-uuid="WRK_BP09"><span>검수</span></li>
+                 -->
+            </ul>
+        </div>
+		
+		<cc-echart id="taskLineChart" class="flex" style="margin-top: 5px; height:170px"></cc-echart>
+		
+    </template>
+    <script>
+		Polymer({
+			is: "cc-task-line-chart",
+
+			behaviors:[
+				Polymer.SCResizableBehavior,
+                Polymer.CCModuleBehavior
+			],
+
+			listeners:{
+				'sc-resize':'doContentResize'
+			},
+
+			properties: {
+				workIds: {
+					type: Array,
+					value: function () {
+						return [];
+					}
+				},
+				categories: {
+                	type: Array,
+                    value: function () {
+						return [];
+					}
+                },
+                items: {
+					type: Array,
+                    value: function () {
+					    return [];
+                    }
+                },
+				searchParam: {
+					type: Object,
+                    value: function () {
+                        return {};
+					}
+				},
+				mainTaskList : {
+					type : Array,
+					value : function(){
+						return[];
+			   		}
+				},
+				drawReady : {
+					type : Boolean,
+					value : false
+				},
+				taskLineChartOptions : {
+					type : Object,
+					value : function() {
+						return {
+							tooltip: {
+								trigger: 'axis',
+								axisPointer: {
+									type: 'shadow'
+								}
+							},
+							legend: {
+								top : 0
+							},
+							xAxis: {
+								type : 'category',
+								data : [],
+								axisLabel: {
+									rotate: 0,
+									interval: 0
+								}
+							},
+							yAxis: {
+								type: 'value',
+								scale: 2
+							},
+							series: [{
+								type : 'line',
+								name: I18N.translate("지연"),
+								seriesIndex: 0,
+								id : 'delay',
+								color : '#EB7575',
+								data : [],
+								animation : true,
+							}, {
+								type : 'line',
+								name: I18N.translate("임박"),
+								seriesIndex: 1,
+								id : 'immnt',
+								color : '#F5BC5F',
+								data : [],
+								animation : true,
+							}, {
+								type : 'line',
+								name: I18N.translate("정상"),
+								seriesIndex: 2,
+								id : 'norm',
+								color :'#72B0EA',
+								data : [],
+								animation : true,
+							}, {
+								type : 'line',
+								name: I18N.translate("합계"),
+								seriesIndex: 3,
+								id : 'all',
+								color : '#434348',
+								data : [],
+								animation : true,
+							}],
+						}
+					}
+				}
+			},
+
+			doContentResize: function(){
+				var me = this;
+				/*if(me.chartMain && me.isVisible(true)){
+					me.chartMain.resize();
+				}*/
+			},
+			initialized: function() {
+				var me = this;
+				// 권한이 있는 Main Work를 조회
+				UT.request(me.$.findListMainTask);
+			},
+			
+			completefindListMainTask: function (e, res) {
+				var me = this;
+                var result = res.response;
+                me.set("mainTaskList", result); // dom-repeat 데이터 셋팅 (상단 TAB)
+			},
+			
+			completeCreateMainTask : function(){
+				if(this.isInitialized){
+					// 상단 TAB이 그려진 후 차트를 그림
+					this.set("drawReady", true);
+					this.load();
+				}
+			},
+
+            refresh: function () {
+				var me = this;
+				me.load();
+			},
+			
+            load: function (param) {
+				var me = this;
+				var mainTaskUuid = null,
+					seriesStatus = UT.isNotEmpty(param) && UT.isNotEmpty(param.seriesStatus) ? param.seriesStatus : null;
+				
+				if(UT.isEmpty(param) || UT.isEmpty(param.main_task_uuid)) {
+					if(UT.isNotEmpty(me.querySelector(".graphTab > ul > li"))) {
+						mainTaskUuid = me.querySelector(".graphTab > ul > li").dataset.mainTaskUuid;
+					} else if(UT.isNotEmpty(me.get("mainTaskList"))) {
+						// 조회된 main work는 존재하나 아직 tab이 생성되지 않은 경우
+						me.async(function() {
+		                    me.load();
+		                }, 100);
+					}
+				} else {
+					mainTaskUuid = param.main_task_uuid;
+				}
+				
+				if(UT.isNotEmpty(mainTaskUuid)) {
+					// 상단 Tab 변경
+	                var after = me.querySelector("li[data-main-task-uuid='"+mainTaskUuid+"']");
+					if(after) {
+						var before = me.querySelector("li.on");
+						if(before) {
+							before.classList.remove("on");
+						}
+						after.classList.add("on");
+					}
+					
+					me.set("searchParam", {"main_task_uuid": mainTaskUuid});
+					UT.request(me.$.findListTaskStatusCount, function(e, res) {
+						var result = res.response;
+						
+						if(result && result.length) {
+							var taskStsUuids = [], categories = [], delayTotCnt = [], immntTotCnt = [], normTotCnt = [], allTotCnt = [];
+							for(var i=0; i<result.length; i++) {
+								var taskStatus = result[i];
+								taskStsUuids.push(taskStatus["task_sts_uuid"]);
+								categories.push(taskStatus["display_task_sts_nm"]);
+								delayTotCnt.push(taskStatus["delay_tot_cnt"]);
+								immntTotCnt.push(taskStatus["immnt_tot_cnt"]);
+								normTotCnt.push(taskStatus["norm_tot_cnt"]);
+								allTotCnt.push(taskStatus["delay_tot_cnt"] + taskStatus["immnt_tot_cnt"] + taskStatus["norm_tot_cnt"]);
+							}
+							
+							me.set("taskStsUuids", taskStsUuids);
+							me.set("taskLineChartOptions.xAxis.data", categories);
+							me.set("items", [delayTotCnt, immntTotCnt, normTotCnt, allTotCnt]);
+							
+							me.drawChart();
+							
+							/*
+							if(me.$.taskLineChart.chartContainer() && UT.isNotEmpty(seriesStatus)) {
+								var model = me.$.taskLineChart.chartContainer;
+								model.series().forEach(function(s, index) {
+									s.setVisible(seriesIndex == index);
+								});
+							}
+							*/
+						}
+					});
+				}
+			},
+
+            drawChart: function() {
+				var me = this;
+				var option = me.taskLineChartOptions;
+				option.series.forEach(function(series, index) {
+					series.data = UT.isEmpty(me.items[index]) ? [] : me.items[index];
+				});
+				
+				var echart = me.$.taskLineChart.generateChart(option);
+				echart.on("click", function(item) {
+					var param = {
+						value: item.data,
+						categoryIdx: item.dataIndex,
+						main_task_uuid: me.searchParam.main_task_uuid,
+						display_main_task_nm: me.querySelector(".graphTab > ul > li.on > span:not(.bar)").innerText,
+						category: item.name,
+						label: item.name,
+						seriesIndex: item.seriesIndex,
+						seriesStatus: "series_" + item.seriesId,
+						taskStatusList: [{task_sts_uuid: me.taskStsUuids[item.dataIndex], display_task_sts_nm: me.taskLineChartOptions.xAxis.data[item.dataIndex]}],
+					};
+					
+					if("series_" + item.seriesId === "all") {
+						delete param.seriesIndex;
+						delete param.seriesStatus;
+					}
+					me.onItemClicked(param);
+				});
+			},
+
+			onItemClicked: function (param) {
+                var me = this;
+                me.fire("item-click", param);
+			},
+			
+			isLastIndex : function(index){
+				return ((this.mainTaskList.length -1) == index);
+			},
+
+			onListClick: function (e) {
+				var me = this;
+
+                if(e.target.nodeName === "LI" && e.target.dataset.mainTaskUuid) {
+					me.load({main_task_uuid: e.target.dataset.mainTaskUuid});
+					me.fire("item-click", {main_task_uuid: e.target.dataset.mainTaskUuid, display_main_task_nm: e.target.querySelector("span:not(.bar)").innerText});
+                }
+			}
+		});
+    </script>
+</dom-module>

@@ -1,0 +1,335 @@
+<sc-link rel="import" href="es-vendor-management-group-evaltr-list.html"></sc-link>  <!-- 협력사관리그룹 담당자 탭 -->
+
+<dom-module id="es-vendor-management-group-list">
+<!-- 
+/**
+ *
+ *	@description : 협력사 > 온보딩평가 설정 > 협력사관리그룹 > 협력사관리그룹 목록
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 콤보 목록 조회 서비스 그룹 -->
+        <sc-request-group init>
+            <sc-code-group id="codes">
+                <!-- 협력사관리그룹 공통코드콤보 조회 -->
+                <sc-code code="E901" value="{{codes.vmgTypCcd}}" ></sc-code>
+            </sc-code-group>
+            <!-- 사용대상 협력사관리유형 공통코드콤보 조회 -->
+			<sc-ajax
+				id="findListVmtUsing"
+				url="findListVmtUsing.do"
+				last-response="{{codes.vmtCcd}}">
+			</sc-ajax>
+        </sc-request-group>
+    
+        <!-- 협력사관리그룹 목록 조회 -->
+        <sc-ajax 
+            id="findListVmg"
+            url="findListVmg.do"
+            body="{{searchParam}}"
+            last-response="{{vmgList}}">
+        </sc-ajax>
+        
+        <!-- 협력사관리그룹 목록 삭제 -->
+        <sc-ajax 
+            id="deleteListVmg"
+            url="deleteListVmg.do"
+            on-response="onDeleteResultHandler">
+        </sc-ajax>
+        
+        <!-- 협력사관리그룹 목록 저장 -->
+        <sc-ajax 
+            id="saveListVmg"
+            url="saveListVmg.do"
+            on-response="onSaveResultHandler">
+        </sc-ajax>
+        
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <cc-search-condition-panel on-search="onSearchVmg" search-condition-cls="label-row" validation-group="search">
+            <cc-fieldset>
+                <sc-label text="협력사관리유형"></sc-label>
+                <sc-combobox-field value="{{searchParam.vmt_ccd}}" items="{{codes.vmtCcd}}" display-field="vmt_nm" value-field="vmt_ccd" placeholder="전체">
+                </sc-combobox-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="소싱그룹 코드"></sc-label>
+                <sc-text-field value="{{searchParam.vmg_cd}}" max-length="18" on-enter="onSearchVmg" ></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="소싱그룹 명"></sc-label>
+                <sc-text-field value="{{searchParam.vmg_nm}}" max-length="100" on-enter="onSearchVmg" ></sc-text-field>
+            </cc-fieldset>
+        </cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="true" selection-able-function="isGridSelectionable" validation-group="list"
+                 on-item-edit-end="onItemEditEnd" on-item-click="onDataCellClicked"
+                 data-provider="{{vmgList}}">
+            <cc-grid-toolbar>
+                <sc-button text="추가" on-click="onAddRow" auth-s></sc-button>
+                <sc-button text="삭제" on-click="onDeleteVmg" auth-s></sc-button>
+                <sc-button text="저장" on-click="onSaveVmg" auth-s></sc-button>
+            </cc-grid-toolbar>
+            <sc-grid-columns>
+                <!--<sc-combobox-column	data-field="vmg_typ_ccd"		header-text="협력사관리그룹 유형"	width="150"	item-editable-function="isItemEditable"	required="true"
+                                    items="{{codes.vmgTypCcd}}"		display-field="label"				value-field="data"></sc-combobox-column>-->
+                <sc-combobox-column	data-field="vmt_ccd"			header-text="협력사관리유형"			width="120"	editable="true"	required="true"
+                                    items="{{codes.vmtCcd}}"		display-field="vmt_nm"				value-field="vmt_ccd"></sc-combobox-column>
+				<sc-data-column	data-field="vmg_cd"				header-text="소싱그룹 코드"        width="150"	text-align="left"	editable="false"
+								style-name="link"></sc-data-column>
+                <sc-data-column		data-field="vmg_nm"		header-text="소싱그룹 명"		width="150"	max-length="100"	item-editable-function="isItemEditable" required="true" text-align="left"></sc-data-column>
+                <sc-data-column		data-field="vmg_nm_en"	header-text="소싱그룹 명 영문"	width="180"	max-length="100"	item-editable-function="isItemEditable" text-align="left"></sc-data-column>
+                <sc-data-column		data-field="sort"		header-text="정렬"					width="60"	editable="true"		text-align="center"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field	data-field="ten_id"></sc-grid-field>
+                <sc-grid-field	data-field="vmg_uuid"></sc-grid-field>
+                <sc-grid-field	data-field="vmt_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-vendor-management-group-list",
+            properties: {
+                codes: {
+                    type: Object,
+                    value:  function(){
+                        return {
+                            vmtCcd: [],
+                            vmgTypCcd: []
+                        };
+                    },
+                    reset: false
+                },
+                searchParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                vmgList:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                }
+            },
+
+            initialized: function(){
+                this.onSearchVmg();
+            },
+
+            isItemEditable: function(data, item){
+                var me = this,
+                    provider = me.$.gridPanel.getDataProvider();
+
+                if(item.dataField === "vmg_nm" || item.dataField === "vmg_nm_en"){
+					/* 운영조직 미매핑 상태인 협력사관리그룹 만 수정 가능 --> SG content 쪽에 적용*/
+					// (New) 신규 추가 된 SG 만 그리드에서 Name 수정 가능 그 외는 information 탭에서 수정 가능
+					return provider.getItemState(item.rowIndex) === "created";
+                }
+            },
+            onImageChange : function(data, item) {
+                if(data["vmg_typ_ccd"] == 'SG' && (UT.isEmpty(data['vmg_uuid']) || data['vmg_uuid'] == '')){
+                    return "search";  // '소싱그룹' && 신규,
+                } else {
+                    return null;
+                }
+            },
+			/* 운영조직에 미매핑 상태인 협력사관리그룹 만 수정 가능 */
+            isGridSelectionable: function(data){
+                return data['vmg_oorg_using_yn'] != 'Y' ;  // 미사용 여부 체크
+            },
+
+            onItemEditEnd: function(event){
+                var me = this,
+                    item = event.detail.item,
+                    data = event.detail.data,
+                    dataField = item.dataField,
+                    provider = event.detail.provider;
+
+                if(!UT.isEmpty(data.vmt_ccd)
+                    && (dataField == "vmt_ccd" || dataField == "vmg_typ_ccd")) {
+                    var filteredVmtCcd = me.codes.vmtCcd.filter(function(item){
+                        if(item.vmt_ccd == data.vmt_ccd){
+                            return item;
+                        }
+                    });
+
+					if(provider.getItemState(item.rowIndex) == "created"){
+						if(data["vmg_typ_ccd"] == "VD_MGMT_TYP"){  // 협력사관리그룹 유형이 '협력사관리유형'인 경우, 협력사관리유형 코드 자동셋팅
+							provider.setItemAt(item.rowIndex, {vmt_uuid : filteredVmtCcd[0].vmt_uuid, vmg_cd : filteredVmtCcd[0].vmt_ccd, vmg_nm : filteredVmtCcd[0].vmt_nm, vmg_nm_en : null});
+						}else{
+							provider.setItemAt(item.rowIndex, {vmt_uuid : filteredVmtCcd[0].vmt_uuid, vmg_cd : null, vmg_nm : null, vmg_nm_en : null});
+						}
+					}else{
+						provider.setItemAt(item.rowIndex, {vmt_uuid : filteredVmtCcd[0].vmt_uuid});
+					}
+                }
+            },
+			
+            onDataCellClicked: function(event) {
+                var me = this;
+                var data = event.detail.data,
+                    item = event.detail.item,
+                    dataField = item.dataField;
+                var grid = me.$.gridPanel;
+                var provider = grid.getDataProvider();
+				
+				if(dataField === "vmg_cd" && !UT.isEmpty(data.vmg_uuid)) {
+					grid.selectionCheckAll(false); // 체크된 모든 아이템 체크 해제
+					me.fire('selected-sg', data);
+				}
+            },
+
+            /**
+             * 협력사관리그룹 목록 조회
+             */
+            onSearchVmg: function() {
+                var me = this;
+
+                if(!me.validate("search")) {
+                    return;
+                }
+
+                // 그리드 조회
+                UT.request(me.$.findListVmg);
+				
+				me.fire('clear-tab');
+            },
+			
+			/**
+             * 소싱그룹 상세정보/매핑정보 저장후 재조회(사용자정보유지)
+             */
+			onSearchAfterSaveDetail : function() {
+				const me = this;
+				
+				me.set("searchParam", null);
+				
+				me.onSearchVmg();
+			},
+
+            /**
+             * 협력사관리그룹 row 추가
+             */
+            onAddRow: function() {
+                var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+
+				provider.addItemAt(0, {});
+				me.fire('clear-tab');
+            },
+
+            /**
+             * 협력사관리그룹 목록 저장
+             */
+            onSaveVmg: function() {
+                var me = this,
+                    message = "STD.N1200", // 저장 하시겠습니까?
+                    provider = this.$.gridPanel.getDataProvider();
+
+                if(!me.validate("list")) {
+                    UT.alert("STD.E0000");
+                    return;
+                }
+
+                var newItems = provider.getNewItems();
+                var updateItems = provider.getUpdateItems();
+
+                if(newItems.length === 0 && updateItems.length === 0){
+                    return UT.alert("STD.N1700");
+                }
+
+                UT.confirm(message, function() {
+                    me.$.saveListVmg.body = {
+                        insertList: newItems,
+                        updateList: updateItems
+                    };
+                    UT.request(me.$.saveListVmg);
+                });
+            },
+            
+            /**
+             * 협력사관리그룹 목록 저장 callback
+             */
+            onSaveResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+                
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+                    UT.completeAlert("저장", function(){
+                        me.onSearchVmg();
+                    });
+                } else{
+                    var validResultTyp = result.resultData.valid_result_typ;
+                    var validDataMap = result.resultData.validDataMap;
+
+                    var filteredVmtCcd = me.codes.vmtCcd.filter(function(item){
+                        if(item.vmt_ccd == validDataMap.vmt_ccd){
+                            return item;
+                        }
+                    });
+
+                    var msg;
+                    //if(validResultTyp == "SAME_SG_EXIST"){
+                        // 협력사관리그룹에 '{0}' 은 이미 등록된 소싱그룹입니다.
+                        msg = this.translate("STD.VS1312", null, validDataMap.vmg_nm);
+                    //}
+                    UT.alert(msg, null, true);
+                }
+            },
+
+            /**
+             * 협력사관리그룹 목록 삭제
+             */
+            onDeleteVmg: function() {
+                var me = this,
+                    message = "STD.N1300", // 삭제 하시겠습니까?
+                    provider = this.$.gridPanel.getDataProvider();
+
+                var checked = provider.selectionCheckedItems();
+                if (checked && checked.length > 0) {
+                    UT.confirm(message, function() {
+						me.$.deleteListVmg.body = {
+							deleteList: checked
+						};
+						UT.request(me.$.deleteListVmg);
+                    });
+                }
+                else{
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                }
+            },
+
+            /**
+             * 협력사관리그룹 목록 삭제 callback
+             */
+            onDeleteResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+				var provider = this.$.gridPanel.getDataProvider();
+
+                if(UT.isNotEmpty(result)){
+					if(result.resultStatus == "U") {
+						//사용 중인 소싱그룹은 삭제할 수 없습니다.
+						UT.alert("STD.SRM1094");
+					} else if(result.resultStatus == "S") {
+						UT.completeAlert("삭제", function(){
+							provider.removeItems(true, true);
+							me.onSearchVmg();
+						});
+					}
+                }//end if(UT.isNotEmpty(result))
+            }
+        });
+    </script>
+
+</dom-module>

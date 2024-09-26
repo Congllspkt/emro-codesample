@@ -1,0 +1,243 @@
+<sc-link rel="import" href="./popup/ep-sp-appform-file.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-sp-appform-detail.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-sp-checkedsigncommon.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-sp-preview-pdf.html"></sc-link>
+
+<dom-module id="es-sp-edoc-template">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 계약서 정보 조회 -->
+		<sc-ajax id="findEcontract"
+				 url="findEcontract.do"
+				 body="{{searchParam}}"
+				 on-response="completeDataSetting"></sc-ajax>
+		<!-- 첨부서류 조회 -->
+		<sc-ajax id="searchAtt"
+				 url="searchAtt.do"
+				 on-response="completeSearchAtt"></sc-ajax>
+				
+		<!-- 공통코드 조회 -->
+		<sc-code-group>
+			<sc-code code="D004" value="{{codes.cntr_appx_typ_ccd}}"></sc-code>
+			<sc-code code="D005" value="{{codes.cntr_appx_crtr_typ_ccd}}"></sc-code>
+			<sc-code code="D007" value="{{codes.cntr_appx_sts_ccd}}"></sc-code>
+		</sc-code-group>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-6">
+				<!-- 계약서내용 (html) -->
+				<sc-container class="vbox flex">
+					<iframe id="cntrContHtml" class="flex" style="width:100%"></iframe>
+				</sc-container>
+			</div>
+
+			<div class="hspace-5"></div>
+
+			<div class="vbox flex-4">
+				<cc-sub-title-bar title-text="부속서류"></cc-sub-title-bar>
+				<sc-grid id="gridViewAttach" class="flex" use-selection="false" use-state="false" on-item-click="onAttachItemClick">
+					<cc-grid-toolbar></cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="cntr_appx_nm" header-text="부속서류 명" width="200" text-align="left" style-name="link"></sc-data-column>
+						<sc-combobox-column data-field="cntr_appx_sts_ccd" header-text="상태" width="80" text-align="center" display-field="label" value-field="data" items="{{codes.cntr_appx_sts_ccd}}"></sc-combobox-column>
+						<sc-combobox-column data-field="cntr_appx_typ_ccd" header-text="유형" width="80" text-align="center" display-field="label" value-field="data" items="{{codes.cntr_appx_typ_ccd}}"></sc-combobox-column>
+						<sc-combobox-column data-field="cntr_appx_crtr_typ_ccd" header-text="작성자 유형" width="80" text-align="center" display-field="label" value-field="data" items="{{codes.cntr_appx_crtr_typ_ccd}}"></sc-combobox-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-data-column data-field="cntr_appx_uuid"></sc-data-column>
+						<sc-data-column data-field="athg_uuid"></sc-data-column>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+		</div>
+	</template>
+	
+	<!-- 스크립트 -->
+	<script>
+		Polymer({
+			is: 'es-sp-edoc-template',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							cntr_appx_typ_ccd: [],
+							cntr_appx_crtr_typ_ccd: [],
+							cntr_appx_sts_ccd: []
+						};
+					}
+				}
+			},
+
+			formulas: {
+				//계약서 변경 가능 상태
+				cntrModifyAbleState: function () {
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					return (sts == "SND" || sts == "APPX_REQ" || sts == "APPX_RET");
+				}
+			},
+
+			load: function(param) {
+				var me = this;
+				me.set("searchParam", param);
+				me.set("cntrInfo", param);
+				UT.request(me.$.findEcontract);
+			},
+			
+			completeDataSetting: function (e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.$.cntrContHtml.contentDocument.body.innerHTML = result.cntrCont;
+				me.$.gridViewAttach.setDataProvider(result.appFormList);
+				
+				me.applyFormula();
+			},
+
+			//첨부서류 GRID click event hanlder
+			onAttachItemClick: function (e) {
+				var me = this;
+				var data = e.detail.data;
+				var fieldName = e.detail.item.dataField;
+				var provider = e.detail.provider;
+				
+				if (fieldName === "cntr_appx_nm") {
+					// Y : 입력완료 / N : 입력 대기
+					(data.cntr_appx_sts_ccd === "Y") ? inputComplete() : nonInputComplete();
+
+					// 입력완료 일 경우
+					function inputComplete() {
+						// 갑 첨부
+						if(data.cntr_appx_crtr_typ_ccd === "BUYER") {
+							data.pageStatus = "view";
+							
+							if (data.cntr_appx_typ_ccd === "TXT") {
+								me.popupText(data);
+							} else if (data.cntr_appx_typ_ccd === "FILE" || data.cntr_appx_typ_ccd === "FILE_LIST") {
+								me.popupFile(data);
+							}
+						}
+						// 을 첨부
+						else if(data.cntr_appx_crtr_typ_ccd === "VD") {
+							if (data.cntr_appx_typ_ccd === "TXT") {
+								//계약서 변경 가능 상태 (VD_RCPT_CONFM : 업체수신확인, RET : 협력사반려, SND : 발송)
+								data.pageStatus = me.formula('cntrModifyAbleState') ? "mod" : "view";
+								me.popupText(data);
+							} else if (data.cntr_appx_typ_ccd === "FILE" || data.cntr_appx_typ_ccd === "FILE_LIST") {
+								data.pageStatus = me.formula('cntrModifyAbleState') ? "edit" : "view";
+								me.popupFile(data);
+							}
+						}
+					}
+
+					// 입력대기 일 경우
+					function nonInputComplete() {
+						if(data.cntr_appx_typ_ccd === "TXT") {
+							data.pageStatus = data.cntr_appx_crtr_typ_ccd === "BUYER" ? "view" : "reg";
+							me.popupText(data);
+							
+						} else if(data.cntr_appx_typ_ccd === "FILE" || data.cntr_appx_typ_ccd === "FILE_LIST") {
+							data.pageStatus = data.cntr_appx_crtr_typ_ccd === "BUYER" ? "view" : "edit";
+							me.popupFile(data);
+						}
+					}
+				}
+			},
+
+			popupFile: function (data) {
+				var me = this;
+				var appFormFilePopup = UT.popup("ep-sp-appform-file", me, "50%", "40%", {
+					"close": function (popup, e) {
+						me.searchAtt();
+					}
+				});
+
+				data.athg_uuid = data.athg_uuid;
+				data.manager = "Y";
+				
+				appFormFilePopup.show();
+				appFormFilePopup.getWindowContent().load(data, data.pageStatus);
+			},
+
+			popupText: function (data) {
+				var me = this;
+				var appFormDetailPopup = UT.popup("ep-sp-appform-detail", me, "70%", "60%", {
+					"close": function (popup, e) {
+						me.searchAtt();
+					}
+				});
+				
+  				appFormDetailPopup.show();
+				appFormDetailPopup.getWindowContent().load(data);
+			},
+
+			// 첨부서식만 검색
+			searchAtt: function () {
+				var me = this;
+				me.$.searchAtt.body = me.searchParam;
+				UT.request(me.$.searchAtt);
+			},
+
+			// 첨부서식 검색 callback
+			completeSearchAtt: function (e, res) {
+				var me = this;
+				var result = res.response;
+				me.$.gridViewAttach.setDataProvider(result);
+			},
+			
+			// 부속서류 유효성 검증
+			validateOnSaveAppx: function() {
+				var me = this;				
+				var aProvider = me.$.gridViewAttach.getDataProvider();
+				var aData = aProvider.getItems();
+				
+				for(var i = 0; i < aData.length; i++) {
+					if(aData[i].cntr_appx_crtr_typ_ccd === "VD" && aData[i].cntr_appx_sts_ccd === "N") {
+						UT.alert("STD.EDO1004"); // 입력되지 않은 첨부서류가 있습니다.
+						return false;
+					}
+				}
+				return true;
+			},
+			
+			// 서명 확인
+			onConfirmSign: function () {
+				var me = this;
+				var popup = UT.popup("ep-sp-checkedsigncommon", me, "800", "350",{});
+				popup.show();
+				popup.getWindowContent().load(me.get("cntrInfo"));
+			},
+			
+			// PDF 미리보기
+			onPreviewPdf: function() {
+				var me = this;
+				var previewPdfPopup = UT.popup("ep-sp-preview-pdf", me, "1400", "750", {});
+				previewPdfPopup.show();
+				previewPdfPopup.getWindowContent().load(me.get("cntrInfo"));
+			},
+			
+			clear: function() {
+				var me = this;
+				me.$.cntrContHtml.contentDocument.body.innerHTML = "";
+			}
+		});
+	</script>
+</dom-module>

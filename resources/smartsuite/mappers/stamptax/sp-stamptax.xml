@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-stamptax">
+	<select id="searchListStampTax" resultType="map">
+	/* sp-stamptax.searchListStampTax : 인지세 현황 조회 */
+		SELECT CNTR.OORG_CD
+			, CNTR.CNTR_UUID
+			, CNTR.CNTR_NO
+			, CNTR.CNTR_DT
+			, CNTR.CNTR_REVNO
+			, CNTR.CNTR_NM
+			, CNTR.CNTR_AMT
+			, CNTR.CNTR_STS_CCD
+			, CNTRR.VD_CD
+			, CNTRR.CNTRR_TYP_CCD
+			, CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+			, VD.ERP_VD_CD
+			, VD.BIZREGNO
+			, STAX.STAX_UUID
+			, STAX.STTPYMT_AMT
+			, STAX.STTPYMT_STS_CCD
+		    , STAX.STTPYMTMETH_CCD
+			, STAX.STTPYMT_RO
+			, STAX.STTPYMT_AMT
+			, STAX.STAX_AMT
+		FROM CNTR CNTR
+	   INNER JOIN CNTRR CNTRR
+	      ON CNTR.TEN_ID = CNTRR.TEN_ID
+	     AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+	   INNER JOIN STAX STAX
+	      ON STAX.TEN_ID = CNTRR.TEN_ID
+	     AND STAX.CNTR_UUID = CNTRR.CNTR_UUID
+	     AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   INNER JOIN VD VD
+		  ON VD.TEN_ID = CNTR.TEN_ID
+	     AND VD.VD_CD  = CNTR.VD_CD
+	   WHERE CNTR.TEN_ID = #{g.tenant}
+		 AND CNTR.VD_CD = #{g.vd_cd}
+		 AND COALESCE(STAX.STTPYMT_RO,0) &gt; 0
+	    <if test="p.cntr_no != null and p.cntr_no != ''">
+		    <bind name="cntr_no" value="'%'+p.cntr_no+'%'"/>
+		    AND UPPER(CNTR.CNTR_NO) LIKE UPPER(#{cntr_no})
+	    </if>
+	    <if test="p.cntr_from_date != null and p.cntr_from_date">
+		    AND CNTR.CNTR_DT &gt;= #{p.cntr_from_date}
+	    </if>
+	    <if test="p.cntr_to_date != null and p.cntr_to_date">
+		    AND CNTR.CNTR_DT <![CDATA[<=]]> #{p.cntr_to_date}
+	    </if>
+	    <if test="p.sttpymt_sts_ccd != null and p.sttpymt_sts_ccd != ''">
+	        AND STAX.STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+	    </if>
+		<if test="p.sttpymt_meth_ccd != null and p.sttpymt_meth_ccd != ''">
+			AND STAX.STTPYMTMETH_CCD = #{p.sttpymt_meth_ccd}
+	    </if>
+		<if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+			AND CNTR.OORG_CD IN
+			<foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+				#{oorg_cd}
+			</foreach>
+		</if>
+	    ORDER BY CNTR.CNTR_NO DESC, CNTR.CNTR_REVNO DESC
+    </select>
+	<select id="findOfflStampTaxInfo" resultType="map">
+	/* sp-stamptax.findOfflStampTaxInfo : 오프라인 인지세 정보 조회 */
+		SELECT CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+			 , CNTR.CNTR_STS_CCD
+			 , STAX.STAX_UUID
+			 , STAX.STTPYMT_NO
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT
+			 , STAX.STTPYMT_STS_CCD
+			 , STAX.STTPYMTMETH_CCD
+			 , STAX.STTPYMT_RO
+			 , STAX.STTPYMT_ATHG_UUID
+			 , CNTRR.CNTRR_TYP_CCD
+		 FROM CNTR CNTR
+	    INNER JOIN CNTRR CNTRR
+           ON CNTRR.TEN_ID = CNTR.TEN_ID
+          AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+          AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+	    INNER JOIN STAX STAX
+           ON STAX.TEN_ID = CNTRR.TEN_ID
+          AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+		WHERE STAX.TEN_ID = #{g.tenant}
+		  AND STAX.STAX_UUID = #{p.stax_uuid}
+	</select>
+	<update id="saveStampTaxFile">
+	/* sp-stamptax.saveStampTaxFile : 오프라인 인지세 파일 저장 */
+		UPDATE STAX
+		SET STTPYMT_NO = #{p.sttpymt_no}
+		  , STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+		  , STTPYMT_AMT = #{p.sttpymt_amt}
+		  , STTPYMT_ATHG_UUID = #{p.sttpymt_athg_uuid}
+		  , STS = 'U'
+		  , MOD_DTTM = #{g.now}
+		  , MODR_ID = #{g.username}
+		WHERE TEN_ID = #{g.tenant}
+		  AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<select id="findListStampTaxPayHistory" resultType="map">
+	/* sp-stamptax.findListStampTaxPayHistory : 인지세 납부 이력 조회 */
+		SELECT STAX.TEN_ID
+			 , STAX.STAX_UUID
+			 , STAX.CNTR_UUID
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT 	        /* 납부한 금액 */
+			 , STAX.STAX_REFUND_AMT         /* 환불받은 금액 */
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_NM
+			 , CNTR.CNTR_AMT
+			 , USR.USR_NM
+			 , CNTRR.CNTRR_TYP_CCD
+		  FROM STAX STAX
+         INNER JOIN CNTR CNTR
+            ON STAX.TEN_ID = CNTR.TEN_ID
+	       AND STAX.CNTR_UUID = CNTR.CNTR_UUID
+         INNER JOIN CNTRR CNTRR
+            ON CNTR.TEN_ID = CNTRR.TEN_ID
+	       AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+	       AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+          LEFT JOIN USR USR
+            ON CNTRR.TEN_ID = USR.TEN_ID
+	       AND CNTRR.USR_ID = USR.USR_ID
+		 WHERE STAX.TEN_ID = #{g.tenant}
+		   AND CNTR.CNTR_NO = (SELECT C.CNTR_NO FROM CNTR C WHERE C.TEN_ID = #{g.tenant} AND C.CNTR_UUID = #{p.cntr_uuid})
+		   AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+		 ORDER BY CNTR.CNTR_NO, CNTR.CNTR_REVNO
+	</select>
+	<select id="findStampTax" resultType="map">
+		/* sp-stamptax.findStampTax : 인지세 정보 조회*/
+		SELECT CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+			 , CNTR.CNTR_STS_CCD
+			 , STAX.STAX_UUID
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT
+			 , STAX.STTPYMT_STS_CCD
+			 , STAX.STTPYMTMETH_CCD
+		     , STAX.STTPYMT_RO
+			 , STAX.STTPYMT_ATHG_UUID
+			 , ECNTR.ECNTR_UUID
+			 , CNTRR.CNTRR_UUID
+			 , CNTRR.CNTRR_TYP_CCD
+			 , STAX.STAX_REFUND_AMT
+		FROM CNTR CNTR
+			     LEFT JOIN ECNTR ECNTR
+			               ON ECNTR.TEN_ID = CNTR.TEN_ID
+				               AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+			     INNER JOIN CNTRR CNTRR
+			                ON CNTRR.TEN_ID = CNTR.TEN_ID
+				                AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+				                AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+			     INNER JOIN STAX STAX
+			                ON STAX.TEN_ID = CNTRR.TEN_ID
+				                AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+		WHERE STAX.TEN_ID = #{g.tenant}
+		  AND STAX.STAX_UUID = #{p.stax_uuid}
+	</select>
+	<select id="findMaxStaxCntrRevNoByCntrUuid" resultType="int">
+		/* sp-stamptax.findMaxStaxCntrRevNoByCntrUuid : 계약 최종차수 조회 */
+		SELECT MAX(CNTR_REVNO) AS MAX_CNTR_REVNO
+		FROM CNTR CNTR
+			     INNER JOIN STAX
+			                ON STAX.TEN_ID = CNTR.TEN_ID
+				                AND STAX.CNTR_UUID = CNTR.CNTR_UUID
+				                AND STAX.STS <![CDATA[<>]]> 'D'
+		WHERE CNTR.TEN_ID = #{g.tenant}
+		  AND CNTR.CNTR_NO = (SELECT C.CNTR_NO
+		                      FROM CNTR C
+		                      WHERE C.TEN_ID = #{g.tenant}
+			                    AND C.CNTR_UUID = #{p.cntr_uuid})
+		  AND CNTR.STS <![CDATA[<>]]> 'D'
+	</select>
+	<update id="updateStampTax">
+		/* sp-stmptax.updateStampTax : 인지세 정보 저장*/
+		UPDATE STAX
+		SET MOD_DTTM = #{g.now}
+		, MODR_ID = #{g.username}
+		<if test="p.sttpymt_amt != null and p.sttpymt_amt !=''">
+			, STTPYMT_AMT = #{p.sttpymt_amt}
+		</if>
+		<if test="p.sttpymt_no != null and p.sttpymt_no !=''">
+			, STTPYMT_NO = #{p.sttpymt_no}
+		</if>
+		<if test="p.sttpymt_sts_ccd != null and p.sttpymt_sts_ccd !=''">
+			, STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+		</if>
+		<if test="p.sttpymtmeth_ccd != null and p.sttpymtmeth_ccd !=''">
+			, STTPYMTMETH_CCD = #{p.sttpymtmeth_ccd}
+		</if>
+		<if test="p.sttpymt_athg_uuid != null and p.sttpymt_athg_uuid !=''">
+			, STTPYMT_ATHG_UUID = #{p.sttpymt_athg_uuid}
+		</if>
+		<if test="p.sttpymt_ro != null and p.sttpymt_ro !=''">
+			, STTPYMT_RO = #{p.sttpymt_ro}
+		</if>
+		WHERE TEN_ID = #{g.tenant}
+		AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<update id="saveRefundStampTax">
+		/* stamptax.saveRefundStampTax : 인지세 환불금액 저장 */
+		UPDATE STAX
+		SET STS = 'U'
+		<choose>
+			<when test="p.stax_refund_amt != null and p.stax_refund_amt !=''">
+				, STAX_REFUND_AMT = #{p.stax_refund_amt}
+			</when>
+			<otherwise>
+				, STAX_REFUND_AMT = NULL
+			</otherwise>
+		</choose>
+		WHERE TEN_ID = #{g.tenant}
+		AND STAX_UUID = #{p.stax_uuid}
+	</update>
+</mapper>

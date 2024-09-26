@@ -1,0 +1,629 @@
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sourcing-group">
+	<select id="findListSourcingGroup" resultType="map">
+	/* sourcing-group.findListSourcingGroup : 소싱그룹 목록 조회 */
+		SELECT SG.TEN_ID
+		     , SG.SG_CD
+		     , SG.PAR_SG_CD
+		     , CASE WHEN 'ko_KR' = #{g.locale} THEN SG.SG_NM
+		            ELSE CASE WHEN SG.SG_NM_EN IS NULL OR SG.SG_NM_EN = '' THEN SG.SG_NM ELSE SG.SG_NM_EN END END AS SG_NM
+		     , SG.LVL
+		     , SG.SORT
+		     , SG.ATT_NO
+             , SG.RMK                   /* 비고 */
+             , CASE WHEN LVL = '3' THEN ( SELECT CASE WHEN COUNT(PIC_ID)  &gt; 0 THEN 'Y' ELSE 'N' END
+                                          FROM SG_PIC    /* 소싱그룹담당자 */
+                                         WHERE TEN_ID       = SG.TEN_ID         /* 시스템아이디 */
+                                           AND SG_CD        = SG.SG_CD          /* 소싱그룹코드 */
+                                           AND EVALTR_YN    = 'Y'               /* 평가자여부 */
+                                           AND STS         != 'D'               /* 상태 */
+                                      )
+                    ELSE ''
+               END AS EVALTR_YN          /* 평가자등록여부 */
+             , CASE WHEN LVL = '3' THEN ( SELECT COUNT(PIC_ID) /* 소싱그룹담당자수 */
+                                          FROM SG_PIC  /* 소싱그룹-담당자 */
+                                          WHERE TEN_ID       = SG.TEN_ID         /* 시스템아이디 */
+                                            AND SG_CD        = SG.SG_CD          /* 소싱그룹코드 */
+                                            AND STS         != 'D'               /* 상태 */
+                                      )
+                    ELSE NULLIF(1,1)
+               END AS CHR_CNT        /* 담당자수 */
+             , CASE WHEN LVL = '3' THEN ( SELECT COUNT(OVV.VD_OORG_UUID)
+                                          FROM VD_OORG_VMG OVV      /* OVV : 소싱그룹-협력사 */
+                                         INNER JOIN VD_OORG OV /* VDOG : 운영조직협력사 */
+                                            ON (    OVV.TEN_ID      = OV.TEN_ID       /* 시스템아이디 */
+                                                AND OVV.VD_OORG_UUID = OV.VD_OORG_UUID  /* 운영조직코드 */
+                                               )
+                                         INNER JOIN VMG_OORG VO
+                                            ON (    VO.TEN_ID      = OVV.TEN_ID
+                                                AND VO.VMG_OORG_UUID = OVV.VMG_OORG_UUID
+                                            )
+                                         INNER JOIN VMG
+                                            ON (    VO.TEN_ID      = VMG.TEN_ID
+                                                AND VO.VMG_UUID = VMG.VMG_UUID
+                                            )
+                                         WHERE VMG.TEN_ID        = SG.TEN_ID  /* 시스템아이디 */
+                                           AND VMG.VMG_CD        = SG.SG_CD   /* 소싱그룹코드 */
+                                           AND OVV.STS         != 'D'        /* 상태 */
+                                           AND OV.STS          != 'D'        /* 상태 */
+                                      )
+                    ELSE NULLIF(1,1)
+               END AS VD_CNT                /* 협력사수 */
+             , CASE WHEN LVL = '3' THEN ( SELECT COUNT(*)
+                                          FROM ITEM ITEM /* 품목 운영조직 */
+                                         WHERE ITEM.TEN_ID  = SG.TEN_ID
+                                           AND ITEM.SG_CD   = SG.SG_CD   /* 소싱그룹코드 */
+                                           AND ITEM.STS != 'D' /* 상태 */
+                                      )
+                    ELSE NULLIF(1,1)
+               END AS ITEM_CNT              /* 품목수 */
+		     , (CASE WHEN VMG.VMG_UUID IS NOT NULL  THEN 'Y' ELSE 'N' END) AS VMG_YN      /* 협력사관리그룹 등록 여부 */
+		     , SG.USE_YN
+             , SG.STS
+             , SG.REGR_ID
+             , SG.REG_DTTM
+             , SG.MODR_ID
+             , SG.MOD_DTTM
+          FROM SG SG
+          LEFT OUTER JOIN VMG
+            ON VMG.TEN_ID = SG.TEN_ID
+           AND VMG.VMG_CD = SG.SG_CD
+           AND VMG.STS != 'D'
+         WHERE SG.TEN_ID       = #{g.tenant}      /* 시스템아이디 */
+           AND SG.STS         != 'D'              /* 상태 */
+         ORDER BY SG.SORT , SG.SG_CD
+	</select>
+    <insert id="insertSourcingGroupInfo">
+    /* sourcing-group.insertSourcingGroupInfo : 소싱그룹 신규 생성*/
+        INSERT INTO SG (
+        	TEN_ID
+          , SG_CD
+          , PAR_SG_CD
+          , SG_NM
+          , SG_NM_EN
+          , LVL
+          , SORT
+          , ATT_NO
+          , USE_YN
+          , RMK
+          , STS
+          , REGR_ID
+          , REG_DTTM
+          , MODR_ID
+          , MOD_DTTM
+        ) VALUES (
+               #{g.tenant}           /* 테넌트 아이디 */
+             , #{p.sg_cd}            /* 소싱그룹 코드 */
+             , #{p.par_sg_cd}        /* 상위 소싱그룹 코드 */
+             , #{p.sg_nm}            /* 소싱그룹 명 */
+             , #{p.sg_nm_en}         /* 소싱그룹 영문 명 */
+             , #{p.lvl}              /* 레벨 */
+             , CAST(#{p.sort} AS INTEGER)         /* 정렬 */
+             , #{p.att_no}           /* 첨부파일 */
+             , 'Y'                   /* 사용여부 */
+             , #{p.rmk}              /* 비고 */
+             , 'C'                   /* 상태 */
+             , #{g.username}         /* 등록자아이디 */
+             , #{g.now}              /* 등록일시 */
+             , #{g.username}         /* 수정자아이디 */
+             , #{g.now}              /* 수정일시 */
+        )
+    </insert>
+	<select id="findSourcingGroupInfo" resultType="map">
+    /* sourcing-group.findSourcingGroupInfo : 소싱그룹 상세정보 조회 */
+        SELECT SG.TEN_ID         /* 시스템아이디 */
+             , SG.SG_CD                   /* 소싱그룹코드 */
+             , SG.PAR_SG_CD                /* 상위소싱그룹코드 */
+             , SG.SG_NM               /* 소싱그룹표준명 */
+             , SG.SG_NM_EN            /* 소싱그룹표준영문명 */
+             , SG.LVL                     /* 레벨 */
+             , SG.SORT                /* 정렬 */
+             , SG.USE_YN                  /* 사용여부 */
+             , SG.ATT_NO                  /* 첨부파일그룹코드 */
+             , SG.RMK                     /* 비고 */
+             , SG.STS                     /* 상태 */
+             , ( SELECT COUNT(OVV.VD_OORG_UUID)
+                   FROM VD_OORG_VMG OVV
+                  INNER JOIN VD_OORG OV
+                     ON (    OVV.TEN_ID      = OV.TEN_ID
+                         AND OVV.VD_OORG_UUID = OV.VD_OORG_UUID
+                        )
+                  INNER JOIN VMG_OORG VO
+                             ON (    OVV.TEN_ID      = VO.TEN_ID
+                                 AND OVV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                                 )
+                  INNER JOIN VMG
+                             ON (    VMG.TEN_ID      = VO.TEN_ID
+                                 AND VMG.VMG_UUID = VO.VMG_UUID
+                                 )
+                  WHERE VMG.TEN_ID      = SG.TEN_ID
+                    AND VMG.VMG_CD      = SG.SG_CD   /* 소싱그룹코드 */
+                    AND OVV.STS        != 'D'        /* 상태 */
+                    AND OV.STS         != 'D'        /* 상태 */
+                    AND OV.OBD_TYP_CCD  = 'OFC'        /* 등록유형(OFC:정규) */
+               ) AS VD_CNT                /* 정규협력사수 */
+             , ( SELECT COUNT(OVV.VD_OORG_UUID)
+                   FROM VD_OORG_VMG OVV
+                  INNER JOIN VD_OORG OV  /* OV : 운영조직협력사 */
+                     ON (    OVV.TEN_ID      = OV.TEN_ID       /* 시스템아이디 */
+                         AND OVV.VD_OORG_UUID = OV.VD_OORG_UUID
+                        )
+                  INNER JOIN VMG_OORG VO
+                     ON (    OVV.TEN_ID      = VO.TEN_ID       /* 시스템아이디 */
+                         AND OVV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                        )
+                  INNER JOIN VMG
+                     ON (    VO.TEN_ID   = VMG.TEN_ID       /* 시스템아이디 */
+                         AND VO.VMG_UUID = VMG.VMG_UUID
+                        )
+                  WHERE VMG.TEN_ID       = SG.TEN_ID  /* 시스템아이디 */
+                    AND VMG.VMG_CD       = SG.SG_CD   /* 소싱그룹코드 */
+                    AND OVV.STS         != 'D'        /* 상태 */
+                    AND OV.STS          != 'D'        /* 상태 */
+                    AND OV.OBD_TYP_CCD  = 'PTNL'        /* 등록유형(PTNL:잠재) */
+               ) AS PTNTL_VD_CNT          /* 잠재협력사수 */
+             , ( SELECT COUNT(OVV.VD_OORG_UUID)
+                   FROM VD_OORG_VMG OVV
+                  INNER JOIN VD_OORG OV  /* OV : 운영조직협력사 */
+                     ON (    OVV.TEN_ID      = OV.TEN_ID       /* 시스템아이디 */
+                         AND OVV.VD_OORG_UUID = OV.VD_OORG_UUID
+                        )
+                  INNER JOIN VMG_OORG VO
+                     ON (    OVV.TEN_ID      = VO.TEN_ID       /* 시스템아이디 */
+                         AND OVV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                        )
+                  INNER JOIN VMG
+                     ON (    VO.TEN_ID      = VMG.TEN_ID       /* 시스템아이디 */
+                         AND VO.VMG_UUID = VMG.VMG_UUID
+                        )
+                  WHERE VMG.TEN_ID       = SG.TEN_ID  /* 시스템아이디 */
+                    AND VMG.VMG_CD       = SG.SG_CD   /* 소싱그룹코드 */
+                    AND OVV.STS         != 'D'        /* 상태 */
+                    AND OV.STS         != 'D'        /* 상태 */
+                    AND OV.OBD_TYP_CCD  = 'NEW'        /* 등록유형(NEW:신규) */
+                ) AS NEW_VD_CNT          /* 신규협력사수 */
+             , ( SELECT COUNT(*)
+                   FROM ITEM ITEM
+                  WHERE ITEM.TEN_ID  = SG.TEN_ID  /* 시스템아이디 */
+                    AND ITEM.SG_CD   = SG.SG_CD   /* 소싱그룹코드 */
+                    AND ITEM.STS != 'D' /* 상태 */
+               ) AS ITEM_CNT              /* 품목수 */
+             , CASE WHEN ( SELECT COUNT(*)
+                             FROM VMG VMG
+                            WHERE VMG.TEN_ID  = SG.TEN_ID  /* 시스템아이디 */
+                              AND VMG.VMG_CD   = SG.SG_CD   /* 소싱그룹코드 */
+                              AND VMG.STS != 'D' /* 상태 */
+                         ) &gt; 0
+                    THEN 'Y'
+                    ELSE 'N'
+                END AS VMG_YN               /* 협력사관리그룹 등록 여부 */
+             , SG.REGR_ID                   /* 등록자아이디 */
+             , SG.REG_DTTM                  /* 등록일시 */
+             , SG.MODR_ID                   /* 수정자아이디 */
+             , SG.MOD_DTTM                  /* 수정일시 */
+          FROM SG SG
+         WHERE SG.TEN_ID          = #{g.tenant}       /* 시스템아이디 */
+           AND SG.SG_CD           = #{p.sg_cd}        /* 소싱그룹코드 */
+    </select>
+    <update id="updateStatusSourcingGroupForDelete">
+    /* sourcing-group.updateStatusSourcingGroupForDelete : 소싱그룹 상태값 변경 - 삭제 */
+        UPDATE SG
+           SET STS          = 'D'               /* 상태 */
+             , MODR_ID      = #{g.username}     /* 수정자아이디 */
+             , MOD_DTTM     = #{g.now}          /* 수정일시 */
+         WHERE TEN_ID       = #{g.tenant}      /* 시스템아이디 */
+           AND SG_CD        = #{p.sg_cd}       /* 소싱그룹코드 */
+    </update>
+	<update id="updateSourcingGroup">
+    /* sourcing-group.updateSourcingGroup : 소싱그룹 정보 수정 */
+        UPDATE SG   /* 소싱그룹 마스터 */
+           SET SG_NM        = #{p.sg_nm}   /* 소싱그룹명 */
+             , SG_NM_EN     = #{p.sg_nm_en}
+             , ATT_NO       = #{p.att_no}       /* 첨부파일그룹코드 */
+             , SORT         = CAST(#{p.sort} AS INTEGER)     /* 정렬순서 */
+             , USE_YN       = #{p.use_yn}       /* 사용 여부 */
+             , RMK          = #{p.rmk}          /* 비고 */
+             , STS          = 'U'               /* 상태 */
+             , MODR_ID      = #{g.username}     /* 수정자아이디 */
+             , MOD_DTTM     = #{g.now}          /* 수정일시 */
+         WHERE TEN_ID       = #{g.tenant}      /* 시스템아이디 */
+           AND SG_CD        = #{p.sg_cd}       /* 소싱그룹코드 */
+    </update>
+	<select id="findListSourcingGroupVendor" resultType="Map">
+    /* sourcing-group.findListSourcingGroupVendor : 소싱그룹 협력사 조회 */
+        SELECT OVV.TEN_ID                  /* 시스템아이디 */
+             , OVV.VD_OORG_VMG_UUID
+             , OVV.VD_OORG_UUID
+             , OV.OORG_CD
+             , OVV.VMG_OORG_UUID
+             , VMG.VMG_CD AS SG_CD
+             , OV.VD_CD                   /* 협력사코드 */
+             , VD.ERP_VD_CD               /* ERP협력사코드 */
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+             , VD.VD_NM
+             , VD.VD_NM_EN
+             , OV.OBD_TYP_CCD
+             , OVV.SUPAVL_YN                 /* 거래여부 */
+             , OVV.SUPAVL_ST_DT              /* 거래 시작일 */
+             , OVV.SUPAVL_ED_DT              /* 거래 종료일 */
+          FROM VD_OORG_VMG OVV  /* OVV : 운영조직 협력사 협력사관리그룹 */
+         INNER JOIN VD_OORG OV /* OV : 운영조직협력사 */
+            ON (    OVV.TEN_ID      = OV.TEN_ID       /* 시스템아이디 */
+                AND OVV.VD_OORG_UUID = OV.VD_OORG_UUID  /* 운영조직코드 */
+               )
+		 INNER JOIN VD VD  /* VDGL : 협력사마스터 */
+	       ON (    OV.TEN_ID = VD.TEN_ID
+	           AND OV.VD_CD  = VD.VD_CD
+	          )
+        INNER JOIN VMG_OORG VO
+            ON (    OVV.TEN_ID = VO.TEN_ID
+	           AND OVV.VMG_OORG_UUID  = VO.VMG_OORG_UUID
+            )
+        INNER JOIN VMG
+            ON (    VO.TEN_ID = VMG.TEN_ID
+	           AND VO.VMG_UUID  = VMG.VMG_UUID
+            )
+         WHERE VMG.TEN_ID       = #{g.tenant}         /* 시스템아이디 */
+           AND VMG.VMG_CD        = #{p.sg_cd}          /* 소싱그룹코드 */
+       <if test="p.oorg_cd != null and p.oorg_cd != ''">
+           AND OV.OORG_CD  = #{p.oorg_cd}    /* 운영조직코드 */
+       </if>
+           AND OVV.STS         != 'D'                 /* 상태 */
+           AND VD.STS         != 'D'                 /* 상태 */
+    </select>
+	<insert id="insertSourcingGroupVendor">
+    /* sourcing-group.insertSourcingGroupVendor : 소싱그룹 협력사 추가 */
+    <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+    	INSERT INTO VD_OORG_VMG (
+    		TEN_ID
+    		, VD_OORG_VMG_UUID
+    		, VD_OORG_UUID
+			, VMG_OORG_UUID
+    		, SUPAVL_YN
+    		, SUPAVL_ST_DT
+    		, RMK
+    		, STS
+    		, REGR_ID
+    		, REG_DTTM
+    		, MODR_ID
+    		, MOD_DTTM
+    	) VALUES (
+    		#{g.tenant}
+    		, #{g.uuid}
+			, #{p.vd_oorg_uuid}
+			, ( SELECT VO.VMG_OORG_UUID
+			      FROM SG
+			     INNER JOIN VMG
+			        ON VMG.TEN_ID = SG.TEN_ID
+			       AND VMG.vmg_cd = SG.SG_CD
+			     INNER JOIN VMG_OORG VO
+			        ON VO.TEN_ID = VMG.TEN_ID
+			       AND VO.VMG_UUID = VMG.VMG_UUID
+			       AND VO.STS != 'D'
+			     WHERE VO.TEN_ID = #{g.tenant}
+			       AND VO.OORG_CD = #{p.oorg_cd}
+                   AND VMG.VMG_CD = #{p.sg_cd}
+			       AND VMG.STS != 'D'
+			  )
+			, 'Y'
+			, #{getFormatNow}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+    </insert>
+	<select id="findListSourcingGroupUser" resultType="Map">
+    /* sourcing-group.findListSourcingGroupUser : 소싱그룹 담당자 조회 */
+        SELECT SP.TEN_ID
+             , SP.SG_PIC_UUID          /* 소싱그룹 담당자 UUID */
+             , SP.SG_CD                /* 소싱그룹 코드 */
+             , SP.PIC_ID               /* 담당자 아이디 */
+             , CASE WHEN #{g.locale} = 'ko_KR' THEN USR.USR_NM ELSE CASE WHEN USR.USR_NM_EN IS NULL OR USR.USR_NM_EN = '' THEN USR.USR_NM ELSE USR.USR_NM_EN END END AS PIC_NM /* 담당자명 */
+             , USR.DEPT_CD             /* 부서 코드 */
+             , ( SELECT CASE WHEN #{g.locale} ='ko_KR' THEN DEPT_NM
+                             ELSE CASE WHEN DEPT_NM_EN IS NULL OR DEPT_NM_EN = '' THEN DEPT_NM ELSE DEPT_NM_EN END
+                        END AS DEPT_NM  /* 부서 명 */
+                   FROM DEPT /* 부서 */
+                  WHERE TEN_ID   = USR.TEN_ID
+                    AND DEPT_CD  = USR.DEPT_CD
+                    AND STS     != 'D'
+               )  AS DEPT_NM          /* 부서 명 */
+             , SP.REP_PIC_YN          /* 대표 여부 */
+             , SP.EVALTR_YN           /* 평가자 여부 */
+             , SP.PF_MGR_YN           /* 프로파일 관리 여부 */
+             , USR.STS                /* 상태 */
+             , SP.REG_DTTM
+             , SP.MOD_DTTM
+             , SP.RMK
+             , SP.REGR_ID
+             , SP.MODR_ID
+          FROM SG_PIC SP                 /* SP : 소싱그룹 담당자 */
+         INNER JOIN USR USR              /* USR : 사용자 */
+            ON SP.TEN_ID = USR.TEN_ID
+           AND SP.PIC_ID  = USR.USR_ID   /* 담당자아이디 */
+           AND USR.STS    != 'D'
+         WHERE SP.TEN_ID       = #{g.tenant}
+           AND SP.SG_CD        = #{p.sg_cd}
+         <if test="p.evaltr_yn != null and p.evaltr_yn != ''">
+           AND SP.EVALTR_YN    = #{p.evaltr_yn}
+         </if>
+           AND SP.STS         != 'D'
+    </select>
+    <delete id="deleteListSourcingGroupUser">
+    /* sourcing-group.deleteListSourcingGroupUser : 소싱그룹 담당자 삭제 */
+        DELETE FROM SG_PIC  /* 소싱그룹담당자 */
+         WHERE TEN_ID       = #{g.tenant}        /* 시스템아이디 */
+           AND SG_CD        = #{p.sg_cd}         /* 소싱그룹코드 */
+        <if test="p.sg_pic_uuid != null and p.sg_pic_uuid !=''">
+           AND SG_PIC_UUID  = #{p.sg_pic_uuid}  /* 소싱그룹 담당자 UUID */
+        </if>
+        <if test="p.pic_id != null and p.pic_id !=''">
+           AND PIC_ID       = #{p.pic_id}        /* 담당자 아이디 */
+        </if>
+    </delete>
+    <insert id="insertSourcingGroupUser">
+    /* sourcing-group.insertSourcingGroupUser : 소싱그룹 담당자 추가 */
+        INSERT INTO SG_PIC (
+        	TEN_ID
+        	, SG_PIC_UUID
+        	, SG_CD
+        	, PIC_ID
+        	, REP_PIC_YN
+        	, EVALTR_YN
+        	, PF_MGR_YN
+        	, RMK
+        	, STS
+        	, REGR_ID
+        	, REG_DTTM
+        	, MODR_ID
+        	, MOD_DTTM
+        ) VALUES (
+        	#{g.tenant}
+        	, #{g.uuid}
+            , #{p.sg_cd}
+            , #{p.pic_id}
+            , CASE WHEN #{p.rep_pic_yn} IS NULL OR #{p.rep_pic_yn} = '' THEN 'N' ELSE #{p.rep_pic_yn} END
+            , CASE WHEN #{p.evaltr_yn} IS NULL OR #{p.evaltr_yn} = '' THEN 'N' ELSE #{p.evaltr_yn} END
+            , CASE WHEN #{p.pf_mgr_yn} IS NULL OR #{p.pf_mgr_yn} = '' THEN 'N' ELSE #{p.pf_mgr_yn} END
+            , #{p.rmk}
+            , 'C'
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        )
+    </insert>
+    <update id="updateSourcingGroupUser">
+    /* sourcing-group.updateSourcingGroupUser : 소싱그룹 담당자 수정 */
+        UPDATE SG_PIC /* 소싱그룹담당자 */
+           SET REP_PIC_YN  = CASE WHEN #{p.rep_pic_yn} IS NULL OR #{p.rep_pic_yn} = '' THEN  'N' ELSE #{p.rep_pic_yn} END       /* 대표 여부 */
+             , EVALTR_YN   = CASE WHEN #{p.evaltr_yn} IS NULL OR #{p.evaltr_yn} = '' THEN  'N' ELSE #{p.evaltr_yn} END    /* 평가자 여부 */
+             , PF_MGR_YN   = CASE WHEN #{p.pf_mgr_yn} IS NULL OR #{p.pf_mgr_yn} = '' THEN  'N' ELSE #{p.pf_mgr_yn} END    /* 프로파일 관리 여부 */
+             , STS         = 'U'               /* 상태 */
+             , MODR_ID     = #{g.username}     /* 수정자아이디 */
+             , MOD_DTTM    = #{g.now}          /* 수정일시 */
+        WHERE TEN_ID       = #{g.tenant}       /* 테넌트 아이디 */
+          AND SG_PIC_UUID  = #{p.sg_pic_uuid}  /* 소싱그룹 담당자 UUID */
+    </update>
+    <update id="mergeSourcingGroupPic">
+    /* sourcing-group.mergeSourcingGroupPic : 소싱그룹 담당자 정보 merge */
+        MERGE INTO SG_PIC A
+		USING (
+			SELECT #{g.tenant}    AS TEN_ID
+			     , #{p.vmg_cd}    AS SG_CD
+			     , #{p.evaltr_id} AS PIC_ID
+			  FROM DUM_TBL
+			  ) B
+		   ON ( A.TEN_ID = B.TEN_ID
+		  AND A.SG_CD = B.SG_CD
+		  AND A.PIC_ID = B.PIC_ID )
+		 WHEN MATCHED THEN
+		     UPDATE SET
+			      STS            = 'U'
+			    , MODR_ID        = #{g.username}
+			    , MOD_DTTM       = #{g.now}
+			    , EVALTR_YN      = #{p.evaltr_yn}
+         WHEN NOT MATCHED THEN
+             INSERT (TEN_ID
+                   , SG_PIC_UUID
+                   , SG_CD
+                   , PIC_ID
+                   , REP_PIC_YN
+                   , EVALTR_YN
+                   , PF_MGR_YN
+                   , STS
+                   , REGR_ID
+                   , REG_DTTM
+                   , MODR_ID
+                   , MOD_DTTM)
+             VALUES (B.TEN_ID
+                   , #{g.uuid}
+                   , B.SG_CD
+                   , B.PIC_ID
+                   , 'N'
+                   , #{p.evaltr_yn}
+                   , 'N'
+                   , 'C'
+                   , #{g.username}
+                   , #{g.now}
+                   , #{g.username}
+                   , #{g.now}
+                    ) </update>
+	<select id="findListSourcingGroupItem" resultType="Map">
+    /* sourcing-group.findListSourcingGroupItem : 소싱그룹 품목 조회 */
+	    SELECT ITEM.TEN_ID     /* 시스템아이디 */
+	         , ITEM.ITEM_CD    /* 품목 코드 */
+	         , CASE WHEN #{g.locale} = 'ko_KR' THEN ITEM.ITEM_NM ELSE CASE WHEN ITEM.ITEM_NM_EN IS NULL OR ITEM.ITEM_NM_EN = '' THEN ITEM.ITEM_NM ELSE ITEM.ITEM_NM_EN END END ITEM_NM
+	         , ITEM.ITEM_SPEC  /* 품목 규격 */
+	         , ITEM.REG_DTTM   /* 등록일시 */
+	         , ITEM.MOD_DTTM   /* 수정일시 */
+	         , ITEM.SG_CD        /* 소싱그룹코드 */
+	      FROM ITEM ITEM       /* 품목 */
+	     WHERE ITEM.TEN_ID = #{g.tenant}  /* 시스템아이디 */
+	       AND ITEM.STS != 'D'
+	       AND ITEM.SG_CD  = #{p.sg_cd}   /* 소싱그룹 */
+	     <if test="p.item_cd != null and p.item_cd != ''">
+	       <bind name="itemCdPattern" value="'%' + p.item_cd + '%'"/>
+	       AND UPPER(ITEM.ITEM_CD) LIKE #{itemCdPattern}
+	     </if>
+	     <if test="p.item_nm != null and p.item_nm != ''">
+	       <bind name="itemNmPattern" value="'%' + p.item_nm + '%'"/>
+	       AND UPPER(ITEM.ITEM_NM) LIKE #{itemNmPattern}
+	     </if>
+	     ORDER BY ITEM.ITEM_CD
+    </select>
+	<update id="insertSourcingGroupItem">
+    /* sourcing-group.insertSourcingGroupItem : 소싱그룹 품목으로 저장 */
+	    UPDATE ITEM
+	       SET SG_CD = #{p.sg_cd}
+	         , MODR_ID = #{g.username}
+	         , MOD_DTTM = #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+	       AND ITEM_CD = #{p.item_cd}
+    </update>
+    <update id="deleteSourcingGroupItem">
+    /* sourcing-group.deleteSourcingGroupItem : 소싱그룹 품목에서 삭제 */
+	    UPDATE ITEM
+	       SET SG_CD = NULL
+	         , MODR_ID = #{g.username}
+	         , MOD_DTTM = #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+	       AND ITEM_CD = #{p.item_cd}
+    </update>
+	<select id="findListCate" resultType="map">
+    /* sourcing-group.findListCate : 품목 분류 리스트 조회 */
+    	SELECT TEN_ID
+    	     , ITEMCAT_CD
+    	     , ITEMCAT_LVL
+	         , CASE WHEN 'ko_KR' = #{g.locale} THEN ITEMCAT_NM
+                    ELSE (CASE WHEN ITEMCAT_NM_EN IS NULL OR ITEMCAT_NM_EN = '' THEN ITEMCAT_NM
+                                ELSE ITEMCAT_NM_EN
+                          END)
+                    END ITEMCAT_NM
+    	     , ITEMCAT_PATH
+    	     , ITEMCAT_PATH_EN
+    	     , PAR_ITEMCAT_CD
+    	     , MGMT_DEPT_CD
+    	     , ITEMCAT_SIMWORD
+    	     , SORT
+    	     , RISK_MGMT_YN
+    	     , ITEM_CD_MAND_YN
+    	     , USE_YN
+    	     , USG_EXPLN
+    	     , RMK
+    	     , STS
+    	     , REGR_ID
+    	     , REG_DTTM
+    	     , MODR_ID
+    	     , MOD_DTTM
+    	     , PURC_TYP_CCD
+    	  FROM ITEMCAT
+    	 WHERE TEN_ID = #{g.tenant}
+           AND STS != 'D'
+    	 ORDER BY SORT ASC
+    </select>
+	<select id="findListCateItem" resultType="map">
+    /* sourcing-group.findListCateItem: 품목 목록 조회 */
+    	SELECT ITEM.TEN_ID          AS TEN_ID
+	         , ITEM.ITEM_CD       AS ITEM_CD
+	         , ITEM.ITEM_NM       AS ITEM_NM
+	         , ITEM.ITEM_NM_EN    AS ITEM_NM_EN
+	         , ITEM.ITEM_SIMWORD       AS ITEM_SIMWORD
+	         , ITEM.ITEM_SPEC          AS ITEM_SPEC
+	         , ITEM.UOM_CCD   AS UOM_CCD
+    	     , ITEM.SG_CD
+	         , MCLS1.ITEMCAT_CD      AS ITEMCAT_LVL_1_CD
+	         , MCLS1.ITEMCAT_NM      AS ITEMCAT_LVL_1_NM
+	         , MCLS2.ITEMCAT_CD      AS ITEMCAT_LVL_2_CD
+	         , MCLS2.ITEMCAT_NM      AS ITEMCAT_LVL_2_NM
+	         , MCLS3.ITEMCAT_CD      AS ITEMCAT_LVL_3_CD
+	         , MCLS3.ITEMCAT_NM      AS ITEMCAT_LVL_3_NM
+	         , MCLS4.ITEMCAT_CD      AS ITEMCAT_LVL_4_CD
+	         , MCLS4.ITEMCAT_NM      AS ITEMCAT_LVL_4_NM
+	      FROM ITEM ITEM
+	      LEFT OUTER JOIN ITEMCAT MCLS1
+	        ON MCLS1.TEN_ID  = ITEM.TEN_ID
+	       AND MCLS1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+	      LEFT OUTER JOIN ITEMCAT MCLS2
+	        ON MCLS2.TEN_ID  = ITEM.TEN_ID
+	       AND MCLS2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+	      LEFT OUTER JOIN ITEMCAT MCLS3
+	        ON MCLS3.TEN_ID  = ITEM.TEN_ID
+	       AND MCLS3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+	      LEFT OUTER JOIN ITEMCAT MCLS4
+	        ON MCLS4.TEN_ID  = ITEM.TEN_ID
+	       AND MCLS4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+	     WHERE ITEM.TEN_ID = #{g.tenant}
+	       AND (ITEM.SG_CD != #{p.sg_cd} OR ITEM.SG_CD IS NULL OR ITEM.SG_CD = '') /* 현재 선택한 SG 가 등록되지 않은 품목만 조회 */
+	        <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+	       AND MCLS1.ITEMCAT_CD = #{p.itemcat_lvl_1_cd}
+	        </if>
+	        <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+	       AND MCLS2.ITEMCAT_CD = #{p.itemcat_lvl_2_cd}
+	        </if>
+	        <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+	       AND MCLS3.ITEMCAT_CD = #{p.itemcat_lvl_3_cd}
+	        </if>
+	        <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+	       AND MCLS4.ITEMCAT_CD = #{p.itemcat_lvl_4_cd}
+	        </if>
+	        <if test="p.item_cd != null and p.item_cd != ''">
+	          <bind name="cdPattern" value="'%' + p.item_cd + '%'"/>
+	       AND UPPER(ITEM.ITEM_CD) LIKE UPPER(#{cdPattern})
+	        </if>
+	        <if test="p.item_nm != null and p.item_nm != ''">
+	          <bind name="namePattern" value="'%' + p.item_nm + '%'"/>
+	       AND UPPER(ITEM.ITEM_NM) LIKE UPPER(#{namePattern})
+	        </if>
+	        <if test="p.mfgr_nm != null and p.mfgr_nm != ''">
+	          <bind name="mfgrNmPattern" value="'%' + p.mfgr_nm + '%'"/>
+	       AND UPPER(ITEM.MFGR_NM) LIKE UPPER(#{mfgrNmPattern})
+	        </if>
+    </select>
+	<select id="findListVendorInfoEO" resultType="map">
+    /* sourcing-group.findListVendorInfo : EO 협력사 목록 조회 */
+    	SELECT VD.VD_CD
+	    	 , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS DISPLAY_VD_NM
+	    	 , VD.VD_NM
+	    	 , VD.VD_NM_EN
+	    	 , VD.ERP_VD_CD
+	    	 , VD.BIZREGNO
+	    	 , VD.CORPNO
+	    	 , VD.CTRY_CCD
+	    	 , VD.TAX_ID
+	    	 , OV.OBD_TYP_CCD
+    	     , OV.PO_POSS_YN
+	    	 , OV.OORG_CD
+    		 , OV.VD_OORG_UUID
+	      FROM VD VD
+	     INNER JOIN VD_OORG OV
+	        ON OV.TEN_ID  = VD.TEN_ID
+	       AND OV.VD_CD   = VD.VD_CD
+	     WHERE VD.TEN_ID    = #{g.tenant}
+	       AND OV.OORG_CD = #{p.oorg_cd}
+	    <if test="p.erp_vd_cd != null and p.erp_vd_cd != &quot;&quot;">
+		   <bind name="vdCdPattern" value="&quot;%&quot; + p.erp_vd_cd + &quot;%&quot;"/>
+	       AND VD.ERP_VD_CD LIKE UPPER(#{vdCdPattern})
+	    </if>
+	    <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+		   <bind name="vdNmPattern" value="&quot;%&quot; + p.vd_nm + &quot;%&quot;"/>
+	       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNmPattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNmPattern}))      /* 협력사명 검색조건*/
+	    </if>
+	    <if test="p.bizregno != null and p.bizregno != ''">
+		   <bind name="bizRegNoPattern" value="&quot;%&quot; + p.bizregno + &quot;%&quot;"/>
+	       AND VD.BIZREGNO LIKE UPPER(#{bizRegNoPattern})
+	    </if>
+	    <if test="p.po_poss_yn != null and p.po_poss_yn != ''">
+	       AND OV.PO_POSS_YN = #{p.po_poss_yn}
+	    </if>
+		<if test="p.ctry_ccd != null and p.ctry_ccd != ''">
+	       AND VD.CTRY_CCD = #{p.ctry_ccd}
+	    </if>
+	     ORDER BY VD.ERP_VD_CD
+	</select>
+</mapper>

@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="po-eval">
+	<select id="findPoInfo" resultType="map">
+		SELECT PO.PO_UUID
+		     , PO.OORG_CD
+		     , PO.PO_NO
+		     , PO.PO_REVNO
+		     , PO.PO_TIT
+		     , PO.PURC_TYP_CCD
+		     , PO.VD_CD
+		     , PO.PO_STS_CCD
+		     , PO_GE_MAPG.GE_UUID
+		  FROM PO
+		  LEFT OUTER JOIN PO_GE_MAPG
+		    ON PO_GE_MAPG.TEN_ID = PO.TEN_ID
+		   AND PO_GE_MAPG.PO_UUID = PO.PO_UUID
+		 WHERE PO.TEN_ID = #{g.tenant}
+		   AND PO.PO_UUID = #{p.po_uuid}
+	</select>
+	<select id="findPoItemCatTypByPoUuid" resultType="string">
+		WITH  T(TEN_ID, ITEMCAT_CD, PAR_ITEMCAT_CD) AS (
+			SELECT ITEMCAT.TEN_ID
+			     , ITEMCAT.ITEMCAT_CD
+			     , ITEMCAT.PAR_ITEMCAT_CD
+			  FROM PO
+			 INNER JOIN PO_ITEM
+			    ON PO_ITEM.TEN_ID = PO.TEN_ID
+			   AND PO_ITEM.PO_UUID = PO.PO_UUID
+			 INNER JOIN ITEM
+			    ON ITEM.TEN_ID = PO_ITEM.TEN_ID
+			   AND ITEM.ITEM_CD = PO_ITEM.ITEM_CD
+			 INNER JOIN ITEMCAT
+			    ON ITEMCAT.TEN_ID = ITEM.TEN_ID
+			   AND ITEMCAT.ITEMCAT_CD = ITEM.ITEMCAT_CD
+			 WHERE PO.TEN_ID = #{g.tenant}
+			   AND PO.PO_UUID = #{p.po_uuid}
+			 UNION ALL
+			SELECT ITEMCAT.TEN_ID
+			     , ITEMCAT.ITEMCAT_CD
+			     , ITEMCAT.PAR_ITEMCAT_CD
+			  FROM ITEMCAT
+			 INNER JOIN T
+			    ON T.TEN_ID = ITEMCAT.TEN_ID
+			   AND T.PAR_ITEMCAT_CD = ITEMCAT.ITEMCAT_CD
+		)
+		SELECT ITEMCAT_CD
+		  FROM T
+		 GROUP BY ITEMCAT_CD
+	</select>
+	<select id="findPoPurcTypByPoUuid" resultType="string">
+		SELECT PURC_TYP_CCD
+		  FROM PO
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PO_UUID = #{p.po_uuid}
+	</select>
+	<select id="findPoSgByPoUuid" resultType="string">
+		WITH  T(TEN_ID, SG_CD, PAR_SG_CD) AS (
+			SELECT SG.TEN_ID
+			     , SG.SG_CD
+			     , SG.PAR_SG_CD
+			  FROM PO
+			 INNER JOIN PO_ITEM
+			    ON PO_ITEM.TEN_ID = PO.TEN_ID
+			   AND PO_ITEM.PO_UUID = PO.PO_UUID
+			 INNER JOIN SG
+			    ON SG.TEN_ID = PO_ITEM.TEN_ID
+			   AND SG.SG_CD = PO_ITEM.SG_CD
+			 WHERE PO.TEN_ID = #{g.tenant}
+			   AND PO.PO_UUID = #{p.po_uuid}
+			 UNION ALL
+			SELECT SG.TEN_ID
+			     , SG.SG_CD
+			     , SG.PAR_SG_CD
+			  FROM SG
+			 INNER JOIN T
+			    ON T.TEN_ID = SG.TEN_ID
+			   AND T.PAR_SG_CD = SG.SG_CD
+		)
+		SELECT SG_CD
+		  FROM T
+		 GROUP BY SG_CD
+	</select>
+	<select id="findVendorInfoByPoUuid" resultType="string">
+		SELECT VMT.VMT_CCD
+		  FROM PO
+		 INNER JOIN OORG_MAPG
+		    ON OORG_MAPG.TEN_ID = PO.TEN_ID
+		   AND OORG_MAPG.CONNSRC_OORG_CD = PO.OORG_CD
+		   AND OORG_MAPG.CONN_TYP_CCD = 'POEO'
+		 INNER JOIN VD_OORG
+		    ON VD_OORG.TEN_ID = OORG_MAPG.TEN_ID
+		   AND VD_OORG.OORG_CD = OORG_MAPG.CONNSUBJ_OORG_CD
+		   AND VD_OORG.VD_CD = PO.VD_CD
+		 INNER JOIN VD_OORG_VMG
+		    ON VD_OORG_VMG.TEN_ID = VD_OORG.TEN_ID
+		   AND VD_OORG_VMG.VD_OORG_UUID = VD_OORG.VD_OORG_UUID
+		 INNER JOIN VMG_OORG
+            ON VMG_OORG.TEN_ID =  VD_OORG_VMG.TEN_ID
+           AND VMG_OORG.VMG_OORG_UUID = VD_OORG_VMG.VMG_OORG_UUID
+           AND VMG_OORG.STS != 'D'
+		   AND VMG_OORG.USE_YN = 'Y'
+		 INNER JOIN VMG
+		    ON VMG.TEN_ID = VD_OORG_VMG.TEN_ID
+		   AND VMG.VMG_UUID = VD_OORG_VMG.VMG_UUID
+		 INNER JOIN VMT
+		    ON VMT.TEN_ID = VMG.TEN_ID
+		   AND VMT.VMT_UUID = VMG.VMT_UUID
+		 WHERE PO.TEN_ID = #{g.tenant}
+		   AND PO.PO_UUID = #{p.po_uuid}
+		 GROUP BY VMT.VMT_CCD
+	</select>
+	<select id="findListGePrcsByGe" resultType="map">
+		SELECT GE_PRCS.GE_PRCS_UUID
+		     , GE_PRCS.GE_UUID
+		     , GE_PRCS.EVAL_SUBJ_RES_UUID
+		     , GE_PRCS.GR_EVALSHT_UUID
+		     , GE_PRCS.GR_EVALSHT_PRCS_UUID
+		     , GE_PRCS.EVAL_CMPLD_DT
+		     , GE_PRCS.GE_PRCS_STS_CCD
+		     , GE_PRCS.PRCS_EVAL_SC
+		     , GE_PRCS.STS
+		     , GE.VD_CD
+		     , GR_EVALSHT_PRCS.EVALTMPL_UUID
+		  FROM GE_PRCS
+		 INNER JOIN GE
+		    ON GE.TEN_ID = GE_PRCS.TEN_ID
+		   AND GE.GE_UUID = GE_PRCS.GE_UUID
+		 INNER JOIN GR_EVALSHT_PRCS
+		    ON GR_EVALSHT_PRCS.TEN_ID = GE_PRCS.TEN_ID
+		   AND GR_EVALSHT_PRCS.GR_EVALSHT_PRCS_UUID = GE_PRCS.GR_EVALSHT_PRCS_UUID
+		 WHERE GE_PRCS.TEN_ID = #{g.tenant}
+		   AND GE_PRCS.GE_UUID = #{p.ge_uuid}
+		 ORDER BY GE_PRCS.PRCS_SORT
+	</select>
+	<delete id="deleteGePrcsByGe">
+		DELETE
+		  FROM GE_PRCS
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GE_UUID = #{p.ge_uuid}
+	</delete>
+	<delete id="deleteGePrcsEvaltrByGePrcs">
+		DELETE
+		  FROM GE_PRCS_EVALTR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GE_PRCS_UUID = #{p.ge_prcs_uuid}
+	</delete>
+	<insert id="insertGe">
+		INSERT INTO GE (
+			TEN_ID
+			, GE_UUID
+			, OORG_CD
+			, GEMT_UUID
+			, GEG_UUID
+			, GR_EVALSHT_UUID
+			, VD_CD
+			, GE_STS_CCD
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.ge_uuid}
+			, #{p.oorg_cd}
+			, #{p.gemt_uuid}
+			, #{p.geg_uuid}
+			, #{p.gr_evalsht_uuid}
+			, #{p.vd_cd}
+			, #{p.ge_sts_ccd}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGe">
+		UPDATE GE
+		   SET GEMT_UUID = #{p.gemt_uuid}
+		     , GEG_UUID = #{p.geg_uuid}
+		     , GR_EVALSHT_UUID = #{p.gr_evalsht_uuid}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GE_UUID = #{p.ge_uuid}
+	</update>
+	<insert id="insertPoGeMapping">
+		INSERT INTO PO_GE_MAPG (
+			TEN_ID
+			, PO_UUID
+			, GE_UUID
+		) VALUES (
+			#{g.tenant}
+			, #{p.po_uuid}
+			, #{p.ge_uuid}
+		)
+	</insert>
+	<insert id="insertGePrcs">
+		INSERT INTO GE_PRCS (
+			TEN_ID
+			, GE_PRCS_UUID
+			, GE_UUID
+			, GR_EVALSHT_UUID
+			, GR_EVALSHT_PRCS_UUID
+			, PRCS_SORT
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.ge_prcs_uuid}
+			, #{p.ge_uuid}
+			, #{p.gr_evalsht_uuid}
+			, #{p.gr_evalsht_prcs_uuid}
+			, #{p.prcs_sort}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<insert id="insertGePrcsEvaltr">
+		INSERT INTO GE_PRCS_EVALTR (
+			TEN_ID
+			, GE_PRCS_EVALTR_UUID
+			, GE_PRCS_UUID
+			, EVALTR_ID
+			, EVALFACT_EVALTR_AUTHTY_CCD
+			, EVAL_STS_CCD
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.ge_prcs_evaltr_uuid}
+			, #{p.ge_prcs_uuid}
+			, #{p.evaltr_id}
+			, #{p.evalfact_evaltr_authty_ccd}
+			, 'WTG'
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<delete id="deletePoGeMapping">
+		DELETE
+		  FROM PO_GE_MAPG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PO_UUID = #{p.po_uuid}
+		   AND GE_UUID = #{p.ge_uuid}
+	</delete>
+	<delete id="deleteGe">
+		DELETE
+		  FROM GE
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GE_UUID = #{p.ge_uuid}
+	</delete>
+</mapper>

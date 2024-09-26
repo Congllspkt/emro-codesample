@@ -1,0 +1,536 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="estamptax">
+	<select id="findContract" resultType="map">
+	/* estamptax.findContract : 계약 및 인지세 정보 조회*/
+		SELECT CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+			 , STAX.STAX_UUID
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT
+		FROM CNTR CNTR
+	   INNER JOIN CNTRR CNTRR
+		  ON CNTRR.TEN_ID = CNTR.TEN_ID
+		 AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+		 AND CNTRR.CNTRR_TYP_CCD = 'BUYER'
+	   INNER JOIN STAX STAX
+		  ON STAX.TEN_ID = CNTRR.TEN_ID
+		 AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   WHERE STAX.TEN_ID = #{g.tenant}
+		 AND STAX.STAX_UUID = #{p.stax_uuid}
+		 AND CNTR.STTPYMTMETH_CCD = 'ESTAX'
+	</select>
+    <select id="findEstampUrlInfo" resultType="map">
+    /* estamptax.findEstampUrlInfo : 전자수입인지 요청 URL 정보 조회*/
+		SELECT
+			   MG.BIZREGNO
+              ,US.MOB
+              ,US.EML
+              ,CNTR.CNTR_NM
+              ,MG.LOGIC_ORG_NM AS COMP_NM
+              ,CNTR.CNTR_NO
+              ,CNTR.CNTR_REVNO
+              ,CNTR.CNTR_AMT
+              ,CNTR.CNTR_DT
+              ,(SELECT COALESCE(S.STTPYMT_RO, 0)
+			      FROM STAX S
+			     INNER JOIN CNTRR CTR
+			        ON CTR.TEN_ID = S.TEN_ID
+			       AND CTR.CNTR_UUID = S.CNTR_UUID
+			       AND CTR.CNTRR_UUID = S.CNTRR_UUID
+			       AND CTR.CNTRR_TYP_CCD = 'BUYER'
+	             WHERE S.TEN_ID = CNTR.TEN_ID
+		           AND S.CNTR_UUID = CNTR.CNTR_UUID) AS BUYER_ISSUE_RATE
+              ,(SELECT A.DTLCD
+                  FROM CCD_CSTR_CND_VAL A
+                 INNER JOIN CCD_CSTR_CND_VAL B
+                    ON A.TEN_ID  = B.TEN_ID
+                   AND A.CCD  = B.CCD
+                   AND A.DTLCD  = B.DTLCD
+                   AND A.TEN_ID  = #{g.tenant}
+                   AND A.CCD  = 'D017'
+                   AND A.CSTR_CND_CD = 'MIN_AMT'
+                   AND B.CSTR_CND_CD = 'MAX_AMT'
+			    WHERE CASE WHEN COALESCE(A.CSTR_CND_VAL, '') = '' THEN 0 ELSE CAST(A.CSTR_CND_VAL AS FLOAT  ) END <![CDATA[<]]> CNTR.CNTR_AMT
+			    AND CASE WHEN COALESCE(B.CSTR_CND_VAL, '') = '' THEN CNTR.CNTR_AMT ELSE CAST(B.CSTR_CND_VAL AS FLOAT  ) END &gt;= CNTR.CNTR_AMT) AS ISSUE_AMT
+              ,(SELECT SUM(COALESCE(STPH.TAXPYMT_AMT,0))
+              	  FROM CNTR_SGNDUSR CTOR
+              	 INNER JOIN STTPYMT STPH
+              	    ON STPH.TEN_ID = CTOR.TEN_ID
+              	   AND STPH.CNTR_SGNDUSR_UUID = CTOR.CNTR_SGNDUSR_UUID
+              	 WHERE CTOR.TEN_ID = CNTR.TEN_ID
+              	   AND CTOR.ECNTR_UUID = CNTR.CNTR_UUID
+              	   AND CTOR.CNTRR_TYP_CCD = 'Y')	AS PAYED_ISSUE_AMT	/* 현재 인지세 납부한 금액 */
+              ,(SELECT SUM(COALESCE(STPH.TAXPYMT_AMT,0))
+              	  FROM CNTR_SGNDUSR CTOR
+              	 INNER JOIN ECNTR CNTR2
+              	    ON CNTR2.TEN_ID = #{g.tenant}
+              	   AND CNTR2.ECNTR_UUID = #{p.ecntr_uuid}
+              	 INNER JOIN ECNTR CNTR3
+              	    ON CNTR3.TEN_ID = CNTR2.TEN_ID
+              	   AND CNTR3.ECNTR_NO = CNTR2.ECNTR_NO
+              	   AND CNTR3.ECNTR_REVNO <![CDATA[<]]> CNTR2.ECNTR_REVNO
+              	 INNER JOIN STTPYMT STPH
+              	    ON STPH.TEN_ID = CTOR.TEN_ID
+              	   AND STPH.CNTR_SGNDUSR_UUID = CTOR.CNTR_SGNDUSR_UUID
+              	 WHERE CTOR.TEN_ID = CNTR3.TEN_ID
+              	   AND CTOR.ECNTR_UUID = CNTR3.ECNTR_UUID
+              	   ) AS BEFORE_TOTAL_PAY_AMT
+		FROM CNTR CNTR
+	   INNER JOIN ECNTR ECNTR
+		  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN LOGIC_ORG MG
+		  ON MG.TEN_ID = CNTR.TEN_ID
+		 AND MG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		 AND MG.USE_YN = 'Y'
+		 AND MG.STS != 'D'
+		 AND MG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+	   INNER JOIN USR US
+		  ON US.TEN_ID = CNTR.TEN_ID
+		 AND US.USR_ID = CNTR.CNTR_PIC_ID
+	   WHERE CNTR.TEN_ID = #{g.tenant}
+		 AND CNTR.CNTR_UUID = #{p.cntr_uuid}
+    </select>
+    <!-- 인지세 파일 저장 -->
+    <update id="updateStampTax">
+    /* estamptax.updateStampTax */
+        UPDATE CNTR_SGNDUSR
+        SET
+           STTPYMT_NO = #{p.sttpymt_no},
+           STTPYMT_ATHG_UUID = #{p.sttpymt_athg_uuid},
+	       STAX_AMT = CAST(#{p.stamptax_amt} AS FLOAT  ),
+           ESTAX_YN = #{p.estax_yn},
+           MODR_ID = #{g.username},
+           MOD_DTTM = #{g.now}
+        WHERE TEN_ID = #{g.tenant}
+            AND ECNTR_UUID = #{p.ecntr_uuid}
+            AND CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+    </update>
+    <!-- 인지세 정보 가져오기 -->
+	<select id="findStampTaxList" resultType="map">
+	/* estamptax.findStampTaxList */
+		SELECT CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+             , CNTR.CNTR_UUID
+             , STAX.STAX_UUID
+			 , STAX.CNTRR_UUID
+			 , ESTAX.STTPYMT_NO
+			 , ESTAX.BIZREGNO
+			 , ESTAX.TAXPYMT_DT
+			 , ESTAX.TAXPYMT_AMT
+		FROM CNTR CNTR
+	   INNER JOIN ECNTR ECNTR
+		  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN CNTRR CNTRR
+          ON CNTRR.TEN_ID = CNTR.TEN_ID
+         AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN STAX STAX
+		  ON STAX.TEN_ID = CNTRR.TEN_ID
+		 AND STAX.CNTR_UUID = CNTRR.CNTR_UUID
+		 AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   INNER JOIN ESTAX ESTAX
+		  ON ESTAX.TEN_ID = STAX.TEN_ID
+		 AND ESTAX.STAX_UUID = STAX.STAX_UUID
+	   WHERE STAX.TEN_ID = #{g.tenant}
+		 AND STAX.STAX_UUID = #{p.stax_uuid}
+	   ORDER BY CNTR.REG_DTTM DESC, CNTR.CNTR_REVNO DESC
+    </select>
+    <insert id="insertStamptaxPurchaseInfo">
+    /* estamptax.insertStamptaxPurchaseInfo 납부내역 저장 */
+    MERGE INTO ESTAX ESTAX
+    USING (SELECT
+    			  #{g.tenant}				AS  TEN_ID
+    			 ,#{p.estax_uuid}  		    AS  ESTAX_UUID
+	             ,#{p.stax_uuid}  		    AS  STAX_UUID
+	             ,#{p.ecntr_uuid}  		    AS  ECNTR_UUID
+    			 ,#{p.issueReqNo} 			AS  STTPYMT_NO
+    			 ,#{p.issueBizNo} 			AS  BIZREGNO
+    			 ,#{p.uniqueId} 			AS  KTNET_REF_ID
+    			 ,#{p.paymentDivisionCode} 	AS  TAXPYMT_TYP_CCD
+    			 ,#{p.paymentOrganCode} 	AS  TAXPYMT_INSTN_CCD
+    			 ,#{p.paymentDttm}			AS  TAXPYMT_DT
+    			 ,#{p.paymentAmount} 		AS  TAXPYMT_AMT
+			 FROM DUM_TBL ) B
+			   ON ESTAX.TEN_ID = B.TEN_ID
+			  AND ESTAX.STTPYMT_NO = B.STTPYMT_NO
+			 WHEN MATCHED THEN
+		   UPDATE SET
+				   TAXPYMT_TYP_CCD      = B.TAXPYMT_TYP_CCD
+				 , TAXPYMT_INSTN_CCD    = B.TAXPYMT_INSTN_CCD
+				 , TAXPYMT_DT        = B.TAXPYMT_DT
+				 , TAXPYMT_AMT         = B.TAXPYMT_AMT
+			 WHEN NOT MATCHED THEN
+		   INSERT (
+			       TEN_ID
+				 , ESTAX_UUID
+	             , STAX_UUID
+	             , ECNTR_UUID
+				 , STTPYMT_NO
+				 , BIZREGNO
+				 , KTNET_REF_ID
+				 , TAXPYMT_TYP_CCD
+				 , TAXPYMT_INSTN_CCD
+				 , TAXPYMT_DT
+				 , TAXPYMT_AMT
+				 , REGR_ID
+				 , REG_DTTM
+				 , MODR_ID
+				 , MOD_DTTM
+			)VALUES(
+			      B.TEN_ID
+			     ,B.ESTAX_UUID
+			     ,B.STAX_UUID
+		         ,B.ECNTR_UUID
+			     ,B.STTPYMT_NO
+                 ,B.BIZREGNO
+                 ,B.KTNET_REF_ID
+                 ,B.TAXPYMT_TYP_CCD
+                 ,B.TAXPYMT_INSTN_CCD
+                 ,B.TAXPYMT_DT
+                 ,B.TAXPYMT_AMT
+                 ,#{g.username}
+                 ,#{g.now}
+                 ,#{g.username}
+                 ,#{g.now}
+                 )            
+    </insert>    
+    <select id="getBuyerBizRegNo" resultType="string">
+    /*estamptax.getBuyerBizRegNo 구매사 사업자번호 조회 */
+	SELECT BIZREGNO
+	  FROM LOGIC_ORG
+	 WHERE TEN_ID = #{g.tenant}
+	   AND LOGIC_ORG_TYP_CCD = 'COMPANY'
+	   AND LOGIC_ORG_CD = #{g.co_cd}
+    </select>
+    <select id="getBuyerStamptaxInfo" resultType="map">
+    /*estamptax.getBuyerStamptaxInfo PDF 발급을 위한 전자수입인지 정보 조회 */
+    SELECT 
+           CRMR.ECNTR_UUID
+          ,CRMR.ECNTR_NO
+          ,CRMR.ECNTR_REVNO
+          ,CRMR.CNTR_NM
+          ,CRMR.CNTR_DT
+          ,CRMR.CNTR_AMT
+          ,CTOR.STTPYMT_ATHG_UUID AS ATHG_UUID
+          ,(SELECT ORG.BIZREGNO
+	  		 FROM LOGIC_ORG ORG
+	 		WHERE ORG.TEN_ID = #{g.tenant}
+	   		  AND ORG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+	   		  AND ORG.LOGIC_ORG_CD = #{g.co_cd}) AS BIZREGNO
+	  FROM ECNTR CRMR
+	 INNER JOIN CNTR_SGNDUSR CTOR
+	    ON CTOR.TEN_ID = CRMR.TEN_ID
+	   AND CTOR.ECNTR_UUID = CRMR.ECNTR_UUID
+	 WHERE CRMR.TEN_ID = #{g.tenant}
+	   AND CRMR.ECNTR_UUID = #{p.ecntr_uuid}
+	   AND CTOR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+    </select>
+    <update id="updateEstampFileGrpCd">
+    /* estamptax.updateEstampFileGrpCd 업데이트 pdf 파일 그룹 코드 */
+    UPDATE CNTR_SGNDUSR
+       SET STTPYMT_ATHG_UUID = #{p.athg_uuid}
+     WHERE TEN_ID = #{g.tenant}
+       AND ECNTR_UUID = #{p.ecntr_uuid}
+       AND CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+    </update>
+    <resultMap id="resultMap-getCntrContent" type="map">
+	    <result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="getCntrContent" resultMap="resultMap-getCntrContent">
+    /* estamptax.getCntrContent pdf 만들기 위한 계약서 내용 조회*/
+    SELECT
+           CRMR.ECNTR_UUID
+          ,CRMR.ECNTR_NO
+          ,CRMR.ECNTR_REVNO
+          ,CRCT.CNTRDOC_CRNG_CONT	AS CONTENT
+          ,CRMR.OORG_CD
+          ,OGMG.LOGIC_ORG_NM
+          ,OGMG.LOGIC_ORG_NM_EN
+          ,(SELECT VD.CTRY_CCD FROM VD VD WHERE VD.TEN_ID = #{g.tenant} AND VD.VD_CD = CRMR.VD_CD) AS CTRY_CCD
+      FROM ECNTR CRMR
+     INNER JOIN CNTRDOC_CONT CRCT
+        ON CRCT.TEN_ID = CRMR.TEN_ID
+       AND CRCT.ECNTR_UUID = CRMR.ECNTR_UUID
+     INNER JOIN LOGIC_ORG OGMG
+        ON OGMG.TEN_ID = CRMR.TEN_ID
+       AND OGMG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+       AND OGMG.LOGIC_ORG_CD = CRMR.CO_CD
+     WHERE CRMR.TEN_ID = #{g.tenant}
+       AND CRMR.ECNTR_UUID = #{p.ecntr_uuid}
+    </select>
+	<resultMap id="resultMap-getAppTextContent" type="map">
+		<result column="APP_CONTENT" javaType="string" property="app_content" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="getAppTextContent" resultMap="resultMap-getAppTextContent">
+    /* estamptax.getAppTextContent pdf 만들기 위한 첨부서류 내용 조회*/
+	SELECT 
+		   A.CNTR_APPX_CRNG_CONT                    AS APP_CONTENT          /*계약서원본*/
+	  FROM CNTR_APPX_CONT A                    /*첨부서류원본정보*/
+	 INNER JOIN CNTR_APPX B
+		ON A.TEN_ID = B.TEN_ID
+	   AND A.CNTR_APPX_UUID = B.CNTR_APPX_UUID
+	 INNER JOIN ECNTR C               /*계약마스터*/
+		ON B.TEN_ID = C.TEN_ID
+	   AND B.ECNTR_UUID = C.ECNTR_UUID
+	 WHERE A.TEN_ID   = #{g.tenant}
+       AND C.ECNTR_UUID  = #{p.ecntr_uuid}
+       AND B.CNTR_APPX_TYP_CCD = 'TXT'
+     ORDER BY B.CNTR_APPX_ORD
+    </select>
+    <select id="getAppFileContent" resultType="map">
+    /* estamptax.getAppFileContent pdf 만들기 위한 첨부파일 조회*/
+	SELECT
+            A.ATHG_UUID                                            /*첨부자구분*/
+          , D.ATHF_SIZE                                           /*첨부파일크기*/
+          , D.ATHF_PATH                                          /*첨부파일경로*/
+          , D.ATHF_PATH                AS ATHF_PATH                /*첨부파일경로*/
+          , D.ATHF_NM                                            /*첨부파일명*/
+          , D.ATHF_ORIG_NM                                           /*원본파일명*/
+	  FROM CNTR_APPX A                        /*첨부서류정보*/
+     INNER JOIN ECNTR B                   /*계약마스터*/
+        ON A.TEN_ID = B.TEN_ID
+       AND A.ECNTR_UUID = B.ECNTR_UUID
+     INNER JOIN ATHF D
+        ON A.TEN_ID = D.TEN_ID
+       AND A.ATHG_UUID = D.ATHG_UUID
+     WHERE A.TEN_ID    = #{g.tenant}
+       AND B.ECNTR_UUID   = #{p.ecntr_uuid}
+	   AND A.CNTR_APPX_TYP_CCD = 'FL'
+	   AND D.STS != 'D'
+	 ORDER BY A.CNTR_APPX_ORD
+    </select>
+    <update id="updateEstampTaxSts">
+    /* estmptax.updateEstampTaxSts 전자수입인지 여부 */
+    UPDATE CNTR_SGNDUSR
+       SET ESTAX_YN = 'Y'
+     WHERE TEN_ID = #{g.tenant}
+       AND ECNTR_UUID = #{p.ecntr_uuid}
+    </update>
+    <!-- 인지세 정보 가져오기 -->
+    <select id="findStampTaxHistoryList" resultType="map">
+    /* estamptax.findStampTaxHistoryList */
+        SELECT  CTOR.ECNTR_UUID
+              , CRMR.ECNTR_NO
+              , CRMR.ECNTR_REVNO
+              , CRMR.CNTR_NM
+              , STPH.STTPYMT_UUID
+			  , STPH.CNTR_SGNDUSR_UUID
+			  , STPH.STTPYMT_REQ_NO
+			  , STPH.TAXPYMT_DT
+			  , STPH.TAXPYMT_AMT
+			  , STPH.STTPYMT_REQ_NO
+			  , CASE WHEN CTOR.CNTRR_TYP_CCD = 'Y'
+			         THEN (SELECT ORG.LOGIC_ORG_NM
+			                 FROM LOGIC_ORG ORG
+			                WHERE ORG.TEN_ID = CTOR.TEN_ID
+			                  AND ORG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+			                  AND ORG.LOGIC_ORG_CD = #{g.co_cd})
+			         ELSE (SELECT VD.VD_NM
+			                 FROM VD VD
+			                WHERE VD.TEN_ID = CTOR.TEN_ID
+			                  AND VD.VD_CD = CTOR.VD_CD)
+			   END COMP_NM
+	      FROM ECNTR CRMR
+         INNER JOIN CNTR_SGNDUSR CTOR
+            ON CTOR.TEN_ID = CRMR.TEN_ID
+           AND CTOR.ECNTR_UUID = CRMR.ECNTR_UUID
+         INNER JOIN STTPYMT STPH
+            ON STPH.TEN_ID = CTOR.TEN_ID
+           AND STPH.CNTR_SGNDUSR_UUID = CTOR.CNTR_SGNDUSR_UUID
+         WHERE CRMR.TEN_ID = #{g.tenant}
+           AND CRMR.ECNTR_NO = #{p.ecntr_no}
+          ORDER BY CRMR.ECNTR_REVNO DESC, STPH.TAXPYMT_DT DESC
+    </select>
+    <select id="getPreviousElecStampInfo" resultType="int">
+    /* estamptax.getPreviousElecStampInfo 이전 전자수입인지 정보 조회 */
+    SELECT COUNT(*) 
+      FROM ECNTR CRMR
+     INNER JOIN CNTR_SGNDUSR CTOR
+        ON CTOR.TEN_ID = CRMR.TEN_ID
+       AND CTOR.ECNTR_UUID = CRMR.ECNTR_UUID
+     WHERE CRMR.TEN_ID = #{g.tenant}
+       AND CRMR.ECNTR_NO = #{p.ecntr_no}
+       AND CRMR.ECNTR_REVNO != #{p.ecntr_revno}
+       AND CRMR.ESTAX_YN = 'Y'
+    </select>
+	<resultMap id="resultMap-getAppContent" type="map">
+		<result column="CNTR_APPX_CRNG_CONT" javaType="string" property="cntr_appx_crng_cont" typeHandler="stringClob"/>
+		<result column="APP_CONTENT" javaType="string" property="app_content" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="getAppContent" resultMap="resultMap-getAppContent">
+    /* estamptax.getAppContent : */
+    SELECT B.ECNTR_NO                      AS ECNTR_NO
+         , B.ECNTR_REVNO                     AS ECNTR_REVNO
+         , A.CNTR_APPX_UUID                   AS SIGN_TARGET            /*첨부서류번호*/
+         , A.CNTR_APPX_TYP_CCD                    AS DOC_TYPE
+         , C.CNTR_APPX_CRNG_CONT                    /* TEXT SIGN_SOURCE*/
+         , C.CNTR_APPX_CRNG_CONT                    AS APP_CONTENT            /*계약서원본*/
+         , A.CNTR_APPX_ORD
+      FROM ECNTR B
+     INNER JOIN CNTR_APPX A
+        ON (A.TEN_ID = B.TEN_ID
+        AND A.ECNTR_UUID = B.ECNTR_UUID)
+     INNER JOIN CNTR_APPX_CONT C
+        ON (C.TEN_ID = A.TEN_ID
+        AND C.CNTR_APPX_UUID = A.CNTR_APPX_UUID)
+     WHERE B.TEN_ID    = #{g.tenant}
+       AND B.ECNTR_UUID   = #{p.ecntr_uuid}
+       AND A.CNTR_APPX_STS_CCD = 'Y'
+     ORDER BY A.CNTR_APPX_ORD
+    </select>
+	<select id="findPaidStampTaxAmt" resultType="int">
+	/*estamptax.findPaidStampTaxAmt : 총 납입 금액 구하기*/
+		SELECT SUM(ESTAX.TAXPYMT_AMT)
+		FROM ESTAX ESTAX
+	   INNER JOIN STAX STAX
+		  ON STAX.TEN_ID = ESTAX.TEN_ID
+		 AND STAX.STAX_UUID = ESTAX.STAX_UUID
+	   INNER JOIN CNTRR CNTRR
+		  ON CNTRR.TEN_ID = STAX.TEN_ID
+		 AND CNTRR.CNTRR_UUID = STAX.CNTRR_UUID
+	   WHERE ESTAX.TEN_ID = #{g.tenant}
+		 AND ESTAX.ESTAX_UUID = #{p.estax_uuid}
+		 AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+	</select>
+	<select id="findCountEstampData" resultType="int">
+		/*estamptax.findCountEstampData : 납부번호로 전자수입인지 건수 확인 */
+		SELECT COUNT(*)
+		FROM ESTAX ESTAX
+	   WHERE ESTAX.TEN_ID = #{g.tenant}
+		  AND ESTAX.STTPYMT_NO = #{p.issueReqNo}
+	</select>
+	<insert id="insertEstampTax">
+		/* estamptax.insertEstampTax : 계약 정보 생성 */
+		INSERT INTO ESTAX
+			( TEN_ID
+			 , ESTAX_UUID
+			 , STAX_UUID
+			 , ECNTR_UUID
+			 , STTPYMT_NO
+			 , BIZREGNO
+			 , KTNET_REF_ID
+			 , TAXPYMT_TYP_CCD
+			 , TAXPYMT_INSTN_CCD
+			 , TAXPYMT_DT
+			 , TAXPYMT_AMT
+			 , RMK
+			 , STS
+			 , REGR_ID
+			 , REG_DTTM
+			 , MODR_ID
+			 , MOD_DTTM) 
+		VALUES
+			( #{g.tenant}
+			, #{p.estax_uuid}
+			, #{p.stax_uuid}
+			, #{p.ecntr_uuid}
+			, #{p.issueReqNo}
+			, #{p.issueBizNo}
+			, #{p.uniqueId}
+			, #{p.paymentDivisionCode}
+			, #{p.paymentOrganCode}
+			, CAST(#{p.paymentDttm} AS TIMESTAMP)  , CAST(#{p.paymentAmount} AS FLOAT  )
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+			)
+	</insert>
+	<update id="updateEstampTax">
+	/* estamptax.updateEstampTax : 전자수입인지세 정보 업데이트 */
+	UPDATE ESTAX
+	SET   BIZREGNO = #{p.issueBizNo}
+	  , KTNET_REF_ID = #{p.uniqueId}
+	  , TAXPYMT_TYP_CCD = #{p.paymentDivisionCode}
+	  , TAXPYMT_INSTN_CCD = #{p.paymentOrganCode}
+	  , TAXPYMT_DT = CAST(#{p.paymentDttm} AS TIMESTAMP)  , TAXPYMT_AMT = CAST(#{p.paymentAmount} AS FLOAT  )
+	WHERE TEN_ID = #{g.tenant}
+	  AND STTPYMT_NO = #{p.issueReqNo}
+	</update>
+	<select id="findReqEstampTax" resultType="map">
+		/* estamptax.findReqEstampTax : 전자수입인지 납부하기 위한 정보 조회 */
+		SELECT LOGIC_ORG.BIZREGNO
+			 , LOGIC_ORG.LOGIC_ORG_NM AS COMP_NM
+		     , CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_DT
+			 , CNTR.CNTR_AMT
+			 , CNTR.CNTR_STS_CCD
+			 , CNTR.CNTR_NM
+			 , STAX.STAX_UUID
+			 , STAX.STAX_AMT
+			 , COALESCE(STAX.STTPYMT_AMT, 0) AS STTPYMT_AMT
+			 , STAX.STTPYMT_STS_CCD
+			 , STAX.STTPYMTMETH_CCD
+			 , STAX.STTPYMT_RO
+			 , CNTRR.CNTRR_MOB
+		     , CNTRR.CNTRR_EML
+			 , ECNTR.ECNTR_UUID
+		FROM CNTR CNTR
+	   INNER JOIN CNTRR CNTRR
+          ON CNTRR.TEN_ID = CNTR.TEN_ID
+         AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+         AND CNTRR.CNTRR_TYP_CCD = 'BUYER'
+	   INNER JOIN ECNTR ECNTR
+		  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+       INNER JOIN STAX STAX
+          ON STAX.TEN_ID = CNTRR.TEN_ID
+         AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   INNER JOIN LOGIC_ORG LOGIC_ORG
+		  ON LOGIC_ORG.TEN_ID = #{g.tenant}
+		 AND LOGIC_ORG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		 AND LOGIC_ORG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+	   WHERE STAX.TEN_ID = #{g.tenant}
+		 AND STAX.STAX_UUID = #{p.stax_uuid}
+		 AND LOGIC_ORG.USE_YN = 'Y'
+	</select>
+	<select id="findListEStampTaxPayHistory" resultType="map">
+	/* estamptax.findListEStampTaxPayHistory : 전자수입인지 납부 이력 조회 */
+		SELECT ESTAX.TEN_ID
+			 , ESTAX.ESTAX_UUID
+			 , ESTAX.STAX_UUID
+			 , ESTAX.ECNTR_UUID
+			 , ESTAX.STTPYMT_NO
+			 , ESTAX.TAXPYMT_DT
+			 , ESTAX.TAXPYMT_AMT
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_NM
+			 , CNTR.CNTR_AMT
+			 , STAX.STAX_AMT
+			 , USR.USR_NM
+		FROM ESTAX ESTAX
+       INNER JOIN STAX STAX
+          ON ESTAX.TEN_ID = STAX.TEN_ID
+         AND ESTAX.STAX_UUID = STAX.STAX_UUID
+       INNER JOIN ECNTR ECNTR
+          ON ESTAX.TEN_ID = ECNTR.TEN_ID
+         AND ESTAX.ECNTR_UUID = ECNTR.ECNTR_UUID
+       INNER JOIN CNTR CNTR
+          ON ECNTR.TEN_ID = CNTR.TEN_ID
+         AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN USR USR
+		  ON USR.TEN_ID = ESTAX.TEN_ID
+	     AND USR.USR_ID = ESTAX.REGR_ID
+		WHERE ESTAX.TEN_ID = #{g.tenant}
+		  AND ESTAX.STAX_UUID = #{p.stax_uuid}
+		ORDER BY ESTAX.TAXPYMT_DT DESC
+	</select>
+	<select id="checkMinRevNoByCntrNo" parameterType="String" resultType="int">
+	/* estamptax.checkMinRevNoByCntrNo : 최소 계약차수 조회 */
+		SELECT MIN(CNTR_REVNO)
+          FROM CNTR
+         WHERE TEN_ID = #{g.tenant}
+           AND CNTR_NO = #{p}
+	</select>
+</mapper>

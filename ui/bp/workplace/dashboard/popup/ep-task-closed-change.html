@@ -1,0 +1,119 @@
+<dom-module id="ep-task-closed-change">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+		
+        <sc-ajax id="updateListClosedChange"
+                 url="updateListClosedChange.do"
+                 on-response="completeUpdateListClosedChange"></sc-ajax>
+
+        <cc-page-title-bar>
+            <sc-button text="변경" on-click="onClickClosedChange"></sc-button>
+        </cc-page-title-bar>
+		
+		<cc-form-panel collapsible="false" column="1" i18n-disabled>
+			<cc-fieldset>
+				<sc-label text="변경 일자"></sc-label>
+				<sc-date-field class="w-90" value="{{changeData.clsg_dt}}" required="true" string-date="true"></sc-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="변경 사유"></sc-label>
+				<sc-textarea-field value="{{changeData.chg_rsn}}" max-length="1000"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+        <sc-grid id="workGrid" class="flex" data-provider="{{taskList}}">
+            <cc-grid-toolbar title-text="대상 업무"></cc-grid-toolbar>
+            <sc-grid-columns>
+				<sc-data-column data-field="display_main_task_nm" header-text="메인 업무"></sc-data-column>
+				<sc-date-column data-field="pre_clsg_dt" header-text="이전 마감 일자" width="120" display-format="yyyy/MM/dd"></sc-date-column>
+				<sc-date-column data-field="clsg_dt" header-text="마감 일자" width="120" display-format="yyyy/MM/dd" string-date="true"></sc-date-column>
+				<sc-data-column data-field="task_tit" header-text="업무 제목" width="300" text-align="left"></sc-data-column>
+				<sc-date-column data-field="snd_dttm" header-text="발신 일시" width="130" display-format="yyyy/MM/dd HH:mm:ss"></sc-date-column>
+				<sc-data-column data-field="sndr_nm" header-text="발신자"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+				<sc-grid-field data-field="task_uuid"></sc-grid-field>
+				<sc-grid-field data-field="task_authty_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is : 'ep-task-closed-change',
+
+            properties: {
+                titleText: {
+                    type: String,
+                    value: I18N.translate("마감 일자 변경")
+                },
+                taskList: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                changeData: {
+                	type: Object,
+                    value: function () {
+                        return {};
+					}
+                }
+            },
+
+			load: function (checkedItems) {
+				var me = this;
+				me.set("taskList", checkedItems);
+				me.$.workGrid.selectionCheckAll(true);
+			},
+
+			onClickClosedChange: function () {
+				var me = this;
+
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+
+				var changeData = me.changeData || {};
+				var taskList = me.$.workGrid.getDataProvider().selectionCheckedItems();
+				
+				if(taskList.length === 0){
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.WRK1013", function() {	// 선택된 업무의 마감일정을 변경하시겠습니까?
+					me.$.updateListClosedChange.body = {
+						clsg_dt: changeData.clsg_dt,
+						chg_rsn: changeData.chg_rsn,
+						taskList: taskList
+					};
+					UT.request(me.$.updateListClosedChange);
+				});
+			},
+
+			completeUpdateListClosedChange: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result && result.resultStatus === "S") {
+					UT.completeAlert();  // 요청을 완료 하였습니다.
+					me.fire("complete-save");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			}
+        });
+    </script>
+</dom-module>

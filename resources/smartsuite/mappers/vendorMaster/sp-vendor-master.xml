@@ -1,0 +1,1803 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-vendor-master">
+	<!-- 사용대상 협력사관리유형 목록 조회 -->
+    <select id="findListVmtUsing" resultType="map">
+    /* vd-mgmt-setup.findListVmtUsing: 협력사관리유형 목록 조회 */
+        SELECT VMT.TEN_ID                   /* 테넌트 아이디 */
+             , VMT.VMT_UUID                 /* 협력사관리유형 UUID */
+             , VMT.VMT_CCD             AS DATA      /* 협력사관리유형 코드 */
+             , DTLCD_MULTLANG.DTLCD_NM AS LABEL
+             , VMT.USE_YN                   /* 사용여부 */
+             , VMT.STS                      /* 상태 */
+             , VMT.RMK                      /* 비고 */
+             , VMT.REGR_ID                   /* 등록자 아이디 */
+             , VMT.REG_DTTM                   /* 등록 일시 */
+             , VMT.MODR_ID                   /* 수정자 아이디 */
+             , VMT.MOD_DTTM                   /* 수정 일시	 */
+             , CASE ( SELECT COUNT(VMG.VMG_UUID)
+                        FROM VMG VMG     /* VMG : 협력사관리그룹 */
+                       WHERE VMG.TEN_ID = VMT.TEN_ID
+                         AND VMG.VMT_UUID = VMT.VMT_UUID
+                         AND VMG.STS != 'D')
+                    WHEN 0 THEN 'N'
+                    ELSE 'Y'
+                END    AS GRP_MAPPING_YN    /* 협력사관리그룹 매핑여부 */
+          FROM VMT VMT    /* VMT : 협력사관리유형 */
+          LEFT OUTER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD_MULTLANG.TEN_ID = VMT.TEN_ID
+		   AND DTLCD_MULTLANG.DTLCD  = VMT.VMT_CCD
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		   AND DTLCD_MULTLANG.CCD    = 'E900'
+         WHERE VMT.TEN_ID = #{g.tenant}
+           AND VMT.STS != 'D'
+           AND VMT.USE_YN            = 'Y'                     /* 사용여부 */
+        ORDER BY VMT.VMT_CCD
+    </select>
+	<select id="findListOorgCdAll" parameterType="String" resultType="map">
+        /* sp-vendor-master.findListOorgCdAll */
+        /* 운영단위 유형 별 운영조직 목록 조회 */
+        /* 콤보박스 or 그리드 콤보박스에 사용 */
+        SELECT O.OORG_CD AS DATA                            /* 운영조직코드 */
+             , CASE WHEN 'ko_KR' = #{g.locale}
+                    THEN CONCAT(CONCAT(CONCAT('[', OUNIT.OUNIT_NM), '] '), LO.LOGIC_ORG_NM)
+                    ELSE CONCAT(CONCAT(CONCAT('[', OUNIT.OUNIT_NM_EN), '] '), LO.LOGIC_ORG_NM_EN)
+                END AS LABEL
+        FROM ( SELECT TEN_ID
+                    , OORG_CD
+                    , PARNODE_OORG_CD
+                    , OUNIT_CD
+                    , PARNODE_LOGIC_ORG_CD
+                    , CHDNODE_YN AS LEAF_YN         /* 최하위 조직여부 */
+                    , LOGIC_ORG_TYP_CCD
+                    , LOGIC_ORG_CD
+               FROM OORG                     /* 운영조직 */
+               WHERE TEN_ID       = #{g.tenant}
+               <if test="p != null and p != ''">
+                 AND OUNIT_CD     = #{p}
+               </if>
+                 AND USE_YN       = 'Y'
+                 AND CHDNODE_YN   = 'Y'
+                 AND STS         != 'D'
+             ) O
+		INNER JOIN LOGIC_ORG LO
+		        ON LO.TEN_ID     = O.TEN_ID
+		       AND LO.LOGIC_ORG_TYP_CCD = O.LOGIC_ORG_TYP_CCD
+		       AND LO.LOGIC_ORG_CD     = O.LOGIC_ORG_CD
+		INNER JOIN OUNIT OUNIT
+		        ON O.TEN_ID = OUNIT.TEN_ID
+		       AND O.OUNIT_CD = OUNIT.OUNIT_CD
+        WHERE LO.USE_YN = 'Y'
+          AND LO.STS  != 'D'
+        ORDER BY O.LOGIC_ORG_CD
+    </select>
+    <insert id="insertVendorOperationOrganizationInfo">
+		/* sp-vendor-master.insertVendorOperationOrganizationInfo : 협력사 운영조직 정보 저장 */
+		INSERT INTO VD_OORG (
+			TEN_ID,           /* 시스템 아이디*/
+			VD_OORG_UUID,     /* 협력사 운영 조직 UUID*/
+			OORG_CD,          /* 운영 조직 코드*/
+			VD_CD,            /* 협력사 코드*/
+			PURC_PIC_ID,      /* 구매 담당자 아이디 */
+			QLY_PIC_ID,       /* 품질 담당자 아이디 */
+			PO_POSS_YN,   /* 거래가능여부*/
+			OBD_TYP_CCD,      /* 온보딩 유형 (POOL 업체)*/
+			STS,              /* 상태*/
+			REG_DTTM,         /* 등록일*/
+			MOD_DTTM,         /* 수정일*/
+			REGR_ID,          /* 등록자 아이디*/
+			MODR_ID           /* 수정자 아이디*/
+		) VALUES (
+			#{g.tenant},        /* 시스템 아이디*/
+			#{p.vd_oorg_uuid},  /* 협력사 운영 조직 UUID*/
+			#{p.oorg_cd},       /* 운영 조직 코드*/
+			#{g.vd_cd},         /* 협력사 코드*/
+			#{p.purc_pic_id},   /* 구매 담당자 아이디 */
+			#{p.qly_pic_id},    /* 품질 담당자 아이디 */
+			'N',                /* 거래가능여부*/
+			'NEW',              /* 온보딩 유형 (POOL 업체)*/
+			'C',                /* 상태*/
+			#{g.now},           /* 등록일*/
+			#{g.now},           /* 수정일*/
+			#{g.vd_cd},      /* 등록자 아이디*/
+			#{g.vd_cd}       /* 수정자 아이디*/
+		)
+	</insert>
+	<update id="updateVendorOperationOrganizationInfo">
+		/* vendor-master.updateVendorOperationOrganizationInfo : 협력사 운영조직 정보 수정 */
+		UPDATE VD_OORG
+		SET
+			PO_POSS_YN   = #{p.po_poss_yn},          /* 거래가능여부*/
+			OBD_TYP_CCD      = #{p.obd_typ_ccd},             /* 온보딩 유형*/
+			OORG_INI_TRANSN_ST_DT = CASE WHEN (OORG_INI_TRANSN_ST_DT IS NULL OR OORG_INI_TRANSN_ST_DT = '')
+				THEN #{p.oorg_ini_transn_st_dt} ELSE OORG_INI_TRANSN_ST_DT END,  /* 최초 거래 시작일*/
+			PYMTMETH_CCD     = #{p.pymtmeth_ccd},            /* 지급방법*/
+			PYMTMETH_EXPLN  =  #{p.pymtmeth_expln},          /* 지급방법 설명 */
+			CUR_CCD          = #{p.cur_ccd},                 /* 통화*/
+			TAX_TYP_CCD      = #{p.tax_typ_ccd},             /* 세금유형*/
+			PURC_PIC_ID      = #{p.purc_pic_id},             /* 구매 담당자 아이디*/
+			QLY_PIC_ID       = #{p.qly_pic_id},              /* 품질 담당자 아이디*/
+			STS              = 'U',
+			MODR_ID          = #{g.username},                /* 수정자 아이디*/
+			MOD_DTTM         = #{g.now}
+		WHERE  TEN_ID        = #{g.tenant}
+		  AND  VD_CD         = #{g.vd_cd}
+		  AND  OORG_CD       = #{p.oorg_cd}
+		  AND  VD_OORG_UUID  = #{p.vd_oorg_uuid}
+	</update>
+    <!-- 협력사 상태 조회 사용X-->
+    <select id="getVendorModSts" resultType="map">
+        SELECT  VDGL.SYS_ID,
+                VDGL.VD_LOG_ID,
+                VDGL.VD_CD,
+                VDGL.MOD_STS,
+                VDGL.MOD_REV,
+                VDGL.MOD_CLS
+        FROM    ESMVDGL1 VDGL
+                INNER JOIN ESMVDOG1 VDOG ON VDGL.SYS_ID = VDOG.SYS_ID AND VDGL.VD_CD = VDOG.VD_CD AND VDGL.MOD_REV = VDOG.MOD_REV
+        WHERE   VDGL.SYS_ID      = #{g.tenant}
+        AND     VDGL.VD_CD       = #{g.vd_cd}
+        AND     VDGL.MOD_REV     = #{p.mod_rev}
+        AND     VDOG.OPER_ORG_CD = #{p.oper_org_cd}
+        AND     VDOG.STS     != 'D'
+    </select>
+    <!-- *********************** 기본정보 탭 ********************* -->
+	<select id="findVendorOperationOrganizationInfo" resultType="map">
+        /* 운영조직정보 조회 : vendor-master.findVendorOperationOrganizationInfo */
+        SELECT ORGVD.TEN_ID,                 /* 시스템 아이디*/
+               ORGVD.VD_OORG_UUID,           /* 협력사 운영 조직 정보 아이디*/
+               ORGVD.OORG_CD,                /* 운영 조직 코드*/
+               (SELECT CASE WHEN 'ko_KR' = #{g.locale} THEN ORG.LOGIC_ORG_NM
+                            ELSE ORG.LOGIC_ORG_NM_EN END
+                FROM OORG OORG
+	                     INNER JOIN LOGIC_ORG ORG
+	                                ON ORG.TEN_ID = OORG.TEN_ID
+		                                AND ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+		                                AND ORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD
+		                                AND ORG.STS != 'D'
+                WHERE OORG.TEN_ID = ORGVD.TEN_ID
+	              AND OORG.OORG_CD = ORGVD.OORG_CD) AS OORG_NM,
+               ORGVD.VD_CD,                  /* 협력사 코드*/
+               ORGVD.PO_POSS_YN,         /* 거래 가능 여부*/
+               ORGVD.OBD_TYP_CCD,            /* 온보딩 유형 공통코드*/
+               ORGVD.DOMOVRS_TYP_CCD,        /* 내외자 구분 공통코드*/
+               ORGVD.PYMTMETH_CCD,           /* 지급방법 공통코드 */
+	           ORGVD.PYMTMETH_EXPLN,         /* 지급방법 설명 */
+	           ORGVD.DLVYMETH_CCD,           /* 납품방법 공통코드 */
+	           ORGVD.DLVYMETH_EXPLN,         /* 납품방법 설명 */
+               ORGVD.CUR_CCD,                /* 통화*/
+               ORGVD.OORG_INI_TRANSN_ST_DT,  /* 운영조직 최초 거래 시작 일자*/
+               ORGVD.PURC_PIC_ID,            /* 구매 담당자 아이디*/
+               ORGVD.TAX_TYP_CCD             /* 세금 유형 공통코드(세금계산서유형)*/
+              ,(
+                 SELECT USR_NM
+                   FROM USR A
+                  WHERE A.TEN_ID = ORGVD.TEN_ID
+                    AND A.USR_ID = ORGVD.PURC_PIC_ID
+               ) AS PURC_PIC_NM                   /* 구매담당자명 */
+              ,(
+                 SELECT C.DEPT_NM
+                   FROM USR A
+        LEFT OUTER JOIN LOGIC_ORG B   /*B:조직*/
+                     ON A.TEN_ID     = B.TEN_ID
+                    AND A.CO_CD      = B.ORG_CD
+                    AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+                    AND B.STS != 'D'
+        LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG MAPG
+                     ON A.TEN_ID            = MAPG.TEN_ID
+                    AND B.LOGIC_ORG_CD      = MAPG.LOGIC_ORG_CD
+                    AND B.LOGIC_ORG_TYP_CCD = MAPG.LOGIC_ORG_TYP_CCD
+                    AND A.DEPT_CD           = MAPG.DEPT_CD
+                    AND MAPG.STS != 'D'
+        LEFT OUTER JOIN DEPT C   /*C:부서*/
+                     ON A.TEN_ID     = C.TEN_ID
+                    AND MAPG.DEPT_CD = C.DEPT_CD
+                    AND C.STS != 'D'
+                  WHERE A.TEN_ID = ORGVD.TEN_ID
+                    AND A.USR_ID = ORGVD.PURC_PIC_ID
+              ) AS PURC_PIC_DEPT                 /* 구매담당자부서명 */
+             ,ORGVD.QLY_PIC_ID                   /* 품질담당자 아이디*/
+             ,(
+                 SELECT USR_NM
+                   FROM USR A
+                  WHERE A.TEN_ID = ORGVD.TEN_ID
+                    AND A.USR_ID = ORGVD.QLY_PIC_ID
+             ) AS QLY_PIC_NM                   /* 품질담당자명 */
+             ,(
+                 SELECT C.DEPT_NM
+                   FROM USR A
+        LEFT OUTER JOIN LOGIC_ORG B   /*B:조직*/
+                     ON A.TEN_ID     = B.TEN_ID
+                    AND A.CO_CD      = B.ORG_CD
+                    AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+                    AND B.STS != 'D'
+	    LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG MAPG
+			         ON A.TEN_ID            = MAPG.TEN_ID
+			        AND B.LOGIC_ORG_CD      = MAPG.LOGIC_ORG_CD
+			        AND B.LOGIC_ORG_TYP_CCD = MAPG.LOGIC_ORG_TYP_CCD
+				    AND A.DEPT_CD           = MAPG.DEPT_CD
+			        AND MAPG.STS != 'D'
+        LEFT OUTER JOIN DEPT C   /*C:부서*/
+                     ON A.TEN_ID     = C.TEN_ID
+	                AND MAPG.DEPT_CD = C.DEPT_CD
+	                AND C.STS != 'D'
+                  WHERE A.TEN_ID = ORGVD.TEN_ID
+                    AND A.USR_ID = ORGVD.QLY_PIC_ID
+               ) AS QLY_PIC_DEPT                  /* 품질담당자 부서명 */
+            , #{p.vmt_ccd} AS VMT_CCD
+            , #{p.vmt_uuid} AS VMT_UUID
+        FROM   VD_OORG ORGVD
+        WHERE  ORGVD.TEN_ID  = #{g.tenant}
+          AND  ORGVD.VD_CD   = #{g.vd_cd}
+          AND  ORGVD.OORG_CD = #{p.oorg_cd}
+    </select>
+    <select id="findBasicVendorInfo" resultType="map">
+        /* sp-vendor-master.findBasicVendorInfo : 기본정보 &gt; 기본정보 조회 */
+        SELECT /*----------------------- VD (ESMVDGL) ---------------------------------*/
+		        VD.TEN_ID,                  /* 시스템 아이디*/
+		        VD.VD_CD,                   /* 협력사 코드*/
+		        VD.ERP_VD_CD,               /* ERP 협력사 코드*/
+		        VD.VD_NM,                   /* 협력사 명*/
+		        VD.VD_NM_EN,                /* 협력사 영문 명*/
+		        VD.CEO_NM,                  /* 대표 명*/
+		        VD.CEO_NM_EN,               /* 대표 영문 명*/
+		        VD.CEO_CRR,                 /* 대표 주요 경력*/
+		        VD.BIZREGNO,                /* 사업자 등록 번호*/
+		        VD.HQ_BIZREGNO,             /* 본사 사업자 등록 번호*/
+		        VD.CORPNO,                  /* 법인 등록 번호*/
+		        VD.TAX_ID,                  /* TAX ID*/
+		        VD.EU_VAT_REG_ID,           /* EU VAT REG ID*/
+		        VD.CTRY_CCD,                /* 국가 코드*/
+		        VD.ZIPCD,                   /* 우편 번호*/
+		        VD.DTL_ADDR_1,              /* 상세 주소 1*/
+		        VD.DTL_ADDR_2,              /* 상세 주소 2*/
+		        CONCAT(VD.DTL_ADDR_1, CONCAT( ' ', VD.DTL_ADDR_2)) AS ADDR_INFO, /* 주소*/
+		        VD.DTL_ADDR_EN_1,           /* 상세 주소 영문 1 */
+		        VD.DTL_ADDR_EN_2,           /* 상세 주소 영문 1 */
+		        CONCAT( CONCAT(VD.DTL_ADDR_EN_1,' ')        /* 상세 주소 영문 1*/
+			        , CONCAT(VD.DTL_ADDR_EN_2,' ')        /* 상세 주소 영문 2*/
+			    ) AS ADDR_EN_INFO,        /* 상세 주소 영문*/
+		        VD.IND,                     /* 업종*/
+		        VD.BIZTYP,                  /* 업태*/
+		        VD.TAXNSUBJ_YN,             /* 단위 과세 여부*/
+		        VD.TAXNSUBJ_SEQNO,          /* 단위 과세 번호 */
+		        VD.VD_MAND_FACT_SAVE_YN,	/* VALID 여부*/
+		        VD.CEO_IMG_ATH_UUID,        /* 대표자 이미지 첨부 코드 */
+		        VD.VD_SIZE_CCD,             /* 협력사 규모*/
+		        VD.VD_ESTD_DT,              /* 설립 일자*/
+		        VD.STKMKT_TYP_CCD,          /* 주식시장 유형 공통코드*/
+		        VD.HMPG_URL,                /* 홈페이지 주소*/
+		        VD.MAIN_TRANSN_POSS_ITEM,   /* 주요 거래 품목*/
+		        EMP.EMP_CNT_YR,             /* 임직원 년도*/
+		        EMP.EMP_NUMC                /* 임직원 수*/
+			    , CASE WHEN VD.CTRY_CCD = 'KR' THEN VD.CTRY_CCD  /* 한국 */
+			               WHEN EXISTS ( SELECT 1
+			                             FROM DTLCD
+			                             WHERE TEN_ID = VD.TEN_ID
+				                           AND CCD = 'C008'
+				                           AND DTLCD = VD.CTRY_CCD ) THEN 'EU' /* EU 회원국 */
+			               ELSE 'ETC'    /* 기타 국가 */
+			      END AS VALID_CTRY_CCD
+-- 	        	, VD.ENC_PRIVATE_KEY        /* 암호화된 PRIVATE KEY */
+        FROM   VD VD
+	    LEFT OUTER JOIN (
+	        SELECT SUBJ_YR AS EMP_CNT_YR , SUM(EMP_NUMC) AS EMP_NUMC
+	          FROM VD_EMP_CURSITU
+	         WHERE TEN_ID  = #{g.tenant}
+		       AND VD_CD   = #{g.vd_cd}
+		    AND SUBJ_YR = CAST( (SELECT
+		    CASE WHEN MAX(CAST(SUBJ_YR AS INT)) IS NULL THEN 0
+		    ELSE MAX(CAST(SUBJ_YR AS INT)) END
+		    FROM VD_EMP_CURSITU
+		    WHERE VD_CD = #{g.vd_cd} AND TEN_ID =#{g.tenant}
+		    ) AS NVARCHAR2(4))  GROUP BY SUBJ_YR
+        ) EMP
+	    ON   ( 1 = 1 )
+        WHERE  VD.TEN_ID      = #{g.tenant}
+        AND    VD.VD_CD       = #{g.vd_cd}
+    </select>
+	<select id="findVendorAttachmentList" resultType="map">
+		/* sp-vendor-master.findVendorAttachmentList : 협력사 첨부파일 조회 */
+		SELECT VA.TEN_ID
+			 , VA.VD_ATHDOCPLCY_UUID    /* 협력사 첨부파일 정책 UUID */
+			 , VD.VD_CD
+			 , AC.CTRY_CCD              /* 정책 국가 코드 */
+			 , AA.ATHF_CCD AS VD_SUBMDDOC_TYP_CCD /* 첨부파일 공통코드(E032) */
+			 , AA.MAND_YN               /* 첨부파일 필수 여부 */
+			 , AA.APVL_SUBJ_YN          /* 첨부파일 결재 대상 여부 */
+			 , AA.ATHDOC_EXPLN          /* 첨부문서 설명 */
+			 , AA.REF_ATHG_UUID         /* 참조 첨부그룹 UUID */
+			 , VAF.VD_ATHF_UUID         /* 협력사 첨부파일 UUID */
+			 , VAF.ATHG_UUID        /* 협력사 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VAF.TEN_ID
+				  AND ATHG_UUID = VAF.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VAF.RMK
+		FROM VD_ATHDOCPLCY VA /* 협력사 첨부문서정책 */
+		INNER JOIN ATHDOCPLCY_ATHF AA /* 첨부문서정책 첨부파일 */
+		        ON VA.TEN_ID = AA.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AA.VD_ATHDOCPLCY_UUID
+			<if test="p.info_chg_req_yn != null and p.info_chg_req_yn eq 'Y'.toString()">
+				AND AA.APVL_SUBJ_YN = 'Y' /* 결재대상 첨부파일만 조회 */
+			</if>
+		INNER JOIN ATHDOCPLCY_CTRY AC /* 첨부문서정책 국가 */
+		        ON VA.TEN_ID = AC.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AC.VD_ATHDOCPLCY_UUID
+		INNER JOIN VD VD /* 협력사 마스터 */
+		        ON VA.TEN_ID = VD.TEN_ID
+		    	AND AC.CTRY_CCD = VD.CTRY_CCD
+		LEFT OUTER JOIN VD_ATHF VAF
+		             ON VA.TEN_ID = VAF.TEN_ID
+		            AND VD.VD_CD = VAF.VD_CD
+		        	AND AA.ATHF_CCD = VAF.VD_SUBMDDOC_TYP_CCD
+		WHERE VA.TEN_ID = #{g.tenant}
+		  AND VD.VD_CD = #{g.vd_cd}
+		ORDER BY AA.MAND_YN DESC, AA.ATHF_CCD
+	</select>
+	<select id="findVendorBankAccountInfo" resultType="map">
+		/* vendor-master.findVendorBankAccountInfo : 협력사 계좌정보 조회 */
+		SELECT VB.TEN_ID
+			 , VB.VD_BNKACCT_UUID         /* 협력사 계좌 UUID */
+			 , VB.BNK_CCD                 /* 은행 공통코드 */
+			 , VB.ACCTHLDR                /* 예금주 */
+			 , VB.BNKACCT_NO             /* 계좌 번호 */
+			 , VB.IBAN_CD                 /* IBAN 코드 */
+			 , VB.SWIFT_CD                /* SWIFT 코드 */
+			 , VB.MAIN_BNKACCT_YN         /* 메인 계좌 여부 */
+			 , VB.VTL_BNKACCT_YN          /* 가상 계좌 여부 */
+			 , VB.USE_YN                  /* 사용 여부 */
+			 , VB.EFCT_ST_DT              /* 유효 시작 일자 */
+			 , VB.EFCT_ED_DT              /* 유효 종료 일자 */
+			 , VB.ATHG_UUID           /* 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VB.TEN_ID
+				  AND ATHG_UUID = VB.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VD.VD_CD
+		FROM VD_BNKACCT VB
+		INNER JOIN VD VD
+		        ON VB.TEN_ID = VD.TEN_ID
+		       AND VB.VD_CD = VD.VD_CD
+		WHERE VB.TEN_ID = #{g.tenant}
+		  AND VB.VD_CD = #{g.vd_cd}
+		ORDER BY CASE WHEN (VB.MAIN_BNKACCT_YN IS NULL OR VB.MAIN_BNKACCT_YN = '') THEN 'N' ELSE VB.MAIN_BNKACCT_YN END DESC, VB.REG_DTTM DESC
+	</select>
+    <update id="updateBasicVendorInfo">
+	    /* sp-vendor-master.updateBasicVendorInfo (updateBasicInfoMaster) : 협력사마스터 수정 */
+        UPDATE VD
+        SET
+            VD_NM           = #{p.vd_nm},                   /* 협력사 명*/
+            VD_NM_EN        = #{p.vd_nm_en},                /* 협력사 영문 명*/
+            CEO_NM          = #{p.ceo_nm},                  /* 대표 명*/
+            CEO_NM_EN       = #{p.ceo_nm_en},               /* 대표 영문 명*/
+            CEO_CRR         = #{p.ceo_crr},                 /* 대표 주요 경력*/
+            BIZREGNO        = #{p.bizregno},                /* 사업자번호*/
+            HQ_BIZREGNO     = #{p.hq_bizregno},             /* 본사사업자번호*/
+            CORPNO          = #{p.corpno},                  /* 법인번호*/
+            TAX_ID          = #{p.tax_id},                  /* TAX NO*/
+            EU_VAT_REG_ID   = #{p.eu_vat_reg_id},           /* EU SALES NO*/
+            TAXNSUBJ_SEQNO  = #{p.taxnsubj_seqno},
+            TAXNSUBJ_YN     = #{p.taxnsubj_yn},
+            ZIPCD           = #{p.zipcd},                   /* 우편 번호*/
+            DTL_ADDR_1      = #{p.dtl_addr_1},              /* 상세 주소 1*/
+            DTL_ADDR_2      = #{p.dtl_addr_2},              /* 상세 주소 2*/
+            ERP_VD_CD       = #{p.erp_vd_cd},               /* ERP 협력사 코드*/
+            DTL_ADDR_EN_1   = #{p.dtl_addr_en_1},           /* 상세 주소 영문 1*/
+            DTL_ADDR_EN_2   = #{p.dtl_addr_en_2},           /* 상세 주소 영문 2 */
+            IND             = #{p.ind},                     /* 업종*/
+            BIZTYP          = #{p.biztyp},                  /* 업태*/
+            VD_MAND_FACT_SAVE_YN  = 'Y',
+            CEO_IMG_ATH_UUID      = #{p.ceo_img_ath_uuid},  /* 대표자 이미지 첨부 코드 */
+	        VD_SIZE_CCD     = #{p.vd_size_ccd},             /* 협력사 규모*/
+	        VD_ESTD_DT      = #{p.vd_estd_dt},              /* 설립 일자*/
+	        STKMKT_TYP_CCD  = #{p.stkmkt_typ_ccd},          /* 주식 상장 여부*/
+	        HMPG_URL        = #{p.hmpg_url},                /* 홈페이지 주소*/
+	        MAIN_TRANSN_POSS_ITEM  = #{p.main_transn_poss_item}, /* 주요 거래 품목*/
+            STS             = 'U',
+            MODR_ID         = #{g.username},                /* 수정자 아이디*/
+            MOD_DTTM        = #{g.now}                      /* 수정 일시*/
+        WHERE TEN_ID        = #{g.tenant}
+          AND VD_CD         = #{g.vd_cd}
+    </update>
+    <update id="updateVdOorgInfo">
+        /* sp-vendor-master.updateVdOorgInfo : 기본정보 &gt; 운영조직정보 수정(updateBasicOperOrg) */
+        UPDATE VD_OORG
+        SET
+	        PO_POSS_YN   = #{p.po_poss_yn},          /* 거래가능여부*/
+	        OBD_TYP_CCD      = #{p.obd_typ_ccd},             /* 온보딩 유형*/
+	        OORG_INI_TRANSN_ST_DT = #{p.oorg_ini_transn_st_dt}, /* 최초 거래 시작일*/
+	        PURC_PIC_ID          = #{p.purc_pic_id},         /* 구매 담당자 아이디*/
+	        QLY_PIC_ID          = #{p.qly_pic_id},           /* 품질 담당자 아이디*/
+            STS                 = 'U',
+            MODR_ID             = #{g.username},             /* 수정자 아이디*/
+            MOD_DTTM            = #{g.now}
+        WHERE  TEN_ID           = #{g.tenant}
+        AND    VD_CD            = #{g.vd_cd}
+        AND    OORG_CD          = #{p.oorg_cd}
+        AND    VD_OORG_UUID     = #{p.vd_oorg_uuid}
+    </update>
+    <insert id="insertVendorAttachmentInfo">
+    /* sp-vendor-master.insertVendorAttachmentInfo 협력사 첨부파일 신규 저장 */
+		INSERT INTO VD_ATHF (
+			TEN_ID,
+			VD_ATHF_UUID,
+            VD_CD,
+			VD_SUBMDDOC_TYP_CCD,
+			ATHG_UUID,
+            USE_YN,
+            STS,        
+            RMK,
+			REGR_ID,
+		    REG_DTTM,
+		    MODR_ID,
+		    MOD_DTTM
+        )VALUES(
+            #{g.tenant},        
+            #{p.vd_athf_uuid},
+            #{g.vd_cd},   
+            #{p.vd_submddoc_typ_ccd},
+            #{p.athg_uuid},
+            #{p.use_yn},
+            #{p.sts},
+            #{p.rmk},
+            #{g.username},
+            #{g.now},
+            #{g.username},
+            #{g.now}
+        )
+    </insert>
+    <update id="updateVendorAttachmentInfo">
+        /* sp-vendor-master.updateVendorAttachmentInfo 협력사 첨부파일 수정 */
+        UPDATE VD_ATHF
+        SET ATHG_UUID = #{p.athg_uuid}
+        ,   STS = #{p.sts}
+        ,   RMK = #{p.rmk}
+	    ,   MODR_ID  = #{g.username}
+	    ,   MOD_DTTM = #{g.now}
+        WHERE TEN_ID = #{g.tenant}
+          AND VD_ATHF_UUID = #{p.vd_athf_uuid}
+    </update>
+	<insert id="insertVendorBankAccountInfo">
+		/* sp-vendor-master.insertVendorBankAccountInfo 협력사 계좌정보 신규 저장 */
+		INSERT INTO VD_BNKACCT (
+			 TEN_ID
+		   , VD_BNKACCT_UUID
+		   , VD_CD
+           , BNK_CCD
+           , ACCTHLDR
+           , BNKACCT_NO
+           , IBAN_CD
+           , SWIFT_CD
+           , VTL_BNKACCT_YN
+           , MAIN_BNKACCT_YN
+           , USE_YN
+           , EFCT_ST_DT
+           , EFCT_ED_DT
+           , ATHG_UUID
+           , RMK
+           , STS
+           , REGR_ID
+           , REG_DTTM
+           , MODR_ID
+           , MOD_DTTM
+		)VALUES(
+		     #{g.tenant}
+	       , #{p.vd_bnkacct_uuid}
+	       , #{g.vd_cd}
+	       , #{p.bnk_ccd}
+	       , #{p.accthldr}
+	       , #{p.bnkacct_no}
+	       , #{p.iban_cd}
+	       , #{p.swift_cd}
+	       , #{p.vtl_bnkacct_yn}
+	       , #{p.main_bnkacct_yn}
+	       , #{p.use_yn}
+	       , #{p.efct_st_dt}
+	       , #{p.efct_ed_dt}
+	       , #{p.athg_uuid}
+	       , #{p.rmk}
+	       , 'C'
+	       , #{g.username}
+	       , #{g.now}
+	       , #{g.username}
+	       , #{g.now}
+       )
+	</insert>
+	<update id="updateVendorBankAccountInfo">
+		/* sp-vendor-master.updateVendorBankAccountInfo 협력사 계좌정보 수정 */
+		UPDATE VD_BNKACCT
+			SET BNK_CCD = #{p.bnk_ccd}
+			  , ACCTHLDR = #{p.accthldr}
+			  , BNKACCT_NO = #{p.bnkacct_no}
+			  , IBAN_CD = #{p.iban_cd}
+			  , SWIFT_CD = #{p.swift_cd}
+			  , VTL_BNKACCT_YN = #{p.vtl_bnkacct_yn}
+			  , MAIN_BNKACCT_YN = #{p.main_bnkacct_yn}
+			  , USE_YN = #{p.use_yn}
+			  , EFCT_ST_DT = #{p.efct_st_dt}
+			  , EFCT_ED_DT = #{p.efct_ed_dt}
+			  , ATHG_UUID = #{p.athg_uuid}
+			  , STS = 'U'
+			  , MODR_ID = #{g.username}
+			  , MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND VD_BNKACCT_UUID = #{p.vd_bnkacct_uuid}
+		  AND VD_CD = #{g.vd_cd}
+	</update>
+	<delete id="deleteVendorBankAccountInfo">
+		/* sp-vendor-master.deleteVendorBankAccountInfo : 협력사 계좌정보 삭제 */
+		DELETE FROM VD_BNKACCT
+		WHERE TEN_ID = #{g.tenant}
+		  AND VD_BNKACCT_UUID = #{p.vd_bnkacct_uuid}
+		  AND VD_CD = #{g.vd_cd}
+	</delete>
+	<select id="findListVendorManagementTypeInfo" resultType="map">
+		/* sp-vendor-master.findListVendorManagementTypeInfo : 협력사-운영조직 : 협력사관리유형 정보 조회 */
+		SELECT OORG_VMT.TEN_ID,
+		       OORG_VMT.OORG_CD,                  /* 운영 조직 코드*/
+		       CASE WHEN 'ko_KR' = #{g.locale} THEN LORG.LOGIC_ORG_NM ELSE LORG.LOGIC_ORG_NM_EN END AS LOGIC_ORG_NM,
+		       CASE WHEN (ORGVD.VD_CD IS NULL OR ORGVD.VD_CD = '') THEN #{g.vd_cd} ELSE ORGVD.VD_CD END AS VD_CD, /* 협력사 코드*/
+		       CASE WHEN (ORGVD.OBD_TYP_CCD IS NULL OR ORGVD.OBD_TYP_CCD = '') THEN 'NEW' ELSE ORGVD.OBD_TYP_CCD END AS OBD_TYP_CCD, /* 등록 유형*/
+		       ORGVD.VD_OORG_UUID,          /* 운영조직 협력사 uuid */
+		       VMT.VMT_UUID,                /* 협력사관리유형 uuid */
+		       VMT.VMT_CCD,                 /* 관리유형 코드*/
+		       VMT_DTLMULT.DTLCD_NM AS VMT_NM,
+		       GRPOVG.REGISTERED_VD_VMG,    /* 관리유형에 등록된 관리그룹 수 */
+		       CASE WHEN (CASE WHEN (GRPOVG.REGISTERED_VD_VMG IS NULL) THEN 0 ELSE GRPOVG.REGISTERED_VD_VMG END) = 0 THEN 'N' ELSE 'Y' END AS SUPAVL_YN,
+		       GRPOVG.SUPAVL_ST_DT,         /* 공급가능 시작일 */
+		       GRPOVG.SUPAVL_ED_DT         /* 공급가능 종료일 */
+		FROM (SELECT OV.TEN_ID, V.VMT_UUID, O.OORG_CD
+		        FROM OEG O
+		       INNER JOIN OEG_VMG OV
+		          ON OV.TEN_ID = O.TEN_ID
+				 AND OV.OEG_UUID = O.OEG_UUID
+				 AND OV.STS != 'D'
+		       INNER JOIN VMG_OORG VO
+		          ON VO.TEN_ID = OV.TEN_ID
+		         AND VO.VMG_OORG_UUID = OV.VMG_OORG_UUID
+		         AND VO.STS != 'D'
+			   INNER JOIN VMG V
+		          ON V.TEN_ID = VO.TEN_ID
+				 AND V.VMG_UUID = VO.VMG_UUID
+				 AND V.STS != 'D'
+			   WHERE O.TEN_ID = #{g.tenant}
+		         AND O.OORG_CD = #{p.oorg_cd}
+				 AND O.STS != 'D'
+			   GROUP BY OV.TEN_ID, V.VMT_UUID, O.OORG_CD
+		     ) OORG_VMT
+		INNER JOIN VMT
+		  ON VMT.TEN_ID = OORG_VMT.TEN_ID
+		 AND VMT.VMT_UUID = OORG_VMT.VMT_UUID
+		 AND VMT.STS != 'D'
+		LEFT OUTER JOIN DTLCD_MULTLANG VMT_DTLMULT ON VMT_DTLMULT.TEN_ID = VMT.TEN_ID AND VMT_DTLMULT.CCD = 'E900' AND VMT_DTLMULT.DTLCD = VMT.VMT_CCD AND VMT_DTLMULT.LANG_CCD = #{g.locale}
+		INNER JOIN OORG OORG ON OORG.TEN_ID = OORG_VMT.TEN_ID AND OORG.OORG_CD = OORG_VMT.OORG_CD AND OORG.OUNIT_CD = 'EO' AND OORG.STS != 'D'
+		INNER JOIN LOGIC_ORG LORG ON LORG.TEN_ID = OORG.TEN_ID AND LORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD AND LORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD AND LORG.STS != 'D'
+		LEFT OUTER JOIN VD_OORG ORGVD ON OORG.TEN_ID = ORGVD.TEN_ID AND OORG.OORG_CD = ORGVD.OORG_CD AND ORGVD.VD_CD = #{g.vd_cd}
+		LEFT OUTER JOIN (SELECT VG.TEN_ID, OVG.VD_OORG_UUID, VG.VMT_UUID, MIN(OVG.SUPAVL_ST_DT) AS SUPAVL_ST_DT, MAX(OVG.SUPAVL_ED_DT) AS SUPAVL_ED_DT
+		                      , SUM(CASE WHEN SUPAVL_YN='Y' THEN 1 ELSE 0 END) AS REGISTERED_VD_VMG
+		                  FROM VD_OORG_VMG OVG
+		                 INNER JOIN VMG_OORG VOG
+		                    ON VOG.TEN_ID = OVG.TEN_ID
+		                   AND VOG.VMG_OORG_UUID = OVG.VMG_OORG_UUID
+		                   AND VOG.STS != 'D'
+		                 INNER JOIN VMG VG
+		                    ON VG.TEN_ID = VOG.TEN_ID
+		                   AND VG.VMG_UUID = VOG.VMG_UUID
+		                   AND VG.STS != 'D'
+	                      WHERE OVG.TEN_ID = #{g.tenant}
+		                    AND OVG.STS != 'D'
+		                  GROUP BY VG.TEN_ID, OVG.VD_OORG_UUID, VG.VMT_UUID
+		                ) GRPOVG
+		  ON GRPOVG.TEN_ID = ORGVD.TEN_ID
+		 AND GRPOVG.VD_OORG_UUID = ORGVD.VD_OORG_UUID
+		 AND GRPOVG.VMT_UUID = VMT.VMT_UUID
+		WHERE OORG_VMT.TEN_ID = #{g.tenant}
+		  AND OORG.USE_YN = 'Y'
+		  AND LORG.USE_YN = 'Y'
+		  AND VMT.USE_YN ='Y'
+		ORDER BY CASE WHEN GRPOVG.REGISTERED_VD_VMG IS NULL THEN 0 ELSE GRPOVG.REGISTERED_VD_VMG END DESC, VMT.VMT_CCD
+	</select>
+	<select id="findListVendorManagementGroup" resultType="map">
+		/* sp-vendor-master.findListVendorManagementGroup 등록 협력사관리그룹 조회 */
+		SELECT OVV.TEN_ID
+			 , OVV.VD_OORG_VMG_UUID
+			 , OVV.VD_OORG_UUID
+		     , VT.VMT_UUID
+			 , VG.VMG_UUID
+			 , OV.VD_CD
+			 , OV.OORG_CD
+			 , (
+					SELECT CASE WHEN 'en_US' = #{g.locale} THEN ORG.LOGIC_ORG_NM_EN
+					            ELSE ORG.LOGIC_ORG_NM
+						   END
+					FROM OORG OORG
+					INNER JOIN LOGIC_ORG ORG
+					        ON ORG.TEN_ID = OORG.TEN_ID
+					       AND ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+					       AND ORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD
+					       AND ORG.STS != 'D'
+					WHERE OORG.TEN_ID = OV.TEN_ID
+					  AND OORG.OORG_CD = OV.OORG_CD
+				) AS OPER_ORG_NM
+			 , VG.VMG_CD
+			 , VG.VMG_TYP_CCD
+			 , VG.VMG_NM
+			 , OVV.SUPAVL_YN
+			 , OVV.SUPAVL_ST_DT
+			 , OVV.SUPAVL_ED_DT
+			 -- 추가필요  , OVV.AUTO_INVT_YN
+			 , VT.VMT_CCD
+		FROM VD_OORG_VMG OVV /* 협력사 운영조직 협력사관리그룹 */
+		INNER JOIN VD_OORG OV /* 협력사 운영조직 */
+		        ON OV.TEN_ID = OVV.TEN_ID
+		       AND OV.VD_OORG_UUID = OVV.VD_OORG_UUID
+			   AND OV.STS != 'D'
+		INNER JOIN VMG_OORG VO /* 협력사관리그룹 운영조직 */
+			    ON VO.TEN_ID = OVV.TEN_ID
+			   AND VO.VMG_OORG_UUID = OVV.VMG_OORG_UUID
+			   AND VO.STS != 'D'
+		INNER JOIN VMG VG /* 협력사관리그룹 */
+		        ON VG.TEN_ID = VO.TEN_ID
+		       AND VG.VMG_UUID = VO.VMG_UUID
+			   AND VG.STS != 'D'
+		INNER JOIN VMT VT
+		        ON VT.TEN_ID = VG.TEN_ID
+		       AND VT.VMT_UUID = VG.VMT_UUID
+			   AND VT.STS != 'D'
+		WHERE OVV.TEN_ID = #{g.tenant}
+		  AND OV.VD_CD =  #{g.vd_cd}
+		  AND OV.OORG_CD = #{p.oorg_cd}
+		  AND OVV.SUPAVL_YN = 'Y'
+		  AND VT.USE_YN = 'Y'
+	</select>
+	<select id="findListUnregisteredVendorManagementGroup" resultType="map">
+    /* sp-vendor-master.findListUnregisteredVendorManagementGroup 추가 거래가능 협력사관리그룹 조회 */
+        SELECT T.*
+		     , CASE WHEN T.APRV_PROG_YN = 'Y' OR T.VMG_PRGS_YN = 'Y' THEN 'Y' ELSE 'N' END AS VMG_REQ_YN /* 평가중인 협력사관리그룹 여부 */
+          FROM ( SELECT VG.TEN_ID
+                      , VO.VMG_OORG_UUID
+                      , OV.VD_OORG_UUID
+                      , VG.VMG_UUID
+                      , VG.VMG_TYP_CCD
+                      , VG.VMG_CD
+                      , CASE WHEN 'ko_KR' = #{g.locale} THEN VG.VMG_NM ELSE VG.VMG_NM_EN END AS VMG_NM
+                      , VG.VMG_NM_EN
+                      , #{p.oorg_cd} AS OORG_CD
+                      , #{g.vd_cd} AS VD_CD
+                      , VT.VMT_UUID
+                      , VT.VMT_CCD
+                      , CASE WHEN REQ_VENDOR.VMG_REQ_YN = 'Y' THEN REQ_VENDOR.OEG_UUID
+                      	ELSE O.OEG_UUID
+                      	END AS OEG_UUID
+                      , CASE WHEN REQ_VENDOR.VMG_REQ_YN = 'Y' THEN REQ_VENDOR.OEG_CD
+                      	ELSE O.OEG_CD
+                      	END AS OEG_CD
+                      , CASE WHEN REQ_VENDOR.VMG_REQ_YN = 'Y' THEN REQ_VENDOR.OEG_NM
+                      	ELSE O.OEG_NM
+                      	END AS OEG_NM
+                      , (
+                         SELECT CASE WHEN 'en_US' = #{g.locale} THEN ORG.LOGIC_ORG_NM_EN
+                                     ELSE ORG.LOGIC_ORG_NM
+                                 END
+                           FROM OORG OORG
+                          INNER JOIN LOGIC_ORG ORG
+                             ON ORG.TEN_ID = OORG.TEN_ID
+                            AND ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+                            AND ORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD
+                            AND ORG.STS != 'D'
+                          WHERE OORG.TEN_ID = #{g.tenant}
+                            AND OORG.OORG_CD = #{p.oorg_cd}
+                        ) AS OORG_NM
+                      , ( SELECT O.OE_UUID
+                            FROM OE O
+                           INNER JOIN OE_VMG OV
+                              ON OV.TEN_ID = O.TEN_ID
+                             AND OV.OE_UUID = O.OE_UUID
+                             AND OV.STS != 'D'
+                           INNER JOIN VMG_OORG VGO
+                              ON VGO.TEN_ID = OV.TEN_ID
+                             AND VGO.VMG_OORG_UUID = OV.VMG_OORG_UUID
+                             AND VGO.STS != 'D'
+                           WHERE O.TEN_ID = #{g.tenant}
+                             AND (O.OEG_UUID = OVG.OEG_UUID OR O.OEG_UUID = REQ_VENDOR.OEG_UUID)
+                             AND O.VD_CD = #{g.vd_cd}
+                             AND O.STS != 'D'
+                             AND (CASE WHEN (O.PRCSG_ED_YN IS NULL OR O.PRCSG_ED_YN = '') THEN 'N' ELSE O.PRCSG_ED_YN END) != 'Y'
+                             AND OV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                        ) AS OE_UUID
+                      , ( CASE WHEN EFCT_SHT.OBD_EVALSHT_UUID IS NOT NULL  THEN 'Y' ELSE 'N'
+                           END
+                        ) AS EVALSHT_EXIST_YN /* 해당 온보딩평가그룹 평가시트 존재 여부 (N:평가시트가 존재하지 않으므로 등록요청 못함) */
+                      , ( CASE WHEN EXISTS ( SELECT 'Y'        /* (N:평가진행중인것이 있으므로 등록요청못함) */
+                                               FROM OE O
+                                              WHERE O.TEN_ID = #{g.tenant}
+                                                AND O.VD_CD = #{g.vd_cd}
+                                                AND O.STS != 'D'
+                                                AND (CASE WHEN (O.PRCSG_ED_YN IS NULL OR O.PRCSG_ED_YN = '') THEN 'N' ELSE O.PRCSG_ED_YN END) != 'Y'
+                                                AND (O.OEG_UUID = OVG.OEG_UUID OR O.OEG_UUID = REQ_VENDOR.OEG_UUID)
+                                           ) THEN 'N' ELSE 'Y' END
+                        ) AS OEG_REQ_POSSIBLE_YN /* 해당 온보딩평가그룹 평가진행가능여부 */
+                      , CASE WHEN (REQ_VENDOR.VMG_REQ_YN IS NULL OR REQ_VENDOR.VMG_REQ_YN = '')
+                             THEN 'N' ELSE REQ_VENDOR.VMG_REQ_YN END AS VMG_PRGS_YN /* VMG 평가 진행중 여부 */
+		              , CASE WHEN (SELECT COUNT(*)
+		                             FROM VD_CHG_HISTREC VCH
+		                            INNER JOIN VD_OORG_VMG_CHG_HISTREC VOV
+		                               ON VOV.TEN_ID = VCH.TEN_ID
+		                              AND VOV.VD_MST_CHG_HISTREC_UUID = VCH.VD_MST_CHG_HISTREC_UUID
+		                              AND VOV.STS != 'D'
+		                            WHERE VCH.TEN_ID = #{g.tenant}
+		                              AND VCH.VD_CD = #{g.vd_cd}
+		                              AND VCH.CHG_REQ_STS_CCD NOT IN ('APVD')
+		                              AND VCH.CHG_TYP_CCD IN ('PO_POSS_VD_REG_REQ', 'VMG_REG_REQ')
+		                              AND VOV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+		                          ) &gt; 0 THEN 'Y' ELSE 'N' END AS APRV_PROG_YN	/* VMG 결재중 여부 */
+                   FROM VMG_OORG VO
+		           LEFT OUTER JOIN VMG VG
+		             ON VG.TEN_ID = VO.TEN_ID
+		            AND VG.VMG_UUID = VO.VMG_UUID
+		            AND VG.STS != 'D'
+                   LEFT OUTER JOIN VMT VT /* 협력사관리유형 */
+                     ON VT.TEN_ID = VG.TEN_ID
+                    AND VT.VMT_UUID = VG.VMT_UUID
+                    AND VT.USE_YN = 'Y'
+                    AND VT.STS != 'D'
+                   LEFT OUTER JOIN OEG_VMG OVG
+                     ON OVG.TEN_ID = VO.TEN_ID
+                    AND OVG.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                    AND OVG.STS != 'D'
+                   LEFT OUTER JOIN OEG O /* 온보딩평가그룹 */
+                     ON O.TEN_ID = OVG.TEN_ID
+                    AND O.OEG_UUID = OVG.OEG_UUID
+                    AND O.OORG_CD = #{p.oorg_cd}
+                    AND O.STS != 'D'
+                   LEFT OUTER JOIN (
+			               SELECT OES.*
+			                    , ROW_NUMBER() OVER(PARTITION BY OES.OEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC) RK
+			                FROM OBD_EVALSHT OES
+			               WHERE OES.TEN_ID = #{g.tenant}
+							AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(OES.EFCT_ST_DT, 'YYYYMMDD')
+							AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(OES.EFCT_EXP_DT, 'YYYYMMDD')  AND OES.CNFD_YN ='Y'
+			                 AND OES.STS != 'D'
+			          ) EFCT_SHT          /* 온보딩 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+			         ON O.TEN_ID = EFCT_SHT.TEN_ID
+			        AND O.OEG_UUID = EFCT_SHT.OEG_UUID
+			        AND EFCT_SHT.RK = 1
+                   LEFT OUTER JOIN VD_OORG OV
+                     ON OV.TEN_ID = VG.TEN_ID
+                    AND OV.OORG_CD = #{p.oorg_cd}
+                    AND OV.VD_CD = #{g.vd_cd}
+                  LEFT OUTER JOIN 
+                  ( SELECT XX.TEN_ID
+                    	, 'Y' AS VMG_REQ_YN
+                    	, XX.OEG_UUID AS OEG_UUID
+                    	, XX.OEG_NM AS OEG_NM
+                    	, XX.OEG_CD AS OEG_CD
+                    	, XX.VMG_OORG_UUID AS VMG_OORG_UUID
+                            FROM ( SELECT XV.TEN_ID
+                                        , XV.VMG_OORG_UUID
+                                        , OX.OEG_UUID
+                                        , OX.OEG_CD
+                                        , OX.OEG_NM
+                                     FROM OE_VMG XV
+                                    INNER JOIN OE X
+                                       ON X.TEN_ID = XV.TEN_ID
+                                      AND X.OE_UUID = XV.OE_UUID
+		                              AND X.PRCSG_ED_YN != 'Y'
+                                      AND X.STS !='D'
+                                    INNER JOIN VMG_OORG VOG
+                                       ON VOG.TEN_ID = XV.TEN_ID
+                                      AND VOG.VMG_OORG_UUID = XV.VMG_OORG_UUID
+                                      AND VOG.USE_YN = 'Y'
+                                      AND VOG.STS != 'D'
+                                    INNER JOIN VMG VG
+                                       ON VG.TEN_ID = VOG.TEN_ID
+                                      AND VG.VMG_UUID = VOG.VMG_UUID
+                                      AND VG.STS != 'D'
+                                    INNER JOIN VMT VT
+                                       ON VT.TEN_ID = VG.TEN_ID
+                                      AND VT.VMT_UUID = VG.VMT_UUID
+                                      AND VT.USE_YN = 'Y'
+                                      AND VT.STS != 'D'
+                                    INNER JOIN OEG OX
+                                     ON OX.TEN_ID = X.TEN_ID
+                                     AND OX.OEG_UUID = X.OEG_UUID
+                                    WHERE XV.TEN_ID = #{g.tenant}
+                                      AND X.VD_CD = #{g.vd_cd}
+                                      AND X.OORG_CD = #{p.oorg_cd}
+                                      <if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+                                      AND VT.VMT_CCD = #{p.vmt_ccd}
+                                      </if>
+                                 ) XX
+                                 INNER JOIN VMG_OORG YY /*대상그룹*/
+                                    ON YY.TEN_ID = XX.TEN_ID
+                                   AND YY.VMG_OORG_UUID = XX.VMG_OORG_UUID
+                        ) REQ_VENDOR
+                       ON REQ_VENDOR.TEN_ID = VO.TEN_ID
+                       AND REQ_VENDOR.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                  WHERE VO.TEN_ID = #{g.tenant}
+                    AND CASE WHEN (VO.STS IS NULL OR VO.STS = '') THEN 'C' ELSE VO.STS END != 'D'
+                    AND VO.USE_YN = 'Y'
+                    <if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+                    AND VT.VMT_CCD = #{p.vmt_ccd}
+                    </if>
+                    /* 거래공급품목은 제외하여야 함 */
+                    AND NOT EXISTS ( SELECT 1
+                                       FROM VD_OORG_VMG OVV
+                                      INNER JOIN VD_OORG OVD
+                                         ON OVD.TEN_ID = OVV.TEN_ID
+                                        AND OVD.VD_OORG_UUID = OVV.VD_OORG_UUID
+                                      WHERE OVV.TEN_ID        = VO.TEN_ID
+                                        AND OVD.OORG_CD       = OV.OORG_CD
+                                        AND OVD.VD_CD         = #{g.vd_cd}
+                                        AND OVV.VMG_OORG_UUID = VO.VMG_OORG_UUID
+                                        AND OVV.SUPAVL_YN     = 'Y'
+                                        AND OVD.PO_POSS_YN    = 'Y'
+                                      /* 2023.06.25 PYJ 추후 추가 예정 : 등록심사 요청인 경우 유효 종료일(정차 심사완료일 + 만료기간이 가장 빠른 일자 기준) 확인 필요*/
+                                   )
+               ) T
+         WHERE T.EVALSHT_EXIST_YN = 'Y'  /* 유효한 평가시트가 존재하지 않는 경우, 등록 대상 아님 */
+           AND (CASE WHEN T.APRV_PROG_YN != 'Y' OR (T.OE_UUID IS NOT NULL  )
+                     THEN 'T' ELSE 'F' END = 'T') /* 결재 진행 중이지만 온보딩 평가 진행 이력이 없는 SG 제외 */
+         ORDER BY T.VMT_CCD, T.VMG_CD, T.OEG_CD
+    </select>
+	<!-- 사용x -->
+    <select id="findEvaltrVendorYn" resultType="map">
+    	SELECT CASE WHEN COUNT(*) &gt; 0 THEN 'Y' ELSE 'N' END AS EVALTR_YN
+			FROM ESSVIES
+				WHERE 1=1 
+				AND VD_CD = #{g.vd_cd}
+				AND EVALTR_TYP = 'S'
+				AND SYS_ID = #{g.tenant}
+				AND STP_STS = 'AR'
+				AND STS != 'D'
+    </select>
+	<!-- 사용x -->
+    <insert id="insertESSVDIG">
+        INSERT INTO ESSVDIG(
+            SYS_ID, 
+            VD_INSP_GRP_ID, 
+            INSP_GRP_ID, 
+            INSP_GRP_CD, 
+            VD_CD, 
+            TYP_CD, 
+            OPER_ORG_CD,
+            INSP_REV, 
+            EVAL_REQ_DATE, 
+            EVAL_END_YN, 
+            EVAL_COMP_DATE, 
+            STS, 
+            REM, 
+            REG_DT,
+            MOD_DT,
+            REG_ID, 
+            MOD_ID 
+        )
+        SELECT 
+            #{g.tenant} AS SYS_ID,
+            #{p.vd_insp_grp_id} AS VD_INSP_GRP_ID,
+            #{p.insp_grp_id} AS INSP_GRP_ID, 
+            #{p.insp_grp_cd} AS INSP_GRP_CD, 
+            #{g.vd_cd} AS VD_CD, 
+            #{p.typ_cd} AS TYP_CD, 
+            #{p.oper_org_cd} AS OPER_ORG_CD, 
+            #{p.insp_rev} AS INSP_REV, 
+            #{p.eval_req_date} AS EVAL_REQ_DATE, /*평가요청일*/
+            'N' AS EVAL_END_YN, 
+            #{p.eval_comp_date} AS EVAL_COMP_DATE,  
+            'C' AS STS,          
+            #{p.rem} AS REM,          
+            #{g.now} AS REG_DT,
+            #{g.now} AS MOD_DT,
+            #{g.username} AS REG_ID,       
+            #{g.username} AS MOD_ID       
+        FROM ESMBLNK
+       WHERE NOT EXISTS (
+                        SELECT 'Y'
+                        FROM ESSVDIG X
+                        WHERE X.SYS_ID = #{g.tenant} AND X.INSP_REV = #{p.insp_rev} AND X.VD_CD = #{g.vd_cd} 
+                        AND EXISTS (
+                                    SELECT 'Y'
+                                    FROM ESSIGSG Z
+                                    WHERE Z.SYS_ID = #{g.tenant} AND Z.TARG_GRP_ID = #{p.targ_grp_id} AND Z.TYP_CD = #{p.typ_cd} AND Z.OPER_ORG_CD = #{p.oper_org_cd} AND Z.USE_YN = 'Y' AND Z.STS != 'D' AND Z.INSP_GRP_CD = X.INSP_GRP_CD
+                                    )
+                        )
+    </insert>
+	<!-- 사용x -->
+    <insert id="insertESSVRRG">
+        INSERT INTO ESSVRRG(
+            SYS_ID, 
+            VD_REG_REQ_TARG_GRP_ID, 
+            VD_INSP_GRP_ID, 
+            TARG_GRP_ID, 
+            TYP_CD, 
+            VD_CD, 
+            OPER_ORG_CD, 
+            TARG_GRP_CD, 
+            TARG_GRP_TYP_CD, 
+            INSP_REV, 
+            PROG_TYP_CD, 
+            HNDL_STS_CD, 
+            EFF_END_DATE, 
+            REG_REQ_DATE, 
+            APRV_REQ_CAUSE, 
+            CRC_REG_CAUSE, 
+            APRV_TARG_YN, 
+            APRV_DATE, 
+            APRV_DOCNO, 
+            RE_EVAL_YN, 
+            REG_CLS, 
+            STS, 
+            REM, 
+            REG_DT,
+            MOD_DT,
+            REG_ID, 
+            MOD_ID
+        ) VALUES (
+            #{g.tenant},
+            #{p.vd_reg_req_targ_grp_id},
+            #{p.vd_insp_grp_id},
+            #{p.targ_grp_id},
+            #{p.typ_cd},
+            #{g.vd_cd},
+            #{p.oper_org_cd},
+            #{p.targ_grp_cd},
+            #{p.targ_grp_typ_cd},
+            #{p.insp_rev},
+            #{p.prog_typ_cd},
+            'W',
+            #{p.eff_end_date}, 
+            #{p.reg_req_date},
+            #{p.aprv_req_cause}, 
+            #{p.crc_reg_cause}, 
+            #{p.aprv_targ_yn}, 
+            #{p.aprv_date}, 
+            #{p.aprv_docno}, 
+            #{p.re_eval_yn}, 
+            #{p.reg_cls}, 
+            'C',                          /* 상태*/
+            #{p.rem},                     /* 비고*/
+            #{g.now},                     /* 등록일*/
+            #{g.now},                     /* 수정일*/
+            #{g.username},                /* 등록자 아이디*/
+            #{g.username}                 /* 수정자 아이디*/
+        )     
+    </insert>
+    <!-- RFX 정보 현황 조회 -->
+    <select id="findListRfxInfoList" resultType="map">
+    /* sp-vendorInfoMgt.findListRfxInfoList: RFX 정보 현황 조회 */
+        SELECT RFX_YEAR    AS TARGET_YR	  /* 대상년도*/
+             , ORG_NM      AS OPER_ORG_NM  /* 운영조직*/
+             , BID_REQ_CNT                 /* 입찰요청건수*/
+             , BID_PRTCP_CNT               /* 입찰참여건수*/
+             , PRTCP_RATE                  /* 참여율*/
+             , BID_SUC_CNT                 /* 낙찰건수*/
+             , BID_RATE                    /* 낙찰율*/
+          FROM ( SELECT RFX.RFX_YEAR
+                      , ORG.ORG_NM
+                      , COUNT(RFX.RFX_NO)                                          AS BID_REQ_CNT    /* 입찰요청건수 */
+                      , SUM(RFX.SUBMIT_YN)                                         AS BID_PRTCP_CNT  /* 입찰참여건수 */
+                      , ROUND((SUM(RFX.SUBMIT_YN) / COUNT(RFX.RFX_NO)) * 100, 2)   AS PRTCP_RATE     /* 참여율 */
+                      , SUM(RFX.STL_YN)                                            AS BID_SUC_CNT    /* 낙찰건수 */
+                      , ROUND((SUM(RFX.STL_YN) / COUNT(RFX.RFX_NO)) * 100, 2)      AS BID_RATE       /* 낙찰율 */
+                   FROM ( SELECT A.RFX_NO
+							    , SUBSTR(TO_CHAR(A.RFX_DATE, 'YYYYMMDD'), 0, 4) AS RFX_YEAR  , A.OPER_ORG_CD
+                               , C.VD_CD
+                               , CASE WHEN C.PROG_STS = 'S' THEN 1 ELSE 0 END  AS SUBMIT_YN -- 제출 건
+                               , CASE WHEN C.STL_YN = 'Y' THEN 1 ELSE 0 END    AS STL_YN    -- 선정 건
+                            FROM ESPRQHD A
+                           INNER JOIN ESPRQVD B
+                              ON A.SYS_ID = B.SYS_ID
+                             AND A.RFX_ID = B.RFX_ID
+                            LEFT OUTER JOIN ESPQTHD C
+                              ON B.SYS_ID = C.SYS_ID
+                             AND B.RFX_NO = C.RFX_NO
+                             AND B.VD_CD  = C.VD_CD
+                           WHERE A.SYS_ID       = #{g.tenant}
+                             AND A.RFX_PROG_STS NOT IN ('T', 'A') -- 임시저장, 결재상신 건 제외
+                             AND B.VD_CD        = #{g.vd_cd}
+                           GROUP BY A.RFX_DATE
+                                  , A.RFX_NO
+                                  , A.OPER_ORG_CD
+                                  , C.VD_CD
+                                  , C.PROG_STS
+                                  , C.STL_YN
+                        ) RFX
+                  INNER JOIN
+                        ( SELECT C.OPER_ORG_CD AS OPER_ORG
+                               , CASE WHEN 'ko_KR' = #{g.locale} THEN D.ORG_NM 
+                                      ELSE D.ORG_EN_NM 
+                                 END AS ORG_NM
+                            FROM ESAOOMG C
+                           INNER JOIN ESAOGMG D
+                              ON C.SYS_ID = D.SYS_ID
+                             AND C.ORG_CD = D.ORG_CD
+                             AND C.ORG_TYP_CD = D.ORG_TYP_CD
+                           WHERE C.SYS_ID = #{g.tenant}
+                        ) ORG
+                     ON RFX.OPER_ORG_CD = ORG.OPER_ORG
+                  GROUP BY RFX.RFX_YEAR
+                      , RFX.OPER_ORG_CD
+                      , ORG.ORG_NM
+               ) A
+         ORDER BY RFX_YEAR
+    </select>
+	<select id="findListVendorInfoChangeRequest" resultType="map">
+	/* sp-vendor-master.findListVendorInfoChangeRequest : 주요정보 변경관리 목록 조회 */
+		SELECT VIC.TEN_ID
+	         , VIC.VD_INFO_CHG_REQ_UUID
+		     , VIC.OORG_CD
+	         , VIC.CHG_REQ_REVNO
+	         , VIC.VD_CD
+	         , VIC.CHG_REQ_DT
+	         , VIC.CHG_REQ_RSN
+	         , VIC.CHG_REQ_STS_CCD
+	         , VIC.CHG_REQ_RET_RSN
+	         , VIC.CHG_REQ_RET_DT
+	         , VIC.BUYER_PIC_ID
+	         , VIC.VD_PIC_ID
+	         , VIC.VD_NM
+	         , VIC.VD_NM_EN
+	         , VIC.CEO_NM
+	         , VIC.CEO_NM_EN
+	         , VIC.CORPNO
+	         , VIC.HQ_BIZREGNO
+	         , VIC.ZIPCD
+	         , VIC.DTL_ADDR_1
+	         , VIC.DTL_ADDR_2
+	         , VIC.DTL_ADDR_EN_1
+	         , VIC.DTL_ADDR_EN_2
+	         , VIC.IND
+	         , VIC.BIZTYP
+	         , VIC.STS
+	         , VIC.RMK
+	         , VIC.REGR_ID
+	         , VIC.REG_DTTM
+	         , VIC.MODR_ID
+	         , VIC.MOD_DTTM
+	      FROM VD_INFO_CHG_REQ VIC
+		 WHERE VIC.TEN_ID = #{g.tenant}
+		   AND VIC.VD_CD = #{g.vd_cd}
+		 <if test="p.oorg_cd != null and p.oorg_cd != ''">
+		   AND VIC.OORG_CD = #{p.oorg_cd}
+		 </if>
+	     <if test="p.chg_req_sts_ccd != null and p.chg_req_sts_ccd != ''">
+	       AND VIC.CHG_REQ_STS_CCD = #{p.chg_req_sts_ccd}
+	     </if>
+	     <if test="p.chg_req_from_dt != null and p.chg_req_from_dt != ''">
+			     AND VIC.CHG_REQ_DT &gt;= TO_DATE(#{p.chg_req_from_dt}, 'YYYYMMDD') </if>
+	     <if test="p.chg_req_to_dt != null and p.chg_req_to_dt != ''">
+			     AND VIC.CHG_REQ_DT &lt;= TO_DATE(#{p.chg_req_to_dt}, 'YYYYMMDD') </if>
+	     <if test="p.chg_req_rsn != null and p.chg_req_rsn != ''">
+	       <bind name="p_chg_req_rsn" value="'%' + p.chg_req_rsn + '%'"/>
+	       AND VIC.CHG_REQ_RSN LIKE #{p_chg_req_rsn}
+	     </if>
+	     ORDER BY VIC.CHG_REQ_REVNO DESC
+	</select>
+    <select id="checkErpVdCd" resultType="map">
+    /* sp-vendor-master.checkErpVdCd : 요청 생성 가능 여부 */
+	    SELECT ERP_VD_CD
+	      FROM VD
+	     WHERE TEN_ID = #{g.tenant}
+	       AND VD_CD = #{g.vd_cd}
+    </select>
+    <select id="checkChangeRequestYn" resultType="map">
+    /* sp-vendor-master.checkChangeRequestYn : 요청 생성 가능 여부 */
+	    SELECT COUNT(*) AS IMPOSSIBLE_NUM
+	      FROM ( SELECT VIC.TEN_ID, VIC.VD_CD, VIC.CHG_REQ_STS_CCD
+	               FROM VD_INFO_CHG_REQ VIC
+	              WHERE VIC.TEN_ID = #{g.tenant}
+	                AND VIC.VD_CD = #{g.vd_cd}
+	                AND (VIC.CHG_REQ_STS_CCD = 'SAVE' OR VIC.CHG_REQ_STS_CCD = 'REQ' OR VIC.CHG_REQ_STS_CCD = 'RCPT') /* 정보 변경 요청 상태(E066) : 저장(SAVE), 요청(REQ), 접수(RCPT) */
+	          ) T
+    </select>
+    <select id="getMaxVendorChangeReqRev" resultType="int">
+    /* sp-vendor-master.getMaxVendorChangeReqRev : 협력사 정보 변경 요청 차수 조회 */
+	    SELECT MAX(CHG_REQ_REVNO)
+	      FROM VD_INFO_CHG_REQ
+	     WHERE TEN_ID       = #{g.tenant}
+	       AND VD_CD        = #{g.vd_cd}
+    </select>
+	<select id="findVendorInfoChangeRequestInfo" resultType="map">
+	/* sp-vendor-master.findVendorInfoChangeRequestInfo : 협력사 변경 요청 정보 조회 */
+	    SELECT VIC.TEN_ID
+	         , VIC.VD_INFO_CHG_REQ_UUID
+	         , VIC.OORG_CD
+	         , VIC.CHG_REQ_REVNO
+	         , VCS.X_SEQ   /* 협력사 정보 변경이력 순차정보 SEQ */
+	         , VIC.VD_CD
+	         , VIC.CHG_REQ_DT
+	         , VIC.CHG_REQ_RSN
+	         , VIC.CHG_REQ_STS_CCD
+	         , VIC.CHG_REQ_RET_RSN
+	         , VIC.CHG_REQ_RET_DT
+	         , VIC.BUYER_PIC_ID
+	         , CASE WHEN #{g.locale} = 'ko_KR' THEN BUYER_PIC_US.USR_NM
+	         	    ELSE (CASE WHEN (BUYER_PIC_US.USR_NM_EN IS NULL OR BUYER_PIC_US.USR_NM_EN = '') THEN BUYER_PIC_US.USR_NM ELSE BUYER_PIC_US.USR_NM_EN END)
+	         	END AS BUYER_PIC_NM
+	         , VIC.VD_PIC_ID
+	         , CASE WHEN #{g.locale} = 'ko_KR' THEN VD_PIC_US.USR_NM
+	                ELSE (CASE WHEN (VD_PIC_US.USR_NM_EN IS NULL OR VD_PIC_US.USR_NM_EN = '') THEN VD_PIC_US.USR_NM ELSE VD_PIC_US.USR_NM_EN END)
+	            END AS VD_PIC_NM
+	         , VIC.VD_NM
+	         , VIC.VD_NM_EN
+	         , VIC.CEO_NM
+	         , VIC.CEO_NM_EN
+	         , VIC.CORPNO
+	         , VIC.HQ_BIZREGNO
+	         , VIC.ZIPCD
+	         , VIC.DTL_ADDR_1
+	         , VIC.DTL_ADDR_2
+	         , VIC.DTL_ADDR_EN_1
+	         , VIC.DTL_ADDR_EN_2
+	         , VIC.IND
+	         , VIC.BIZTYP
+	         , VIC.STS
+	         , VIC.RMK
+	         , VIC.REGR_ID
+	         , VIC.REG_DTTM
+	         , VIC.MODR_ID
+	         , VIC.MOD_DTTM
+	         , V.ERP_VD_CD
+	         , V.CEO_CRR
+	         , V.CTRY_CCD
+	         , V.BIZREGNO
+	         , V.TAX_ID
+	         , V.EU_VAT_REG_ID
+	      FROM VD_INFO_CHG_REQ VIC
+		 INNER JOIN VD_CHG_SEQ VCS  /* 변경이력 순차정보 View */
+            ON VCS.TEN_ID = VIC.TEN_ID
+           AND VCS.VD_INFO_CHG_REQ_UUID = VIC.VD_INFO_CHG_REQ_UUID
+	       AND VCS.X_SEQ = (SELECT MAX(X_SEQ) FROM VD_CHG_SEQ WHERE VD_INFO_CHG_REQ_UUID = VCS.VD_INFO_CHG_REQ_UUID AND (VD_MST_CHG_HISTREC_UUID IS NULL OR VD_MST_CHG_HISTREC_UUID = ''))
+		 INNER JOIN VD V
+			ON V.TEN_ID = VIC.TEN_ID
+		   AND V.VD_CD = VIC.VD_CD
+		   AND V.STS != 'D'
+	      LEFT OUTER JOIN USR BUYER_PIC_US
+	        ON BUYER_PIC_US.TEN_ID = VIC.TEN_ID
+	       AND BUYER_PIC_US.USR_ID = VIC.BUYER_PIC_ID
+	       AND BUYER_PIC_US.STS != 'D'
+	      LEFT OUTER JOIN USR VD_PIC_US
+	        ON VD_PIC_US.TEN_ID = VIC.TEN_ID
+	       AND VD_PIC_US.USR_ID = VIC.VD_PIC_ID
+	       AND VD_PIC_US.STS != 'D'
+	     WHERE VIC.TEN_ID = #{g.tenant}
+	       AND VIC.VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</select>
+	<insert id="insertVendorInfoChangeRequest">
+    <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+    /* sp-vendor-master.insertVendorInfoChangeRequest : 협력사 주요정보 변경요청 히스토리 등록 */
+        INSERT INTO VD_INFO_CHG_REQ (
+            TEN_ID
+            , VD_INFO_CHG_REQ_UUID
+            , OORG_CD
+            , CHG_REQ_REVNO
+            , VD_CD
+            , CHG_REQ_DT
+            , CHG_REQ_RSN
+            , CHG_REQ_STS_CCD
+            , BUYER_PIC_ID
+            , VD_PIC_ID
+            , VD_NM
+            , VD_NM_EN
+            , CEO_NM
+            , CEO_NM_EN
+            , CORPNO
+            , HQ_BIZREGNO
+            , ZIPCD
+            , DTL_ADDR_1
+            , DTL_ADDR_2
+            , DTL_ADDR_EN_1
+            , DTL_ADDR_EN_2
+            , IND
+            , BIZTYP
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        ) VALUES (
+            #{g.tenant}
+            , #{p.vd_info_chg_req_uuid}
+            , #{p.oorg_cd}
+			, CAST(#{p.chg_req_revno} AS INTEGER)  , #{g.vd_cd}
+			, TO_DATE(#{getFormatNow}, 'YY-MM-DD')  , #{p.chg_req_rsn}
+            , #{p.chg_req_sts_ccd}
+            , #{p.buyer_pic_id}
+            , #{g.username}
+            , #{p.vd_nm}
+            , #{p.vd_nm_en}
+            , #{p.ceo_nm}
+            , #{p.ceo_nm_en}
+            , #{p.corpno}
+            , #{p.hq_bizregno}
+            , #{p.zipcd}
+            , #{p.dtl_addr_1}
+            , #{p.dtl_addr_2}
+            , #{p.dtl_addr_en_1}
+            , #{p.dtl_addr_en_2}
+            , #{p.ind}
+            , #{p.biztyp}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        )
+    </insert>
+    <update id="updateVendorInfoChange">
+    /* sp-vendor-master.updateVendorInfoChange */
+	    UPDATE VD_INFO_CHG_REQ
+	       SET <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+	           CHG_REQ_RSN = #{p.chg_req_rsn}
+			    , CHG_REQ_DT = TO_DATE(#{getFormatNow}, 'YY-MM-DD')  , CHG_REQ_STS_CCD = #{p.chg_req_sts_ccd}
+	         , BUYER_PIC_ID = #{p.buyer_pic_id}
+	         , VD_PIC_ID = #{p.vd_pic_id}
+	         , VD_NM = #{p.vd_nm}
+	         , VD_NM_EN = #{p.vd_nm_en}
+	         , CEO_NM = #{p.ceo_nm}
+	         , CEO_NM_EN = #{p.ceo_nm_en}
+	         , CORPNO = #{p.corpno}
+	         , HQ_BIZREGNO = #{p.hq_bizregno}
+	         , ZIPCD = #{p.zipcd}
+	         , DTL_ADDR_1 = #{p.dtl_addr_1}
+	         , DTL_ADDR_2 = #{p.dtl_addr_2}
+	         , DTL_ADDR_EN_1 = #{p.dtl_addr_en_1}
+	         , DTL_ADDR_EN_2 = #{p.dtl_addr_en_2}
+	         , IND = #{p.ind}
+	         , BIZTYP = #{p.biztyp}
+	         , STS = 'U'
+	         , RMK = #{p.rmk}
+	         , MODR_ID = #{g.username}
+	         , MOD_DTTM= #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+	       AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	       AND CHG_REQ_REVNO = #{p.chg_req_revno}
+	</update>
+	<update id="sendVendorInfoChange">
+    /* sp-vendor-master.sendVendorInfoChange */
+	    UPDATE VD_INFO_CHG_REQ
+	       SET CHG_REQ_STS_CCD = #{p.chg_req_sts_ccd},                   /* 변경 상태*/
+	           MOD_DTTM = #{g.now},                        /* 수정일*/
+	           MODR_ID = #{g.username}                    /* 수정자 아이디*/
+	     WHERE TEN_ID = #{g.tenant}
+	       AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</update>
+	<insert id="insertCopyVendorInfoChange">
+    <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+    /* sp-vendor-master.insertCopyVendorInfoChange : 협력사 주요정보 변경요청 히스토리 등록 (복사) */
+		INSERT INTO VD_INFO_CHG_REQ (
+			TEN_ID
+            , VD_INFO_CHG_REQ_UUID
+            , OORG_CD
+            , CHG_REQ_REVNO
+            , VD_CD
+            , CHG_REQ_DT
+            , CHG_REQ_RSN
+            , CHG_REQ_STS_CCD
+            , VD_PIC_ID
+            , VD_NM
+            , VD_NM_EN
+            , CEO_NM
+            , CEO_NM_EN
+            , CORPNO
+            , HQ_BIZREGNO
+            , ZIPCD
+            , DTL_ADDR_1
+            , DTL_ADDR_2
+            , DTL_ADDR_EN_1
+            , DTL_ADDR_EN_2
+            , IND
+            , BIZTYP
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        ) SELECT
+               #{g.tenant}
+             , #{p.new_vd_info_chg_req_uuid}
+             , OORG_CD
+             , #{p.chg_req_revno}
+             , VD_CD
+				, TO_DATE(#{getFormatNow}, 'YY-MM-DD') /* 요청 일자  */  , CHG_REQ_RSN
+             , #{p.chg_req_sts_ccd}
+             , #{g.username}
+             , VD_NM
+             , VD_NM_EN
+             , CEO_NM
+             , CEO_NM_EN
+             , CORPNO
+             , HQ_BIZREGNO
+             , ZIPCD
+             , DTL_ADDR_1
+             , DTL_ADDR_2
+             , DTL_ADDR_EN_1
+             , DTL_ADDR_EN_2
+             , IND
+             , BIZTYP
+             , 'C'
+             , RMK
+             , #{g.username}
+             , #{g.now}
+             , #{g.username}
+             , #{g.now}
+            FROM VD_INFO_CHG_REQ
+           WHERE VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+    </insert>
+    <delete id="deleteVendorChangeRequestInfo">
+    /* sp-vendor-master.deleteVendorChangeRequestInfo : 협력사 정보 변경 요청 삭제 */
+	    DELETE FROM VD_INFO_CHG_REQ
+	     WHERE TEN_ID          = #{g.tenant}
+	       AND VD_INFO_CHG_REQ_UUID   = #{p.vd_info_chg_req_uuid}
+    </delete>
+	<select id="findAttachmentListVendorHistrecInfo" resultType="map">
+	/* sp-vendor-master.findAttachmentListVendorHistrecInfo : 협력사 첨부파일 이력(histrec) 조회 */
+		SELECT VA.TEN_ID
+			 , VA.VD_ATHDOCPLCY_UUID    /* 협력사 첨부파일 정책 UUID */
+			 , VD.VD_CD
+			 , AC.CTRY_CCD              /* 정책 국가 코드 */
+			 , AA.ATHF_CCD AS VD_SUBMDDOC_TYP_CCD /* 첨부파일 공통코드(E032) */
+			 , AA.MAND_YN               /* 첨부파일 필수 여부 */
+			 , AA.APVL_SUBJ_YN          /* 첨부파일 결재 대상 여부 */
+			 , AA.ATHDOC_EXPLN          /* 첨부문서 설명 */
+			 , AA.REF_ATHG_UUID         /* 참조 첨부그룹 UUID */
+			 , VACH.VD_ATHF_CHG_HISTREC_UUID /* 협력사 첨부그룹 변경 이력 UUID */
+			 , VACH.ATHG_UUID        /* 협력사 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VACH.TEN_ID
+				  AND ATHG_UUID = VACH.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VACH.RMK
+		FROM VD_ATHDOCPLCY VA /* 협력사 첨부문서정책 */
+		INNER JOIN ATHDOCPLCY_ATHF AA /* 첨부문서정책 첨부파일 */
+		        ON VA.TEN_ID = AA.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AA.VD_ATHDOCPLCY_UUID
+			    AND AA.APVL_SUBJ_YN = 'Y' /* 결재대상 첨부파일만 조회 */
+		INNER JOIN ATHDOCPLCY_CTRY AC /* 첨부문서정책 국가 */
+		        ON VA.TEN_ID = AC.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AC.VD_ATHDOCPLCY_UUID
+		INNER JOIN VD VD /* 협력사 마스터 */
+		        ON VA.TEN_ID = VD.TEN_ID
+		        AND AC.CTRY_CCD = VD.CTRY_CCD
+		LEFT OUTER JOIN VD_ATHF_CHG_HISTREC VACH /* 협력사 첨부파일 이력 */
+		             ON VA.TEN_ID = VACH.TEN_ID
+		            AND VD.VD_CD = VACH.VD_CD
+		            AND AA.ATHF_CCD = VACH.VD_SUBMDDOC_TYP_CCD
+			    	AND VACH.VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+		WHERE VA.TEN_ID = #{g.tenant}
+		  AND VD.VD_CD = #{g.vd_cd}
+		ORDER BY AA.MAND_YN DESC, AA.ATHF_CCD
+	</select>
+	<select id="findVendorAttachmentChangeRequestList" resultType="map">
+	/* sp-vendor-master.findVendorAttachmentChangeRequestList : 협력사 첨부파일 변경 요청(chg_req) 조회 */
+		SELECT VA.TEN_ID
+			 , VA.VD_ATHDOCPLCY_UUID    /* 협력사 첨부파일 정책 UUID */
+			 , VD.VD_CD
+			 , AC.CTRY_CCD              /* 정책 국가 코드 */
+			 , AA.ATHF_CCD AS VD_SUBMDDOC_TYP_CCD /* 첨부파일 공통코드(E032) */
+			 , AA.MAND_YN               /* 첨부파일 필수 여부 */
+			 , AA.APVL_SUBJ_YN          /* 첨부파일 결재 대상 여부 */
+			 , AA.ATHDOC_EXPLN          /* 첨부문서 설명 */
+			 , AA.REF_ATHG_UUID         /* 참조 첨부그룹 UUID */
+			 , VACR.VD_ATHF_CHG_REQ_UUID /* 협력사 첨부그룹 변경 요청 UUID */
+		     , VACR.VD_INFO_CHG_REQ_UUID /* 협력사 정보 변경 요청 UUID */
+			 , VACR.ATHG_UUID        /* 협력사 첨부그룹 UUID */
+			 , (SELECT COUNT(1)
+			    FROM ATHF
+			    WHERE TEN_ID = VACR.TEN_ID
+				  AND ATHG_UUID = VACR.ATHG_UUID
+				  AND STS != 'D') AS ATT_COUNT
+			 , VACR.RMK
+		FROM VD_ATHDOCPLCY VA /* 협력사 첨부문서정책 */
+		INNER JOIN ATHDOCPLCY_ATHF AA /* 첨부문서정책 첨부파일 */
+		        ON VA.TEN_ID = AA.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AA.VD_ATHDOCPLCY_UUID
+			    AND AA.APVL_SUBJ_YN = 'Y' /* 결재대상 첨부파일만 조회 */
+		INNER JOIN ATHDOCPLCY_CTRY AC /* 첨부문서정책 국가 */
+		        ON VA.TEN_ID = AC.TEN_ID
+		        AND VA.VD_ATHDOCPLCY_UUID = AC.VD_ATHDOCPLCY_UUID
+		INNER JOIN VD VD /* 협력사 마스터 */
+		        ON VA.TEN_ID = VD.TEN_ID
+		        AND AC.CTRY_CCD = VD.CTRY_CCD
+		LEFT OUTER JOIN VD_INFO_CHG_REQ VICR /* 협력사 정보 변경 요청 */
+		    	ON VA.TEN_ID = VICR.TEN_ID
+		    	AND VD.VD_CD = VICR.VD_CD
+		    	AND VICR.VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+		LEFT OUTER JOIN VD_ATHF_CHG_REQ VACR /* 협력사 첨부파일 변경 요청 */
+		             ON VA.TEN_ID = VACR.TEN_ID
+			        AND VICR.VD_INFO_CHG_REQ_UUID = VACR.VD_INFO_CHG_REQ_UUID
+		            AND AA.ATHF_CCD = VACR.VD_SUBMDDOC_TYP_CCD
+		WHERE VA.TEN_ID = #{g.tenant}
+		  AND VD.VD_CD = #{g.vd_cd}
+		ORDER BY AA.MAND_YN DESC, AA.ATHF_CCD
+	</select>
+	<select id="findVendorBankAccountHistrecList" resultType="map">
+		/* sp-vendor-master.findVendorBankAccountHistrecList : 협력사 계좌정보 이력(histrec) 조회 */
+		SELECT VBCH.TEN_ID
+		     , VBCH.VD_BNKACCT_CHG_HIST_UUID  /* 협력사 계좌 변경 이력 UUID */
+		     , VBCH.VD_MST_CHG_HISTREC_UUID   /* 협력사 마스터 변경 이력 UUID */
+		     , VBCH.BNK_CCD                 /* 은행 공통코드 */
+		     , VBCH.ACCTHLDR                /* 예금주 */
+		     , VBCH.BNKACCT_NO             /* 계좌 번호 */
+		     , VBCH.IBAN_CD                 /* IBAN 코드 */
+		     , VBCH.SWIFT_CD                /* SWIFT 코드 */
+		     , VBCH.MAIN_BNKACCT_YN         /* 메인 계좌 여부 */
+		     , VBCH.VTL_BNKACCT_YN          /* 가상 계좌 여부 */
+		     , VBCH.USE_YN                  /* 사용 여부 */
+		     , VBCH.EFCT_ST_DT              /* 유효 시작 일자 */
+		     , VBCH.EFCT_ED_DT              /* 유효 종료 일자 */
+		     , VBCH.ATHG_UUID           /* 첨부그룹 UUID */
+		     , (SELECT COUNT(1)
+		        FROM ATHF
+		        WHERE TEN_ID = VBCH.TEN_ID
+			      AND ATHG_UUID = VBCH.ATHG_UUID
+			      AND STS != 'D') AS ATT_COUNT
+		     , VBCH.VD_BNKACCT_UUID
+		     , VCH.VD_CD
+		  FROM VD_BNKACCT_CHG_HISTREC VBCH /* 협력사 계좌정보 변경 이력 */
+		 INNER JOIN VD_CHG_HISTREC VCH /* 협력사 변경 이력 */
+		    ON VBCH.TEN_ID = VCH.TEN_ID
+		   AND VBCH.VD_MST_CHG_HISTREC_UUID = VCH.VD_MST_CHG_HISTREC_UUID
+		 WHERE VBCH.TEN_ID = #{g.tenant}
+		   AND VCH.VD_CD = #{g.vd_cd}
+		   AND VCH.VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+	</select>
+	<select id="findVendorBankAccountChangeRequestList" resultType="map">
+		/* sp-vendor-master.findVendorBankAccountChangeRequestList : 협력사 계좌정보 변경 요청(chg_req) 조회 */
+	    SELECT VBCR.TEN_ID
+		     , VBCR.VD_BNKACCT_CHG_REQ_UUID /* 협력사 계좌 변경 요청 UUID */
+		     , VBCR.VD_INFO_CHG_REQ_UUID    /* 협력사 정보 변경 요청 UUID */
+		     , VBCR.BNK_CCD                 /* 은행 공통코드 */
+		     , VBCR.ACCTHLDR                /* 예금주 */
+		     , VBCR.BNKACCT_NO             /* 계좌 번호 */
+		     , VBCR.IBAN_CD                 /* IBAN 코드 */
+		     , VBCR.SWIFT_CD                /* SWIFT 코드 */
+		     , VBCR.MAIN_BNKACCT_YN         /* 메인 계좌 여부 */
+		     , VBCR.VTL_BNKACCT_YN          /* 가상 계좌 여부 */
+		     , VBCR.USE_YN                  /* 사용 여부 */
+		     , VBCR.EFCT_ST_DT              /* 유효 시작 일자 */
+		     , VBCR.EFCT_ED_DT              /* 유효 종료 일자 */
+		     , VBCR.ATHG_UUID           /* 첨부그룹 UUID */
+		     , (SELECT COUNT(1)
+		        FROM ATHF
+		        WHERE TEN_ID = VBCR.TEN_ID
+			      AND ATHG_UUID = VBCR.ATHG_UUID
+			      AND STS != 'D') AS ATT_COUNT
+	         , VBCR.VD_BNKACCT_UUID
+	         , VICR.VD_CD
+	    FROM VD_BNKACCT_CHG_REQ VBCR /* 협력사 계좌정보 변경 요청 */
+		INNER JOIN VD_INFO_CHG_REQ VICR /* 협력사 정보 변경 요청 */
+		   ON VICR.TEN_ID = VBCR.TEN_ID
+		  AND VICR.VD_INFO_CHG_REQ_UUID = VBCR.VD_INFO_CHG_REQ_UUID
+	    WHERE VBCR.TEN_ID = #{g.tenant}
+	      AND VBCR.VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</select>
+	<insert id="insertVendorBankAccountInfoChange">
+	/* sp-vendor-master.insertVendorBankAccountInfoChange : 협력사 계좌 변경 요청 저장 */
+		INSERT INTO VD_BNKACCT_CHG_REQ (
+			TEN_ID
+		  , VD_BNKACCT_CHG_REQ_UUID
+		  , VD_INFO_CHG_REQ_UUID
+		  , BNK_CCD
+		  , ACCTHLDR
+		  , BNKACCT_NO
+		  , IBAN_CD
+		  , SWIFT_CD
+		  , VTL_BNKACCT_YN
+		  , MAIN_BNKACCT_YN
+		  , USE_YN
+		  , EFCT_ST_DT
+		  , EFCT_ED_DT
+		  , ATHG_UUID
+		  , VD_BNKACCT_UUID
+		  , RMK
+		  , STS
+		  , REGR_ID
+		  , REG_DTTM
+		  , MODR_ID
+		  , MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+		  , #{p.vd_bnkacct_chg_req_uuid}
+		  , #{p.vd_info_chg_req_uuid}
+		  , #{p.bnk_ccd}
+		  , #{p.accthldr}
+		  , #{p.bnkacct_no}
+		  , #{p.iban_cd}
+		  , #{p.swift_cd}
+		  , #{p.vtl_bnkacct_yn}
+		  , #{p.main_bnkacct_yn}
+		  , #{p.use_yn}
+		  , #{p.efct_st_dt}
+		  , #{p.efct_ed_dt}
+		  , #{p.athg_uuid}
+		  , #{p.vd_bnkacct_uuid}
+		  , #{p.rmk}
+		  , 'C'
+		  , #{g.username}
+		  , #{g.now}
+		  , #{g.username}
+		  , #{g.now}
+		)
+	</insert>
+	<update id="updateVendorBankAccountInfoChange">
+	/* sp-vendor-master.updateVendorBankAccountInfoChange : 협력사 계좌 변경 요청 수정 */
+		UPDATE VD_BNKACCT_CHG_REQ
+		   SET BNK_CCD = #{p.bnk_ccd}
+		     , ACCTHLDR = #{p.accthldr}
+		     , BNKACCT_NO = #{p.bnkacct_no}
+		     , IBAN_CD = #{p.iban_cd}
+		     , SWIFT_CD = #{p.swift_cd}
+		     , VTL_BNKACCT_YN = #{p.vtl_bnkacct_yn}
+		     , MAIN_BNKACCT_YN = #{p.main_bnkacct_yn}
+		     , USE_YN = #{p.use_yn}
+		     , EFCT_ST_DT = #{p.efct_st_dt}
+		     , EFCT_ED_DT = #{p.efct_ed_dt}
+		     , ATHG_UUID = #{p.athg_uuid}
+		     , VD_BNKACCT_UUID = #{p.vd_bnkacct_uuid}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_BNKACCT_CHG_REQ_UUID = #{p.vd_bnkacct_chg_req_uuid}
+		   AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</update>
+	<select id="findPoPossOorgCdByVd" resultType="map">
+	/* sp-vendor-master.findPoPossOorgCdByVd : 발주 가능한 운영조직 코드 조회 */
+		SELECT OORG.OORG_CD, LOGIC_ORG.LOGIC_ORG_NM
+		  FROM OORG OORG
+		 INNER JOIN LOGIC_ORG LOGIC_ORG
+		    ON LOGIC_ORG.TEN_ID = OORG.TEN_ID
+           AND LOGIC_ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+           AND LOGIC_ORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD
+		 INNER JOIN VD_OORG OV
+		    ON OORG.TEN_ID = OV.TEN_ID
+		   AND OORG.OORG_CD = OV.OORG_CD
+		 WHERE OORG.TEN_ID = #{g.tenant}
+		   AND OV.VD_CD = #{g.vd_cd}
+		   AND OV.PO_POSS_YN = 'Y'
+	</select>
+	<delete id="deleteVendorBankAccountChangeRequestInfo">
+	/* sp-vendor-master.deleteVendorBankAccountChangeRequestInfo : 협력사 계좌 변경 요청 삭제 */
+		DELETE FROM VD_BNKACCT_CHG_REQ
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</delete>
+	<insert id="insertVendorAttachmentChangeRequest">
+	/* sp-vendro-master.insertVendorAttachmentChangeRequest : 협력사 첨부파일 변경 요청 */
+		INSERT INTO VD_ATHF_CHG_REQ(
+			TEN_ID
+			, VD_ATHF_CHG_REQ_UUID
+			, VD_INFO_CHG_REQ_UUID
+			, VD_SUBMDDOC_TYP_CCD
+			, ATHG_UUID
+			, USE_YN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.vd_athf_chg_req_uuid}
+			, #{p.vd_info_chg_req_uuid}
+	        , #{p.vd_submddoc_typ_ccd}
+	        , #{p.athg_uuid}
+	        , #{p.use_yn}
+	        , #{p.rmk}
+	        , 'C'
+	        , #{g.username}
+	        , #{g.now}
+	        , #{g.username}
+	        , #{g.now}
+		)
+	</insert>
+	<update id="updateVendorAttachmentChangeRequest">
+	/* sp-vendor-master.updateVendorAttachmentChangeRequest : 협력사 첨부파일 변경 요청 수정 */
+		UPDATE VD_ATHF_CHG_REQ
+		   SET ATHG_UUID = #{p.athg_uuid}
+		     , STS = 'U'
+		     <if test="p.rmk != null and p.rmk != ''">
+		     , RMK = #{p.rmk}
+		     </if>
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_ATHF_CHG_REQ_UUID = #{p.vd_athf_chg_req_uuid}
+	</update>
+	<delete id="deleteVendorAttachmentChangeRequestInfo">
+	/* sp-vendor-master.deleteVendorAttachmentChangeRequestInfo : 협력사 첨부파일 변경 요청 삭제 */
+		DELETE FROM VD_ATHF_CHG_REQ
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+	</delete>
+	<select id="findListVendorAttachmentChangeRequest" resultType="map">
+	/* sp-vendor-master.findListVendorAttachmentChangeRequest : 협력사 첨부파일 변경 요청 조회 */
+		SELECT TEN_ID
+		     , VD_ATHF_CHG_REQ_UUID
+		     , VD_INFO_CHG_REQ_UUID
+		     , VD_SUBMDDOC_TYP_CCD
+		     , ATHG_UUID
+		     , USE_YN
+		     , RMK
+		     , STS
+		     , REGR_ID
+		     , REG_DTTM
+		     , MODR_ID
+		     , MOD_DTTM
+		  FROM VD_ATHF_CHG_REQ
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_INFO_CHG_REQ_UUID = #{p.vd_info_chg_req_uuid}
+		   AND STS != 'D'
+	</select>
+	<insert id="insertCopyVEndorAttachmentChangeRequest">
+	/* sp-vendor-master.insertCopyVEndorAttachmentChangeRequest : 협력사 첨부파일 변경 요청 복사 */
+		INSERT INTO VD_ATHF_CHG_REQ (
+			TEN_ID
+			, VD_ATHF_CHG_REQ_UUID
+			, VD_INFO_CHG_REQ_UUID
+			, VD_SUBMDDOC_TYP_CCD
+			, ATHG_UUID
+			, USE_YN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) SELECT
+		      #{g.tenant}
+			, #{p.new_vd_athf_chg_req_uuid}
+			, #{p.new_vd_info_chg_req_uuid}
+			, VD_SUBMDDOC_TYP_CCD
+			, #{p.new_athg_uuid}
+			, USE_YN
+			, RMK
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		    FROM VD_ATHF_CHG_REQ
+		   WHERE VD_ATHF_CHG_REQ_UUID = #{p.vd_athf_chg_req_uuid}
+	</insert>
+	<select id="findPrevHistrecForVendorReqMainInfoChange" resultType="map">
+	/* sp-vendor-master.findPrevHistrecForVendorReqMainInfoChange : 협력사의 이전 차수 조회 */
+	    SELECT VCS.X_SEQ
+             , VCS.TEN_ID
+             , VCS.VD_CD
+             , VCS.VD_MST_CHG_HISTREC_UUID
+             , VCS.MOD_SEQNO
+             , VCS.VD_INFO_CHG_REQ_UUID
+             , VCS.CHG_REQ_REVNO
+             , VCS.CHG_REQ_STS_CCD
+             , VCS.REGR_ID
+             , VCS.REG_DTTM
+             , VCS.MODR_ID
+             , VCS.MOD_DTTM
+	      FROM VD_CHG_SEQ VCS
+	     WHERE VCS.TEN_ID = #{g.tenant}
+	       AND VCS.X_SEQ = (SELECT MAX(X_SEQ) AS PREV_X_SEQ
+		                      FROM VD_CHG_SEQ
+		                     WHERE TEN_ID          = 'EMRO'
+		                     <if test="p.x_seq != null and p.x_seq != ''">
+			                   AND X_SEQ <![CDATA[<]]> #{p.x_seq}
+		                     </if>
+			                   AND CHG_REQ_STS_CCD = 'APVD'  /* 승인 */
+		                       AND VD_CD           = #{g.vd_cd}
+	                         GROUP BY VD_CD
+			               )
+	       AND VCS.VD_CD = #{g.vd_cd}
+	</select>
+	<select id="findBasicVendorHistrecInfo" resultType="map">
+    /* sp-vendor-master.findBasicVendorHistrecInfo : 기본정보 이력 조회 */
+        SELECT VCH.TEN_ID                         /* 테넌트 아이디 */
+             , VCH.VD_MST_CHG_HISTREC_UUID        /* 협력사 마스터 변경 이력 UUID */
+             , VCH.VD_INFO_CHG_REQ_UUID           /* 협력사 마스터 변경 요청 UUID */
+             , VCH.MOD_SEQNO                      /* 수정 일련번호 */
+             , VCH.VD_CD                          /* 협력사 코드 */
+             , VCH.CHG_TYP_CCD                    /* 변경 유형 공통코드 */
+             , VCH.CHG_RSN                      /* 변경 사유 MOD_CAUSE*/
+             , VCH.CHG_REQ_STS_CCD                /* 변경 요청 상태 공통코드 */
+             , VCH.CHG_REQR_ID                    /* 변경 요청자 아이디 */
+             , VCH.VD_NM                          /* 협력사 명 */
+             , VCH.VD_NM_EN                       /* 협력사 명 영문 */
+             , VCH.CEO_NM                         /* 대표자 명 */
+             , VCH.CEO_NM_EN                      /* 대표자 명 영문 */
+             , VCH.CEO_CRR                        /* 대표 경력 */
+             , VCH.CORPNO                         /* 법인번호 */
+             , VCH.HQ_BIZREGNO                    /* 본사 사업자등록번호 */
+             , VCH.TAX_ID                         /* 세금 아이디 */
+             , VCH.EU_VAT_REG_ID                  /* EU VAT 등록자 아이디 */
+             , VCH.ZIPCD                          /* 우편 번호 */
+             , VCH.DTL_ADDR_1                     /* 상세 주소 1 */
+             , VCH.DTL_ADDR_2                     /* 상세 주소 2 */
+             , VCH.DTL_ADDR_EN_1                  /* 상세 주소 영문 1 */
+             , VCH.DTL_ADDR_EN_2                  /* 상세 주소 영문 2 */
+             , VCH.IND                            /* 업종 */
+             , VCH.BIZTYP                         /* 업태 */
+             , VCH.RMK                            /* 비고 */
+             , VCH.REGR_ID                        /* 등록자 아이디 */
+             , VCH.REG_DTTM                       /* 등록 일시 */
+             , VCH.MODR_ID                        /* 수정자 아이디 */
+             , VCH.MOD_DTTM                       /* 수정 일시 */
+             , V.ERP_VD_CD
+             , V.CTRY_CCD
+             , V.BIZREGNO
+             , V.TAXNSUBJ_YN
+             , V.TAXNSUBJ_SEQNO
+             , V.TAX_ID
+             , V.EU_VAT_REG_ID
+          FROM VD_CHG_HISTREC VCH
+         INNER JOIN VD V
+            ON V.TEN_ID = VCH.TEN_ID
+           AND V.VD_CD  = VCH.VD_CD
+         WHERE VCH.TEN_ID                  = #{g.tenant}
+           AND VCH.VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+    </select>
+	<select id="findPrevOorgHistrecForVendorReqMainInfoChange" resultType="map">
+	/* sp-vendor-master.findPrevOorgHistrecForVendorReqMainInfoChange : 운영조직 이전 차수 정보 조회 */
+	    SELECT OVCS.X_SEQ
+             , OVCS.TEN_ID
+             , OVCS.VD_CD
+             , OVCS.OORG_CD
+             , OVCS.VD_MST_CHG_HISTREC_UUID
+             , OVCS.MOD_SEQNO
+             , OVCS.VD_INFO_CHG_REQ_UUID
+             , OVCS.CHG_REQ_REVNO
+             , OVCS.CHG_REQ_STS_CCD
+             , OVCS.REGR_ID
+             , OVCS.REG_DTTM
+             , OVCS.MODR_ID
+             , OVCS.MOD_DTTM
+	      FROM VD_OORG_CHG_SEQ OVCS
+	     WHERE OVCS.TEN_ID          = #{g.tenant}
+	       AND X_SEQ = (SELECT MAX(X_SEQ) AS PREV_X_SEQ
+	                      FROM VD_OORG_CHG_SEQ
+	                     WHERE TEN_ID          = #{g.tenant}
+		                 <if test="p.x_seq != null and p.x_seq != ''">
+                           AND X_SEQ <![CDATA[<]]> #{p.x_seq}
+		                 </if>
+		                   AND CHG_REQ_STS_CCD = 'APVD'  /* 승인 */
+	                       AND VD_CD           = #{g.vd_cd}
+	                       AND OORG_CD         = #{p.oorg_cd}
+                         GROUP BY VD_CD
+		               )
+	       AND OVCS.VD_CD = #{g.vd_cd}
+	       AND OVCS.OORG_CD         = #{p.oorg_cd}
+	</select>
+	<select id="findVendorOperationOrganizationHistrecInfo" resultType="map">
+    /* sp-vendor-master.findVendorOperationOrganizationHistrecInfo: 운영조직 이력 정보 조회 */
+        SELECT OVCH.TEN_ID                        /* 테넌트 아이디 */
+             , OVCH.VD_OORG_CHG_HISTREC_UUID      /* 운영조직 협력사 변경 이력 UUID */
+             , OVCH.VD_OORG_UUID                  /* 운영조직 협력사 UUID */
+             , OVCH.VD_MST_CHG_HISTREC_UUID       /* 협력사 마스터 변경 이력 UUID */
+             , OVCH.PO_POSS_YN                /* 거래 가능 여부 */
+             , OVCH.OBD_TYP_CCD                   /* 온보딩 유형 공통코드 */
+             , OVCH.DOMOVRS_TYP_CCD               /* 내외자 구분 공통코드 */
+             , OVCH.PYMTMETH_CCD                  /* 지급방법 공통코드 */
+             , OVCH.PYMTMETH_EXPLN                /* 지급방법 설명 */
+             , OVCH.CUR_CCD                       /* 통화 공통코드 */
+             , OVCH.DLVYMETH_CCD                  /* 납품방법 공통코드 */
+             , OVCH.DLVYMETH_EXPLN                /* 납품방법 설명 */
+             , OVCH.TAX_TYP_CCD                   /* 세금 유형 공통코드 */
+             , OVCH.STS                           /* 상태 */
+             , OVCH.RMK                           /* 비고 */
+             , OVCH.REGR_ID                       /* 등록자 아이디 */
+             , OVCH.REG_DTTM                      /* 등록 일시 */
+             , OVCH.MODR_ID                       /* 수정자 아이디 */
+             , OVCH.MOD_DTTM                      /* 수정 일시 */
+          FROM VD_OORG_CHG_HISTREC OVCH
+         WHERE OVCH.TEN_ID                  = #{g.tenant}
+           AND OVCH.VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+    </select>
+</mapper>

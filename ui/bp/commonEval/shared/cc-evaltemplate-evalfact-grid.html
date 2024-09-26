@@ -1,0 +1,535 @@
+<dom-module id="cc-evaltemplate-evalfact-grid">
+<!-- 
+/**
+ *
+ *	@description : 평가 항목(그리드) 생성 컨포넌트
+ *  <pre>
+ 			<cc-evaltemplate-evalfact-grid id="factGridArea"
+ 											eval-template-list="{{evalTemplateList}}"
+ 											evalfact-eval-list="{{evalfactEvalList}}">
+ 			</cc-evaltemplate-evalfact-grid>
+ * </pre>
+ * @author : sykim
+ * @FileName : 
+ * @Since 2023. 7. 26.
+ * @변경이력 : [2023. 7. 26] sykim 최초작성
+ */
+-->
+	<style>
+		:host {
+            @apply(--vbox-layout);
+        }
+		.hd-box {
+			margin: 1px;
+			border: 0;
+		}
+		.hd-title {
+			border-bottom: 0;
+			background-color: transparent;
+			font-weight: bold;
+			font-size: 16px;
+			padding: 0;
+		}
+		.hd-body {
+			background: #FFF;
+			border: 1px solid #C9C9C9;
+			padding: 24px 30px;
+			box-sizing: border-box;
+		}
+		
+		.rmk-box {
+			border: 1px solid #E2E2E2;
+			background: #F8F8F8;
+			padding: 16px;
+			box-sizing: border-box;
+		}
+		.rmk-title {
+			border-bottom: 0;
+			padding: 5px;
+			font-weight: 500;
+			font-size: 13px;
+		}
+		.rmk-body {
+			padding :5px;
+		}
+		.attachEmptyBtn{
+			background: transparent;
+			border: 0;
+		}
+	</style>
+	<template>
+        <div class="flex">
+            <template id="repeatTemplate" is="dom-repeat" items="{{evalTemplateList}}" as="evalTmpl">
+                <div class="vbox hd-box">
+                    <div class="hd-title">
+                        <sc-label text="{{evalTmpl.evaltmpl_nm}}" i18n-disabled></sc-label>
+                    </div>
+					
+                    <div class="vbox">
+                        <sc-grid id="grid{{evalTmpl.evaltmpl_cd}}" class="h-500"
+                                 use-state="false" 
+                                 use-selection="false"
+                                 data-provider="{{evalTmpl.tmplFactScaleList}}"
+                                 editable="{{!evalTmpl.scaleDisabled}}"
+                                 on-item-edit-end="onItemEditEnd"
+                                 on-item-click="onDataCellClicked"
+                                 on-pasted="onGridPasted" paste-when-edit-end-event="false">
+                            <cc-grid-toolbar></cc-grid-toolbar>
+                            <sc-grid-columns>
+                                <sc-data-column data-field="efactg_nm" header-text="평가항목군 명" width="200" text-align="left" mergeable="true" merge-based-field="evaltmpl_efactg_uuid"></sc-data-column>
+                                <sc-data-column data-field="evalfact_nm" header-text="평가항목 명" width="300" text-align="left" mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-data-column>
+                                <sc-data-column data-field="scale_nm" header-text="스케일 명" width="400" text-align="left" mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-data-column>
+                                <sc-data-column data-field="sc2" header-text="점수" width="50" text-align="right"></sc-data-column>
+                                <sc-checkbox-column	data-field="select_yn" header-text="선택" width="60" text-align="center" editable="{{!evalTmpl.scaleDisabled}}" required="{{!evalTmpl.scaleDisabled}}"
+                                                    check-value="Y"	un-check-value="N" display-checkbox="false"></sc-checkbox-column>
+<!--                                <sc-data-column	data-field="rmk" header-text="평가항목 의견" width="350" text-align="left" item-editable-function="rmkEditableFunction"-->
+<!--                                                    mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-data-column>-->
+								<sc-image-column data-field="img_rmk" header-text="평가항목 의견" width="60" text-align="center" image-cls="link" mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-image-column>
+                                <sc-attachment-column data-field="att_cnt" header-text="첨부파일" width="60" text-align="left"
+                                                    shared-group-field="athg_uuid" popup-call-fn="onOpenAttPopupByFact"
+                                                    mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-attachment-column>
+                                <sc-group-column header-text="평가항목 설명" width="350" hide-child-headers="true">
+	                                <sc-image-column data-field="eval_grd_link"	width="20" style-name="link" mergeable="true" merge-based-field="evaltmpl_evalfact_uuid" image-change-function="onImageChange"></sc-image-column>
+	                                <sc-data-column	data-field="evalfact_expln"	width="180"	text-align="left" mergeable="true" merge-based-field="evaltmpl_evalfact_uuid"></sc-data-column>
+                                </sc-group-column>
+                            </sc-grid-columns>
+                        </sc-grid>
+                        
+                        <a name="{{evalTmpl.evaltmpl_cd}}"></a>
+						
+                        <sc-panel title-text="▣ [[translate('종합 의견')]]" collapsible="false" i18n-disabled>
+                            <div id="gridDiv{{evalTmpl.evaltmpl_cd}}" class="rmk-box">
+                                <div class="hbox rmk-title">
+                                    <sc-label text="[[[evalTmpl.evaltmpl_nm]]] [[translate('STD.SRM1099')]]" i18n-disabled></sc-label>
+                                    <sc-spacer></sc-spacer>
+                                    <sc-button id="attCntBtn" class$="[[hasAttFile(evalTmpl.att_cnt)]]" text="종합 첨부" icon-cls="btn attach" data="[[evalTmpl]]" on-click="onOpenAttPopup"></sc-button>
+                                </div> 
+                                <div class="rmk-body">
+                                    <sc-textarea-field value="{{evalTmpl.rmk}}" maxLength="1000" readonly="[[readOnly]]" required="[[!readOnly]]"></sc-textarea-field>
+                                </div>
+                            </div>
+                        </sc-panel>
+						
+                        <div class="vspace-5"></div>
+                    </div>
+                </div>
+                <div class="vspace-5"></div>
+            </template>
+        </div>
+		
+		<sc-dialog id="rmkDialog" title-text="[[translate('평가항목 의견')]]" style="width:450px; height:350px" modal="true" i18n-disabled>
+			<cc-page-title-bar>
+				<sc-button text="입력" on-click="onFactRmkEdited"></sc-button>
+			</cc-page-title-bar>
+			<cc-form-panel>
+				<cc-fieldset>
+					<sc-textarea-field id="factRmk" value="" class="h-200" readonly="[[readOnly]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+		</sc-dialog>
+		
+        <sc-dialog id="dialog" title-text="[[translate('평가항목 설명')]]" style="width:450px; height:350px" modal="true" i18n-disabled>
+            <cc-form-panel>
+                <cc-fieldset>
+                    <sc-textarea-field id="factExpln" value="" class="h-200" readonly="true"></sc-textarea-field>
+                </cc-fieldset>
+            </cc-form-panel>
+       </sc-dialog>
+    </template>
+	
+    <script>
+		Polymer({
+			is : 'cc-evaltemplate-evalfact-grid',
+			properties : {
+				readOnly : {
+					type : Object,
+					notify : true,
+					value : function(){
+						return false;
+					}
+				},
+				codes : {
+					type : Object,
+					notify: true,
+					value : function(){
+						return {};
+					}
+				},
+				// 평가항목 목록
+				evalfactEvalList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				// 평가템플릿 목록
+				evalTemplateList : {
+					type : Array,
+					notify: true,
+					value : function(){
+						return new Array();
+					},
+				},
+				// 마지막으로 편집한 항목&스케일 정보
+				selectedObj : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				}
+			},
+		
+			/* 항목설명 팝업 여부 */
+			displayFactExplnByPopup : function(evalfactDtlDspyTypCcd){
+				return (evalfactDtlDspyTypCcd == "P"); // "P" : popup
+			},
+		
+			/* 항목설명팝업 이미지 변경 */
+			onImageChange : function(data, item){
+				var me = this;
+				if(me.displayFactExplnByPopup(data.eval_fact_desc_view_cls)){ // "P" : popup
+					return "link";
+				}else{
+					return null;
+				}
+			},
+			
+			/* 그리드 셀 클릭 이벤트 처리 */
+			onDataCellClicked : function(event){
+				var me = this,
+					detail = event.detail,
+					data = detail.data,
+					item = detail.item,
+					fieldName = item.dataField;
+				
+				// 마지막으로 편집한 항목, 스케일 정보 세팅
+				me.set("selectedObj", data);
+				me.set("selectedObj.rowIndex", item.rowIndex);
+				
+				if(fieldName == "eval_grd_link" && me.displayFactExplnByPopup(data.evalfact_dtl_dspy_typ_ccd)){
+					me.onShowDescrFactDialog(data);
+				} else if(fieldName == "img_rmk"){
+					me.onShowRmkDialog(data);
+				}
+			},
+		
+			/* 항목설명팝업 조회 */
+			onShowDescrFactDialog : function(data){
+				var me = this;
+				me.$.factExpln.value = data.evalfact_expln;
+				me.$.dialog.show();
+			},
+			
+			/* 항목의견 입력 팝업 조회 */
+			onShowRmkDialog : function(data){
+				var me = this;
+				me.$.factRmk.value = data.rmk;
+				me.$.rmkDialog.show();
+			},
+			
+			onFactRmkEdited : function(){
+				var me = this;
+				var obj = me.get("selectedObj");
+				if(UT.isNotEmpty(obj)) {
+					var grid = document.getElementById("grid" + obj.evaltmpl_cd);
+					var provider = grid.getDataProvider();
+					
+					var rmkValue = me.$.factRmk.value;
+					var tmplFactIdxes = provider.filterIndexes(function(data){
+						return data.evaltmpl_evalfact_uuid == obj.evaltmpl_evalfact_uuid;
+					});
+					provider.setItemAtBatch(tmplFactIdxes, function(index, data){
+						return {rmk: rmkValue};
+					});
+				}
+				
+				me.$.rmkDialog.close();
+			},
+			
+			/* 첨부파일 첨부 여부 */
+			hasAttFile : function(cnt){
+				return (cnt > 0) ? "attachBtn" : "attachEmptyBtn";
+			},
+			
+			/* 종합의견 첨부파일 팝업 */
+			onOpenAttPopup : function(e){
+				var me = this;
+				var btnId = e.currentTarget.id;
+				var evalTmpl = e.target.data;
+				var readOnly = me.get("readOnly");
+				
+				if(UT.isEmpty(evalTmpl)){
+					evalTmpl = e.target.parentElement.data;
+					if(UT.isEmpty(evalTmpl)){
+						evalTmpl = e.target.parentElement.parentElement.data;
+					}
+				}
+				
+				var setAthgUuid = function(athg_uuid, cnt){
+					var evalTemplateList = me.get("evalTemplateList");
+					var key = evalTmpl.eval_subj_evaltr_res_uuid;
+					for(var i = 0 ;i<evalTemplateList.length;i++){
+						var evTmpl = evalTemplateList[i];
+						if(evTmpl.eval_subj_evaltr_res_uuid === key){
+							me.set("evalTemplateList."+i+".athg_uuid", athg_uuid)
+							me.set("evalTemplateList."+i+".att_cnt", cnt)
+						}
+					}
+					
+					var btn = document.getElementById(btnId);
+					if(cnt > 0){
+						btn.classList.remove("attachEmptyBtn");
+						btn.classList.add("attachBtn");
+					}else{
+						btn.classList.remove("attachBtn");
+						btn.classList.add("attachEmptyBtn");
+					}
+				};
+				
+				UT.popupAttach(me, evalTmpl.athg_uuid, function(result) {
+					setAthgUuid(result.athg_uuid, result.file_count);
+				}, { editable: !readOnly, title: "파일첨부" });
+			},
+			
+			/* 평가결과 편집 완료 */
+			onItemEditEnd: function(event){
+				var me = this,
+					data = event.detail.data,
+					item = event.detail.item,
+					provider = event.detail.provider,
+					newValue = event.detail.newValue,
+					grid = event.detail.grid;
+				var evalTemplateList = me.evalTemplateList;
+				
+				if(item.dataField == "select_yn"){
+					if(newValue == "Y"){ // 기존 체크항목 삭제
+						var indexArr = provider.filterIndexes(function(item){
+							return item.evaltmpl_evalfact_uuid == data.evaltmpl_evalfact_uuid && item.select_yn == "Y"
+									&& item.scale_cd != data.scale_cd;
+						});
+						if(indexArr.length > 0){
+							provider.setItemAtBatch(indexArr, function(index, data){
+								return { select_yn: "N" };
+							});
+						}
+					}
+				}else if(item.dataField == "rmk"){
+					var indexArr = provider.filterIndexes(function(item){
+						return item.evaltmpl_evalfact_uuid == data.evaltmpl_evalfact_uuid;
+					});
+					provider.setItemAtBatch(indexArr, function(index, data){
+						return { rmk: newValue };
+					});
+				}
+				
+				// 데이터에 반영
+				for(var idx in evalTemplateList){
+					var evTmpl = evalTemplateList[idx];
+					if(evTmpl.evaltmpl_cd == data.evaltmpl_cd){
+						evTmpl.tmplFactScaleList = provider.getItems();
+					}
+				}
+			},
+		
+			/* 평가결과 paste 완료 */
+			onGridPasted: function(event){
+				var me = this,
+					pastedIndexes = event.detail.pastedIndexes;
+				var provider = event.target.getDataProvider();
+				var evalTemplateList = me.evalTemplateList;
+				var evTmplCd;
+				
+				var factList = me.evalfactEvalList;
+				for(var idx in factList){
+					var factItem = factList[idx];
+					evTmplCd = factItem.evaltmpl_cd;
+					var setFlag = false;
+					
+					// 입력 가능 값이 아닌 경우(Y, N)
+					var isNotCorrectIndexes = provider.filterIndexes(function(item){
+						return item.evaltmpl_evalfact_uuid == factItem.evaltmpl_evalfact_uuid && item.select_yn != 'Y' && item.select_yn != 'N';
+					});
+					if(isNotCorrectIndexes.length > 0){
+						setFlag = true;
+					}
+					
+					// select_yn : 항목 1개당 "Y" 개수
+					var selectYList = provider.filterItems({ select_yn: 'Y', evaltmpl_evalfact_uuid: factItem.evaltmpl_evalfact_uuid });
+					
+					// Y가 1개씩 입력되지 않았으면,
+					if(selectYList.length != 1){
+						// 해당 항목의 스케일 indexes
+						var scaleIdxes = provider.filterIndexes(function(data){
+							return data.evaltmpl_evalfact_uuid == factItem.evaltmpl_evalfact_uuid;
+						});
+						
+						// 붙여넣었지만 Y입력이 잘못된 항목 스케일 indexes
+						var allNButPastedIdexes = pastedIndexes.filter(function(item){
+							return scaleIdxes.includes(item);
+						});
+						
+						// pasted된 항목인지 check
+						if(allNButPastedIdexes.length == 0){
+							continue;
+						}
+						
+						setFlag = true;
+					}
+					
+					if(setFlag){
+						provider.setItemAtBatch(pastedIndexes, function(nodeIndex, data){
+							return { select_yn: "N", rmk: null };
+						});
+						
+						// 입력한 평가결과를 확인하세요. <br>('{0}' 평가항목 확인필요)
+						UT.alert(me.translate("STD.SRM1223", null, factItem.evalfact_nm), null, true);
+						me.moveScroll(factItem.evaltmpl_evalfact_uuid, factItem.evaltmpl_cd, true);
+						
+						break;
+					}
+					
+					// 비고 setting
+					var indexArr = provider.filterIndexes(function(item){
+						return item.evaltmpl_evalfact_uuid == factItem.evaltmpl_evalfact_uuid;
+					});
+					var rmkData = provider.getItemAt(indexArr[0]);
+					provider.setItemAtBatch(indexArr, function(index, data){
+						return {rmk: rmkData.rmk};
+					});
+				}
+				
+				// 데이터에 반영
+				for(var idx in evalTemplateList){
+					var evTmpl = evalTemplateList[idx];
+					if(evTmpl.evaltmpl_cd == evTmplCd){
+						evTmpl.tmplFactScaleList = provider.getItems();
+					}
+				}
+			},
+			
+			/* 평가항목별 첨부파일 팝업 호출 */
+			onOpenAttPopupByFact: function(data, item, provider){
+				var me = this,
+					fact = data,
+					athgUuid = data.athg_uuid,
+					readOnly = me.get("readOnly");
+				
+				var setAthgUuid = function(athg_uuid, cnt){
+					var factList = me.get("evalfactEvalList");
+					var evalTemplateList = me.get("evalTemplateList");
+					
+					var tmplFactUuid = fact.evaltmpl_evalfact_uuid;
+					var evTmplCd = fact.evaltmpl_cd;
+					for(var i = 0 ;i<factList.length;i++){
+						var factObj = factList[i];
+						if(factObj.evaltmpl_evalfact_uuid === tmplFactUuid){
+							// Fact att, 정보 셋팅
+							me.set("evalfactEvalList."+i+".athg_uuid", athg_uuid);
+							me.set("evalfactEvalList."+i+".att_cnt", cnt);
+							
+							// Fact 스케일, att 정보 셋팅
+							var targetFactIndexes = provider.filterIndexes(function(data){
+								return data.evaltmpl_evalfact_uuid  == tmplFactUuid;
+							});
+							provider.setItemAtBatch(targetFactIndexes, function(nodeIndex, data){
+								return {athg_uuid: athg_uuid, att_cnt: cnt};
+							});
+						}
+					}
+					
+					// 데이터에 반영
+					for(var idx in evalTemplateList){
+						var evTmpl = evalTemplateList[idx];
+						if(evTmpl.evaltmpl_cd == evTmplCd){
+							me.set("evalTemplateList."+idx+".tmplFactScaleList", provider.getItems());
+						}
+					}
+				};
+				
+				UT.popupAttach(me, athgUuid, function(result){
+					setAthgUuid(result.athg_uuid, result.file_count);
+				}, { editable: !readOnly });
+			},
+			
+			/* 항목의견 수정가능 여부 */
+			rmkEditableFunction: function(data, item){
+				var me = this;
+				
+				if(data["rmkDisabled"] == "false" && data["scale_sort"] == "1"){
+					var evalTemplateList = me.get("evalTemplateList");
+					
+					for(var idx in evalTemplateList){
+						var evTmpl = evalTemplateList[idx];
+						if(evTmpl.evaltmpl_cd == data.evaltmpl_cd){
+							var factScaleList = evTmpl.tmplFactScaleList.filter(function(item, index){
+								return item.evaltmpl_evalfact_uuid == data.evaltmpl_evalfact_uuid && item.select_yn == "Y";
+							});
+							
+							if(factScaleList.length == 1){
+								return true;
+							}
+						}
+					}
+				}
+				
+				return false;
+			},
+			
+			moveScroll : function(uuid, tmplCd, validFocusBox){
+				var me = this;
+				var target = document.getElementById(uuid);
+				me.fire("fact-area-clear");
+				
+				var hash = null;
+				if(!UT.isEmpty(tmplCd)){
+					hash = "grid" + tmplCd;
+					var target = document.getElementById(hash);
+					
+					if(!UT.isEmpty(target)){
+						var provider = target.getDataProvider();
+						indexes = provider.filterIndexes(function(item){
+							return item.evaltmpl_evalfact_uuid == uuid;
+						});
+						
+						if(indexes.length > 0){
+							target.setCurrentCell({dataField: 'evalfact_nm', rowIndex: indexes[0]});
+						}
+					}
+				}else{
+					hash = "gridDiv" + uuid;
+					var target = document.getElementById(hash);
+				}
+				
+				// 스크롤 이동
+				var mdiTabbar = document.querySelector("sc-mdi-tabbar");
+				if (mdiTabbar && typeof mdiTabbar.scrollIntoView == "function") {
+					// 스크롤 이동시 mdi tabbar도 영향을 받아 높이가 줄어드는 현상이 발생함
+					// mdi tabbar element를 강제로 스크롤 영역에 위치하도록 임시 구현
+					// target.scrollIntoView();
+					location.hash = null; // 초기화
+					location.hash = "#" + hash;
+					mdiTabbar.scrollIntoView();
+				}
+				
+				if(target){
+					var eventHandler = (function(target, style, e){
+						this.removeEventListener("fact-area-clear", arguments.callee);
+						target.onmouseover = undefined;
+						target.setAttribute("style", style);
+					}).bind(this, target, target.getAttribute("style"));
+					
+					target.setAttribute("style", "border: 2px solid " + (validFocusBox ? "red;" : "blue;"));
+					target.onmouseover = eventHandler;
+					me.addEventListener("fact-area-clear", eventHandler);
+				}
+			},
+		
+			onClear : function(){
+				var me = this;
+				me.set("evalTemplateList", me.getPropertyInfo("evalTemplateList").value());
+				me.set("selectedObj", {});
+				me.fire("fact-area-clear");
+			}
+		});
+	</script>
+</dom-module>

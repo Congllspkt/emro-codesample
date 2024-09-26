@@ -1,0 +1,682 @@
+<sc-link rel="import" href="es-performance-eval-result-summary.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-subj-list.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-comprehensive-opinion-list.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-evalfact-list.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-evalfact-opinion-list.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-calcfact-list.html"></sc-link>
+<sc-link rel="import" href="es-performance-eval-result-calcfact-adj-list.html"></sc-link>
+<sc-link rel="import" href="ep-appeal-popup.html"></sc-link>
+<sc-link rel="import" href="../appeal/ep-vendor-appeal-list.html"></sc-link>
+
+<!--
+    ******************************************************************************************
+    ** @Program-name    : 퍼포먼스평가 결과 관리 (상세조회 화면)
+    ** @Description     : 퍼포먼스평가 결과정보를 조회합니다.
+    ** @Author          : hisua1215
+    ** @Create Date     : 2016.06.02
+    ** @History         : 2016.06.02 hisua1215 최초작성
+    ******************************************************************************************
+-->
+<dom-module id="es-performance-eval-result-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+	<!--
+		************************************************************************************************************
+		* Service Area
+		************************************************************************************************************
+	 -->
+		<sc-request-group init>
+			<!-- 운영조직 조회 -->
+			<sc-ajax
+					url="findListOperationOrganizationByUser.do"
+					body="SO"
+					content-type="text/plain"
+					last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<!-- 평가진행상태 -->
+				<sc-code code="R301" value="{{codes.peStsCcd}}"></sc-code>
+				<!-- 정성평가수행상태 -->
+				<sc-code code="R401" value="{{codes.evalPrgsStsCcd}}"></sc-code>
+				<!-- 평가자유형 -->
+				<sc-code code="R706" value="{{codes.evaltrTypCcd}}"></sc-code>
+				<!-- 평가항목담당그룹 -->
+				<sc-code code="R707" value="{{codes.evaltrAuthtyCcd}}"></sc-code>
+				<!-- 평가항목유형 -->
+				<sc-code code="EVKD" value="{{codes.addCndCcd}}"></sc-code>
+				<!-- 항목 유형 -->
+				<sc-code code="R001" value="{{codes.evalfactTypCcd}}"></sc-code>
+				<!-- 이의제기 진행상태 공통코드 -->
+				<sc-code code="R304" value="{{codes.appealStsCcd}}"></sc-code>
+				<!-- 사용여부 공통코드 -->
+				<sc-code code="C009" value="{{codes.useYnCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<sc-request-group id="defaultValueGrp" on-response="completeDefaultValueGrp">
+			<!-- 평가그룹 목록 조회 -->
+			<sc-ajax id="findListPegByPe" url="findListPegByPe.do" body="{{peInfo}}" last-response="{{codes.pegList}}"></sc-ajax>
+			<!-- 협력사관리그룹 목록 조회 -->
+			<sc-ajax id="findListVmgByPe" url="findListVmgByPe.do" body="{{peInfo}}" last-response="{{codes.vmgList}}"></sc-ajax>
+		</sc-request-group>
+		
+		<!-- 평가 정보 조회 -->
+		<sc-ajax id="findPfmcEvalRes"	url="findPfmcEvalRes.do"	body="{{peInfo}}" on-response="completeFindPfmcEvalRes"></sc-ajax>
+		
+		<!-- 평가완료 -->
+		<sc-ajax id="confirmPfmcEvalResult"
+				 url="confirmPfmcEvalResult.do">
+		</sc-ajax>
+		
+		<!-- 이의제기 종료 -->
+		<sc-ajax id="endPfmcEvalAppeal"
+				 url="endPfmcEvalAppeal.do">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-r,auth-s, auth-a"></cc-auth-checker>
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar>
+			<sc-button text="이의제기 통보"   on-click="onOpenAppealPopup" auth-s hidden="[[!formula('isEnableAppealNotice')]]"></sc-button><!--hidden="[[!formula('isEnableComplainNotice')]]"-->
+			<!--<sc-button text="계산항목"       on-click="onFindEvalRecInfo"    auth-s hidden="[[!formula('isQunatEvalResult')]]"></sc-button> -->
+			<sc-button text="이의제기 현황"   on-click="onPopupVdAppealList"  auth-s hidden="[[!formula('isEnableAppealProgress')]]"></sc-button>
+			<sc-button text="이의제기 종료"	on-click="onEndPfmcEvalAppeal"			auth-s hidden="[[!formula('isEnableEndPfmcEvalAppeal')]]"></sc-button>
+			<sc-button text="평가 완료"		on-click="onConfirmPfmcEvalResult"	auth-s hidden="[[!formula('isEnableConfirmPfmcEval')]]"></sc-button>
+			<sc-button text="결재 요청"		on-click="onApproval"				auth-a hidden="[[!formula('isEnableConfirmPfmcEval')]]"></sc-button>
+			<sc-button text="닫기"			on-click="onClose" ></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex">
+			<cc-approval-summary app-id="{{peInfo.pe_uuid}}" aprv-typcd="{{apvlTypCcd}}" hidden="[[!formula('requestedApproval')]]" auth-r>
+			</cc-approval-summary>
+			
+			<cc-form-panel id="peInfoPanel" title-text="[[formula('title')]]" collapsible="true" column="3" i18n-disabled>
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<sc-combobox-field value="{{peInfo.oorg_cd}}"	items="{{codes.oorgCd}}"	display-field="logic_org_nm" value-field="oorg_cd" readonly="true"></sc-combobox-field>
+					<!--<div class="field-box">
+						<sc-label  class="flex"	text="{{peInfo.logic_org_nm}}" i18n-disabled></sc-label>
+					</div>-->
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="상태"></sc-label>
+					<sc-combobox-field	value="{{peInfo.pe_sts_ccd}}"	items="{{codes.peStsCcd}}"	display-field="label" value-field="data"	readonly="true"></sc-combobox-field>
+					<!--<div class="field-box">
+						<sc-label class="flex"	text="{{peInfo.pe_sts_nm}}" 	i18n-disabled></sc-label>
+					</div>-->
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가 대상 연도"></sc-label>
+					<sc-text-field value="{{peInfo.eval_subj_yr}}" readonly="true"></sc-text-field>
+					<!--<div class="field-box">
+						<sc-label class="flex"	text="{{peInfo.eval_subj_yr}}" i18n-disabled></sc-label>
+					</div>-->
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="[[translate('평가 코드')]] / [[translate('명')]]"></sc-label>
+					<div class="field-box flex">
+						<sc-text-field class="w-150" value="{{peInfo.eval_cd}}" readonly="true" placeholder="평가 코드"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field  class="flex" value="{{peInfo.eval_nm}}" readonly="true" placeholder="평가 명"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="데이터 수집 기간 연월"></sc-label>
+					<sc-period-month-field from-value="{{peInfo.dat_coll_st_yymm}}" to-value="{{peInfo.dat_coll_ed_yymm}}" string-date="true"
+										   readonly="true">
+					</sc-period-month-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="[[translate('자체점검 여부')]] / [[translate('기간')]]"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-checkbox-field input-value="{{peInfo.slfck_subj_yn}}" readonly="true" checked-value="Y" un-checked-value="N"
+										   on-checkchange="onChangeSlfckSubjYn"></sc-checkbox-field>
+						<div class="hspace-10"></div>
+						<!--hidden="[[!formula('isSelfExamSubjY')]]"-->
+						<sc-period-date-field from-value="{{peInfo.slfck_st_dt}}" to-value="{{peInfo.slfck_clsg_dt}}" string-date="true" readonly="true">
+						</sc-period-date-field>
+					
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가자 평가 기간"></sc-label>
+					<sc-period-date-field from-value="{{peInfo.evaltr_eval_st_dt}}" to-value="{{peInfo.evaltr_eval_clsg_dt}}" string-date="true"
+										  readonly="true">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 이의제기 가능 여부"></sc-label>
+					<sc-checkbox-field input-value="{{peInfo.vd_appeal_poss_yn}}" readonly="true" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('isPossibleVdAppeal')]]">
+					<sc-label text="이의제기 상태"></sc-label>
+					<sc-combobox-field	value="{{peInfo.appeal_sts_ccd}}"	items="{{codes.appealStsCcd}}"	display-field="label" value-field="data"	readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="개선 요청 가능 여부"></sc-label>
+					<sc-checkbox-field input-value="{{peInfo.improv_req_appl_yn}}" readonly="true" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="차별화 적용 대상 여부"></sc-label>
+					<sc-checkbox-field input-value="{{peInfo.diff_appl_yn}}" readonly="true" checkedㄴ-value="Y" un-checked-value="N"></sc-checkbox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			<!--
+			<cc-sub-title-bar title-text="평가 결과"></cc-sub-title-bar>
+			-->
+			<div class="vspace-10"></div>
+			
+			<sc-tab-navigation	class="flex">
+				
+				<es-performance-eval-result-summary	title-text="Summary"	id="summaryTab"	></es-performance-eval-result-summary>
+				<template>
+					<es-performance-eval-result-subj-list id="peSubjListTab" title-text="퍼포먼스평가 대상 결과" on-initialized="_onPeSubjListTabInitialized"
+												  on-complete-save="onSearch" on-close-detail="onClose"	on-open-vd-improve-page="onOpenVdImprovePage">
+					</es-performance-eval-result-subj-list>
+				</template>
+				<template>
+					<es-performance-eval-result-comprehensive-opinion-list id="opinionListTab" title-text="종합 의견" on-initialized="_onOpinionListTabInitialized"
+														  on-close-detail="onClose">
+					</es-performance-eval-result-comprehensive-opinion-list>
+				</template>
+				<template>
+					<es-performance-eval-result-evalfact-list id="evalfactListTab" title-text="평가항목 결과" on-initialized="_onEvalfactListTabInitialized"
+															 on-close-detail="onClose">
+					</es-performance-eval-result-evalfact-list>
+				</template>
+				<template>
+					<es-performance-eval-result-evalfact-opinion-list id="evalfactOpinionListTab" title-text="평가항목 의견" on-initialized="_onEvalfactOpinionListTabInitialized"
+															  on-close-detail="onClose">
+					</es-performance-eval-result-evalfact-opinion-list>
+				</template>
+				<template>
+					<es-performance-eval-result-calcfact-list id="calcfactListTab" title-text="정량 평가항목 결과" on-initialized="_onCalcfactListTabInitialized"
+															on-close-detail="onClose">
+					</es-performance-eval-result-calcfact-list>
+				</template>
+				<template>
+					<es-performance-eval-result-calcfact-adj-list id="calcfactAdjListTab" title-text="계산항목 조정" on-initialized="_onCalcfactAdjListTabInitialized"
+															on-complete-save="onSearch" on-close-detail="onClose">
+					</es-performance-eval-result-calcfact-adj-list>
+				</template>
+			</sc-tab-navigation>
+
+		</div>
+
+	</template>
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-performance-eval-result-detail",
+			
+			properties:{
+				// 평가정보
+				peInfo : {
+					type: Object,
+					value : function() {
+						return{};
+					}
+				},
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function(){
+						return{};
+					}
+				},
+				// 목록 조회 Object
+				findList: {
+					type: Object,
+					value: function(){
+						return{
+							param : {},
+							peSubjResult : [],
+							evalfactResult : [],
+							quantEvalfactResult : []
+						};
+					}
+				},
+				// code 목록 binding Object
+				codes: {
+					type: Object,
+					reset: false,
+					value: function(){
+						return{
+							oorgCd: [],
+							peStsCcd : [],
+							appealStsCcd: [],
+							pegList:[],
+							vmgList:[],
+							addCndCcd : [],
+							evalfactTypCcd : [],
+							useYnCcd : []
+						};
+					},
+					reset : false
+				},
+				//결재 유형 코드
+				apvlTypCcd: {
+					type: String,
+					value: function() {
+						return "PRDCEVAL_CNFD";
+					}
+				},
+				// 목록 재조회
+				reloadable: {
+					type: Boolean,
+					value: false
+				},
+				peSubjListTabInitialized: false,
+				opinionListTabInitialized: false,
+				evalfactListTabInitialized: false,
+				evalfactOpinionListTabInitialized: false,
+				calcfactListTabInitialized: false,
+				calcfactAdjListTabInitialized: false
+			},
+			formulas: {
+				title : function() {
+					var me = this;
+					if(UT.isEmpty(me.peInfo) || UT.isEmpty(me.peInfo.eval_nm)) {
+						return me.translate('퍼포먼스평가 정보');
+					}
+					return me.translate("퍼포먼스평가 정보") + ' : ' + me.peInfo.eval_nm;
+				},
+				isPossibleVdAppeal : function() {
+					return UT.isNotEmpty(this.peInfo) && this.peInfo.vd_appeal_poss_yn == "Y";
+				},
+				isEnableAppeal : function(){
+					var me = this;
+					var data = me.get("peInfo");
+					// 이의제기  버튼
+					return data.vd_appeal_poss_yn == "Y" && (data.pe_sts_ccd == "EVAL_RES_CALC_CMPLD" ); // 이의제기 가능여부 및 (집계완료 상태 시
+				},
+				isEnableAppealNotice : function(){
+					var me = this;
+					var data = me.get("peInfo");
+					// 이의제기  버튼
+					return me.formula('isEnableAppeal') && ((data.appeal_sts_ccd || "APPEAL_CRNG") == "APPEAL_CRNG") // 이의제기 여부 및 집계완료 상태 시
+				},
+				isEnableAppealProgress: function(){
+					var me = this;
+					var data = me.get("peInfo");
+					// 이의제기현황  버튼
+					return (me.formula('isEnableAppeal') && data.appeal_sts_ccd != 'APPEAL_CRNG');  // [R304] APPEAL_CRNG : 이의제기 통보 대기
+				},
+				isEnableAppealSts: function(){
+					var me = this;
+					var data = me.get("peInfo");
+					// 이의제기현황  버튼
+					return (me.formula('isEnableAppeal') && UT.isNotEmpty(data.appeal_sts_ccd)); // 이의제기 통보상태 및 집계완료 상태 시
+				},
+				// 이의제기 종료 가능 상태
+				isEnableEndPfmcEvalAppeal : function(){
+					var me = this;
+					var data = me.get("peInfo");
+					// 이의제기  버튼
+					return (me.formula('isEnableAppeal') && data.appeal_sts_ccd == "APPEAL_PRGSG"); // 이의제기 여부 Y 및 집계완료 상태 시
+				},
+				// 평가완료, 결재상신 가능 상태
+				isEnableConfirmPfmcEval : function() {
+					var me = this;
+					var data = me.get("peInfo");
+					var peSts = (data.pe_sts_ccd == "EVAL_RES_CALC_CMPLD" || data.pe_sts_ccd == "RET" );  // 집계완료 이거나 결재 반려
+					var vdObjSts = (data.vd_appeal_poss_yn === 'N' || UT.isEmpty(data.appeal_sts_ccd ) || data.appeal_sts_ccd ==  "APPEAL_CRNG" ||data.appeal_sts_ccd == "APPEAL_ED"); // 이의제기 아니거나 이의제기 종료
+					return peSts && vdObjSts;
+				},
+				isQunatEvalResult : function(){
+					var me = this;
+					var data = me.get("peInfo");
+					
+					return data.has_quant_yn == "Y";
+				},
+				requestedApproval : function() {
+					var me = this;
+					var data = me.get("peInfo");
+					
+					return ["APVL_PRGSG", "RET", "APVD"].includes(data.pe_sts_ccd);
+				},
+				// 협력사 마스터 모듈 존재 확인
+				existModuleVENDORMASTER : function() {
+					return SCModuleManager.exist('VENDOR-MASTER');
+				},
+			},
+			initialized: function(){
+				var me = this;
+			},
+			/**
+			 * parameter setting
+			 */
+			load: function(data) {
+				var me = this;
+				me.set("searchParam.st_eval_sc", 0);
+				me.set("searchParam.stp_eval_sc", 100);
+				me.set("peInfo", data);
+				
+				// 퍼포먼스평가 정보 패널 default 접기
+				me.$.peInfoPanel.$.collapsePanel.collapse();
+				
+				me.loadDefaultValueGrp(); // 퍼포먼스 평가 대상 평가그룹, 협력사관리그룹 조회
+			},
+			loadDefaultValueGrp:function(){
+				var me = this;
+				UT.request(me.$.defaultValueGrp);
+			},
+			completeDefaultValueGrp : function() {
+				var me = this;
+				me.onFindInfo();
+			},
+			/*
+			 * 코드명 검색
+			 */
+			getCodeName : function (codeList, code, valueField, labelField){
+				var codeName = '';
+				
+				if(codeList && codeList.length > 0){
+					for(var i=0; i < codeList.length; i++){
+						if(codeList[i][valueField] == code){
+							codeName = codeList[i][labelField];
+							break;
+						}
+					}
+				}
+				return codeName;
+			},
+			/**
+			 * 상세 결과 목록 조회
+			 */
+			onSearch : function(e, data){
+				var me = this;
+				var peInfo = UT.copy(me.get("peInfo"));
+				
+				me.$.summaryTab.load({codes: me.codes, peInfo : peInfo});
+				
+				if(me.peSubjListTabInitialized) {
+					me.peSubjListTabLoad();
+				}
+				if(me.opinionListTabInitialized) {
+					me.opinionListTabLoad();
+				}
+				if(me.evalfactListTabInitialized) {
+					me.evalfactListTabLoad();
+				}
+				if(me.evalfactOpinionListTabInitialized) {
+					me.evalfactOpinionListTabLoad();
+				}
+				if(me.calcfactListTabInitialized) {
+					me.calcfactListTabLoad();
+				}
+				if(me.calcfactAdjListTabInitialized) {
+					me.calcfactAdjListTabLoad();
+				}
+			},
+			// 평가 정보 조회
+			onFindInfo: function(){
+				var me = this;
+				
+				UT.request(me.$.findPfmcEvalRes);
+			},
+			completeFindPfmcEvalRes: function(el,res){
+				var me = this;
+				var lastResponse = res.response;
+				
+				//리스트에서 넘어온 평가정보와 조회된 결과
+				var peInfo = me.peInfo || {};
+				
+				for(var prop in lastResponse) {
+					peInfo[prop] = lastResponse[prop];
+				}
+				peInfo.logic_org_nm = me.getCodeName(me.codes.oorgCd, peInfo.oorg_cd, "oorg_cd", "logic_org_nm");
+				peInfo.pe_sts_nm = me.getCodeName(me.codes.peStsCcd, peInfo.pe_sts_ccd, "data", "label");
+				me.set("peInfo", UT.copy(peInfo));
+				me.applyFormula();
+				me.onSearch();
+			},
+			
+			/* 이의제기통보 팝업 호출 */
+			onOpenAppealPopup : function() {
+				var me = this;
+				var param = me.get("peInfo");
+				
+				var appealPopup = UT.popup('ep-appeal-popup', me, 800, 400, {
+					'complete-save' : function(popup, e) {
+						me.onFindInfo();
+						popup.close();
+					}
+				});
+				appealPopup.show();
+				appealPopup.getWindowContent().load(param);
+			},
+			//이의제기현황팝업 호출
+			onPopupVdAppealList: function(){
+				var me = this;
+				var param = {
+					peInfo : me.get("peInfo"),
+					codes : me.codes
+				};
+				
+				var vdAppealListPop = UT.popup('ep-vendor-appeal-list',me,'70%','70%', null, {titleText : "이의제기 현황"});
+				vdAppealListPop.show();
+				vdAppealListPop.getWindowContent().load(param);
+			},
+			// 이의제기 종료
+			onEndPfmcEvalAppeal : function() {
+				var me = this;
+				var peInfo = UT.copy(me.get("peInfo"));
+				
+				// 이의제기를 종료하시겠습니까?
+				UT.confirm("STD.SRM1132", function(){
+					peInfo.cmpl_sts_cd = "APPEAL_ED"; // [R304] 이의제기 종료
+					me.$.endPfmcEvalAppeal.set("body", peInfo);
+					UT.request(me.$.endPfmcEvalAppeal, function(e, res) {
+						var result = res.response;
+						
+						if (UT.isObject(result) && result.resultStatus === "S") {
+							return UT.completeAlert("이의제기 종료",function(){
+								me.onFindInfo();
+							});
+						}else{
+							return UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			// 평가완료 이벤트
+			onConfirmPfmcEvalResult : function() {
+				var me = this,
+					peInfo = me.get("peInfo");
+				
+				// 평가 결과를 확정 하시겠습니까?
+				var message = "STD.SRM1002";
+				UT.confirm(message, function(){
+					me.$.confirmPfmcEvalResult.set("body", peInfo);
+					UT.request(me.$.confirmPfmcEvalResult, function(e, res) {
+						var result = res.response;
+						
+						if (UT.isObject(result) && result.resultStatus === "S") {
+							return UT.completeAlert("확정",function(){
+								me.set("reloadable", true);
+								me.onClose();
+							});
+						}else if(UT.isObject(result) && result.ret_cd == "-1" && UT.isNotEmpty(result.resultMessage)){
+							return UT.alert(result.ret_msg, null, true);
+						}else{
+							return UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			// 결재 요청
+			onApproval : function() {
+				var me = this;
+				var peUuid = me.get("peInfo.pe_uuid");
+				
+				if (UT.isNotEmpty(peUuid)) {
+					
+					var appData = me.get("peInfo");
+					
+					UT.popupApproval(me, {
+							task_uuid: peUuid, apvl_typ_ccd: me.apvlTypCcd, apvl_tit: me.get("peInfo.eval_nm"),
+							appData: appData,
+						},
+						function(aprvSts) { // EVAL: 정기평가 확정
+							me.set("reloadable", true);
+							if (aprvSts === "P") { // 상신
+								me.onClose();
+							} else {			// 결재 저장 시
+								me.onFindInfo();
+							}
+						});
+				}
+			},
+			// *****************************************************************
+			// 탭 제어
+			// *****************************************************************
+			// 평가 대상 결과 탭 초기화 완료
+			_onPeSubjListTabInitialized: function(){
+				var me = this;
+				me.set("peSubjListTabInitialized",true);
+				me.peSubjListTabLoad();
+			},
+			// 평가 대상 결과 탭 로드
+			peSubjListTabLoad : function(){
+				var me = this;
+				me.$.peSubjListTab.load({codes: me.codes, peInfo : me.get("peInfo")});
+			},
+			// 종합의견 탭 초기화 완료
+			_onOpinionListTabInitialized: function(){
+				var me = this;
+				me.set("opinionListTabInitialized",true);
+				me.opinionListTabLoad();
+			},
+			// 종합의견 탭 로드
+			opinionListTabLoad : function() {
+				var me = this;
+				me.$.opinionListTab.load({codes: me.codes, peInfo : me.get("peInfo")});
+			},
+			// 평가항목 결과 탭 초기화 완료
+			_onEvalfactListTabInitialized: function(){
+				var me = this;
+				me.set("evalfactListTabInitialized",true);
+				me.evalfactListTabLoad();
+			},
+			// 평가항목 결과 탭 로드
+			evalfactListTabLoad : function(){
+				var me = this;
+				me.$.evalfactListTab.load({peInfo : me.get("peInfo"), codes : me.codes});
+			},
+			// 평가항목 의견 탭 초기화 완료
+			_onEvalfactOpinionListTabInitialized: function(){
+				var me = this;
+				me.set("evalfactOpinionListTabInitialized",true);
+				me.evalfactOpinionListTabLoad();
+			},
+			// 평가항목 의견 탭 로드
+			evalfactOpinionListTabLoad : function(){
+				var me = this;
+				me.$.evalfactOpinionListTab.load({peInfo : me.get("peInfo"), codes : me.codes});
+			},
+			// 정량항목 결과 탭 초기화 완료
+			_onCalcfactListTabInitialized: function(){
+				var me = this;
+				me.set("calcfactListTabInitialized",true);
+				me.calcfactListTabLoad();
+			},
+			// 정량항목 결과 탭 로드
+			calcfactListTabLoad : function(){
+				var me = this;
+				
+				me.$.calcfactListTab.load({codes : me.codes, peInfo : me.get("peInfo")});
+			},
+			// 계산항목 조정 탭 초기화 완료
+			_onCalcfactAdjListTabInitialized: function(){
+				var me = this;
+				me.set("calcfactAdjListTabInitialized",true);
+				me.calcfactAdjListTabLoad();
+			},
+			// 계산항목 조정 탭 로드
+			calcfactAdjListTabLoad : function(){
+				var me = this;
+				
+				me.$.calcfactAdjListTab.load({codes : me.codes, peInfo : me.get("peInfo")});
+			},
+			/* 닫기 */
+			onClose: function(){
+				var me = this;
+				var reloadable = me.get("reloadable");
+				me.reset();
+				me.fire("close", {reloadable: reloadable});
+			},
+			// 평가 대상 결과를 개선항목으로 등록한다.
+			onRegVdImprove : function(e, data) {
+				var me = this;
+				// 협력사 마스터 모듈 존재하지 않는 경우 개선항목 등록 X
+				if(!me.formula('existModuleVENDORMASTER')) {
+					return;
+				}
+				me.$.savePeSubjResultImprove.body = {
+					insertPeSubjResultList : data
+				};
+				
+				UT.request(me.$.savePeSubjResultImprove);
+				
+			},
+			completeSaveEvalResultImprove : function(e, res) {
+				var me = this;
+				var result = res.response;
+				var validList = result.validList;
+				
+				if(result.result_status === "S" && UT.isNotEmpty(validList) && validList.length > 0) {
+					// 중복 데이터 {0}건 제외 후 추가하였습니다.
+					UT.alert(me.translate("STD.N2010", null, result.invalidList.length), function() {
+						var menuCd = "SRM09200"; // 협력사 개선요청 관리
+						var menuInfo = me._getMenuInfo(menuCd);
+						
+						UT.createWindow(menuCd, menuInfo.menu_nm, menuInfo.menu_url, function(module) {
+							if (UT.isFunction(module.searchImproveDetail)) {
+								module.searchImproveDetail(validList[validList.length-1]);
+							}
+						});
+					});
+				} else {
+					UT.alert("STD.E9999");// 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			// 협력사 개선관리 페이지로 이동
+			onOpenVdImprovePage : function(e, data) {
+				var me = this,
+					validList = data;
+				// 협력사 마스터 모듈 없는 경우 페이지 이동 처리 X
+				if(!me.formula('existModuleVENDORMASTER')) {
+					return;
+				}
+				
+				var menuCd = "SRM09200"; // 협력사 개선요청 관리
+				var menuInfo = me._getMenuInfo(menuCd);
+				
+				MDIUT.createWindow(menuCd, menuInfo.menu_nm, menuInfo.menu_url, function(module) {
+					if (UT.isFunction(module.searchImproveDetail)) {
+						module.searchImproveDetail(validList[validList.length-1]);
+					}
+				});
+			},
+			// mdi에서 menu 정보
+			_getMenuInfo: function(menuCd) {
+				var menuInfo = SCMenuManager.getMenuNode(menuCd);
+				return menuInfo;
+			}
+		});
+	</script>
+
+</dom-module>

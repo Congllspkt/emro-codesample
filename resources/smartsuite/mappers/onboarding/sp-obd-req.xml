@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-obd-req">
+	<select id="findActOrFailOnboardingEvalProcessCnt" resultType="map">
+        /* sp-obd-req.findActOrFailOnboardingEvalProcessCnt : 불합격 또는 진행중인 평가 프로세스 조회 */
+        SELECT CASE WHEN SUM(FAIL_CNT) IS NULL THEN 0 ELSE SUM(FAIL_CNT) END   AS FAIL_CNT
+             , CASE WHEN SUM(ACT_CNT) IS NULL THEN 0 ELSE SUM(ACT_CNT) END     AS ACT_CNT
+          FROM ( SELECT CASE WHEN OP.OE_PRCS_STS_CCD = 'PRCS_FLR' THEN 1 ELSE 0 END AS FAIL_CNT  /* PRCS_FLR: 프로세스 불합격 */
+                      , CASE WHEN OP.OE_PRCS_STS_CCD IN ('EVAL_WTG', 'EVAL_PRGSG')  /* EVAL_WTG: 평가 대기, EVAL_PRGSG: 평가 진행중 */
+                                      OR ( OP.OE_PRCS_STS_CCD = 'PRCS_WTG'
+                                      		AND OP.EVAL_SUBJ_RES_UUID IS NOT NULL  ) THEN 1 ELSE 0 END AS ACT_CNT  /* PRCS_WTG: 프로세스 대기 */
+                   FROM OE_PRCS OP  /* 협력사심사그룹평가절차 */
+                  WHERE OP.TEN_ID        = #{g.tenant}
+                    AND OP.OE_UUID       = #{p.oe_uuid}
+               ) X
+    </select>
+	<select id="findNextOnboardingEvalProcessPrcsUuid" resultType="string">
+        /* sp-obd-req.findNextOnboardingEvalProcessPrcsUuid : 프로세스 대기 중인 다음 온보딩 평가 프로세스 절차 UUID 조회 */
+        SELECT OE_PRCS_UUID
+          FROM OE_PRCS OP
+         INNER JOIN OBD_EVALSHT_PRCS OEP
+            ON OEP.TEN_ID                = OP.TEN_ID
+           AND OEP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID
+         WHERE OP.TEN_ID      = #{g.tenant}
+           AND OEP.PRCS_SORT  = (SELECT MIN(PRCS_SORT)
+                                   FROM OE_PRCS T_OP
+                                  INNER JOIN OBD_EVALSHT_PRCS T_OEP
+                                     ON T_OEP.TEN_ID                = T_OP.TEN_ID
+                                    AND T_OEP.OBD_EVALSHT_PRCS_UUID = T_OP.OBD_EVALSHT_PRCS_UUID
+                                  WHERE T_OP.TEN_ID          = #{g.tenant}
+                                    AND T_OP.OE_UUID         = #{p.oe_uuid}
+                                    AND T_OP.OE_PRCS_STS_CCD = 'PRCS_WTG' )  /* PRCS_WTG: 프로세스 대기 */
+           AND OP.OE_UUID         = #{p.oe_uuid}
+           AND OP.OE_PRCS_STS_CCD = 'PRCS_WTG'
+    </select>
+	<select id="findNextOnboardingEvalProcess" resultType="map">
+        /* sp-obd-req.findNextOnboardingEvalProcess : 다음 온보딩 평가 프로세스 조회 */
+        SELECT O.TEN_ID
+             , O.OORG_CD
+             , OP.OE_PRCS_UUID
+             , OP.OE_UUID
+             , O.OEG_UUID
+             , O.VD_CD
+             , OEP.EVALTMPL_UUID
+          FROM OE_PRCS OP
+         INNER JOIN OBD_EVALSHT_PRCS OEP
+            ON OEP.TEN_ID                = OP.TEN_ID
+           AND OEP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID
+         INNER JOIN OE O
+            ON O.TEN_ID  = OP.TEN_ID
+           AND O.OE_UUID = OP.OE_UUID
+         WHERE OP.TEN_ID       = #{g.tenant}
+           AND OP.OE_UUID      = #{p.oe_uuid}
+           AND OP.OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </select>
+	<select id="updateEvalSubjResKey" resultType="map">
+	    /* sp-obd-req.updateEvalSubjResKey : eval 평가대상 결과 아이디를 온보딩평가대상(OE_PRCS) 테이블에 저장 */
+	    UPDATE OE_PRCS
+	       SET EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+	         , OE_PRCS_STS_CCD    = 'EVAL_WTG'
+	         , STS                = 'U'
+	         , MODR_ID            = #{g.username}
+	         , MOD_DTTM           = #{g.now}
+	     WHERE TEN_ID       = #{g.tenant}
+	       AND OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </select>
+	<update id="updateEvalSubjEvaltrResKey">
+	    /* sp-obd-req.updateEvalSubjEvaltrResKey : eval 평가대상 평가자 결과 아이디를 온보딩평가대상 평가자(OE_PRCS_EVALTR) 테이블에 저장 */
+	    UPDATE OE_PRCS_EVALTR
+	       SET EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+	         , STS                       = 'U'
+	         , MODR_ID                   = #{g.username}
+	         , MOD_DTTM                  = #{g.now}
+	     WHERE TEN_ID                    = #{g.tenant}
+	       AND OE_PRCS_EVALTR_UUID       = #{p.oe_prcs_evaltr_uuid}
+    </update>
+	<select id="findListOePrcsEvalSubjEvaltrByOePrcsEvalSubjRes" resultType="map">
+	    /* sp-obd-req.findListOePrcsEvalSubjEvaltrByOePrcsEvalSubjRes : 온보딩 프로세스 평가대상 평가자 목록 조회 (oe_prcs_uuid 단위로 조회) */
+	    SELECT OP.TEN_ID                          -- required : tenant 아이디
+	         , OP.OE_UUID
+	         , OP.OE_PRCS_UUID                    -- required : 운영조직 코드
+	         , OPE.OE_PRCS_EVALTR_UUID
+	         , OPE.EVALFACT_EVALTR_AUTHTY_CCD     -- required : 평가항목 평가자 권한 공통코드
+	         , OPE.EVALTR_ID                      -- required : 평가자 아이디
+	      FROM OE_PRCS OP
+	     INNER JOIN OE_PRCS_EVALTR OPE
+	        ON OPE.TEN_ID       = OP.TEN_ID
+	       AND OPE.OE_PRCS_UUID = OP.OE_PRCS_UUID
+	       AND OPE.STS         != 'D'
+	     WHERE OP.TEN_ID       = #{g.tenant}
+	       AND OP.OE_UUID      = #{p.oe_uuid}
+	       AND OP.OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </select>
+	<select id="findListOnboardingEvalProcess" resultType="map">
+        /* sp-obd-req.findListOnboardingEvalProcess: 온보딩평가 프로세스 목록 조회 */
+        SELECT OP.TEN_ID
+             , O.OE_UUID
+             , O.OORG_CD
+             , OP.OE_PRCS_UUID
+             , V.VD_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN V.VD_NM ELSE V.VD_NM_EN END AS VD_NM
+             , O.OEG_UUID
+             , OEG.OEG_CD
+             , OEP.OBD_EVALSHT_UUID                     /* 온보딩 평가시트 */
+             , OEP.OBD_EVALSHT_PRCS_UUID                /* 온보딩 평가시트 프로세스 */
+             , OEP.EVALTMPL_UUID                        /* 온보딩 평가시트 프로세스 템플릿 */
+             , OEP.PRCS_CCD
+             , OEP_DTLMULT.DTLCD_NM AS PRCS_NM
+             , O.OE_REQ_DT                              /* 온보딩평가 요청 일자 */
+             , OP.EVAL_CMPLD_DT                         /* 온보딩평가 프로세스 완료 일자 */
+             , OP.OE_PRCS_STS_CCD                       /* 프로세스 상태 */
+             , OP.EVAL_SUBJ_RES_UUID                    /* 평가 대상 결과 UUID */
+             , OP_STS_DTLMULT.DTLCD_NM AS OE_REQ_RES_STS_NM
+             , OP.PRCS_CONL_PASS_RSN                    /* 프로세스 조건부 합격 사유 */
+             , CONCAT(CASE WHEN OP.PRCS_EVAL_SC IS NULL
+               				 THEN CAST('0' AS NVARCHAR2(18))
+               				 ELSE CAST(OP.PRCS_EVAL_SC AS NVARCHAR2(18)) END
+               			, CONCAT('/', CASE WHEN OEP.PRCS_PASS_SC IS NULL
+               							   THEN CAST('0' AS NVARCHAR2(18))
+               							   ELSE CAST(OEP.PRCS_PASS_SC AS NVARCHAR2(18)) END)
+             ) AS EVAL_SCO  , (SELECT SUM(CASE WHEN EVAL_STS_CCD = 'SUBM' THEN 1 ELSE 0 END) FROM OE_PRCS_EVALTR OPE WHERE OPE.TEN_ID = OP.TEN_ID AND OPE.OE_PRCS_UUID = OP.OE_PRCS_UUID) AS EVAL_END_CNT  /* 완료된 절차 수 */
+             , (SELECT SUM(CASE WHEN OPE.OE_PRCS_EVALTR_UUID IS NOT NULL  THEN 1 ELSE 0 END) FROM OE_PRCS_EVALTR OPE WHERE OPE.TEN_ID = OP.TEN_ID AND OPE.OE_PRCS_UUID = OP.OE_PRCS_UUID) AS EVAL_TOT_CNT  /* 전체 절차 수 */
+             , OEP.EVALTR_TYP_CCD                       /* 평가자 유형 공통코드 */
+             , CASE WHEN EXISTS(
+                                SELECT 1
+                                  FROM OE_PRCS_EVALTR OPE
+                                 WHERE OPE.TEN_ID       = OP.TEN_ID
+                                   AND OPE.OE_PRCS_UUID = OP.OE_PRCS_UUID
+                                   AND OPE.EVALTR_ID IS NULL OR OPE.EVALTR_ID = ''
+                                   AND OPE.STS != 'D'
+                               ) THEN 'Y' ELSE 'N'
+               END NO_EVALTR_YN                         /* 평가 담당자 미존재 여부 */
+             , OP.PRE_OE_PRCS_PASS_DT                   /* 이전 온보딩평가 프로세스 합격 일자 */
+             , OEP.AUTO_PRCSG_YN                        /* 자동 처리 여부 */
+             , OEP.PRCS_EFCTPD_MNTHS                    /* 프로세스 유효기간 개월 */
+             , OEP.PRE_OE_TCAPPL_YN                    /* 이전 온보딩평가 인정 여부 */
+             , OEP.PRE_OE_EFCTPD_MNTHS                  /* 이전 온보딩평가 유효기간 개월 */
+             , OEP.PRE_OE_FCD_PASS_TCAPPL_YN           /* 이전 온보딩평가 강제 합격 인정 여부 */
+             , OEP.PTNL_VD_SLCTN_CRTRA_YN               /* 잠재 협력사 선정 기준 여부 */
+             , OEP.PRCS_WGT                             /* 프로세스 가중치 */
+             , OEP.PRCS_SORT                            /* 프로세스 정렬 */
+          FROM OE_PRCS OP
+          LEFT OUTER JOIN DTLCD_MULTLANG OP_STS_DTLMULT ON OP_STS_DTLMULT.TEN_ID = OP.TEN_ID AND OP_STS_DTLMULT.CCD = 'E007' AND OP_STS_DTLMULT.DTLCD = OP.OE_PRCS_STS_CCD AND OP_STS_DTLMULT.LANG_CCD = #{g.locale}
+         INNER JOIN OE O ON O.TEN_ID = OP.TEN_ID AND O.OE_UUID = OP.OE_UUID
+         INNER JOIN VD V ON V.TEN_ID = OP.TEN_ID AND V.VD_CD = O.VD_CD
+          /* 온보딩평가그룹 평가시트 프로세스 */
+          LEFT OUTER JOIN OBD_EVALSHT_PRCS OEP ON OEP.TEN_ID = OP.TEN_ID AND OEP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID
+          LEFT OUTER JOIN DTLCD_MULTLANG OEP_DTLMULT ON OEP_DTLMULT.TEN_ID = OEP.TEN_ID AND OEP_DTLMULT.CCD = 'E916' AND OEP_DTLMULT.DTLCD = OEP.PRCS_CCD AND OEP_DTLMULT.LANG_CCD = #{g.locale}
+         /* 온보딩평가그룹 */
+         INNER JOIN OEG OEG ON OEG.TEN_ID = O.TEN_ID AND OEG.OEG_UUID = O.OEG_UUID
+         /* 협력사관리그룹 */
+         WHERE OP.TEN_ID         = #{g.tenant}
+           AND O.OE_UUID         = #{p.oe_uuid}
+           AND O.OE_PRGS_STS_CCD = #{p.oe_prgs_sts_ccd}
+		ORDER BY CAST(OEP.PRCS_SORT AS INT) <!-- MySQL은 AS INT가 아닌 AS UNSIGNED를 사용해야 한다. --></select>
+	<update id="saveListOnboardingEvalCompleteOePrcs">
+        /* sp-obd-req.saveListOnboardingEvalCompleteOePrcs : 온보딩평가 모니터링 - 조건부합격 저장 (온보딩평가 프로세스 마감 저장) */
+        UPDATE OE_PRCS
+           SET OE_PRCS_STS_CCD = 'PRCS_CLSG'
+             , MODR_ID         = #{g.username}
+             , MOD_DTTM        = #{g.now}
+         WHERE TEN_ID          = #{g.tenant}
+           AND OE_UUID         = #{p.oe_uuid}
+           AND OE_PRCS_STS_CCD IN ('EVAL_WTG', 'PRCS_WTG')
+    </update>
+	<select id="findOnboardingEvalPrcsInfo" resultType="map">
+        /* sp-obd-req.findOnboardingEvalPrcsInfo : 온보딩평가 프로세스 정보 조회 (for Complete OnboardingEvalPrcs) */
+        SELECT OP.OE_PRCS_UUID
+             , OP.TEN_ID
+             , OP.OE_UUID
+             , OP.OBD_EVALSHT_PRCS_UUID
+             , O.VD_CD
+             , OP.OE_PRCS_STS_CCD
+             , OEP.EVALTMPL_UUID
+             , OEP.PRE_OE_TCAPPL_YN            /* 이전 온보딩평가 인정 여부 */
+             , OP.PRCS_EVAL_SC
+             , OEP.PRCS_PASS_SC                 /* 프로세스 합격점수 */
+             , OEP.PRCS_WGT
+            -- , OP.EVAL_CLS
+             , OP.STS
+             , OP.RMK
+             , OEP.PRCS_CCD
+             , OG.OEG_CD
+             , OEP.PRCS_SORT
+             , OEP.PRE_OE_FCD_PASS_TCAPPL_YN   /* 이전 강제 패스 인정 여부 */
+             , OEP.AUTO_PRCSG_YN                /* 자동 처리 여부 */
+           --  , OP.EVAL_FAIL_YN 과락여부
+             , OEP.PTNL_VD_SLCTN_CRTRA_YN       /* 잠재 협력사 기준 여부 */
+             , OP.EVAL_CMPLD_DT
+             , OEP.PRE_OE_EFCTPD_MNTHS          /* 이전 온보딩평가 유효기간 개월 */
+             , OEP.PRCS_EFCTPD_MNTHS            /* 프로세스 유효기간 개월 */
+             , OEP.EVALTR_TYP_CCD
+          FROM OE_PRCS OP
+         INNER JOIN OE O
+            ON O.TEN_ID  = OP.TEN_ID
+           AND O.OE_UUID = OP.OE_UUID
+         INNER JOIN OBD_EVALSHT_PRCS OEP
+            ON OEP.TEN_ID                = OP.TEN_ID
+           AND OEP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID
+           AND OEP.STS                  != 'D'
+         INNER JOIN OEG OG
+            ON OG.TEN_ID                  = O.TEN_ID
+           AND OG.OEG_UUID                = O.OEG_UUID
+         WHERE OP.TEN_ID       = #{g.tenant}
+           AND OP.OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </select>
+	<update id="updateOnboardingEvalPrcsResultSts">
+        /* sp-obd-req.updateOnboardingEvalPrcsResultSts : 온보딩평가 프로세스 평가 결과 UPDATE */
+        UPDATE OE_PRCS
+           SET
+           <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+               EVAL_CMPLD_DT   = #{getFormatNow}
+			 , OE_PRCS_STS_CCD = (CASE WHEN NVL(PRCS_EVAL_SC, 0) <![CDATA[>=]]> NVL(CAST(#{p.prcs_pass_sc} AS NUMERIC), -1)
+			THEN 'PRCS_PASS'  /* PRCS_PASS: 프로세스 합격 */
+			ELSE 'PRCS_FLR'   /* PRCS_FLR: 프로세스 불합격 */
+			END)  , MODR_ID         = #{g.username}
+		     , MOD_DTTM        = #{g.now}
+          WHERE TEN_ID         = #{g.tenant}
+            AND OE_PRCS_UUID   = #{p.oe_prcs_uuid}
+            AND OE_PRCS_STS_CCD NOT IN ('PRCS_PASS', 'PRCS_CONL_PASS', 'PRE_OE_RES_APPL')  /* PRCS_PASS: 프로세스 합격, PRCS_CONL_PASS: 프로세스 조건부 합격, PRE_OE_RES_APPL: 이전 온보딩평가 결과 적용 */
+            AND OE_PRCS_STS_CCD NOT IN ('PRCS_FLR')  /* PRCS_FLR: 프로세스 불합격 */
+    </update>
+	<update id="updateOnboardingEvalReqResultFail">
+		/* sp-obd-req.updateOnboardingEvalReqResultFail : 온보딩평가 결과 상태(E008) 업데이트 */
+		UPDATE OE
+		SET OE_RES_STS_CCD = 'FAIL'
+          , MODR_ID        = #{g.username}
+          , MOD_DTTM       = #{g.now}
+		WHERE TEN_ID  = #{g.tenant}
+		  AND OE_UUID = #{p.oe_uuid}
+		  AND EXISTS (SELECT 1
+		              FROM OE_PRCS OP
+		              WHERE OP.TEN_ID       = #{g.tenant}
+			            AND OP.OE_PRCS_UUID = #{p.oe_prcs_uuid}
+			            AND OP.OE_PRCS_STS_CCD NOT IN ('PRCS_PASS', 'PRCS_CONL_PASS', 'PRE_OE_RES_APPL')
+			            AND OP.OE_PRCS_STS_CCD IN ('PRCS_FLR')) /* PRCS_FLR: 프로세스 불합격일 경우만 FAIL UPDATE */
+	</update>
+</mapper>

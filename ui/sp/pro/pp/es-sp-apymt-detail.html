@@ -1,0 +1,643 @@
+<sc-link rel="import" href="../../../bp/pro/shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="es-sp-apymt-detail">
+	<!--
+		******************************************************************************************
+		** @Program-name 	: 기성현황(공사/용역) - 선급금등록 화면
+		** @Description		: 검수관리
+		******************************************************************************************
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		-->
+		<!-- 기성요청을 위한 발주정보 목록 조회 -->
+		<sc-ajax id="findDefaultData"
+				 url="initProgressPaymentRequestInfoByPoUuid.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- 상세정보 조회 -->
+		<sc-ajax id="findSpAsnHdDt"
+				 url="findProgressPaymentRequestInfo.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- 저장 -->
+		<sc-ajax id="saveDraftAsn"
+				 url="saveProgressPaymentDraft.do"
+				 on-response="completeSaveSpAsnDraft">
+		</sc-ajax>
+		
+		<!-- 기성 요청 저장 -->
+		<sc-ajax id="submitAsn"
+				 url="submitProgressPayment.do"
+				 on-response="completeSaveSpAsnSubmit">
+		</sc-ajax>
+		
+		<!-- 삭제 -->
+		<sc-ajax id="deleteSpAsn"
+				 url="deleteProgressPaymentRequest.do"
+				 body="{{asnHdInfo}}"
+				 on-response="completeDeleteSpAsn">
+		</sc-ajax>
+		
+		<!-- 코드 -->
+		<sc-code-group>
+			<sc-code code="C007" value="{{codes.unitCd}}"></sc-code>       <!-- UOM -->
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>          <!-- 통화 -->
+			<sc-code code="P091" value="{{codes.payClsCd}}"></sc-code>		<!-- 지급구분 (선급금/중도금/잔금) -->
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar title-text="선급금 요청">
+			<sc-button text="저장" auth-s on-click="onSaveDraft" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="선급금 요청" auth-s on-click="onSaveSpAsnSubmit" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="삭제" auth-s on-click="onDelete" hidden="[[!formula('deletable')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel title-text="반려 사유" hidden="[[!formula('returnSts')]]" column="1">
+				<cc-fieldset>
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field class="h-100" value="{{asnHdInfo.asn_opn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			<cc-form-panel title-text="선급금 상세" validation-group="asnData">
+					<cc-fieldset>
+						<sc-label text="운영조직"></sc-label>
+						<cc-sp-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO"
+													  placeholder="선택" required="true" disabled="true"
+													  value="{{asnHdInfo.oorg_cd}}">
+						</cc-sp-operorg-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="기성요청 번호/회차"></sc-label>
+						<div class="field-box">
+							<sc-text-field value="{{asnHdInfo.asn_no}}" class="w-150" readonly="true"></sc-text-field>
+							<span style="margin:0 5px">/</span>
+							<sc-text-field value="{{asnHdInfo.asn_ordn}}" class="w-50" readonly="true"></sc-text-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="제목"></sc-label>
+						<sc-text-field value="{{asnHdInfo.asn_tit}}" required="true" readonly="[[!formula('editable')]]" max-length="200"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="발주 번호/차수"></sc-label>
+						<div class="field-box">
+							<sc-text-field value="{{asnHdInfo.po_no}}" class="w-150" readonly="true"></sc-text-field>
+							<span style="margin:0 5px">/</span>
+							<sc-text-field value="{{asnHdInfo.po_revno}}" class="w-50" readonly="true"></sc-text-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="발주 금액"></sc-label>
+						<sc-number-field class="w-150 align-right" readonly="true"
+										 input-cover="true" format-type="amt"
+										 value="{{asnHdInfo.po_amt}}">
+						</sc-number-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="공사/용역 기간"></sc-label>
+						<sc-period-date-field from-value="{{asnHdInfo.ppbas_st_dt}}" to-value={{asnHdInfo.ppbas_cmpld_dt}} string-date="true" required="true" readonly="[[!formula('editable')]]"></sc-period-date-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="선급금(PO기준)"></sc-label>
+						<sc-number-field class="w-150 align-right" readonly="true"
+										 input-cover="true" format-type="amt"
+										 value="{{asnHdInfo.apymt_amt}}">
+						</sc-number-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="선급금(요청)"></sc-label>
+						<sc-number-field class="w-150 align-right" readonly="true"
+										 input-cover="true" format-type="amt" required="true"
+										 validator="delyTotAmtValidator"
+										 value="{{asnHdInfo.asn_amt}}">
+						</sc-number-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="비고"></sc-label>
+						<sc-textarea-field class="h-100" value="{{asnHdInfo.rmk}}" max-length="200" readonly="[[!formula('editable')]]"></sc-textarea-field>
+					</cc-fieldset>
+					<cc-fieldset row-span="2">
+					<sc-grid id="paymentPlanGrid"
+							 style="height:100%;min-height: 250px;"
+							 use-selection="false"
+							 use-state="false"
+							 aggregate="true"
+							 sortable="false"
+							 use-dummy="false"
+							 column-fit-style="evenFill">
+						<cc-grid-toolbar title-text="지급 조건"></cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column data-field="pymt_typ_ccd" header-text="지급 유형" width="100"
+												display-field="label" value-field="data" items="{{codes.payClsCd}}"></sc-combobox-column>
+							<sc-data-column data-field="pymt_ro" header-text="지급 비율(%)" width="80" text-align="right"
+											data-type="number" format-type="decimal"></sc-data-column>
+							<sc-data-column data-field="pymt_amt" header-text="지급 금액" width="180" text-align="right"
+											data-type="number" format-type="amt" aggregate-format="amt" aggregate-kind="sum"></sc-data-column>
+							<sc-date-column data-field="pymt_expt_dt" header-text="지급 예정 일자" width="100"
+											value-format="yyyyMMdd" string-date="true"></sc-date-column>
+						</sc-grid-columns>
+					</sc-grid>
+				</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="첨부파일"></sc-label>
+						<div class="upload-wrapper">
+							<sc-upload id="upload" class="h-200" value="{{asnHdInfo.athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+						</div>
+					</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="gridPanel" class="h-400"
+					 use-selection="false"
+					 use-state="[[formula('editable')]]"
+					 editable="[[formula('editable')]]"
+					 collapsible="true"
+					 aggregate="true"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar title-text="공사/용역 정보"></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="po_no" header-text="발주 번호" width="110"></sc-data-column>
+					<sc-data-column data-field="po_lno" header-text="발주 항번" width="70" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100"></sc-data-column>
+					<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="200" text-align="left"></sc-data-column>
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="150" text-align="left"></sc-data-column>
+					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="90" image-change-function="onImageChangeFn" visible="[[formula('hasNoCdItem')]]"></sc-image-column>
+					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="40"
+										display-field="data" value-field="data" items="{{codes.unitCd}}"></sc-combobox-column>
+					<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70"
+										display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="po_uprc" header-text="발주 단가" width="100" text-align="right"
+									data-type="number" format-type="price"
+									aggregate-title="합계"></sc-data-column>
+					<sc-data-column data-field="po_amt" header-text="발주 금액" width="140" text-align="right"
+									data-type="number" format-type="amt"
+									aggregate="true" aggregate-kind="sum" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="asn_amt" header-text="선급금(요청)" width="140" text-align="right" editable="true"
+									max-length="20" validator-type="amt" validator-function="gridValidatorFn"
+									data-type="number" format-type="amt"
+									aggregate-function="onAmtAggregateFn" editor-regex-function="onRegexFn" validate-on-cell-paste="true"
+									aggregate="true" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="gr_amt" header-text="선급금" width="140" text-align="right" visible="[[formula('isGrCompleted')]]"
+									data-type="number" format-type="amt"
+									aggregate="true" aggregate-kind="sum" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="remain_amt" header-text="잔여 금액" width="140" text-align="right"
+									data-type="number" format-type="amt"
+									aggregate="true" aggregate-kind="sum" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="gr_ttl_amt" header-text="기성 합계 금액" width="140" text-align="right"
+									data-type="number" format-type="amt"
+									aggregate="true" aggregate-kind="sum" aggregate-format="amt"></sc-data-column>
+					<sc-data-column data-field="gr_ttl_rate" header-text="기성 합계 율" width="90" text-align="right" converter="onGrRateConverter"
+									data-type="number" format-type="decimal"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="cate_cd"></sc-grid-field>
+					<sc-grid-field data-field="po_revno"></sc-grid-field>
+					<sc-grid-field data-field="asn_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="asn_no"></sc-grid-field>
+					<sc-grid-field data-field="asn_lno"></sc-grid-field>
+					<sc-grid-field data-field="asn_ordn"></sc-grid-field>
+					<sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pr_no"></sc-grid-field>
+					<sc-grid-field data-field="pr_lno"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-sp-apymt-detail",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							uomCcd: [],	// UOM
+							curCcd: [],		// 통화
+							payClsCd: []
+						}
+					},
+					reset: false
+				},
+				
+				// 납품예정 헤더
+				asnHdInfo: {
+					type: Object,
+					value: function() {
+						return {
+							ppbas_st_dt: "",
+							ppbas_cmpld_dt: "",
+							param: {}
+						}
+					}
+				},
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			formulas: {
+				//editable
+				editable: function() {
+					var me = this;
+					var asnHdInfo = me.get("asnHdInfo");
+					// 임시저장 or 검수반려
+					//return (UT.isNotEmpty(asnHdInfo) && (asnHdInfo.asn_sts_ccd == "CRNG" || asnHdInfo.asn_sts_ccd == "RET"));
+					return asnHdInfo.asn_sts_ccd == "CRNG"; //임시저장일 때에만 수정가능 (반려 시 history 남기고 다른 요청건 생성가능하도록 함)
+				},
+				//반려상태
+				returnSts: function() {
+					var me = this;
+					var asnHdInfo = me.get("asnHdInfo");
+					return asnHdInfo.asn_sts_ccd === "RET";
+				},
+				deletable: function() {
+					var me = this;
+					return (me.formula("editable") && UT.isNotEmpty(me.get("asnHdInfo.asn_uuid")));
+				},
+				isFirstPayRev: function() {
+					var me = this;
+					return me.get("asnHdInfo.asn_ordn") === 1;
+				},
+				isGrCompleted: function() {
+					var me = this;
+					var asnHdInfo = me.get("asnHdInfo");
+					return asnHdInfo.asn_sts_ccd === "CMPLD"; //기성등록
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					return me.get("asnHdInfo.has_no_cd_item") === "Y";
+				}
+			},
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+			},
+			onRegexFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "asn_amt") {
+					//row별 amt
+					return CCPrecManager.regex("amt", data["cur_ccd"]);
+				}
+				return null;
+			},
+			//합계
+			onAmtAggregateFn: UT.plusBigNumber,
+			//그리드 셀 수정 완료 함수
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					fieldName    = item.dataField,
+					itemIndex    = item.rowIndex,
+					provider     = me.$.gridPanel.getDataProvider();
+				
+				if(fieldName === "asn_amt") {
+					// 발주잔량
+					var remainAmt = data['remain_amt'];
+					
+					// 기성요청금액
+					var asnAmt = newValue;
+					
+					// 기성요청금액은 잔여금액을 초과할 수 없음.
+					if(Number(asnAmt) > Number(remainAmt)) {
+						// {0}은(는) {1}이하 값으로 입력하십시오
+						UT.alert(me.translate("STD.E1011", null, me.translate("선급금(요청)"), me.translate("잔여 금액")), null, true);
+						provider.setItemAt(item.rowIndex, {asn_amt: oldValue || 0});
+					} else {
+						var result = new BigNumber('0');
+						var datas = provider.getItems();
+						for(var i = 0; i < datas.length; ++i) {
+							result = result.plus(new BigNumber(datas[i]["asn_amt"] || 0));
+						}
+						var sum = result.toFixed();
+						me.set("asnHdInfo.asn_amt", sum);
+					}
+				}
+			},
+			// grid item-click event
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item;
+				
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			
+			//그리드 validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me = this;
+				if(dataField === "asn_amt") {
+					var value = UT.toNumber(data[dataField]);
+					var compareValue = UT.toNumber(data['remain_amt']);
+					if(value > compareValue) {
+						// {0}은(는) {1}이하 값으로 입력하십시오
+						return me.translate("STD.E1011", null, me.translate(headerText), me.translate("잔여 금액"));
+					}
+				}
+				return true;
+			},
+			//선급금요청금액
+			delyTotAmtValidator: function(value) {
+				var me = this;
+				
+				// 선급금요청금액
+				var delyTotAmt = new BigNumber(value || 0);
+				if(delyTotAmt.isZero()) {
+					// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					return me.translate("STD.E1008", null, me.translate("선급금(요청)"), 0);
+				}
+				
+				/****************************************************************************************************
+				 * [2020.04.23] 발주변경(계약변경)으로 지급예정정보가 변경될 수 있도록 수정이 되어(SMARTNINE-4448),
+				 * 지급회차 별 금액 및 총 지급예정 회차가 변동이 될 수 있음.
+				 * 또한 기성은 예정정보에 꼭 맞춰야하는 것이 아니므로 하기 내용을 주석 처리함
+            	
+            	// 선급금(PO기준)
+            	var prePayAmt = new BigNumber(me.get("asnHdInfo.apymt_amt"));
+            	// 선급금요청금액 > 선급금(PO기준)
+       			if(delyTotAmt.gt(prePayAmt)) {
+	       			// {0}은(는) {1}이하 값으로 입력하십시오
+	                return me.translate("STD.E1011", null, me.translate("선급금요청금액"), me.translate("선급금(PO기준)"));
+	       		}
+				 ****************************************************************************************************/
+				return true;
+			},
+			//기성율(%)
+			onGrRateConverter: function(rowIndex, fieldName, data) {
+				var poAmt = new BigNumber(data["po_amt"] || 0);	// 발주금액
+				var grAmt = new BigNumber(data["gr_ttl_amt"] || 0);	// 누적금액
+				
+				return grAmt.div(poAmt).mul(new BigNumber(100)).toFixed(2);
+			},
+			//load
+			load: function(param) {
+				var me = this;
+				param.apymt_yn = "Y";
+				me.set("searchParam", param);
+				
+				if(UT.isNotEmpty(param.asn_uuid)) {
+					me.findSpAsnHdDt(param);
+				} else if(UT.isNotEmpty(param.po_uuid)) {
+					me.findDefaultData(param);
+				}
+			},
+			
+			/**
+			 * 기성요청 헤더&상세 데이터 조회
+			 */
+			findSpAsnHdDt: function(param) {
+				var me = this;
+				
+				UT.request(me.$.findSpAsnHdDt, function(e, res) {
+					var result = res.response;
+					
+					me.set("asnHdInfo", result.asnHdInfo);
+					me.$.gridPanel.setDataProvider(result.asnDtList);
+					me.$.paymentPlanGrid.setDataProvider(result.paymentPlans);
+					
+					me.applyFormula();
+				});
+			},
+			
+			findDefaultData: function(param) {
+				var me = this;
+				
+				UT.request(me.$.findDefaultData, function(e, res) {
+					var result    = res.response,
+						asnHdInfo = result.asnHdInfo,
+						asnItems  = result.asnItems,
+						paymentPlans = result.paymentPlans;
+					
+					me.set("asnHdInfo", asnHdInfo);
+					me.$.gridPanel.getDataProvider().addItems(asnItems);
+					me.$.paymentPlanGrid.setDataProvider(paymentPlans);
+					
+					me.applyFormula();
+				});
+			},
+			
+			/**
+			 * 저장버튼 클릭
+			 */
+			onSaveDraft: function() {
+				var me = this;
+				
+				me.doSave(me.$.saveDraftAsn, "STD.N1200");
+			},
+			
+			/**
+			 * 기성요청 버튼 클릭
+			 */
+			onSaveSpAsnSubmit: function() {
+				var me = this;
+				
+				me.doSave(me.$.submitAsn, "STD.AR1002");
+			},
+			
+			/**
+			 * 데이터 저장
+			 */
+			doSave: function(ajaxTarget, message) {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				
+				if(!me.validate('asnData')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				if(!provider || provider.getItemSize() === 0) {
+					UT.alert("STD.PR1002"); //"품목 정보가 없습니다."
+					return;
+				}
+				
+				if(!me.$.gridPanel.validate()) {
+					UT.alert("STD.N1102");
+					return;
+				}
+				
+				UT.confirm(message, function() {
+					me.$.upload.upload().then(function() {
+						ajaxTarget.body = {
+							asnHdInfo: me.asnHdInfo,
+							insertItems: provider.getNewItems(),
+							updateItems: provider.getUpdateItems()
+						};
+						UT.request(ajaxTarget);
+					});
+				});
+			},
+			
+			// 데이터 저장 callback
+			completeSaveSpAsnDraft: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert();
+					var asnUuid = result.resultData.asnUuid;
+					me.load({asn_uuid: asnUuid});
+				} else {
+					me.errorMessageHandler(result);
+				}
+			},
+			
+			/**
+			 * 납품예정 버튼 클릭
+			 */
+			onSaveSubmit: function() {
+				var me = this;
+				
+				me.doSave(me.$.submitAsn);
+			},
+			
+			// 납품예정 callback
+			completeSaveSpAsnSubmit: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert();
+					me.onClose();
+				} else {
+					me.errorMessageHandler(result);
+				}
+			},
+			
+			errorMessageHandler: function(result) {
+				var me = this;
+				
+				if(result.resultStatus === "PO_STATE_ERR") {
+					var invalidPo = result.resultData,
+						errCode   = invalidPo.check_result,
+						msg       = null,
+						sts       = invalidPo.vd_gr_sts_ccd;
+					
+					if(errCode === "PRE_PAY_REG_PROGRESS") {		//선급금 등록 진행중
+						msg = me.translate("STD.AR1008");				//"담당자가 선급금 등록을 진행중입니다."
+						
+					} else if(errCode === "PRE_PAY_REG_COMPLETE") {	//선급금 등록완료
+						msg = me.translate("STD.AR1009"); 				//"선급금 등록이 이미 완료되었습니다."
+						
+					} else if(errCode === "PRE_PAY_REQ_PROGRESS") {	//선급금 요청 작성중
+						msg = me.translate("STD.AR1010");				//"선급금 요청 임시저장 건이 존재합니다."
+						
+					} else if(errCode === "PRE_PAY_REQ_COMPLETE") {	//선급금 요청 완료
+						msg = me.translate("STD.AR1011");				//"승인대기 상태의 선급금 요청 건이 존재하여 선급금 요청을 하실 수 없습니다."
+						
+					} else if(errCode === "PO_COMPLETE") {			//발주종료
+						msg = me.translate("STD.PO1047", null, invalidPo.po_no);
+						
+					} else if(errCode === "PO_TERMINATE") {			//발주해지
+						msg = me.translate("STD.PO1049", null, invalidPo.po_no);
+						
+					} else if(errCode === "PO_CHANGE_PROGRESS") {	//발주변경 진행중
+						msg = me.translate("STD.PO1032", null, invalidPo.po_no);
+					}
+					
+					if(UT.isNotEmpty(msg)) {
+						UT.alert(msg, function() {
+							me.onClose();
+						}, true);
+					}
+					
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					
+					if(UT.isNotEmpty(me.get("searchParam.asn_uuid"))) {
+						me.load(me.get("searchParam"));
+					}
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 삭제
+			 */
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					UT.request(me.$.deleteSpAsn);
+				});
+			},
+			completeDeleteSpAsn: function(e, res) {
+				var me = this, result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N2500", me.onClose());
+				} else {
+					me.errorMessageHandler(result);
+				}
+			},
+			
+			/**
+			 * 닫기
+			 */
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+		});
+	</script>
+
+</dom-module>

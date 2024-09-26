@@ -1,0 +1,151 @@
+<dom-module id="es-attrasgn-list">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<cc-auth-checker check-list="auth-r"></cc-auth-checker>
+		
+		<!-- 목록조회 -->
+		<sc-ajax id="findListItemCatByCms"
+				 url="findListItemCatByCms.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListItemCat">
+		</sc-ajax>
+		
+		<!-- 목록조회 -->
+		<sc-ajax id="findListItemCatWithCdOrNmByCms"
+				 url="findListItemCatWithCdOrNmByCms.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListItemCat">
+		</sc-ajax>
+		
+		<cc-search-condition-panel on-search="onSearch"   auth-r>
+			<cc-fieldset>
+				<sc-label text="품목분류"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.itemcat_cd}}" class="w-100" on-enter="onSearch" placeholder="품목분류 코드"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{searchParam.itemcat_nm}}" on-enter="onSearch" placeholder="품목분류 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" is-tree="true" use-state="false" use-selection="false" tree-check-mode="leaf"
+				 on-item-click="onDataCellClicked" on-item-double-click="onItemDoubleClick">
+			<cc-grid-toolbar>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="disp_itemcat_nm" header-text="품목분류 명" width="280" text-align="left"></sc-data-column>
+				<sc-data-column data-field="itemcat_cd" header-text="품목분류 코드" width="100" text-align="left" style-name="link"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="ten_id"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_cd"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_lvl"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm_en"></sc-grid-field>
+				<sc-grid-field data-field="use_yn"></sc-grid-field>
+				<sc-grid-field data-field="tree"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_path"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_path_en"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-attrasgn-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.onSearch();
+			},
+			
+			load: function() {
+				var me = this;
+				me.onSearch();
+			},
+			
+			onSearch: function() {
+				var me = this;
+				var searchParam = me.get("searchParam");
+				
+				if(UT.isNotEmpty(searchParam.itemcat_cd) || UT.isNotEmpty(searchParam.itemcat_nm)) {
+					UT.request(me.$.findListItemCatWithCdOrNmByCms);
+				} else {
+					UT.request(me.$.findListItemCatByCms);
+				}
+			},
+			
+			onDataCellClicked: function(event) {
+				var me = this;
+				var detail = event.detail;
+				var	data = detail.data;
+				var	item = detail.item;
+				
+				if(item.dataField === "itemcat_cd") {
+					me.fire("show-detail", data);
+				}
+			},
+			
+			onItemDoubleClick: function(e, detail) {
+				var me = this;
+				var data = detail.data;
+				var item = detail.item;
+				var grid = me.$.gridPanel;
+				
+				if(item.dataField == 'disp_itemcat_nm' || item.dataField == 'itemcat_cd') {
+					if(item.expanded) {
+						grid.collapse(item.nodeIndex, true);
+					} else {
+						grid.expand(item.nodeIndex, false);
+					}
+				}
+			},
+			
+			completeFindListItemCat: function(e, res) {
+				var me = this;
+				var hier = new CCHierachicalData();
+				hier.onNodeAppend = function(parentNode, node, parentNodeLevel) {
+					if(parentNodeLevel === 0) {
+						node['itemcat_path'] = (node['itemcat_nm'] != null ? node['itemcat_nm'] : '');
+					} else {
+						node['itemcat_path'] = parentNode['itemcat_path'] + ' > ' + (node['itemcat_nm'] != null ? node['itemcat_nm'] : '');
+					}
+				};
+				var hierachiDatas = hier.HierachyTransformByKey(res.response, "itemcat_cd", "par_itemcat_cd", "children", "0", null, true);
+				me.$.gridPanel.setHierachyDataProvider(hierachiDatas, "children");
+				
+				if(UT.isNotEmpty(me.get("searchParam.itemcat_cd"))) {
+					me.searchTreeGridView(me.$.gridPanel, "itemcat_cd", me.get("searchParam.itemcat_cd"));
+				} else if(UT.isNotEmpty(me.get("searchParam.itemcat_nm"))) {
+					me.searchTreeGridView(me.$.gridPanel, "itemcat_nm", me.get("searchParam.itemcat_nm"));
+				}
+				
+				me.fire('reset-detail');
+			},
+			
+			searchTreeGridView: function(treeGrid, field, value) {
+				var currentCell  = treeGrid.getCurrentCell();
+				var	currentIndex = (currentCell === null) ? -1 : currentCell.rowIndex;
+
+				treeGrid.expandAll();
+				treeGrid.searchItem(field, value, currentIndex);
+			}
+		});
+	</script>
+</dom-module>

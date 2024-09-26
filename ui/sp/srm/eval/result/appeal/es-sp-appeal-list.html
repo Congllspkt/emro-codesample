@@ -1,0 +1,184 @@
+<dom-module id="es-sp-appeal-list">
+	<style>
+		:host{
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<!-- 이의제기 현황 목록 조회 -->
+		<sc-ajax id="findAppealList"
+				url="findAppealList.do"
+				body="{{searchParam}}"
+				last-response="{{findAppealList}}">
+		</sc-ajax>
+		
+	   <sc-request-group id="group" on-response="onAutoLoaded"></sc-request-group>
+		
+		<!-- 평가명 조회 -->
+         <sc-ajax id="findListEvalResult" 
+         			url="findListEvalResult.do" 
+         			body="{{searchParam}}" 
+         			last-response="{{evalResultList}}">
+        </sc-ajax>
+        
+		<sc-request-group init>
+			<!-- srm 운영조직 콤보박스 목록 조회 -->
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="SO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			
+			<!-- 이의제기 진행 상태(SUPPLIER) 공통코드 조회 -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.R304.param}}"
+					 last-response="{{codes.R304.result}}"></sc-ajax>
+	       
+        </sc-request-group>
+        
+        <cc-auth-checker check-list="auth-r"></cc-auth-checker>
+        
+        <cc-page-title-bar></cc-page-title-bar>
+       
+       	<cc-search-condition-panel on-search="onFindList" on-enter="onFindList"	validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field
+						display-field="logic_org_nm" value-field="oorg_cd" selected-index="0"
+						items="{{codes.oorgCd}}" value="{{searchParam.oorg_cd}}" placeholder="선택">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field	value="{{searchParam.eval_nm}}"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="이의제기 통보 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.R304.result}}"
+								   value="{{searchParam.appeal_sts_ccd}}"  placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+       	</cc-search-condition-panel>
+       
+       <sc-grid	id="gridPanel"	use-selection="false"	use-state="false"
+       							data-provider="{{findAppealList}}"	on-item-click="onDataCellClicked">
+       	<cc-grid-toolbar></cc-grid-toolbar>
+       	<sc-grid-columns>
+       		<sc-combobox-column	data-field="oorg_cd"				header-text="운영조직"			width="200"
+       							display-field="logic_org_nm"		value-field="oorg_cd"			items="{{codes.oorgCd}}">
+			</sc-combobox-column>
+       		<sc-data-column		data-field="eval_nm"				header-text="평가 명"				width="200"		text-align="left"		style-name="link"></sc-data-column>
+			<sc-combobox-column data-field="appeal_sts_ccd" 		header-text="이의제기 통보 상태" 		width="150" 	display-field="label" 	value-field="data" items="{{codes.R304.result}}"></sc-combobox-column>
+       		<sc-date-column		data-field="appeal_st_dt"		header-text="이의제기 제출 시작 일자"	width="150"></sc-date-column>
+       		<sc-date-column		data-field="appeal_clsg_dt"		header-text="이의제기 제출 마감 일자"	width="150"></sc-date-column>
+       		<sc-data-column		data-field="subm_count"				header-text="이의제기 제출 건수"		width="150"		text-align="right"></sc-data-column>
+       		<sc-data-column		data-field="rcpt_count"				header-text="이의제기 접수 건수"		width="150"		text-align="right"></sc-data-column>
+       		<sc-data-column		data-field="ret_count"				header-text="이의제기 반려 건수"		width="150"		text-align="right"></sc-data-column>
+       		<sc-data-column		data-field="apvd_count"				header-text="이의제기 처리 완료 건수"	width="150"		text-align="right"></sc-data-column>
+       	</sc-grid-columns>
+       </sc-grid>
+	</template>
+	
+	<script>
+	Polymer({
+			is : 'es-sp-appeal-list',
+			properties : {
+				codes: {
+					type: Object,
+					value: function(){
+						return {
+							oorgCd: [],
+							R304: {
+								param: {
+									ccd : "R304",
+									cstr_cnd_cd : "S_VIEW_YN",
+									cstr_cnd_val : "Y"
+								},
+								result: []
+							},
+							param: {
+								link_typ: "EOSO"
+							}
+						};
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				evalResultList: {
+                	type: Array
+                },
+                findAppealList: {
+                	type: Array
+                }
+			},
+			observers: [
+                        'onChangeEvalSearch(searchParam.oorg_cd, searchParam.eval_kind_cd)'
+                        ],
+			/************************************************** 
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+				var me = this;
+				me.setFilteredEvalKindCodes();
+			},
+			load: function(){
+				var me = this;
+				me.onFindList();
+			},
+			/************************************************** 
+			 * 그리드 이벤트
+			 **************************************************/
+			 onDataCellClicked: function(event){
+                var me = this, detail = event.detail,
+                data = detail.data,
+                item = detail.item,
+                fieldName = item.dataField,
+                itemIndex = item.rowIndex;
+                
+                if(fieldName === "eval_nm"){
+                	me.fire("show-detail",data);
+                }
+			 },
+			/************************************************** 
+			 * 버튼 이벤트
+			 **************************************************/
+			 onFindList: function(){
+				var me = this;
+				if(!me.validate('search')){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(me.$.findAppealList);
+			 },
+			 
+			onChangeEvalSearch: function(oorg_cd,eval_kind_cd){
+				var me = this;
+				
+				UT.request(me.$.findListEvalResult);
+			},
+			/**
+             * SRM 운영조직 combo 변경 처리
+             */
+            onChangeOperOrgCombo: function(e) {
+                var me = this;
+                var selectedItem = e.detail.selectedItem;
+                
+                if(!selectedItem){
+                    me.set("searchParam.org_nm", "");
+                }else{
+                    me.set("searchParam.org_nm", selectedItem.org_nm);
+                }
+                
+            }
+            
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,241 @@
+<sc-link rel="import" href="es-sp-appeal-eval-tab.html"></sc-link>	<!-- 평가결과 탭 -->
+<sc-link rel="import" href="es-sp-appeal-detail-tab.html"></sc-link> <!-- 이의제기 탭 -->
+<dom-module id="es-sp-appeal-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 평가결과 조회 -->
+		<sc-ajax
+				id="findListPeSubjFactorResult"
+				url="findListPeSubjFactorResult.do"
+				body="{{searchParam}}"
+				on-response="completeFindListPeSubjFactorResult">
+		</sc-ajax>
+		
+		<!-- 협력사관리그룹 목록조회 -->
+		<sc-ajax id="findListVmg"
+				 url="findListVmg.do"
+				 last-response="{{codes.vmgOorgInfo}}">
+		</sc-ajax>
+		
+		<!-- 평가그룹 목록 조회 -->
+		<sc-ajax id="findListPegByPe"
+				 url="findListPegByPe.do"
+				 body="{{searchParam}}"
+				 last-response="{{codes.pegList}}">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<!-- srm 운영조직 콤보박스 목록 조회 -->
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="SO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			
+			<sc-code-group>
+				<!-- 이의제기 진행상태 -->
+				<sc-code code="R304" value="{{codes.R304}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-page-title-bar>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindList"	validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field
+						display-field="logic_org_nm" value-field="oorg_cd" selected-index="0"  reset="false"
+						items="{{codes.oorgCd}}" value="{{searchParam.oorg_cd}}" placeholder="선택" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field	value="{{searchParam.eval_nm}}"  readonly="true"  reset="false"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="이의제기 항목"></sc-label>
+				<sc-text-field	value="{{searchParam.vd_appeal_fact_nm}}" placeholder="[[translate('평가항목 명')]]/[[translate('계산항목 명')]]" i18n-disabled on-enter="onFindList"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="이의제기 통보 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.R304}}" placeholder="전체"
+								   value="{{searchParam.appeal_sts_ccd}}" readonly="true"  reset="false"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="소싱그룹"></sc-label>
+				<sc-combobox-field
+						display-field="display_vmg_nm" value-field="vmg_oorg_uuid"
+						items="{{codes.vmgOorgInfo}}" value="{{searchParam.vmg_oorg_uuid}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isResultTab')]]">
+				<sc-label text="퍼포먼스평가그룹"></sc-label>
+				<sc-combobox-field display-field="peg_nm" 		value-field="peg_uuid"
+								   items="{{codes.pegList}}" 	value="{{searchParam.peg_uuid}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<sc-tab-navigation id="tabNavi" class="flex" selected-index="0" on-item-select="onTabItemSelect">
+			<es-sp-appeal-eval-tab id="evalResultTab" title-text="평가 결과" on-obj-list="onShowObjList"></es-sp-appeal-eval-tab>
+			<template>
+				<es-sp-appeal-detail-tab id="appealTab" title-text="이의제기"></es-sp-appeal-detail-tab>
+			</template>
+		</sc-tab-navigation>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-sp-appeal-detail",
+			properties : {
+				// 조회 조건
+				searchParam: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				qualifactorList: {
+					type: Array,
+					value: []
+				},
+				quantfactorList: {
+					type: Array,
+					value: []
+				},
+				
+				// 공통코드
+				codes: {
+					type: Object,
+					value:function(){
+						return {
+							oorgCd: [],
+							R304: [],
+							vmgOorgInfo: [],		/* 협력사관리그룹 */
+							pegList: []			/* 퍼포먼스평가그룹 */
+						}
+					},
+					reset : false
+				},
+				
+				// 선택된 Tab
+				selectedTab : {
+					type: String,
+					value: function(){
+						return "";
+					}
+				}
+			},
+			
+			formulas : {
+				isResultTab : function(){
+					var me = this;
+					return (me.$.tabNavi.selectedIndex === 0);
+				},
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(data) {
+				var me = this;
+				
+				me.$.findListVmg.body = {
+					pe_uuid : data.pe_uuid
+				}
+				me.set("searchParam", data);
+				
+				UT.request(me.$.findListVmg);		// 협력사관리그룹 combobox
+				UT.request(me.$.findListPegByPe);	// 퍼포먼스평가그룹 comobobox
+				
+				me.onFindList();
+			},
+			
+			// 목록으로
+			onClose: function(){
+				var me = this;
+				me.$.evalResultTab.clear();
+				me.reset();
+				me.fire('close');
+			},
+			
+			onFindList: function() {
+				var me = this,
+					selectedTab = me.get("selectedTab"),
+					peInfo = me.get("searchParam");
+				
+				if(selectedTab === 'appealTab') {
+					me.$.appealTab.load(peInfo);
+				} else {
+					UT.request(me.$.findListPeSubjFactorResult);
+				}
+			},
+			
+			onShowObjList: function(e, data){
+				var me = this;
+				var peInfo = me.get("searchParam");
+				
+				me.$.tabNavi.selectItem(me.$.appealTab);	// 이의제기 탭 선택
+				me.$.appealTab.load(peInfo);
+			},
+			
+			completeFindListPeSubjFactorResult: function(e, res){
+				var me = this,
+					result = res.response;
+				
+				me.set("qualifactorList", result.qualifactorList);
+				me.set("quantfactorList", result.quantfactorList);
+				
+				me.evalResultTabLoad(result);
+			},
+			
+			// 평가결과 Tab load
+			evalResultTabLoad : function(data) {
+				var me = this,
+					peInfo = me.get("searchParam");
+				
+				var param = {
+					qualifactorList : me.get("qualifactorList"),
+					quantfactorList : me.get("quantfactorList"),
+					peInfo : peInfo
+				}
+
+				me.$.evalResultTab.load(param);
+			},
+			
+			// Tab click
+			onTabItemSelect: function(e) {
+				var me = this,
+					contentId = e.detail.item.id,
+					peInfo = me.get("searchParam");
+
+				me.applyFormula('isResultTab');
+				if(contentId === 'appealTab') {
+					me.set("selectedTab", contentId);
+					me.$.appealTab.load(peInfo);
+				} else if(contentId === 'evalResultTab') {
+					me.set("selectedTab", contentId);
+					var param = {
+						peInfo : peInfo,
+						qualifactorList : me.get("qualifactorList"),
+						quantfactorList : me.get("quantfactorList")
+					}
+					me.$.evalResultTab.load(param);
+				}
+			}
+			
+		});
+	</script>
+
+</dom-module>

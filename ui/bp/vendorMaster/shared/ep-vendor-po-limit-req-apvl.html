@@ -1,0 +1,507 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사관리유형 - 협력사 발주 제한 요청 팝업
+	** @Author 			: yjpark
+	** @Create Date 	: 2023.08.23
+	******************************************************************************************
+-->
+
+<dom-module id="ep-vendor-po-limit-req-apvl">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+		<!-- 진행중인 협력사 결재 정보 조회 -->
+        <sc-ajax
+            id="findVendorApprovalInfo"
+            url="../vendorInfo/findVendorApprovalInfo.do"
+            body="{{searchParam}}"
+            on-response="completeFindVendorApprovalInfo">
+        </sc-ajax>
+		
+		<!-- 품의상심 전 임시저장 -->
+        <sc-ajax
+            id="saveVendorInfoBeforeAprv"
+            url="../vendorInfo/saveVendorInfoBeforeAprv.do"
+            on-response="completeSaveVendorInfoBeforeAprv">
+        </sc-ajax>
+		
+		<!-- 이전 이력 삭제 -->
+        <sc-ajax
+        	id="deleteVendorHistory"
+        	url="../vendorInfo/deleteVendorHistory.do"
+        	on-response="completeDeleteVendorHistory">
+        </sc-ajax>
+		
+		<!-- 품의 Bypass: 확정처리 및 이력관리 -->
+        <sc-ajax
+            id="saveBypassVendorPoLimit"
+            url="../vendorInfo/saveBypassVendorPoLimit.do"
+            on-response="completeVendorPoLimit">
+        </sc-ajax>
+		
+        <!-- 공통코드 조회 -->
+        <sc-request-group init>
+			<!-- 변경 유형 -->
+            <sc-ajax
+                id="findListCommonCodeConstraintCode"
+                url="findListCommonCodeConstraintCode.do"
+                body="{{codes.chgTypCcd.param}}"
+                last-response="{{codes.chgTypCcd.result}}">
+            </sc-ajax>
+        </sc-request-group>
+ 		
+		<cc-sub-title-bar>
+			<sc-button text="협력사 발주 제한" on-click="onSaveBypassVendorPoLimit" hidden="[[!formula('notAprvBtnVisible')]]"></sc-button>
+            <sc-button text="저장" on-click="onTempSaveVendorInfoBeforeAprv" hidden="[[!formula('aprvReqBtnVisible')]]"></sc-button>
+            <sc-button text="결재 요청" on-click="onSaveVendorInfoBeforeAprv" hidden="[[!formula('aprvReqBtnVisible')]]"></sc-button>
+            <sc-button text="결재 정보" on-click="onShowAprvInfo" hidden="[[!formula('aprvInfoBtnVisible')]]"></sc-button>
+            <sc-button text="요청 이력 삭제" on-click="onDeleteVendorHistory" hidden="[[!formula('delHistoryBtnVisible')]]"></sc-button>
+        </cc-sub-title-bar>
+		
+		<div class="flex">
+			<cc-vendor-histrecinfo class="flex" id="histrecInfo"></cc-vendor-histrecinfo>
+			<div class="vspace-5"></div>
+			
+			<cc-form-panel title-text="[[translate('결재 요청 정보')]]" form-cls="label-row" column="1" validation-group="modStsInfo" i18n-disabled>
+				<cc-fieldset>
+					<sc-label text="요청 사유"></sc-label>
+					<!-- mod_cause -->
+					<sc-textarea-field class="h-100" value="{{modStsInfo.chg_rsn}}" max-length="1000" required="true" validation-group="basicInfo" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "ep-vendor-po-limit-req-apvl",
+            properties: {
+            	titleText:{
+                    type: String,
+    				value: "발주 제한 요청"
+    			},
+				
+    			searchParam: {
+    				type: Object,
+    				value: function(){
+    					return {};
+    				}
+    			},
+				
+				saveType : {
+                	type : Object,
+                	value : function(){
+                		return {};
+                	}
+                },
+				
+                // 공통코드 binding 객체
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function(){
+                        return {
+							chgTypCcd: {
+                                param: {
+                                    ccd         : "E027",
+									dtl_cd      : "PO_LMT_REQ"
+                                },
+                                result: []
+                            }
+                        };
+                    }
+                },
+                
+                /*협력사 상태정보 data binding 객체*/
+                modStsInfo: {
+                    type: Object,
+                    value : function(){
+                        return {};
+                    }
+                },
+                aprvInfo: {
+                    type: Object,
+                    value : function(){
+                        return {};
+                    }
+                },
+				
+                chgTypCcd : {
+                    type: String,
+                    value : "PO_LMT_REQ"  /* 발주 제한 요청 */
+                }
+            },
+			
+            formulas: {
+				isTargAprv: function(){
+					var me = this;
+					var chgTypCcd = me.get("codes.chgTypCcd.result");
+					var targAprvChgTypCcd = chgTypCcd.filter(function(item){
+						if (item["cstr_cnd_cd"] == "APRV_TARG_YN"
+								&& item["cstr_cnd_val"] == "Y") {
+							return item;
+						}
+					});
+					
+					return !UT.isEmpty(targAprvChgTypCcd) && targAprvChgTypCcd.length == 1;
+				},
+            	editable: function(){
+                    var me = this;
+                    var modStsInfo = me.get("modStsInfo");
+                    return (!me.get("searchParam.view")
+							&& (UT.isEmpty(modStsInfo) || modStsInfo.chg_req_sts_ccd != 'PRGSG'));
+                },
+				notAprvBtnVisible: function(){
+					var me = this;
+					return me.formula("editable") && !me.formula("isTargAprv");
+				},
+				aprvReqBtnVisible: function(){
+					var me = this;
+					return me.formula("editable") && me.formula("isTargAprv");
+				},
+                //이력이존재하면
+                delHistoryBtnVisible: function () {
+                    var me = this;
+                    var data = me.get("modStsInfo");
+                    var viewMode = me.get("searchParam.view");
+                    // 이력 정보가 존재하고, 결재진행중이거나 완료된 결재가 아닌 경우 이력정보 삭제 가능
+                    return (!viewMode && UT.isNotEmpty(data) && UT.isNotEmpty(data.vd_mst_chg_histrec_uuid) && ["APVD", "PRGSG"].indexOf(data.chg_req_sts_ccd) == -1);
+                },
+                aprvInfoBtnVisible: function () {
+                    var me = this;
+                    var modStsInfo = me.get("modStsInfo") || {};
+                    return (UT.isNotEmpty(modStsInfo.apvl_uuid) && !me.formula('editable'));
+                }
+            },
+			
+			/* 협력사 이력정보 및 대상 협력사관리그룹 정보 조회 */
+			onloadVendorInfo: function(){
+                var me = this;
+				var data = {
+					searchParam: me.get("searchParam"),
+					modStsInfo: me.get("modStsInfo"),
+					isTargInfoChg: false
+				};
+
+                me.$.histrecInfo.load(data);
+            },
+			
+            load: function(data){
+                var me = this;
+				data.chg_typ_ccd = me.chgTypCcd;
+                me.set("searchParam",data);
+				
+                me.onSearchAprvInfo();
+            },
+
+            onSearchAprvInfo: function(){
+                var me = this;
+                UT.request(me.$.findVendorApprovalInfo);
+            },
+			
+            /* 결재정보 조회 완료 후 callback */
+			completeFindVendorApprovalInfo: function(e, res){
+				var me = this;
+                var result = res.response || {};
+				var aprvRockInfo = result.aprvRockInfo;
+				var aprvInfo = result.aprvInfo;
+				var modStsInfo = result.modStsInfo;
+				var viewMode = UT.isBoolean(me.get("searchParam.view")) ? me.get("searchParam.view") : false;
+
+				// 마지막 변경이력(결재)이 진행중인 경우
+                if (!viewMode && UT.isNotEmpty(aprvRockInfo) && aprvRockInfo.vd_mst_chg_histrec_uuid) {
+					// ROCK 대상 여부 체크
+					var isExistAprvRockTarget = aprvRockInfo.rock_yn == "Y"  // 진행중인 결재중, Rock 대상 결재 존재
+												&& aprvRockInfo.vd_mst_chg_histrec_uuid != me.get("searchParam.vd_mst_chg_histrec_uuid");  // Rock 대상 결재 != 현재 결재
+					
+					var isNotAprvRock   = true;
+					if(isExistAprvRockTarget){  // ROCK 대상
+						var rockTyp = aprvRockInfo.rock_typ;
+						if(rockTyp == "INFO_ROCK"){
+							// 현재 결재가 정보 변경 결재이면, Rock 대상 결재
+							isNotAprvRock = true;  //현재 결재는 N_FIX : 항상 정보 Rock 미대상
+						} else if("OORG_ROCK"){
+							// 현재 결재의 운영조직 == 운영조직 Rock 대상 결재의 운영조직 이면, Rock 대상 결재
+							isNotAprvRock = (aprvRockInfo.oorg_cd == me.get("searchParam.oorg_cd")) ? false : true;
+						}
+					}
+					
+					var isRegUser       = aprvRockInfo.rock_yn == "Y" ? (aprvRockInfo.chg_reqr_id == SCSessionManager.currentUser.usr_id) : (aprvInfo.chg_reqr_id == SCSessionManager.currentUser.usr_id);
+					var isSameModTarget = aprvRockInfo.rock_yn == "Y" ? (aprvRockInfo.vd_mst_chg_histrec_uuid == me.get("searchParam.vd_mst_chg_histrec_uuid")) : (aprvInfo.vd_mst_chg_histrec_uuid == me.get("searchParam.vd_mst_chg_histrec_uuid"));
+					if(!isNotAprvRock || (isNotAprvRock && isSameModTarget && !isRegUser)) {
+						// Rock 대상 결재
+						// Rock 대상 결재가 아니고 결재 대상이 같은데. 결재요청자가 현재 로그인 사용자와 다른 경우
+						aprvInfo = aprvRockInfo.rock_yn == "Y" ? aprvRockInfo : aprvInfo;
+						var message = me.getVdModInvalidMessage(aprvInfo);
+						return UT.alert(message, me.onClose.bind(me), true);
+					} else {
+						// 결재 중인 등록요청 정보 조회
+						me.set("aprvInfo", aprvInfo);
+						me.set("modStsInfo", UT.isNotEmpty(modStsInfo) ? modStsInfo : {});
+					}
+				} else{
+					// 진행중인 결재가 없으면 협력사 변경이력 정보 초기화
+                    me.set("modStsInfo", {});
+					
+					if(viewMode) {
+						// 결재이력 조회화면일 경우 변경요청사유 보여줌
+						//mod_cause
+						me.set("modStsInfo.chg_rsn", modStsInfo.chg_rsn);
+					}
+                }
+				
+				me.onloadVendorInfo();
+				me.applyFormula();
+            },
+			
+            /* 진행중인 결재 알림 팝업창 */
+            getVdModInvalidMessage: function(aprvInfo){
+                var me = this;
+                // 진행중인 결재가 존재하여 결재요청이 불가합니다.
+                var message = me.translate("STD.VS1073");
+                var brStr = "<br>";
+                var str1 = aprvInfo.chg_typ_nm,
+                    str2 = aprvInfo.chg_req_sts_nm,
+                    str3 = aprvInfo.chg_reqr_nm;
+                // str1 : 결재 유형명 (운영조직명/협력사관리유형명)
+                str1 += aprvInfo.vmg_nm ? brStr + "&nbsp;" : "";
+                str1 += " ( " + aprvInfo.logic_org_nm;
+                str1 += aprvInfo.vmt_nm ? " / " + aprvInfo.vmt_nm : "";
+                str1 += " )";
+                // str2 : 결재 상태명 (결재 문서번호)
+                str2 += aprvInfo.apvl_docno ? " ( " + me.translate("결재 문서번호") + " : " + aprvInfo.apvl_docno + " )": "";
+                // str3 : 결재 요청자명(요청자아이디)
+                str3 += " ( " + aprvInfo.chg_reqr_id + " )";
+                
+                message += brStr;
+                message += me.translate("STD.VS1082", null, str1, str2, str3);
+                return message;
+            },
+            
+			/* 결재정보 btn */
+			onShowAprvInfo : function(){
+				var me = this;
+				me.onShowPopupApproval(me.get("modStsInfo.vd_mst_chg_histrec_uuid"));
+			},
+			
+			/* 임시저장 btn */
+			onTempSaveVendorInfoBeforeAprv: function(){
+				var me = this;
+				me.set("saveType","tempSave");
+				me.onSave("STD.N1200");	//저장하시겠습니까?
+			},
+			/* 결재요청 btn */
+            onSaveVendorInfoBeforeAprv: function(){
+            	var me = this;
+                me.set("saveType","apvlSave");
+                me.onSave("STD.N2300"); //결재요청하시겠습니까?
+            },
+			
+			/* 저장 */
+            onSave: function(message){
+            	var me = this;
+             
+            	//결재진행중이면 저장 불가
+            	if(["PRGSG"].indexOf(me.get("modStsInfo.chg_req_sts_ccd")) > -1){
+            		// 진행중인 결재가 존재하여 결재요청이 불가합니다.
+            		UT.alert("STD.VS1073");
+            		return;
+            	}else if(["APVD"].indexOf(me.get("modStsInfo.chg_req_sts_ccd")) > -1){
+					// 결재 완료상태
+                    me.set("modStsInfo", {});
+                }
+				
+				if (!me.validate("modStsInfo")) {
+					UT.alert("STD.E0000");
+                    return;
+                }
+				
+				var gettedInfo = me.getSaveParameter();
+				if(!gettedInfo.result){
+					UT.alert(gettedInfo.message);
+					return;
+				}
+				
+				var basicInfo = gettedInfo.basicInfo,
+					vdOorgInfo = gettedInfo.vdOorgInfo,
+					athfList = gettedInfo.athfList;
+              
+                UT.confirm(message, function() {
+					// 저장 시 넘겨줄 파라미터 set
+					//mod_cause
+					basicInfo.chg_rsn = me.modStsInfo.chg_rsn;
+                    me.$.saveVendorInfoBeforeAprv.body = {
+                        chgTypCcd: me.chgTypCcd,
+						modStsInfo: me.modStsInfo,
+                        basicInfo: basicInfo,
+                        vdOorgInfo: vdOorgInfo,
+						athfList: athfList
+                    };
+                    UT.request(me.$.saveVendorInfoBeforeAprv);
+                });
+            },
+            /* 저장 후 callback */
+            completeSaveVendorInfoBeforeAprv: function(e, res){
+                var me = this;
+				var lastResponse = res.response;
+				var resultData = lastResponse.resultData;
+				var vdMstChgHistrecUuid = resultData.vd_mst_chg_histrec_uuid;
+				var vdOorgUuid = resultData.vd_oorg_uuid;
+
+				// 재조회
+				me.set("searchParam.vd_mst_chg_histrec_uuid", vdMstChgHistrecUuid);
+				me.set("searchParam.vd_oorg_uuid", vdOorgUuid);
+				me.onSearchAprvInfo();
+                me.fire("complete-save");
+                
+                if (me.get("saveType") === "apvlSave"){
+                    //결재요청 팝업 호출
+                    me.onShowPopupApproval(vdMstChgHistrecUuid);
+                } else {
+                    UT.completeAlert("저장");
+                }
+            },
+			
+            /* 결재 작성 팝업 호출 */
+            onShowPopupApproval: function(vdMstChgHistrecUuid){
+                var me = this;
+				
+                UT.popupApproval(me, {task_uuid : vdMstChgHistrecUuid, apvl_typ_ccd : me.chgTypCcd}, function(sts, popup) {
+                    if(sts === "PRGSG" || sts === "APVD") {   // 결재상신/승인(=전결) 시
+                        //결재 팝업에서 이벤트 처리후 실행되는 call back 함수 내용을 정의한다.
+                        popup.close();
+                        me.onClose();
+                    } else {
+                        me.onSearchAprvInfo();
+						me.fire("complete-save"); // 결재 취소 시 재조회 필요
+                    }
+                });
+            },
+			
+			/* 이력삭제 */
+            onDeleteVendorHistory: function(){
+            	var me = this;
+            	
+				me.set("saveType", "delete");
+				var gettedInfo = me.getSaveParameter();
+				if(!gettedInfo.result){
+					UT.alert(gettedInfo.message);
+					return;
+				}
+				
+				var basicInfo = gettedInfo.basicInfo,
+					vdOorgInfo = gettedInfo.vdOorgInfo,
+					athfList = gettedInfo.athfList;
+				
+            	UT.confirm("STD.N1300",function(){
+            		me.$.deleteVendorHistory.body = {
+            			chgTypCcd: me.chgTypCcd,
+						modStsInfo: me.modStsInfo,
+                        basicInfo: basicInfo,
+                        vdOorgInfo: vdOorgInfo,
+						athfList: athfList
+            		};
+            		UT.request(me.$.deleteVendorHistory);
+            	});
+            },
+			/* 이력삭제완료 */
+            completeDeleteVendorHistory: function(e,res) {
+            	var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					me.set("searchParam.vd_mst_chg_histrec_uuid", null);
+					UT.completeAlert("요청 이력 삭제", function() {
+						// 조회
+						me.onSearchAprvInfo();
+						me.fire("complete-save");
+					});
+				} else {
+					// 오류가 발생하였습니다.\n관리자에게 문의하세요
+					UT.alert("STD.E9999");
+				}
+            },
+			
+			/* 품의 Bypass: 확정처리 및 이력관리 */
+            onSaveBypassVendorPoLimit : function(){
+            	var me = this;
+            	
+				if (!me.validate("modStsInfo")) {
+					UT.alert("STD.E0000");
+                    return;
+                }
+				
+            	var gettedInfo = me.getSaveParameter();
+				if(!gettedInfo.result){
+					UT.alert(gettedInfo.message);
+					return;
+				}
+				
+				var basicInfo = gettedInfo.basicInfo,
+					vdOorgInfo = gettedInfo.vdOorgInfo,
+					athfList = gettedInfo.athfList;
+           	 
+            	UT.confirm("STD.N5000", function() {  // 확정하시겠습니까?
+            		// 저장 시 넘겨줄 파라미터 set
+					//mod_cause
+					basicInfo.chg_rsn = me.modStsInfo.chg_rsn;
+                	me.$.saveBypassVendorPoLimit.body = {
+                		chgTypCcd: me.chgTypCcd,
+						modStsInfo: me.modStsInfo,
+						basicInfo : basicInfo,
+                        vdOorgInfo: vdOorgInfo,
+						athfList: athfList
+                	};
+                	UT.request(me.$.saveBypassVendorPoLimit);
+               });
+            },
+			/* 품의 Bypass response */
+			completeVendorPoLimit : function(el,res){
+				var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					UT.completeAlert("협력사 발주 제한", me.onClose.bind(me));
+				} else {
+					// 오류가 발생하였습니다.\n관리자에게 문의하세요
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+             * cc의 데이터를 가져온다
+             */
+            getSaveParameter : function() {
+                var me = this;
+                var gettedInfo = {};
+				var vaidatorMode = me.get("saveType") == "delete" ? false : true;
+
+				var gettedHistrecInfo = me.$.histrecInfo.getSaveParameter(vaidatorMode);
+				
+				if(vaidatorMode){
+					if(!gettedHistrecInfo.result){
+						return gettedHistrecInfo;
+					}
+				}
+
+				gettedInfo = {
+					result        : true,
+					basicInfo     : gettedHistrecInfo.basicInfo,
+					vdOorgInfo    : gettedHistrecInfo.vdOorgInfo,
+					athfList      : gettedHistrecInfo.athfList,
+				};
+                return gettedInfo;
+            },
+            
+            // 닫기
+            onClose: function(){
+                var me = this;
+                me.fire("close-popup");
+            }
+        });
+    </script>
+</dom-module>

@@ -1,0 +1,720 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="eval-tmpl">
+	<select id="selectEvalFactUsedYnInEvalTmpl" resultType="String">
+	/* eval-tmpl.selectEvalFactUsedYnInEvalTmpl : 평가항목 사용여부 확인 (평가템플릿 평가항목)*/
+		SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END
+		  FROM EVALTMPL_EVALFACT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND STS != 'D'
+		   <choose>
+			   <when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				   AND EVALFACT_UUID IN
+				   <foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					   #{item.evalfact_uuid}
+				   </foreach>
+			   </when>
+			   <when test="p.evalfact_uuid != null and p.evalfact_uuid != ''">
+				   AND EVALFACT_UUID = #{p.evalfact_uuid}
+			   </when>
+			   <otherwise>
+				   AND 1 = 0
+			   </otherwise>
+		   </choose>
+	</select>
+    <resultMap id="resultMap-findListEvalTmpl" type="java.util.HashMap">
+        <id column="TEN_ID" property="ten_id"/>
+        <id column="EVALTMPL_UUID" property="evaltmpl_uuid"/>
+        <result column="EVAL_TASK_TYP_CCD" property="eval_task_typ_ccd"/>
+        <result column="EVALTMPL_CD" property="evaltmpl_cd"/>
+        <result column="EVALTMPL_NM" property="evaltmpl_nm"/>
+        <result column="EVALFACT_AUTHTY_APPL_YN" property="evalfact_authty_appl_yn"/>
+        <result column="CNFD_YN" property="cnfd_yn"/>
+        <result column="RMK" property="rmk"/>
+        <result column="STS" property="sts"/>
+        <result column="REGR_ID" property="regr_id"/>
+        <result column="REG_DTTM" property="reg_dttm"/>
+        <result column="MODR_ID" property="modr_id"/>
+        <result column="MOD_DTTM" property="mod_dttm"/>
+        <collection javaType="java.util.ArrayList" property="evalsht_list" resultMap="evalshtMap"/>
+    </resultMap>
+    <resultMap id="evalshtMap" type="java.util.HashMap">
+        <id column="EVALSHT_UUID" property="evalsht_uuid"/>
+        <result column="EVALSHT_CD" property="evalsht_cd"/>
+        <result column="EVALSHT_NM" property="evalsht_nm"/>
+        <result column="EFCT_ST_DT" property="efct_st_dt"/>
+        <result column="EFCT_EXP_DT" property="efct_exp_dt"/>
+    </resultMap>
+	<select id="findListEvalTmpl" resultMap="resultMap-findListEvalTmpl" resultOrdered="true">
+	/* eval-tmpl.findListEvalTmpl : 평가 템플릿 조회 */
+	SELECT ET.TEN_ID
+	     , ET.EVALTMPL_UUID
+	     , ET.EVAL_TASK_TYP_CCD
+	     , ET.EVALTMPL_CD
+	     , ET.EVALTMPL_NM
+	     , ET.EVALFACT_AUTHTY_APPL_YN
+	     , ET.CNFD_YN
+	     , ET.RMK
+	     , ET.STS
+	     , ET.REGR_ID
+	     , ET.REG_DTTM
+	     , ET.MODR_ID
+	     , ET.MOD_DTTM
+		 , (SELECT CASE WHEN #{g.locale} = 'ko_KR' THEN USR_NM ELSE CASE WHEN USR_NM_EN IS NULL OR USR_NM_EN = '' THEN USR_NM ELSE USR_NM_EN END END FROM USR WHERE TEN_ID = ET.TEN_ID AND USR_ID = ET.MODR_ID) AS MOD_NM
+	     , CASE WHEN ET.EVAL_TASK_TYP_CCD = 'PE' THEN PFMC_SHT.PFMC_EVALSHT_UUID
+	            WHEN ET.EVAL_TASK_TYP_CCD = 'OE' THEN OBD_SHT.OBD_EVALSHT_UUID
+	            WHEN ET.EVAL_TASK_TYP_CCD = 'GE' THEN GR_SHT.GR_EVALSHT_UUID
+            END EVALSHT_UUID
+         , CASE WHEN ET.EVAL_TASK_TYP_CCD = 'PE' THEN PFMC_SHT.EVALSHT_CD
+                WHEN ET.EVAL_TASK_TYP_CCD = 'OE' THEN OBD_SHT.EVALSHT_CD
+                WHEN ET.EVAL_TASK_TYP_CCD = 'GE' THEN GR_SHT.EVALSHT_CD
+            END EVALSHT_CD
+         , CASE WHEN ET.EVAL_TASK_TYP_CCD = 'PE' THEN PFMC_SHT.EVALSHT_NM
+                WHEN ET.EVAL_TASK_TYP_CCD = 'OE' THEN OBD_SHT.EVALSHT_NM
+                WHEN ET.EVAL_TASK_TYP_CCD = 'GE' THEN GR_SHT.EVALSHT_NM
+            END EVALSHT_NM
+        , CASE WHEN ET.EVAL_TASK_TYP_CCD = 'PE' THEN PFMC_SHT.EFCT_ST_DT
+               WHEN ET.EVAL_TASK_TYP_CCD = 'OE' THEN OBD_SHT.EFCT_ST_DT
+               WHEN ET.EVAL_TASK_TYP_CCD = 'GE' THEN GR_SHT.EFCT_ST_DT
+           END EFCT_ST_DT
+        , CASE WHEN ET.EVAL_TASK_TYP_CCD = 'PE' THEN PFMC_SHT.EFCT_EXP_DT
+               WHEN ET.EVAL_TASK_TYP_CCD = 'OE' THEN OBD_SHT.EFCT_EXP_DT
+               WHEN ET.EVAL_TASK_TYP_CCD = 'GE' THEN GR_SHT.EFCT_EXP_DT
+           END EFCT_EXP_DT
+	  FROM EVALTMPL ET
+	 <if test="g.existModule(&quot;SRM&quot;)">
+	  LEFT OUTER JOIN PFMC_EVALSHT PFMC_SHT
+	    ON ET.TEN_ID = PFMC_SHT.TEN_ID
+	   AND ET.EVALTMPL_UUID = PFMC_SHT.EVALTMPL_UUID
+	   AND PFMC_SHT.STS != 'D'
+	   AND ET.EVAL_TASK_TYP_CCD = 'PE'
+	 </if>
+     <if test="g.existModule(&quot;VS&quot;)">
+      LEFT OUTER JOIN OBD_EVALSHT_PRCS OBD_SHT_PRCS
+        ON ET.TEN_ID = OBD_SHT_PRCS.TEN_ID
+       AND ET.EVALTMPL_UUID = OBD_SHT_PRCS.EVALTMPL_UUID
+       AND OBD_SHT_PRCS.STS != 'D'
+       AND ET.EVAL_TASK_TYP_CCD = 'OE'
+      LEFT OUTER JOIN OBD_EVALSHT OBD_SHT
+        ON OBD_SHT_PRCS.TEN_ID = OBD_SHT.TEN_ID
+       AND OBD_SHT_PRCS.OBD_EVALSHT_UUID = OBD_SHT.OBD_EVALSHT_UUID
+       AND OBD_SHT.STS != 'D'
+     </if>
+     <if test="g.existModule(&quot;PRO&quot;)">
+       LEFT OUTER JOIN GR_EVALSHT_PRCS GR_SHT_PRCS
+         ON ET.TEN_ID = GR_SHT_PRCS.TEN_ID
+        AND ET.EVALTMPL_UUID = GR_SHT_PRCS.EVALTMPL_UUID
+        AND GR_SHT_PRCS.STS != 'D'
+        AND ET.EVAL_TASK_TYP_CCD = 'GE'
+       LEFT OUTER JOIN GR_EVALSHT GR_SHT
+         ON GR_SHT_PRCS.TEN_ID = GR_SHT.TEN_ID
+        AND GR_SHT_PRCS.GR_EVALSHT_UUID = GR_SHT.GR_EVALSHT_UUID
+        AND GR_SHT.STS != 'D'
+     </if>
+	 WHERE ET.TEN_ID = #{g.tenant}
+	   AND ET.STS != 'D'
+	   <if test="p.eval_task_typ_ccd != null and p.eval_task_typ_ccd !=''">
+	     AND ET.EVAL_TASK_TYP_CCD = #{p.eval_task_typ_ccd}
+	   </if>
+	   <if test="p.evaltmpl_nm != null and p.evaltmpl_nm !=''">
+		 <bind name="evamtmplNm" value="'%' + p.evaltmpl_nm + '%'"/>
+		 AND UPPER(ET.EVALTMPL_NM) LIKE UPPER(#{evamtmplNm})
+	   </if>
+	   <if test="p.evalfact_authty_appl_yn != null and p.evalfact_authty_appl_yn != ''">
+		 AND ET.EVALFACT_AUTHTY_APPL_YN = #{p.evalfact_authty_appl_yn}
+	   </if>
+	   <if test="p.cnfd_yn != null and p.cnfd_yn != ''">
+	     AND ET.CNFD_YN = #{p.cnfd_yn}
+	   </if>
+		ORDER BY ET.MOD_DTTM DESC
+	</select>
+	<select id="findEvalTmplInfo" resultType="Map">
+	/* eval-tmpl.findEvalTmplInfo : 평가템플릿 정보 조회 */
+		SELECT ET.TEN_ID
+		     , ET.EVALTMPL_UUID
+		     , ET.EVAL_TASK_TYP_CCD
+		     , (SELECT DTLMULT.DTLCD_NM
+		          FROM DTLCD DTL
+			     INNER JOIN DTLCD_MULTLANG DTLMULT
+			        ON  DTL.TEN_ID = DTLMULT.TEN_ID
+				   AND DTL.CCD = DTLMULT.CCD
+				   AND DTL.DTLCD = DTLMULT.DTLCD
+				   AND DTLMULT.LANG_CCD = #{g.locale}
+		        WHERE DTL.CCD = 'R704'
+			      AND DTL.DTLCD = ET.EVAL_TASK_TYP_CCD ) AS EVAL_TASK_TYP_NM /* 평가 업무 유형 */
+		     , ET.EVALTMPL_CD
+		     , ET.EVALTMPL_NM
+		     , (SELECT SUM(ETEFG.EFACTG_WGT)
+		        FROM EVALTMPL_EFACTG ETEFG
+		        WHERE ET.TEN_ID = ETEFG.TEN_ID
+			      AND ET.EVALTMPL_UUID = ETEFG.EVALTMPL_UUID
+			      AND ETEFG.STS !='D') AS SUM_EFACTG_WGT /* 평가템플릿 평가항목군 가중치 */
+		     , ET.CNFD_YN
+		     , ET.EVALFACT_AUTHTY_APPL_YN
+		     , ET.RMK
+		     , ET.STS
+		     , ET.REGR_ID
+		     , ET.REG_DTTM
+		     , ET.MODR_ID
+		     , ET.MOD_DTTM
+		  FROM EVALTMPL ET
+	     WHERE ET.TEN_ID = #{g.tenant}
+		   AND ET.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		   AND ET.STS != 'D'
+	</select>
+	<select id="findListEvalTmplEfactgList" resultType="Map">
+	/* eval-tmpl.findListEvalTmplEfactgList : 평가템플릿 평가항목군 조회 */
+		SELECT ETEFG.TEN_ID
+		     , ETEFG.EVALTMPL_EFACTG_UUID
+		     , ETEFG.EVALTMPL_UUID
+		     , ETEFG.EFACTG_UUID
+		     , 'ROOT' AS ETEFG_UUID                      /* 트리 구성을 위함 */
+		     , ETEFG.EVALTMPL_EFACTG_UUID AS ETEF_UUID   /* 트리 구성을 위함 */
+		     , EFG.EFACTG_NM AS EVALFACT_NM
+		     , EFG.EFACTG_CD
+		     , ETEFG.EFACTG_WGT
+		     , (SELECT SUM(ETEF.EVALFACT_WGT)
+		        FROM EVALTMPL_EVALFACT ETEF
+			             INNER JOIN EVALFACT EF
+			                        ON ETEF.TEN_ID = EF.TEN_ID
+				                        AND ETEF.EVALFACT_UUID = EF.EVALFACT_UUID
+		        WHERE ETEFG.TEN_ID = ETEF.TEN_ID
+			      AND ETEFG.EVALTMPL_EFACTG_UUID = ETEF.EVALTMPL_EFACTG_UUID
+			      AND EF.ADD_CND_CCD = 'NA'
+			      AND ETEF.STS != 'D') AS EVALFACT_WGT   /* 평가항목군 평가항목 가중치 합 (일반항목만 계산) */
+		     , 'N' AS SLFCK_SUBJ_YN
+		     , ETEFG.RMK
+		     , ETEFG.SORT
+		     , ETEFG.STS
+		     , ETEFG.REGR_ID
+		     , ETEFG.REG_DTTM
+		     , ETEFG.MODR_ID
+		     , ETEFG.MOD_DTTM
+		  FROM EVALTMPL_EFACTG ETEFG
+		 INNER JOIN EFACTG EFG
+		    ON ETEFG.TEN_ID = EFG.TEN_ID
+		   AND ETEFG.EFACTG_UUID = EFG.EFACTG_UUID
+		 WHERE ETEFG.TEN_ID = #{g.tenant}
+		   AND ETEFG.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		 ORDER BY ETEFG.SORT
+	</select>
+	<select id="findListEvalTmplFactor" resultType="Map">
+	/* eval-tmpl.findListEvalTmplFactor : 평가템플릿 평가항목 조회 */
+		SELECT ETEF.TEN_ID
+		     , ETEF.EVALTMPL_EVALFACT_UUID
+		     , ETEF.EVALTMPL_EFACTG_UUID
+		     , ETEF.EVALTMPL_UUID
+		     , ETEF.EVALFACT_UUID
+		     , ETEF.EVALTMPL_EFACTG_UUID AS ETEFG_UUID                      /* 트리 구성을 위함 */
+		     , ETEF.EVALTMPL_EVALFACT_UUID AS ETEF_UUID   /* 트리 구성을 위함 */
+		     , EF.EVALFACT_NM
+		     , EF.EVALFACT_CD
+		     , ETEF.EVALFACT_WGT
+		     , ETEF.EVALFACT_EVALTR_AUTHTY_CCD
+		     , EF.EVALFACT_TYP_CCD
+		     , EF.ADD_CND_CCD
+             , EF.SCALE_APPL_YN
+		     , ETEF.SORT
+		     , ETEF.STS
+		     , ETEF.REGR_ID
+		     , ETEF.REG_DTTM
+		     , ETEF.MODR_ID
+		     , ETEF.MOD_DTTM
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		     , (CASE WHEN ESEE.EVALTMPL_EVALFACT_UUID IS NULL OR ESEE.EVALTMPL_EVALFACT_UUID = '' THEN 'N' ELSE 'Y' END) AS SLFCK_SUBJ_YN
+		</if>
+		  FROM EVALTMPL_EVALFACT ETEF
+		 INNER JOIN EVALFACT EF
+		    ON ETEF.TEN_ID = EF.TEN_ID
+		   AND ETEF.EVALFACT_UUID = EF.EVALFACT_UUID
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		  LEFT OUTER JOIN EVALSHT_SLFCK_EVALFACT ESEE <!-- 평가시트 자가진단 평가항목 -->
+		    ON ESEE.TEN_ID = ETEF.TEN_ID
+		   AND ESEE.PFMC_EVALSHT_UUID = #{p.work_evaltmpl_uuid}
+		   AND ESEE.EVALTMPL_EVALFACT_UUID = ETEF.EVALTMPL_EVALFACT_UUID
+		   AND ESEE.STS != 'D'
+		</if>
+		WHERE ETEF.TEN_ID = #{g.tenant}
+		  AND ETEF.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		<if test="p.evaltmpl_efactg_uuid != null and p.evaltmpl_efactg_uuid != ''">
+		  AND ETEF.EVALTMPL_EFACTG_UUID = #{p.evaltmpl_efactg_uuid}
+		</if>
+		ORDER BY ETEF.SORT
+	</select>
+	<insert id="insertEvalTmpl">
+	/* eval-tmpl.insertEvalTmpl : 평가템플릿 저장 */
+		INSERT INTO EVALTMPL (
+		    TEN_ID
+		    , EVALTMPL_UUID
+		    , EVAL_TASK_TYP_CCD
+		    , EVALTMPL_CD
+		    , EVALTMPL_NM
+		    , CNFD_YN
+		    , EVALFACT_AUTHTY_APPL_YN
+		    , RMK
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+            , #{p.evaltmpl_uuid}
+            , #{p.eval_task_typ_ccd}
+            , #{p.evaltmpl_cd}
+            , #{p.evaltmpl_nm}
+            , #{p.cnfd_yn}
+            , #{p.evalfact_authty_appl_yn}
+            , #{p.rmk}
+            , 'C'
+		    , #{g.username}
+		    , #{g.now}
+		    , #{g.username}
+		    , #{g.now}
+		)
+	</insert>
+	<update id="updateEvalTmpl">
+	/* eval-tmpl.updateEvalTmpl : 평가템플릿 수정 */
+		UPDATE EVALTMPL
+		   SET EVALTMPL_NM = #{p.evaltmpl_nm}
+			 , CNFD_YN     = #{p.cnfd_yn}
+		     , EVALFACT_AUTHTY_APPL_YN = #{p.evalfact_authty_appl_yn}
+		     , RMK         = #{p.rmk}
+		     , STS         = 'U'
+		     , MODR_ID     = #{g.username}
+			 , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		   AND STS != 'D'
+	</update>
+	<insert id="insertEvalTmplEfactg">
+	/* eval-tmpl.insertEvalTmplEfactg : 평가템플릿 평가항목군 추가 */
+		INSERT INTO EVALTMPL_EFACTG (
+		    TEN_ID
+		    , EVALTMPL_EFACTG_UUID
+		    , EVALTMPL_UUID
+		    , EFACTG_UUID
+		    , EFACTG_WGT
+		    , RMK
+		    , SORT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) VALUES (
+			 #{g.tenant}
+	         , #{p.evaltmpl_efactg_uuid}
+	         , #{p.evaltmpl_uuid}
+	         , #{p.efactg_uuid}
+	         , CAST(#{p.efactg_wgt} AS NUMERIC(10,5))
+	         , #{p.rmk}
+	         , CAST(#{p.sort} AS INTEGER)
+	         , 'C'
+	         , #{g.username}
+	         , #{g.now}
+	         , #{g.username}
+	         , #{g.now}
+		)
+	</insert>
+	<update id="updateEvalTmplEfactg">
+	/* eval-tmpl.updateEvalTmplEfactg : 평가템플릿 평가항목군 수정 */
+		UPDATE EVALTMPL_EFACTG
+		   SET EFACTG_WGT  = CAST(#{p.efactg_wgt} AS NUMERIC(10,5))
+		     , RMK         = #{p.rmk}
+		     , SORT        = CAST(#{p.sort} AS INTEGER)
+		     , STS         = 'U'
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID      = #{g.tenant}
+		   AND EVALTMPL_EFACTG_UUID = #{p.evaltmpl_efactg_uuid}
+		   AND STS        != 'D'
+	</update>
+	<insert id="insertEvalTmplEvalfact">
+	/* eval-tmpl.insertEvalTmplEvalfact : 평가템플릿 평가항목 추가 */
+		INSERT INTO EVALTMPL_EVALFACT (
+		    TEN_ID
+		    , EVALTMPL_EVALFACT_UUID
+		    , EVALTMPL_EFACTG_UUID
+		    , EVALTMPL_UUID
+		    , EVALFACT_UUID
+		    , EVALFACT_WGT
+		    , EVALFACT_EVALTR_AUTHTY_CCD
+		    , SORT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+		    , #{p.evaltmpl_evalfact_uuid}
+		    , #{p.evaltmpl_efactg_uuid}
+		    , #{p.evaltmpl_uuid}
+		    , #{p.evalfact_uuid}
+		    , CAST(#{p.evalfact_wgt} AS NUMERIC(10,5))
+		    , #{p.evalfact_evaltr_authty_ccd}
+		    , CAST(#{p.sort} AS INTEGER)
+	        , 'C'
+	        , #{g.username}
+	        , #{g.now}
+	        , #{g.username}
+	        , #{g.now}
+		)
+	</insert>
+	<update id="updateEvalTmplEvalfact">
+	/* eval-tmpl.updateEvalTmplEvalfact : 평가템플릿 평가항목 수정 */
+		UPDATE EVALTMPL_EVALFACT
+		   SET EVALFACT_WGT               = CAST(#{p.evalfact_wgt} AS NUMERIC(10,5))
+		     , EVALFACT_EVALTR_AUTHTY_CCD = #{p.evalfact_evaltr_authty_ccd}
+		     , SORT                       = CAST(#{p.sort} AS INTEGER)
+		     , STS                        = 'U'
+		     , MODR_ID                    = #{g.username}
+		     , MOD_DTTM                   = #{g.now}
+	     WHERE TEN_ID      = #{g.tenant}
+	       AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}
+	       AND STS        != 'D'
+	</update>
+	<insert id="insertEvalTmplEvalfactScale">
+	/* eval-tmpl.insertEvalTmplEvalfactScale : 평가템플릿 평가항목 스케일 저장 */
+		INSERT INTO EVALTMPL_EVALFACT_SCALE (
+		    TEN_ID
+		    , EVALTMPL_EVALFACT_SCALE_UUID
+		    , EVALTMPL_EVALFACT_UUID
+		    , SCALE_CD
+		    , SCALE_NM
+		    , ST_VAL
+		    , STP_VAL
+		    , SC
+		    , SCALE_SORT
+		    , NULLV_APPL_SUBJ_SCALE_YN
+		    , EVALFACT_WGT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) VALUES (
+		    #{g.tenant}
+         	, #{p.evaltmpl_evalfact_scale_uuid}
+         	, #{p.evaltmpl_evalfact_uuid}
+         	, #{p.scale_cd}
+         	, #{p.scale_nm}
+         	, #{p.st_val}
+         	, #{p.stp_val}
+         	, #{p.sc}
+         	, #{p.scale_sort}
+         	, #{p.nullv_appl_subj_scale_yn}
+         	, #{p.evalfact_wgt}
+         	, 'C'
+         	, #{g.username}
+         	, #{g.now}
+         	, #{g.username}
+         	, #{g.now}
+		)
+	</insert>
+	<select id="findListEvalTmplEvalFactScale" resultType="Map">
+	/* eval-tmpl.findListEvalTmplEvalFactScale : 평가템플릿 평가항목 스케일 조회 */
+		SELECT TEN_ID
+		     , EVALTMPL_EVALFACT_SCALE_UUID
+		     , EVALTMPL_EVALFACT_UUID
+		     , SCALE_CD
+		     , SCALE_NM
+		     , ST_VAL
+		     , STP_VAL
+		     , SC
+		     , SCALE_SORT
+		     , NULLV_APPL_SUBJ_SCALE_YN
+		     , EVALFACT_WGT
+		     , STS
+		     , REGR_ID
+		     , REG_DTTM
+		     , MODR_ID
+		     , MOD_DTTM
+		  FROM EVALTMPL_EVALFACT_SCALE
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}
+		   AND STS != 'D'
+		 ORDER BY SCALE_SORT
+	</select>
+	<delete id="deleteEvalTmpl">
+	/* eval-tmpl.deleteEvalTmpl : 평가템플릿 삭제 */
+		DELETE FROM EVALTMPL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</delete>
+	<delete id="deleteEvalTmplEvalFactorScale">
+	/* eval-tmpl.deleteEvalTmplEvalFactorScale : 평가템플릿 평가항목 스케일 삭제 */
+		DELETE FROM EVALTMPL_EVALFACT_SCALE
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}  /* 평가템플릿 평가항목 uuid */
+	</delete>
+	<delete id="deleteEvalTmplEvalFactor">
+	/* eval-tmpl.deleteEvalTmplEvalFactor : 평가템플릿 평가항목 삭제 */
+		DELETE FROM EVALTMPL_EVALFACT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</delete>
+	<delete id="deleteEvalTmplEfactg">
+	/* eval-tmpl.deleteEvalTmplEfactg : 평가템플릿 평가항목군 삭제 */
+		DELETE FROM EVALTMPL_EFACTG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		<if test="p.evaltmpl_efactg_uuid != null and p.evaltmpl_efactg_uuid != ''">
+		   AND EVALTMPL_EFACTG_UUID     = #{p.evaltmpl_efactg_uuid}
+		</if>
+	</delete>
+	<insert id="insertEvalTmplCopy">
+	/* eval-tmpl.insertEvalTmplCopy : 평가템플릿 복사 */
+		INSERT INTO EVALTMPL (
+		    TEN_ID
+		    , EVALTMPL_UUID
+		    , EVAL_TASK_TYP_CCD
+		    , EVALTMPL_CD
+		    , EVALTMPL_NM
+		    , CNFD_YN
+		    , EVALFACT_AUTHTY_APPL_YN
+		    , RMK
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		)
+		SELECT TEN_ID
+		     , #{p.evaltmpl_new_uuid}
+		     , EVAL_TASK_TYP_CCD
+		     , #{p.evaltmpl_new_cd}
+		     , CONCAT(#{p.copy_nm}, EVALTMPL_NM)
+			 , 'N'
+		     , EVALFACT_AUTHTY_APPL_YN
+		     , RMK
+		     , 'C'
+		     , #{g.username}
+		     , #{g.now}
+		     , #{g.username}
+		     , #{g.now}
+		  FROM EVALTMPL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		   AND STS != 'D'
+	</insert>
+	<insert id="insertEvalTmplEfactgCopy">
+	/* eval-tmpl.insertEvalTmplEfactgCopy : 평가템플릿 평가항목군 복사 */
+		INSERT INTO EVALTMPL_EFACTG (
+		    TEN_ID
+		    , EVALTMPL_EFACTG_UUID
+		    , EVALTMPL_UUID
+		    , EFACTG_UUID
+		    , EFACTG_WGT
+		    , RMK
+		    , SORT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) SELECT TEN_ID
+		       , #{p.evaltmpl_efactg_new_uuid}
+		       , #{p.evaltmpl_new_uuid}
+		       , EFACTG_UUID
+		       , EFACTG_WGT
+		       , RMK
+		       , SORT
+		       , 'C'
+		       , #{g.username}
+		       , #{g.now}
+		       , #{g.username}
+		       , #{g.now}
+		    FROM EVALTMPL_EFACTG
+		   WHERE TEN_ID = #{g.tenant}
+		     AND EVALTMPL_EFACTG_UUID = #{p.evaltmpl_efactg_uuid}
+			 AND STS != 'D'
+	</insert>
+	<insert id="insertEvalTmplEvalfactCopy">
+	/* eval-tmpl.insertEvalTmplEvalfactCopy : 평가템플릿 평가항목 복사 */
+		INSERT INTO EVALTMPL_EVALFACT (
+		    TEN_ID
+		    , EVALTMPL_EVALFACT_UUID
+		    , EVALTMPL_EFACTG_UUID
+		    , EVALTMPL_UUID
+		    , EVALFACT_UUID
+		    , EVALFACT_WGT
+		    , EVALFACT_EVALTR_AUTHTY_CCD
+		    , SORT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) SELECT TEN_ID
+		       , #{p.evaltmpl_evalfact_new_uuid}
+		       , #{p.evaltmpl_efactg_new_uuid}
+		       , #{p.evaltmpl_new_uuid}
+			   , EVALFACT_UUID
+		  	   , EVALFACT_WGT
+			   , EVALFACT_EVALTR_AUTHTY_CCD
+		       , SORT
+		       , 'C'
+		       , #{g.username}
+		       , #{g.now}
+		       , #{g.username}
+		       , #{g.now}
+		    FROM EVALTMPL_EVALFACT
+		   WHERE TEN_ID = #{g.tenant}
+		     AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}
+			 AND STS != 'D'
+	</insert>
+	<insert id="insertEvalTmplEvalfactScaleCopy">
+	/* eval-tmpl.insertEvalTmplEvalfactScaleCopy : 평가템플릿 평가항목 스케일 복사 */
+		INSERT INTO EVALTMPL_EVALFACT_SCALE (
+		    TEN_ID
+		    , EVALTMPL_EVALFACT_SCALE_UUID
+		    , EVALTMPL_EVALFACT_UUID
+		    , SCALE_CD
+		    , SCALE_NM
+		    , ST_VAL
+		    , STP_VAL
+		    , SC
+		    , SCALE_SORT
+		    , NULLV_APPL_SUBJ_SCALE_YN
+		    , EVALFACT_WGT
+		    , STS
+		    , REGR_ID
+		    , REG_DTTM
+		    , MODR_ID
+		    , MOD_DTTM
+		) SELECT TEN_ID
+		       , #{p.evaltmpl_evalfact_scale_new_uuid}
+		  	   , #{p.evaltmpl_evalfact_new_uuid}
+		  	   , SCALE_CD
+		       , SCALE_NM
+		       , ST_VAL
+		       , STP_VAL
+		       , SC
+		       , SCALE_SORT
+		       , NULLV_APPL_SUBJ_SCALE_YN
+		       , EVALFACT_WGT
+		       , 'C'
+		       , #{g.username}
+		       , #{g.now}
+		       , #{g.username}
+		       , #{g.now}
+		    FROM EVALTMPL_EVALFACT_SCALE
+		   WHERE TEN_ID = #{g.tenant}
+		     AND EVALTMPL_EVALFACT_SCALE_UUID = #{p.evaltmpl_evalfact_scale_uuid}
+		     AND STS != 'D'
+	</insert>
+	<delete id="deleteEvalTmplEvalFactorByEfactg">
+	/* eval-tmpl.deleteEvalTmplEvalFactorByEfactg : 평가템플릿 평가항목군에 매핑된 평가항목 삭제 */
+		DELETE FROM EVALTMPL_EVALFACT
+		WHERE TEN_ID = #{g.tenant}
+		AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		AND EVALTMPL_EVALFACT_UUID     = #{p.evaltmpl_evalfact_uuid}
+	</delete>
+	<delete id="deleteEvalTmplEfactgByEfactg">
+	/* eval-tmpl.deleteEvalTmplEfactgByEfactg : 평가템플릿 평가항목군 삭제 */
+		DELETE FROM EVALTMPL_EFACTG
+		WHERE TEN_ID = #{g.tenant}
+		AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		AND EVALTMPL_EFACTG_UUID = #{p.evaltmpl_efactg_uuid}
+	</delete>
+	<delete id="deleteEvalTmplEvalFactorByEvalFact">
+	/* eval-tmpl.deleteEvalTmplEvalFactorByEvalFact : 평가템플릿 평가항목 삭제 */
+		DELETE FROM EVALTMPL_EVALFACT
+		WHERE TEN_ID = #{g.tenant}
+		AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}
+	</delete>
+	<select id="selectEfactgUsedYnInEvalTmpl" resultType="String">
+	/* eval-tmpl.selectEfactgUsedYnInEvalTmpl : 평가항목군 사용여부 확인 (평가템플릿 평가항목군)*/
+		SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END
+		FROM EVALTMPL_EFACTG
+		WHERE TEN_ID = #{g.tenant}
+		AND STS != 'D'
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EFACTG_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.efactg_uuid}
+				</foreach>
+			</when>
+			<when test="p.evalfact_uuid != null and p.evalfact_uuid != ''">
+				AND EFACTG_UUID = #{p.efactg_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+	<update id="saveEvalTmplEvalFactScale">
+	/* eval-tmpl.saveEvalTmplEvalFactScale : 평가템플릿 평가항목 스케일 수정 */
+		UPDATE EVALTMPL_EVALFACT_SCALE
+		   SET SCALE_SORT = CAST(#{p.scale_sort} AS INTEGER)
+		     , SC         = CAST(#{p.sc} AS NUMBER(8, 5))
+             , ST_VAL     = CAST(#{p.st_val} AS NUMBER)
+             , STP_VAL    = CAST(#{p.stp_val} AS NUMBER)  , STS         = 'U'
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_EVALFACT_SCALE_UUID = #{p.evaltmpl_evalfact_scale_uuid}
+	</update>
+	<update id="updateCnfdYnEvalTmpl">
+	/* eval-tmpl.updateCnfdYnEvalTmpl : 평가템플릿 확정여부 수정 */
+		UPDATE EVALTMPL
+		   SET CNFD_YN     = #{p.cnfd_yn}
+		     , STS         = 'U'
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		<choose>
+	     <when test="p.evaltmpl_uuids != null and p.evaltmpl_uuids.size() != 0">
+	       AND EVALTMPL_UUID  IN
+				<foreach close=")" collection="p.evaltmpl_uuids" item="evaltmpl_uuids" open="(" separator=",">
+				  #{evaltmpl_uuids}
+				</foreach>
+		 </when>
+		 <otherwise>
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		 </otherwise>
+		</choose>
+		   AND STS != 'D'
+	</update>
+	<update id="updateEvalTmplEvalFactorScaleStsByDelete">
+	/* eval-tmpl.updateEvalTmplEvalFactorScaleStsByDelete : 평가템플릿 평가항목 스케일 삭제 */
+		UPDATE EVALTMPL_EVALFACT_SCALE
+		   SET STS = 'D'
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM    = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}  /* 평가템플릿 평가항목 uuid */
+	</update>
+	<update id="updateEvalTmplEvalFactorStsByDelete">
+	/* eval-tmpl.updateEvalTmplEvalFactorStsByDelete : 평가템플릿 평가항목 삭제 */
+		UPDATE EVALTMPL_EVALFACT
+		   SET STS = 'D'
+			 , MODR_ID     = #{g.username}
+			 , MOD_DTTM    = #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</update>
+	<update id="updateEvalTmplEfactgStsByDelete">
+	/* eval-tmpl.updateEvalTmplEfactgStsByDelete : 평가템플릿 평가항목군 삭제 */
+		UPDATE EVALTMPL_EFACTG
+		   SET STS = 'D'
+			 , MODR_ID     = #{g.username}
+			 , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</update>
+	<update id="updateEvalTmplStsByDelete">
+	/* eval-tmpl.updateEvalTmplStsByDelete : 평가템플릿 삭제 */
+		UPDATE EVALTMPL
+		   SET STS = 'D'
+			 , MODR_ID     = #{g.username}
+			 , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</update>
+</mapper>

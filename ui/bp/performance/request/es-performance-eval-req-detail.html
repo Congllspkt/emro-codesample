@@ -1,0 +1,596 @@
+<sc-link rel="import" href="es-performance-eval-req-hd.html"></sc-link>
+<!--<link rel="import" href="es-performance-eval-req-group.html"></link>-->
+
+<dom-module id="es-performance-eval-req-detail">
+
+<!--
+/**
+ *
+ *	@description : 퍼포먼스평가 헤더
+ *  <pre>
+ * </pre>
+ * @author : hj.jang
+ * @FileName :
+ * @Since 2023. 06. 08
+ * @변경이력 : [2023. 06. 08] hj.jang 최초작성
+ */
+-->
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-request-group init>
+			<!-- 운영조직 조회 -->
+			<sc-ajax
+					url="findListOperationOrganizationByUser.do"
+					body="SO"
+					content-type="text/plain"
+					last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<!-- 1. 평가요청 정보 조회 -->
+		<sc-ajax id="findPfmcEvalReq"
+				 url="findPfmcEvalReq.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindPfmcEvalReq">
+		</sc-ajax>
+		<!-- 2. 평가그룹 목록 조회-->
+		<sc-ajax id="findListPfmcEvalPeg"
+				 url="findListPfmcEvalPeg.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListPfmcEvalPeg">
+		</sc-ajax>
+		
+		<!-- 3. 평가요청 헤더 저장 -->
+		<sc-ajax id="savePfmcEvalReq"
+				 url="savePfmcEvalReq.do"
+				 on-response="completeSavePfmcEvalReq">
+		</sc-ajax>
+
+		<!-- 4. 퍼포먼스 평가 요청 -->
+		<sc-ajax id="requestPfmcEval"
+				 url="requestPfmcEval.do"
+				 body="{{pfmcEvalReq}}"
+				 on-response="completeRequestPfmcEval">
+		</sc-ajax>
+
+		<!-- 5. 퍼포먼스 평가 삭제 -->
+		<sc-ajax id="deletePfmcEval"
+				 url="deletePfmcEval.do"
+				 body="{{pfmcEvalReq}}"
+				 on-response="completeDeletePfmcEval">
+		</sc-ajax>
+		
+		<!-- 6. 퍼포먼스 평가 요청 취소 -->
+		<sc-ajax id="cancelRequestPfmcEval"
+				 url="cancelRequestPfmcEval.do"
+				 body="{{pfmcEvalReq}}">
+		</sc-ajax>
+		
+		<!-- 7. 퍼포먼스 평가 요청 가능 상태 확인 -->
+		<sc-ajax id="checkValidStateRequestPfmcEval"
+				 url="checkValidStateRequestPfmcEval.do"
+				 body="{{pfmcEvalReq}}"
+				 on-response="completeCheckValidStateRequestPfmcEval">
+		</sc-ajax>
+
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<!--<sc-button text="신규" on-click="onNew" hidden="[[!formula('isNewBtnVisiable')]]"></sc-button>-->
+			<sc-button text="평가 요청" on-click="onRequestPfmcEval" hidden="[[!formula('isRequestable')]]"></sc-button>
+			<sc-button text="평가 요청 취소" on-click="onCancelRequestPfmcEval" hidden="[[!formula('isFailedCreateRes')]]"></sc-button>
+			<sc-button text="삭제" on-click="onDeletePfmcEval" hidden="[[!formula('isDeletable')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose" hidden="[[!closeable]]"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<div class="flex-3">
+				<es-performance-eval-req-hd id="reqHd" on-save-pe="onSavePe" on-change-oorg-cd="findListPfmcEvalPeg" data-check="true"></es-performance-eval-req-hd>
+			</div>
+			
+			<sc-splitter split-type="vertical"></sc-splitter>
+			
+			<div class="flex-7">
+				<sc-tab-navigation id="pePegTabNavi" class="fit" selected-index="0" on-item-select="onTabItemSelect">
+					<!-- 적용된 평가그룹 엘리먼트가 동적으로 생성된다.
+					<es-performance-eval-req-group id="grpTab1" title-text="퍼포먼스평가그룹"></es-performance-eval-req-group>
+					-->
+				</sc-tab-navigation>
+			</div>
+			
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-performance-eval-req-detail',
+			properties: {
+				codes : {
+					type : Object,
+					value : function() {
+						return {
+							evalTaskTypCcd : [],   /* R704 평가업무구분 공통코드 */
+							peReqStsCcd : [],      /* R301 평가수행상태 공통코드 */
+							oorgCd : []            /* 운영조직 코드 */
+						}
+					},
+					reset : false
+				},
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				defaultParam : {
+					type : Object,
+					value : function() {
+						return {
+							eval_task_typ_ccd : "PE",   /* [R704] Performance 평가 */
+							oper_unit_cd : "SO",        /* SRM 운영조직 단위 코드 */
+							oorg_cd : ""
+						};
+					},
+					reset : false
+				},
+				// 닫기 가능 여부. 모니터링 메뉴에서 진입한 경우 true, 평가요청 메뉴에서 진입한 경우 false
+				closeable : {
+					type : Boolean,
+					value : false,
+					reset : false
+				},
+				// 퍼포먼스평가 요청 정보
+				pfmcEvalReq : {
+					type : Object,
+					value : function() {
+						return {
+							pe_uuid : "",
+							pe_req_sts_ccd : ""
+						};
+					}
+				},
+				loadCompleted : {
+					type : Boolean,
+					value : function() {
+						return false;
+					}
+				},
+				// 퍼포먼스평가 평가그룹 목록
+				pePegList :{
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				// 목록 재조회 여부
+				reloadable: {
+					type: Boolean,
+					value : false
+				}
+			},
+			formulas : {
+				// 평가 신규 작성 상태
+				isNewState : function() {
+					return UT.isEmpty(this.searchParam.pe_uuid);
+				},
+				// 평가요청 수정 가능 상태 : 평가통보되기 전 상태
+				isEditable : function() {
+					return this.formula('isNewState') || this.pfmcEvalReq.pe_sts_ccd === "CRNG";
+				},
+				// 평가요청 가능 상태
+				isRequestable : function() {
+					return !this.formula('isNewState') && this.formula('isEditable');
+				},
+				// 신규작성 버튼 보여지는 상태
+				isNewBtnVisiable : function() {
+					return !this.closeable && UT.isNotEmpty(this.pfmcEvalReq) && UT.isNotEmpty(this.pfmcEvalReq.pe_uuid);
+				},
+				// 평가 삭제 가능 상태
+				isDeletable : function() {
+					var me = this,
+						pfmcEvalReq = me.pfmcEvalReq;
+					var invalidStss = ["APVL_PRGSG", "APVD"]; // [R301] 결재요청, 승인완료
+					
+					return UT.isNotEmpty(pfmcEvalReq) && UT.isNotEmpty(pfmcEvalReq.pe_uuid) && !invalidStss.includes(pfmcEvalReq.pe_sts_ccd, 0);
+				},
+				// 평가 요청 실패한 경우
+				isFailedCreateRes: function(){
+					var me = this,
+						peStsCcd = me.get("pfmcEvalReq.pe_sts_ccd");
+					
+					return (peStsCcd === "CRN_ERR");    // 통보오류
+				},
+			},
+			initialized : function() {
+				var me = this;
+				//me.load();
+			},
+			load : function(param) {
+				var me = this;
+				// 상세정보 조회 파라미터 있는 경우 (목록에서 상세로 이동 혹은 평가요청 저장 후 재조회)
+				if(UT.isNotEmpty(param)) {
+					me.set("searchParam", param.searchParam);
+					me.set("closeable", (UT.isEmpty(param.closeable) ? false : param.closeable));
+				}
+				// 평가요청 메뉴에서 열린 경우
+				else {
+					me.set("searchParam", UT.copy(me.defaultParam));
+					me.set("closeable", false);
+				}
+				me.$.reqHd.load(me.searchParam);
+				if(!me.formula('isNewState')) {
+					me.onSearch();
+				} else {
+					me.findListPfmcEvalPeg();
+					me.$.reqHd.setPfmcEvalReq(me.searchParam);
+				}
+			},
+			// 퍼포먼스 평가 요청 정보 조회
+			onSearch : function() {
+				var me = this;
+				// 1. 퍼포먼스 평가 요청 헤더 조회
+				me.findPfmcEvalReq();
+				
+				// 2. 퍼포먼스 평가그룹 목록 조회
+				me.findListPfmcEvalPeg();
+				
+				// 3. 퍼포먼스 평가그룹 상세정보 조회
+				me.searchGrpTab();
+			},
+			// 1. 퍼포먼스 평가 요청 헤더 조회
+            findPfmcEvalReq : function() {
+                var me = this;
+                UT.request(me.$.findPfmcEvalReq);
+			},
+            completeFindPfmcEvalReq : function(e, res) {
+                var me = this,
+                    result = res.response;
+                me.set("loadCompleted", true);
+                me.set("pfmcEvalReq", result);
+                me.set("searchParam", result);
+
+				// 퍼포먼스 평가 요청 헤더 조회 후 헤더 화면에 데이터 세팅
+                me.$.reqHd.setPfmcEvalReq(result);
+                me.applyFormula();
+            },
+			// 2. 퍼포먼스 평가그룹 목록 조회
+            findListPfmcEvalPeg : function(e, data) {
+				var me = this;
+				if(UT.isNotEmpty(data)) {
+					me.set("searchParam.oorg_cd", data);
+				}
+                UT.request(me.$.findListPfmcEvalPeg);
+			},
+			completeFindListPfmcEvalPeg : function(e, res) {
+				var me = this,
+					pePegList = res.response;
+				
+				// 평가그룹 목록 조회 후 헤더 화면에 데이터 세팅 (평가그룹 그리드에 보여짐)
+				me.set("pePegList", pePegList);
+                me.$.reqHd.setPePegList(pePegList);
+				
+				// 퍼포먼스 평가에 적용여부 선택된 평가그룹 목록
+                var evalSubjPePegList = pePegList.filter(function(pePeg) {
+                    return pePeg.apply_peg_yn == "Y";
+				});
+                me.set("evalSubjPePegList", evalSubjPePegList);
+                me.applyFormula();
+				me.loadPePegTabs(); // 퍼포먼스평가 평가그룹 탭 로드
+			},
+			// 퍼포먼스평가 평가그룹 탭 로드
+			loadPePegTabs : function() {
+				var me = this,
+					pePegTabNavi = me.$.pePegTabNavi, // 퍼포먼스평가 평가그룹 탭 네비게이션
+					evalSubjPePegList = me.evalSubjPePegList; // 퍼포먼스평가 평가그룹
+				
+				// 기존 적용된 평가그룹 탭 제거
+				me.removePePegTab();
+				
+				if(UT.isEmpty(evalSubjPePegList)) {
+					return;
+				}
+				// 평가그룹탭 초기화 function
+				var _onPePegInitialized = function(e) {
+					var contentId = e.target.id;
+					// 선택된 탭의 아이디(퍼포먼스평가그룹 아아디) 와 퍼포먼스평가그룹코드가 동일한 데이터 탐색
+					var pePegInfoList = me.evalSubjPePegList.filter(function(pePeg) {
+						return pePeg.peg_cd === contentId;
+					});
+					
+					if(UT.isNotEmpty(pePegInfoList) && e.target.isInitialized) {
+						e.target.load(pePegInfoList[0]);
+						e.target.setTabReadOnly(!me.formula('isEditable'));
+						e.target.setPfmcEvalReq(me.pfmcEvalReq);
+						e.target.onFindPfmcReqPegInfo();
+					}
+				};
+				
+				// 동적으로 html을 import하여 ui 모듈 태그를 생성
+				me.importLink("ui/bp/performance/request/es-performance-eval-req-group.html", function() {
+					for(var i = 0; i < evalSubjPePegList.length; i++) {
+						var pePeg = evalSubjPePegList[i];
+						
+						// 퍼포먼스평가요청 퍼포먼스평가그룹 탭 생성
+						var pePegTab = document.createElement("es-performance-eval-req-group");
+						pePegTab.id = pePeg.peg_cd; // 탭 아이디 : 퍼포먼스평가그룹 코드
+						pePegTab.setAttribute("title", pePeg.peg_nm); // 탭 제목 : 퍼포먼스평가그룹 명
+						pePegTab.setAttribute("data-args", "tab");
+						pePegTab.setAttribute("data-check", "true");
+						pePegTab.addEventListener("initialized", _onPePegInitialized);
+						// tab navigation 에 생성한 헤더 탭 append
+						// if( i === 0 ) {
+						Polymer.dom(pePegTabNavi).appendChild(pePegTab);
+						Polymer.dom.flush();
+						// } else {
+						// 	var template = document.createElement("template");
+						// 	Polymer.dom(template).appendChild(pePegTab);
+						// 	Polymer.dom(pePegTabNavi).appendChild(template);
+						// }
+						
+						if( i === 0 ) {
+							pePegTabNavi.selectItem(pePegTab);
+						}
+					}
+				});
+			},
+			// 평가그룹 탭 제거
+			removePePegTab : function() {
+				var me = this;
+				var pePegTabNavi = me.$.pePegTabNavi;
+				var contents = Polymer.dom(pePegTabNavi).queryDistributedElements('*');
+				for(var i=0; i<contents.length; i++){
+					Polymer.dom(pePegTabNavi).removeChild(contents[i]);
+				}
+			},
+			onTabItemSelect : function(e) {
+				var me = this,
+					contentId = e.detail.item.id;
+				// 탭 클릭시 새로 로드
+				var pePegInfoList = me.evalSubjPePegList.filter(function(pePeg) {
+					return pePeg.peg_cd === contentId;
+				});
+				
+				if(UT.isNotEmpty(pePegInfoList) && e.detail.item.isInitialized) {
+					e.detail.item.load(pePegInfoList[0]);
+					e.detail.item.setTabReadOnly(!me.formula('isEditable'));
+					e.detail.item.onFindPfmcReqPegInfo();
+				}
+			},
+            searchGrpTab : function() {
+                var me = this;
+				var tabItem = me.$.pePegTabNavi.selectedItem;
+				
+				// 선택된 평가그룹 탭 존재하고 초기화 된 상태인 경우
+				if(UT.isNotEmpty(tabItem) && tabItem.isInitialized) {
+					tabItem.setPfmcEvalReq(me.searchParam);
+					tabItem.setTabReadOnly(!me.formula('isEditable'));
+				}
+			},
+			// 퍼포먼스평가요청 헤더 저장
+			onSavePe : function(e, data) {
+				var me = this;
+				me.$.savePfmcEvalReq.body = data;
+				UT.request(me.$.savePfmcEvalReq);
+			},
+			completeSavePfmcEvalReq : function(e, res) {
+				var me = this,
+					result = res.response;
+
+				if(result.resultStatus === "S") {
+					// 저장이 완료되었습니다.
+					UT.completeAlert("저장");
+
+					var peUuid = result.resultData.pe_uuid;
+					me.set("searchParam.pe_uuid", peUuid);
+					me.set("reloadable", true);
+					me.onSearch();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 평가 요청 버튼 클릭
+			onRequestPfmcEval : function() {
+				var me = this;
+				var checkAjax = me.$.checkValidStateRequestPfmcEval;
+				var result = me.requestValid(checkAjax);
+				
+				
+			},
+			completeRequestPfmcEval : function(e, res) {
+				var me = this,
+					result = res.response;
+
+				if(result.resultStatus === "S") {
+					UT.completeAlert("평가 요청", function() {
+						me.set("reloadable", true);
+						//	요청을 완료 하였습니다.
+						if(me.closeable) {
+							me.fire("complete-request", me.searchParam);
+						} else {
+							me.onSearch();
+						}
+					});
+				}
+			},
+			// 평가 요청 취소 버튼 클릭
+			onCancelRequestPfmcEval : function() {
+				var me = this;
+				// 평가 요청을 취소 하시겠습니까?
+				UT.confirm("STD.SRM1019", function() {
+					UT.request(me.$.cancelRequestPfmcEval, function(e, res) {
+						var result = res.response;
+						if(UT.isObject(result) && result.resultStatus === "S") {
+							// 요청을 완료하였습니다.
+							UT.completeAlert("평가 요청 취소",function(){
+								me.set("reloadable", true);
+								me.onSearch();
+							});
+						} else {
+							//저장실패
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			// 삭제 버튼 클릭
+			onDeletePfmcEval : function() {
+				var me = this,
+					pfmcEvalReq = me.pfmcEvalReq;
+				var invalidStss = ["APVL_PRGSG", "APVD"]; // [R301] 결재요청, 승인완료
+				
+				// STD.N1300	삭제 하시겠습니까?
+				UT.confirm("STD.N1300", function() {
+					UT.request(me.$.deletePfmcEval);
+				});
+			},
+			completeDeletePfmcEval : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus === "S") {
+					//	요청을 완료 하였습니다.
+					UT.completeAlert("삭제", function() {
+						// 닫기 버튼이 있는 경우, 평가 삭제 후 닫기 수행.
+						if(me.closeable) {
+							me.set("reloadable", true);
+							me.onClose();
+						} else {
+							me.resetReqInfo();
+							me.load();
+						}
+					});
+				}
+			},
+			// 닫기 버튼 클릭
+			onClose : function() {
+				var me = this;
+				var reloadable = me.get("reloadable");
+				me.resetReqInfo();
+				me.fire("close", {reloadable: reloadable});
+			},
+			// 신규 버튼 클릭
+			onNew : function() {
+				var me = this;
+				// 필요 시 다국어 등록해야 함.
+				UT.confirm("신규 평가 요청을 생성하시겠습니까?", function() {
+					me.resetReqInfo();
+					me.load();
+				});
+			},
+			// 요청정보 초기화
+			resetReqInfo : function() {
+				var me = this;
+				me.reset();
+				// 운영조직 기본값 세팅. SRM 운영조직 1번째 값
+				var dftOorgCd = UT.isEmpty(me.codes.oorgCd) ? "" : me.codes.oorgCd[0].oorg_cd;
+				me.set("defaultParam.oorg_cd", dftOorgCd);
+				me.set("searchParam", UT.copy(me.defaultParam));
+			},
+			// 평가요청 가능상태 확인
+			requestValid : function(ajax) {
+				var me = this;
+				
+				// 1. 평가그룹 탭에 변경된 정보가 있는지 확인 (저장 필요)
+				var checkElementList = me.querySelectorAll("[data-check=true]");
+				var changed = false;
+				var changedElement = null;
+				if(UT.isNotEmpty(checkElementList)) {
+					for(var i = 0; i < checkElementList.length; i++) {
+						var element = checkElementList[i];
+						if(element.dataset.args === "tab") {
+							changed = element.isPegInnerTabStateChanged();
+						} else {
+							changed = element.isHdStateChanged();
+						}
+						if(changed) {
+							changedElement = checkElementList[i];
+							// 변경된 정보가 있습니다. 저장하지 않고 진행하시겠습니까?
+							UT.confirm("STD.N3900", function() {
+								UT.request(ajax);
+							}, function () {
+								// 아니오 선택 시 변경정보 존재하는 평가그룹으로 이동
+								if(changedElement.dataset.args === "tab") {
+									me.$.pePegTabNavi.selectItem(changedElement);
+								}
+								me.showChangedElementStyle(changedElement);
+								
+							});
+						}
+					}
+					// 변경사항 없는 경우 데이터 정합성 검사 서비스 호출
+					if(!changed) {
+						UT.request(ajax);
+					}
+				}
+			},
+			// 평가요청 데이터 정합성 검사 결과
+			completeCheckValidStateRequestPfmcEval : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus === "S") {
+					// 평가를 요청 하시겠습니까?
+					UT.confirm("STD.N1107", function() {
+						UT.request(me.$.requestPfmcEval);
+					});
+				}
+				var resultList = result.resultList; // invalid peg list
+				var requestable = true;
+				var message = "";
+				for(var i = 0; i < resultList.length ; i++) {
+					var invalidPeg = resultList[i];
+					var pegNm = invalidPeg.peg_nm;
+					var invalidFieldList = invalidPeg.invalidFieldList; // EFCT_EVALSHT_YN, EFCT_VMG_YN, EFCT_AUTHTY_YN, EXISTS_PE_SUBJ_YN, EXISTS_PE_EVALTR_YN
+					
+					invalidFieldList.forEach(function(invalidCode) {
+						/*if(invalidCode.toUpperCase() === "EXISTS_PE_SUBJ_YN") {
+							//message += "[" + pegNm + "] " + me.translate("STD.SRM1015") + "<br/>"; //평가 대상이 없습니다.
+						}*/
+						
+						if(invalidCode.toUpperCase() === "EXISTS_PE_EVALTR_YN") {
+							message += "[" + pegNm + "] " + me.translate("STD.SRM1221") + "<br/>"; //평가자를 등록하세요.
+						} else if(invalidCode.toUpperCase() === "EFCT_AUTHTY_YN") {
+							message += "[" + pegNm + "] " + me.translate("STD.SRM1307") + "<br/>"; //평가템플릿에 설정된 평가항목 평가자 권한으로만 등록하세요.
+							requestable = false;
+						}
+						/*else if(invalidCode.toUpperCase() === "EFCT_VMG_YN") {
+							message += "[" + pegNm + "] " + me.translate("STD.SRM1335") + "<br/>"; // 퍼포먼스평가그룹과 연결되지 않은 협력사관리그룹이 존재합니다.
+							requestable = false;
+						} else if(invalidCode.toUpperCase() === "EFCT_EVALSHT_YN") {
+							message += "[" + pegNm + "] " + me.translate("STD.SRM1336") + "<br/>"; // 퍼포먼스평가그룹의 확정된 평가시트가 변경되었습니다.
+							requestable = false;
+						}*/
+					});
+				}
+				message += me.translate("STD.N1107"); // 평가를 요청하시겠습니까?
+				UT.confirm(message, function() {
+					UT.request(me.$.requestPfmcEval);
+				}, true);
+			},
+			// 변경 사항 있는 요소에 빨간 테두리 쳐주고, 1초 후 테두리 제거
+			showChangedElementStyle : function(changedElement) {
+				var me = this;
+				var eventHandler = (function(target, style, e){
+					this.removeEventListener("changed-element-clear", arguments.callee);
+					target.setAttribute("style", style);
+				}).bind(this, changedElement, changedElement.getAttribute("style"));
+				
+				changedElement.setAttribute("style", "border: 2px solid red;" );
+				me.async(function() {
+					this.fire("changed-element-clear");
+				}, 1000);
+				me.addEventListener("changed-element-clear", eventHandler);
+				
+			}
+		});
+	</script>
+
+</dom-module>

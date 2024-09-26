@@ -1,0 +1,641 @@
+<sc-link rel="import" href="/ui/bp/shared/ep-user-list.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/commonEval/shared/ep-evaltmpl-detail.html"></sc-link>
+
+<dom-module id="es-npe-setup">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findRfxNpeFact"
+				 url="findRfxNpeFact.do"
+				 on-response="completeFindNpeFactSetup">
+		</sc-ajax>
+		
+		<sc-ajax id="findListEvalTmpl"
+				 url="findListEvalTmpl.do">
+		</sc-ajax>
+		
+		<sc-ajax id="findListPreNonPriRfxDetail"
+				 url="findListPreNonPriRfxDetail.do">
+		</sc-ajax>
+		
+		<sc-ajax id="saveRfxNpeFact"
+				 url="saveRfxNpeFact.do"
+				 on-response="completeSaveRfxNpeFact">
+		</sc-ajax>
+		
+		<sc-ajax id="confirmRfxNpeFact"
+				 url="confirmRfxNpeFact.do"
+				 on-response="completeConfirmRfxNpeFact">
+		</sc-ajax>
+		
+		<sc-ajax id="cancelConfirmRfxNpeFact"
+				 url="cancelConfirmRfxNpeFact.do"
+				 on-response="completeCancelConfirmRfxNpeFact">
+		</sc-ajax>
+		
+		<sc-ajax id="deleteRfxNpeFact"
+				 url="deleteRfxNpeFact.do"
+				 on-response="completeDeleteRfxNpeFact">
+		</sc-ajax>
+		
+		<sc-ajax id="findListRfxEvaltr"
+				 url="findListRfxEvaltr.do">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<!-- 평가항목 평가자 권한 -->
+			<sc-code code="R706" value="{{codes.evaltrDivCcd}}"></sc-code>
+			<!-- 평가항목 평가자 권한 -->
+			<sc-code code="R707" value="{{codes.evalfactEvaltrAuthtyCcd}}"></sc-code>
+		</sc-request-group>
+		
+		<cc-page-title-bar title-text="비가격평가 작성">
+			<sc-button text="저장" on-click="onSave" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="확정" on-click="onConfirm" hidden="[[!formula('confirmBtn')]]"></sc-button>
+			<sc-button text="확정 취소" on-click="onCancelConfirm" hidden="[[!formula('cancelConfirmBtn')]]"></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex page">
+			<cc-form-panel validation-group="nonPriEvalInfo">
+				<cc-fieldset hidden="[[formula('isExistEvalTmplUuid')]]">
+					<sc-label text="비가격평가 생성 유형"></sc-label>
+					<sc-radio-group-field  value="{{nonpriCrtCcd}}" style="display: grid;" on-change="onChangeCreateCcd">
+						<sc-radio-field label="템플릿으로 만들기" input-value="TEMPLATE"></sc-radio-field>
+						<sc-radio-field label="평가항목으로 만들기" input-value="EVALFACT"></sc-radio-field>
+						<sc-radio-field label="이전 비가격평가 템플릿 Import" input-value="NONPRICE"></sc-radio-field>
+					</sc-radio-group-field>
+				</cc-fieldset>
+				<cc-fieldset style="align-self: center;">
+					<sc-label text="평가자 유형"></sc-label>
+					<sc-radio-group-field  display-field="label" value-field="data" style="display: grid;" on-change="onChangeEvaltrDivCcd" readonly="[[!formula('editable')]]"
+										  items="{{codes.filterEvaltrDivCcd}}" value="{{npeFactSetup.evaltr_typ_ccd}}">
+					</sc-radio-group-field>
+				</cc-fieldset>
+				<!--<cc-fieldset style="align-self: center;">
+					<sc-label text="종합평가 합격 점수"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-number-field class="w-100" value="{{npeFactSetup.pass_sc}}" required="true" max-value="100" min-value="0" readonly="[[!formula('editable')]]"></sc-number-field>
+						<span style="margin-left:5px">[[translate('점 이상')]]</span>
+					</div>
+				</cc-fieldset>-->
+			</cc-form-panel>
+			
+			<sc-grid id="tmplGridPanel" class="flex" use-state="false" use-selection="false" use-dummy="true"
+					 show-number-line="false" editable="true" hidden="[[!formula('isTemplateAndisNotExistEvalTmplUuid')]]"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar title-text="템플릿 목록">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="evaltmpl_nm" header-text="비가격평가 템플릿 명" width="500" text-align="left" style-name="link"></sc-data-column>
+					<sc-image-column data-field="evaltmpl_img" header-text="미리보기" text-align="center" width="80" image-cls="link"></sc-image-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="evaltmpl_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-grid id="preRfxGridPanel" class="flex" use-state="false" use-selection="false" use-dummy="true"
+					 show-number-line="false" editable="true" hidden="[[!formula('isPreNonPriTemplateAndisNotExistEvalTmplUuid')]]"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar title-text="이전 비가격평가">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="rfx_no" header-text="RFX 번호" width="120" text-align="center" style-name="link"></sc-data-column>
+					<sc-data-column data-field="rfx_rnd" header-text="진행차수" width="90" text-align="center" data-type="number"></sc-data-column>
+					<sc-data-column data-field="rfx_tit" header-text="제목" width="300" text-align="left"></sc-data-column>
+					<sc-data-column data-field="compreval_pass_sc" header-text="종합평가 합격 점수" width="150" text-align="right" data-type="number" format-type="integer"></sc-data-column>
+					<sc-combobox-column data-field="evaltr_typ_ccd" header-text="평가자 유형" width="160" text-align="center" display-field="label" value-field="data" items="{{codes.filterEvaltrDivCcd}}"></sc-combobox-column><!--필수여부-->
+					<sc-data-column data-field="evaltmpl_nm" header-text="비가격평가 템플릿 명" width="500" text-align="left"></sc-data-column>
+					<sc-image-column data-field="evaltmpl_img" header-text="미리보기" text-align="center" width="80" image-cls="link"></sc-image-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="npefact_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_uuid"></sc-grid-field>
+					<sc-grid-field data-field="evaltmpl_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<cc-evaltmpl-evalfact id="evaltmplEvalfact" class="flex" style="padding-top: 5px;" on-saved-transform-evaltmpl="onSavedTransformEvalmpl"></cc-evaltmpl-evalfact>
+			
+			<sc-grid id="evaltrGridPanel" class="flex" use-state="false" use-selection="true" use-dummy="true"
+					 show-number-line="false" editable="true">
+				<cc-grid-toolbar title-text="평가자">
+					<sc-button text="추가" on-click="onAddEvaltr" hidden="[[!formula('editable')]]" auth-s></sc-button>
+					<sc-button text="삭제" on-click="onDelEvaltr" hidden="[[!formula('editable')]]" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="eval_pic_id" header-text="평가자 아이디" width="120" text-align="center"></sc-data-column>
+					<sc-data-column data-field="disp_eval_pic_nm" header-text="평가자 명" width="200" text-align="center"></sc-data-column>
+					<sc-combobox-column data-field="evalfact_evaltr_authty_ccd" header-text="평가항목 평가자 권한" width="180" editable="[[formula('editable')]]" visible="[[formula('isEvalAthtPic')]]" required="[[formula('isEvalAthtPic')]]"
+										display-field="label" value-field="data" items="{{codes.filterEvalfactEvaltrAuthtyCcd}}"></sc-combobox-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="npefact_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_uuid"></sc-grid-field>
+					<sc-grid-field data-field="dept_cd"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-npe-setup",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							evaltrDivCcd: [],
+							filterEvaltrDivCcd: [],
+							evalfactEvaltrAuthtyCcd: [],
+							filterEvalfactEvaltrAuthtyCcd: []
+						}
+					},
+					reset: false
+				},
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				npeFactSetup: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				evalTmplInfo: {
+					type: Object,
+					value: function() {
+						return {
+							eval_task_typ_ccd: "NPE"
+						};
+					}
+				},
+				nonpriCrtCcd: {
+					type: String,
+					value: function() {
+						return "TEMPLATE";
+					}
+				},
+			},
+			
+			formulas: {
+				editable: function() {
+					var me = this;
+					return !me.formula("isConfirm");
+				},
+				confirmBtn: function() {
+					var me = this;
+					var rfxStsCcd = me.get("rfxData.rfx_sts_ccd");
+					return rfxStsCcd === "CRNG" && !me.formula("isConfirm");
+				},
+				cancelConfirmBtn: function() {
+					var me = this;
+					var rfxStsCcd = me.get("rfxData.rfx_sts_ccd");
+					return rfxStsCcd === "CRNG" && me.formula("isConfirm");
+				},
+				isTemplate: function() {
+					return this.get("nonpriCrtCcd") === "TEMPLATE";
+				},
+				isTemplateAndisNotExistEvalTmplUuid: function() {
+					return this.formula("isTemplate") && !this.formula("isExistEvalTmplUuid");
+				},
+				isEvalFact: function() {
+					return this.get("nonpriCrtCcd") === "EVALFACT";
+				},
+				isEvalFactAndisNotExistEvalTmplUuid: function() {
+					return this.formula("isEvalFact") && !this.formula("isExistEvalTmplUuid");
+				},
+				isPreNonPriTemplate: function() {
+					return this.get("nonpriCrtCcd") === "NONPRICE";
+				},
+				isPreNonPriTemplateAndisNotExistEvalTmplUuid: function() {
+					return this.formula("isPreNonPriTemplate") && !this.formula("isExistEvalTmplUuid");
+				},
+				isEvalAthtPic: function() {
+					return this.get("npeFactSetup.evaltr_typ_ccd") === "EVALFACT_AUTHTY_PIC";
+				},
+				isExistEvalTmplUuid: function() {
+					return UT.isNotEmpty(this.get("npeFactSetup.evaltmpl_uuid"));
+				},
+				isConfirm: function() {
+					var me = this;
+					var cnfdYn = me.get("npeFactSetup.cnfd_yn") || "N";
+					return cnfdYn === "Y";
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				var filterEvaltrDivCcd = me.get("codes.evaltrDivCcd").filter(function(item) {
+					/*if(item.data === "PURC_PIC" || item.data === "EVALFACT_AUTHTY_PIC") {
+						return true;
+					}*/
+					if(item.data === "PURC_PIC") {
+						return true;
+					}
+				});
+				me.set("codes.filterEvaltrDivCcd", filterEvaltrDivCcd);
+				
+				var filterEvalfactEvaltrAuthtyCcd = me.get("codes.evalfactEvaltrAuthtyCcd").filter(function(item) {
+					if(item.data !== "ALL") {
+						return true;
+					}
+				});
+				me.set("codes.filterEvalfactEvaltrAuthtyCcd", filterEvalfactEvaltrAuthtyCcd);
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("rfxData", param);
+				me.findRfxNpeFact();
+			},
+			
+			findRfxNpeFact: function() {
+				var me = this;
+				me.$.findRfxNpeFact.body = {
+					rfx_uuid: me.get("rfxData.rfx_uuid")
+				};
+				UT.request(me.$.findRfxNpeFact);
+			},
+			
+			completeFindNpeFactSetup: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("rfxData", response.rfxData);
+				if(UT.isEmpty(response.npeFactSetup)){
+					me.set("npeFactSetup.rfx_uuid", me.get("rfxData.rfx_uuid"));
+				}else{
+					me.set("npeFactSetup", response.npeFactSetup);
+				}
+
+				if(UT.isEmpty(me.get("npeFactSetup.evaltr_typ_ccd"))) {
+					me.set("npeFactSetup.evaltr_typ_ccd", "PURC_PIC");
+				}
+				
+				if(me.formula("isExistEvalTmplUuid")) {
+					me.set("evalTmplInfo.evaltmpl_uuid", me.get("npeFactSetup.evaltmpl_uuid"));
+				} else {
+					me.findListEvalTmpl();
+				}
+				
+				me.$.evaltrGridPanel.setDataProvider(response.npeFactEvaltr);
+				
+				var evaltmplUuid = me.get("npeFactSetup.evaltmpl_uuid");
+				me.$.evaltmplEvalfact.load({
+					evalTmplInfo: {
+						evaltmpl_uuid: evaltmplUuid,
+						eval_task_typ_ccd: "NPE",
+						work_evaltmpl_uuid: me.get("npeFactSetup.npefact_uuid")
+					},
+					workMode: !me.formula("isConfirm")
+				});
+				me.applyFormula();
+			},
+			
+			loadEvaltmplEvalfact: function(evaltmplUuid) {
+				var me = this;
+				me.$.evaltmplEvalfact.load({
+					evalTmplInfo: {
+						evaltmpl_uuid: evaltmplUuid,
+						eval_task_typ_ccd: "NPE",
+						work_evaltmpl_uuid: me.get("npeFactSetup.npefact_uuid")
+					},
+					workMode: true
+				});
+			},
+			
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === 'rfx_no') {
+					var provider = me.$.evaltrGridPanel.getDataProvider();
+					provider.removeAll();
+					
+					me.loadEvaltmplEvalfact(data.evaltmpl_uuid);
+					
+					//me.set("npeFactSetup.pass_sc", data.pass_sc);
+					me.set("npeFactSetup.evaltr_typ_ccd", data.evaltr_typ_ccd);
+					me.$.findListRfxEvaltr.body = {
+						rfx_uuid: data.rfx_uuid
+					};
+					UT.request(me.$.findListRfxEvaltr, function(e, res) {
+						var response = res.response;
+						for(var i = 0; i < response.length; i++) {
+							provider.addItem(response[i]);
+						}
+					});
+				} else if(item.dataField === 'evaltmpl_nm') {
+					me.loadEvaltmplEvalfact(data.evaltmpl_uuid);
+				} else if(item.dataField === 'evaltmpl_img') {
+					var evatmplPopup = UT.popup("ep-evaltmpl-detail", me, "80%", "90%", {
+						"close": function(popup, e) {
+							// 평가 템플릿 목록 조회
+							popup.close();
+						}
+					}, {titleText : "평가템플릿 상세"});
+					evatmplPopup.show();
+					evatmplPopup.getWindowContent().load(data);
+				}
+			},
+			
+			findListEvalTmpl: function() {
+				var me = this;
+				
+				me.$.findListEvalTmpl.body = {
+					eval_task_typ_ccd: "NPE"
+				};
+				UT.request(me.$.findListEvalTmpl, function(e, res) {
+					var response = res.response;
+					me.$.tmplGridPanel.setDataProvider(response);
+				});
+			},
+			
+			findListPreNonPriRfxDetail: function() {
+				var me = this;
+				
+				me.$.findListPreNonPriRfxDetail.body = {
+					rfx_uuid: me.get("rfxData.rfx_uuid")
+				};
+				UT.request(me.$.findListPreNonPriRfxDetail, function(e, res) {
+					var response = res.response;
+					me.$.preRfxGridPanel.setDataProvider(response);
+				});
+			},
+			
+			onSave: function() {
+				var me = this;
+				me.doSaveProcess("save", me.$.saveRfxNpeFact);
+			},
+			
+			doSaveProcess: function(type, ajax, msg) {
+				var me = this;
+				if(!me.validate('nonPriEvalInfo')) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				var evaltrProvider = me.$.evaltrGridPanel.getDataProvider();
+				if(type !== "save") {
+					if(evaltrProvider.getItems().length === 0) {
+						UT.alert("STD.SRM1098");  // 평가자는 한 명 이상 존재해야 합니다.
+						return;
+					}
+				}
+				
+				var npeFactSetup = me.get("npeFactSetup");
+				var evaltmplEvalfact = me.$.evaltmplEvalfact;
+				//debugger;
+				
+				var resultParam = evaltmplEvalfact.getSaveParameter("confirmSave");
+				if(!resultParam.isValid) {
+					UT.alert(resultParam.resultMessage, null, true);
+					return;
+				}
+				
+				var evalfactAuthtyApplYn = resultParam.evalTmplInfo.evalfact_authty_appl_yn;  // 평가항목 권한 적용 여부
+				var evaltrAuthtyAppYn = npeFactSetup.evaltr_typ_ccd == "EVALFACT_AUTHTY_PIC" ? "Y" : "N";  // 평가자 유형
+				
+				if(evaltrAuthtyAppYn === "Y") { // 평가항목 권한 담당자 여부
+					if(!me.$.evaltrGridPanel.validate()) {
+						return {result: false, msg: "STD.SRM1350"};
+					}
+				}
+				
+				if(evalfactAuthtyApplYn != evaltrAuthtyAppYn){
+					UT.alert("STD.SRM1351"); // '평가자 유형'과 '평가항목 권한 적용 여부'가 유효하지 않습니다.
+					return;
+				}
+				
+				if(evalfactAuthtyApplYn === "Y") {
+					var usedEvalfactEvaltrAuthtyCcd = resultParam.usedEvalfactEvaltrAuthtyCcd;
+					
+					for(var i = 0; i < usedEvalfactEvaltrAuthtyCcd.length; i++) {
+						var authtyCcdInfo = usedEvalfactEvaltrAuthtyCcd[i];
+						var nodeIndex = evaltrProvider.filterIndexes(function(item) {
+							if(item.evalfact_evaltr_authty_ccd === authtyCcdInfo.data) {
+								return true;
+							}
+						});
+						if(nodeIndex.length === 0) {
+							UT.alert(me.translate("STD.RFX1217", null, authtyCcdInfo.label), null, true);		//{0} 평가항목 평가자 권한을 가진 평가자가 존재하지 않습니다.
+							return;
+						}
+					}
+				}
+				
+				me.set("evalTmplInfo", resultParam.evalTmplInfo);
+				
+				function doAjax() {
+					ajax.body = {
+						npeFactSetup: me.get("npeFactSetup"),
+						evalTmplInfo: me.get("evalTmplInfo"),
+						insertNpeFactEvaltr: evaltrProvider.getNewItems(),
+						updateNpeFactEvaltr: evaltrProvider.getUpdateItems(),
+						removeNpeFactEvaltr: evaltrProvider.getRemoveItems()
+					};
+					UT.request(ajax);
+				}
+				
+				if(UT.isNotEmpty(msg)) {
+					UT.confirm(msg, function() {
+						doAjax();
+					});
+				} else {
+					doAjax();
+				}
+			},
+			
+			completeSaveRfxNpeFact: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.findRfxNpeFact();
+				}
+			},
+			
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {
+					me.$.deleteRfxNpeFact.body = me.get("rfxData")
+					UT.request(me.$.deleteRfxNpeFact);
+				});
+			},
+			
+			completeDeleteRfxNpeFact: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.alert("STD.N2500");
+					me.onClose();
+				}
+			},
+			
+			onChangeCreateCcd: function() {
+				var me = this;
+				me.applyFormula();
+				
+				var provider = me.$.preRfxGridPanel.getDataProvider();
+				
+				// 이전 비가격평가 데이터 조회
+				if(me.formula("isPreNonPriTemplate") && provider.getItems().length === 0) {
+					me.findListPreNonPriRfxDetail();
+				} else if(me.get("nonpriCrtCcd") === "EVALFACT") {
+					me.loadEvaltmplEvalfact(null);
+				} else {
+				}
+			},
+			
+			onChangeEvaltrDivCcd: function(e,data) {
+	        	var me = this;
+	        	if(UT.isNotEmpty(data.selectedItem)){
+					var npeFactSetup = me.get("npeFactSetup");
+					var evalTmplInfo = me.get("evalTmplInfo");
+
+					me.applyFormula();
+					me.$.evaltmplEvalfact.setEvaltmplInfo(evalTmplInfo);
+
+					// 평가항목 권한 담당자가 아닐 경우 모든 담당자의 권한을 '전체'로 변경
+					var provider = me.$.evaltrGridPanel.getDataProvider();
+					if(!me.formula("isEvalAthtPic")) {
+						provider.setItemAtBatch(true, function(nodeIndex, data) {
+							return {
+								evalfact_evaltr_authty_ccd: "ALL"
+							};
+						});
+					} else {
+						provider.setItemAtBatch(true, function(nodeIndex, data) {
+							return {
+								evalfact_evaltr_authty_ccd: null
+							};
+						});
+					}
+				}
+			},
+			
+			onAddEvaltr : function(){
+				var me = this;
+				
+				//사용자검색 팝업을 호출한다.
+				var userPopup = UT.popup('ep-user-list', me, '50%', '70%', {
+					"selected-items" : function(popup, e) {
+						me.setSelectedUser(e.detail);
+						popup.close();
+					}
+				});
+				userPopup.show();
+				userPopup.getWindowContent().load();
+			},
+			
+			/**
+			 * 그리드에 선택된 사용자 추가
+			 */
+			setSelectedUser : function(selectedItems) {
+				var me = this,
+					provider = me.$.evaltrGridPanel.getDataProvider();
+				
+				var created = [];
+				for (var i = 0; i < selectedItems.length; i++) { // 신규 데이터 가공
+					var item = selectedItems[i];
+					created.push({
+						eval_pic_id : item.usr_id,
+						disp_eval_pic_nm : item.usr_nm,
+						dept_cd : item.dept_cd,
+						evalfact_evaltr_authty_ccd: 'ALL'
+					});
+				}
+				provider.addItems(created);
+			},
+			
+			onDelEvaltr: function() {
+				var me = this;
+				
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+					});
+				}
+			},
+			
+			onConfirm: function() {
+				var me = this;
+				me.doSaveProcess("confirm", me.$.confirmRfxNpeFact, "STD.N5000");
+			},
+			
+			completeConfirmRfxNpeFact: function(e, res) {
+				var me= this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.onClose();
+				}
+			},
+			
+			onCancelConfirm: function() {
+				var me = this;
+				var npeFactSetup = me.get("npeFactSetup");
+				
+				UT.confirm("STD.N1111", function() {
+					me.$.cancelConfirmRfxNpeFact.body = {
+						npeFactSetup: npeFactSetup
+					};
+					UT.request(me.$.cancelConfirmRfxNpeFact);
+				});
+			},
+			
+			completeCancelConfirmRfxNpeFact: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.findRfxNpeFact();
+				}
+			},
+			
+			onSavedTransformEvalmpl: function(e) {
+				var me = this;
+				me.findRfxNpeFact();
+			},
+			
+			onClose: function() {
+				var me = this;
+				
+				me.clearData();
+				me.fire('show-detail');
+			},
+			
+			clearData: function() {
+				var me = this;
+				
+				//데이터 clear 이전에 초기화 해주어야 함
+				me.set('loadCompleted', false);
+				
+				//properties 초기화 및 grid provider 초기화
+				me.reset();
+			}
+		});
+	</script>
+</dom-module>

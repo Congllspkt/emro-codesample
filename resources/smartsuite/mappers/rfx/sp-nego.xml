@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 
+NEGO: 협상 헤더
+NEGO_ITEM: 협상 상세
+ -->
+
+<mapper namespace="sp-nego">
+	<select id="findNegoTargetList" resultType="map">
+		/* sp-nego.findNegoTargetList : 협상대상 조회 */
+		SELECT RFX.OORG_CD
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.RFX_TYP_CCD
+		     , RFX.PURC_TYP_CCD
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_RES_STS_CCD
+		     , NEGO.NEGO_UUID
+		     , NEGO.NEGO_RND
+		     , NEGO.NEGO_STS_CCD
+		     , NEGO.NEGO_VD_STS_CCD
+		     , NEGO.CLSG_DTTM
+		     , NEGO.RFX_BID_UUID
+		     , (
+		        SELECT COUNT(0)
+		          FROM RFX_BID_ITEM RFX_BID_ITEM
+		         WHERE RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+		           AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		           AND RFX_BID_ITEM.STS         != 'D'
+		       ) ITEM_CNT
+		  FROM RFX RFX
+		 INNER JOIN NEGO NEGO
+		    ON RFX.TEN_ID       = NEGO.TEN_ID
+		   AND RFX.RFX_UUID     = NEGO.RFX_UUID
+		   AND NEGO.NEGO_TYP_CCD = 'ONLN'
+		   AND NEGO.STS         != 'D'
+		 INNER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID       = NEGO.TEN_ID
+		   AND RFX_BID.RFX_BID_UUID = NEGO.RFX_BID_UUID
+		   AND RFX_BID.STS         != 'D'
+		 WHERE RFX.TEN_ID    = #{g.tenant}
+		   AND RFX_BID.VD_CD = #{g.vd_cd}
+		   AND RFX.STS      != 'D'
+		   AND NEGO.NEGO_STS_CCD != 'NEGO_WTG'
+		   AND RFX.OORG_CD IN
+		   <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		       #{oorg_cd}
+		   </foreach>
+		   <if test="p.from_rfx_crn_dt != null">
+		       AND RFX.RFX_CRN_DT &gt;= #{p.from_rfx_crn_dt}
+		   </if>
+		   <if test="p.to_rfx_crn_dt != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_crn_dt,1)"/>
+		       AND RFX.RFX_CRN_DT <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.rfx_typ_ccd != null">
+		       AND RFX.RFX_TYP_CCD = #{p.rfx_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_nos != null and p.rfx_nos.size() != 0">
+		           AND UPPER(RFX.RFX_NO) IN
+		           <foreach close=")" collection="p.rfx_nos" item="rfx_no" open="(" separator=",">
+		               #{rfx_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_no != null and p.rfx_no != ''">
+		               <bind name="rfxNoPattern" value="'%'+ p.rfx_no + '%'"/>
+		               AND UPPER(RFX.RFX_NO) LIKE UPPER(#{rfxNoPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfx_tit != null and p.rfx_tit != ''">
+		       <bind name="titPattern" value="'%' + p.rfx_tit + '%'"/>
+		       AND UPPER(RFX.RFX_TIT) LIKE UPPER(#{titPattern})
+		   </if>
+		   <if test="p.purc_typ_ccd != null">
+		       AND RFX.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   </if>
+		 ORDER BY RFX.RFX_NO DESC, RFX.RFX_RND DESC, NEGO.NEGO_RND DESC
+	</select>
+	<select id="findNegoRfxData" resultType="map">
+		/* sp-nego.findNegoRfxData : 협상대상 rfx 정보 조회 */
+		SELECT RFX.OORG_CD
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.RFX_TYP_CCD
+		     , RFX.PURC_TYP_CCD
+		     , RFX.RFX_PURP_CCD
+		     , RFX.RFX_STS_CCD
+		  FROM RFX RFX
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX.STS     != 'D'
+	</select>
+	<select id="findNegoQtaData" resultType="map">
+		/* sp-nego.findNegoQtaData : 협상대상 견적 정보 조회 */
+		SELECT RFX_BID.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , RFX_BID.CUR_CCD
+		     , RFX_BID.RFX_BID_AMT
+		     , RFX_BID.ATHG_UUID
+		     , NEGO.NEGO_UUID
+		     , NEGO.RFX_BID_UUID
+		     , NEGO.NEGO_AMT
+		     , NEGO.NEGO_STS_CCD
+		     , NEGO.NEGO_VD_STS_CCD
+		     , NEGO.NEGO_RES_STS_CCD
+		     , NEGO.NEGO_TYP_CCD
+		     , NEGO.CLSG_DTTM
+		     , NEGO.VCONF_YN
+		     , NEGO.ATHG_UUID AS NEGO_ATHG_UUID
+		     , NEGO.NEGO_CONT
+		     , NEGO.GUP_RSN
+		     , VD.ERP_VD_CD
+		     , VD_OORG.OBD_TYP_CCD        /* 거래유형 */
+		     , VD_OORG.PO_POSS_YN        /* 거래상태(Y/N) */
+		     , (
+		        SELECT COUNT(RFX_BID.VD_CD)
+		          FROM RFX_BID RFX_BID
+		         WHERE RFX_BID.TEN_ID    = RFX.TEN_ID
+		           AND RFX_BID.RFX_NO    = RFX.RFX_NO
+		           AND RFX_BID.RFX_RND   = RFX.RFX_RND
+		           AND RFX_BID.RFX_BID_EFCT_YN  = 'Y'
+		           AND RFX_BID.STS      != 'D'
+		           AND RFX_BID.RFX_BID_STS_CCD NOT IN ('RCPT_WTG','CRNG','GUP')
+		       ) AS RFX_BID_CNT             /* 제출업체 수 */
+		     , RFX.OORG_CD
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.RFX_TYP_CCD
+		     , RFX.PURC_TYP_CCD
+		     , RFX.RFX_PURP_CCD
+		  FROM NEGO NEGO
+		 INNER JOIN RFX RFX
+		    ON NEGO.TEN_ID    = RFX.TEN_ID
+		   AND NEGO.RFX_UUID  = RFX.RFX_UUID
+		   AND RFX.STS       != 'D'
+		 INNER JOIN RFX_BID RFX_BID
+		    ON NEGO.TEN_ID       = RFX_BID.TEN_ID
+		   AND NEGO.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		   AND RFX_BID.STS      != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		 INNER JOIN VD_OORG VD_OORG
+		    ON VD_OORG.TEN_ID = VD.TEN_ID
+		   AND VD_OORG.VD_CD  = VD.VD_CD
+		   AND VD_OORG.OORG_CD IN (
+		                           SELECT OORG_MAPG.CONNSUBJ_OORG_CD
+		                             FROM OORG_MAPG OORG_MAPG
+		                            WHERE OORG_MAPG.TEN_ID          = RFX.TEN_ID
+		                              AND OORG_MAPG.CONNSRC_OORG_CD = RFX.OORG_CD
+		                              AND OORG_MAPG.CONN_TYP_CCD    = 'POEO'
+		                              AND OORG_MAPG.CONN_YN         = 'Y'
+		                          )
+		   AND VD_OORG.STS != 'D'
+		 WHERE NEGO.TEN_ID    = #{g.tenant}
+		   AND NEGO.RFX_UUID  = #{p.rfx_uuid}
+		   AND NEGO.NEGO_UUID = #{p.nego_uuid}
+		   AND NEGO.STS      != 'D'
+	</select>
+	<update id="saveNegoHeader">
+		/* sp-nego.saveNegoHeader: 협상헤더 저장*/
+		UPDATE NEGO
+		   SET NEGO_VD_STS_CCD = #{p.nego_vd_sts_ccd}
+		     <choose>
+		         <when test="p.nego_vd_sts_ccd !=null and p.nego_vd_sts_ccd == &quot;GUP&quot;">
+		             , GUP_RSN     = #{p.gup_rsn}
+		             , NEGO_AMT    = NULL
+		         </when>
+		         <otherwise>
+		             , ATHG_UUID = #{p.nego_athg_uuid}
+		             , NEGO_AMT  = CAST(#{p.nego_amt} AS FLOAT  )
+		             , GUP_RSN   = NULL
+		         </otherwise>
+		     </choose>
+		     , NEGO_STS_CCD = 'NEGO_PRGSG' -- 협상진행중
+		     , STS          = 'U'
+		     , MODR_ID      = #{g.username}
+		     , MOD_DTTM     = #{g.now}
+		 WHERE TEN_ID    = #{g.tenant}
+		   AND NEGO_UUID = #{p.nego_uuid}
+		   AND STS      !='D'
+	</update>
+	<select id="checkNegoProgSts" resultType="map">
+		/* sp-nego.checkNegoProgSts : 협상 진행상태 유효성 확인 */
+		SELECT CASE WHEN NEGO_STS_CCD = #{p.nego_sts_ccd}
+		            THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM NEGO
+		 WHERE TEN_ID    = #{g.tenant}
+		   AND NEGO_UUID = #{p.nego_uuid}
+		   AND STS      !='D'
+	</select>
+	<select id="checkVdProgSts" resultType="map">
+		/* sp-nego.checkVdProgSts : 업체 협상진행상태 유효성 확인*/
+		SELECT CASE WHEN NEGO_VD_STS_CCD = #{p.nego_vd_sts_ccd} THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM NEGO
+		 WHERE TEN_ID    = #{g.tenant}
+		   AND NEGO_UUID = #{p.nego_uuid}
+		   AND STS      !='D'
+	</select>
+</mapper>

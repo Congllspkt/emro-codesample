@@ -1,0 +1,1364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="elecGuarantee">
+	<select id="getBondInfo" resultType="map">
+	/* elecGuarantee.getBondInfo : 보증서 상세조회 */
+			SELECT
+					CNTR.TEN_ID   AS TENANT
+				,	CNTR.CNTR_UUID
+			    ,   CNTR.CNTR_NO
+				,	CNTR.CNTR_REVNO
+				,   CNTR.CNTR_TYP_CCD
+				,   CNTR.CNTR_ST_DT
+				,   CNTR.CNTR_EXP_DT
+				,   CNTR.CNTR_DT
+				,   CNTR.CNTR_AMT
+				,   GUR.GUR_RO
+				,   GUR.GUR_UUID
+				,   GUR.GUR_TYP_CCD
+				,	#{p.head_mesg_type}								    AS HEAD_MESG_TYPE
+				,	CASE
+					    WHEN GUR.GUR_TYP_CCD = 'CPGUR' THEN '계약정보통보서'
+					    WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR' THEN '선금정보통보서'
+					    WHEN GUR.GUR_TYP_CCD = 'DEFPGUR' THEN '하자정보통보서'
+					    WHEN GUR.GUR_TYP_CCD = 'PAYINF' THEN '지급정보통보서'
+					    ELSE ''
+					END													AS HEAD_MESG_NAME
+				,	CNTR.CNTR_REVNO									AS REVISION_NO
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS BOND_CURC_CODE
+				, CASE WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR'           /* 선급금 이행 보증 */
+					   THEN (GUR.APYMT_PYMT_AMT * GUR.GUR_RO) /100
+					   ELSE CNTR.CNTR_AMT * GUR.GUR_RO / 100
+					    END AS BOND_PENL_AMNT
+				,	GUR.GUR_ST_DT										AS BOND_BEGN_DATE
+				,	GUR.GUR_EXP_DT										AS BOND_FNSH_DATE
+				,   CASE
+			              WHEN GUR.GUR_TYP_CCD = 'CPGUR' THEN '002'
+			              WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR' THEN '004'
+			              WHEN GUR.GUR_TYP_CCD = 'DEFPGUR' THEN '003'
+			              WHEN GUR.GUR_TYP_CCD = 'PAYINF' THEN '006'
+			              ELSE ''
+          			END                                                 AS BOND_KIND_CODE
+				,   '000' CONT_PROC_TYPE -- 계약구분코드
+				,	CNTR.CNTR_NM										AS CONT_NAME_TEXT
+				,	'2'													AS CONT_TYPE_IDEN
+				,	CASE WHEN CNTR.CNTR_TYP_CCD = 'D02'
+				         THEN '1'
+				         ELSE '2'
+				    END													AS CONT_UNIT_DIVS
+				,	CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+						 THEN '1'
+						 ELSE '2'
+					END													AS CONT_NEWS_DIVS
+				,	CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+						 THEN '10' -- 배서업무구분 : 신규
+						 ELSE CASE WHEN CNTR.CNTR_EXP_DT <![CDATA[>]]> (SELECT CNTR.CNTR_EXP_DT FROM CNTR WHERE CNTR.TEN_ID = #{g.tenant} AND CNTR.CNTR_NO = #{p.cntr_no} AND CNTR.CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT))
+									    AND CNTR.CNTR_AMT <![CDATA[>]]> (SELECT CNTR.CNTR_AMT FROM CNTR WHERE CNTR.TEN_ID = #{g.tenant} AND CNTR.CNTR_NO = #{p.cntr_no} AND CNTR.CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '62'    -- 배서업무구분 : 연장증액
+								   WHEN CNTR.CNTR_EXP_DT <![CDATA[>]]> (SELECT CNTR.CNTR_EXP_DT FROM CNTR WHERE CNTR.TEN_ID = #{g.tenant} AND CNTR.CNTR_NO = #{p.cntr_no} AND CNTR.CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '20'  -- 배서업무구분 : 연장
+								   WHEN CNTR.CNTR_AMT <![CDATA[>]]> (SELECT CNTR.CNTR_AMT FROM CNTR WHERE CNTR.TEN_ID = #{g.tenant} AND CNTR.CNTR_NO = #{p.cntr_no} AND CNTR.CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '60' 	   -- 배서업무구분 : 증액
+								   WHEN CNTR.CNTR_AMT <![CDATA[<]]> (SELECT CNTR.CNTR_AMT FROM CNTR WHERE CNTR.TEN_ID = #{g.tenant} AND CNTR.CNTR_NO = #{p.cntr_no} AND CNTR.CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '70'		   -- 배서업무구분 : 감액
+								  ELSE '90'
+							  END
+					END													AS BOND_APPL_CODE
+			     ,  CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+						 THEN '신규'
+			     		 ELSE CASE WHEN CNTR.CNTR_EXP_DT  <![CDATA[>]]>  (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT))
+                                         AND CNTR.SUP_AMT  <![CDATA[>]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '연장증액'
+                                   WHEN CNTR.CNTR_EXP_DT  <![CDATA[>]]>  (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '연장'
+                                   WHEN CNTR.SUP_AMT  <![CDATA[>]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '증액'
+                                   WHEN CNTR.SUP_AMT  <![CDATA[<]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '감액'
+                                   ELSE '기타'
+                              END
+                    END                                                 AS BOND_APPL_TXT
+				,	ORG.LOGIC_ORG_NM											AS CRED_ORGA_NAME
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS CONT_CURC_CODE
+				,   CNTR.CNTR_AMT
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS FORN_CURC_CODE
+				,   CNTR.CNTR_DT										AS CONT_MAIN_DATE
+				,   CNTR.CNTR_ST_DT                                  AS CONT_BEGN_DATE
+				,   CNTR.CNTR_EXP_DT                                    AS CONT_FNSH_DATE
+				,   CASE WHEN CNTR.CNTR_TYP_CCD = 'D02'
+				         THEN 0
+				         ELSE GUR.GUR_RO
+				    END    									    		AS CONT_PRIC_RATE
+				,   GUR.GUR_ST_DT										AS MORG_BEGN_DATE
+				,   GUR.GUR_EXP_DT										AS MORG_FNSH_DATE
+				,   GUR.GUR_RO									    AS MORG_PRIC_RATE
+				,   CNTR.CNTR_AMT * GUR.GUR_RO / 100 			    AS DEFECT_AMT
+				,   GUR.GUR_RO									    AS PREP_PRIC_RATE
+				,   CNTR.CNTR_ST_DT                                  AS PREP_BEGN_DATE
+				,   CNTR.CNTR_EXP_DT                                    AS PREP_FNSH_DATE
+				,   GUR.APYMT_PYMT_DT										AS PREP_PAYM_DATE
+				,   CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS PREP_CURC_CODE
+				,	CNTR.CNTR_AMT * GUR.GUR_RO / 100									            AS PREP_PAYM_AMNT
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS FPRE_CURC_CODE
+				,	'O'													AS CRED_ORPS_DIVS
+				,	ORG.LOGIC_ORG_NM										AS CRED_BOND_HOLD
+				,   ORG.CORPNO											AS CORP_REG_NO
+				,   ORG.BIZREGNO											AS BP_BIZREGNO
+				,	'1111111111111'										AS CRED_OWNR_NUMB
+				,	ORG.CEO_NM                         					AS CRED_OWNR_NAME
+				,   ORG.ZIPCD											AS BP_ZIPCD
+				,	ORG.ADDR			                        			AS CRED_ORGA_ADDR
+				,	UR.USR_NM											AS CRED_CHRG_NAME
+			  	,   (SELECT DEPT_NM FROM DEPT WHERE TEN_ID = CNTR.TEN_ID AND DEPT_CD =  UR.DEPT_CD) AS DEPT_NM
+				,	CASE WHEN TRIM(#{p.tel}) IS NULL OR TRIM(#{p.tel}) = ''
+                         THEN UR.TEL
+                         ELSE TRIM(#{p.tel})
+                    END                                                 AS CRED_PHON_NUMB
+                ,   CASE WHEN TRIM(#{p.mob}) IS NULL OR TRIM(#{p.mob}) = ''
+                         THEN UR.MOB
+                         ELSE TRIM(#{p.mob})
+                    END                                                 AS CRED_CELL_PHON
+					,	UR.EML											AS CRED_SEND_MAIL
+				,	VD.VD_NM											AS APPL_ORGA_NAME
+				,	'O'													AS APPL_ORPS_DIVS
+				,	''													AS APPL_ORGA_NUMB
+				,   VD.BIZREGNO											AS SP_BIZREGNO
+				,	'1111111111111'										AS APPL_OWNR_NUMB
+				,	VD.CEO_NM									     	AS APPL_OWNR_NAME
+-- 				,   VD.ZIPCD											AS SP_ZIPCD
+				,	VD.DTL_ADDR_1								        AS APPL_ORGA_ADDR
+				,	''	         			               				AS APPL_CHRG_NAME
+				,	''													AS APPL_DEPT_NAME
+-- 				,	VD.PHONE_NO											AS APPL_OFFC_PHON
+				,	TRIM(UR.EML)										AS APPL_SEND_MAIL
+				,	(SELECT
+						GUR_BOND_NO
+					FROM
+						GUR GUR
+					WHERE TEN_ID = #{g.tenant}
+					    AND GUR.CNTR_NO =  CNTR.CNTR_NO
+						AND GUR.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+						AND GUR.CNTR_REVNO =
+						(SELECT
+							MAX(GUR2.CNTR_REVNO)
+						FROM
+							GUR GUR2
+						WHERE TEN_ID = #{g.tenant}
+							AND GUR2.CNTR_NO =  CNTR.CNTR_NO
+							AND GUR2.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+						GROUP BY GUR2.CNTR_NO))							AS HIST_BOND_NUMB
+				,	CNTR.CNTR_NO 											AS PO_CNTR_NO
+				,   GUR.ATHG_UUID   										AS ATHG_UUID
+			    ,   ECNTR.ECNTR_UUID
+				<if test="p.GUR_TYP_CCD == 'PAYINF'">
+				,   '1'													AS CONT_COMM_DIVS
+				,   '2'													AS CONT_PLDG_YSNO
+				,   'O'													AS CONT_PLDG_DIVS
+				,   VD.BIZREGNO											AS CONT_PLDG_IDEN
+				,   VD.VD_NM											AS CONT_PLDG_NAME
+				,   '1'													AS CONT_PREM_YSNO
+				,   'O'													AS CONT_PREM_DIVS
+				,   ''													AS CONT_PREM_IDEN
+				,   ''													AS CONT_PREM_NAME
+				,   CNTR.CNTR_ST_DT										AS PAYM_BEGN_DATE
+				,   CNTR.CNTR_EXP_DT									AS PAYM_FNSH_DATE
+				,   'WON'												AS PAYM_BEFR_CURC
+				,   1234211												AS PAYM_BEFR_AMNT
+				,   'WON'												AS FPAY_BEFR_CURC
+				,   '10000'												AS FPAY_BEFR_AMNT
+				,   '20050505'											AS PAYM_DEBT_DATE
+				,   '1'													AS PAYM_ACNT_METH
+				,   CNTR.CNTR_DT										AS UNDE_LAST_DATE
+				,   'WON'												AS UNDE_TOTA_CURC
+				,   CNTR.CNTR_AMT * GUR.GUR_RO / 100												AS UNDE_TOTA_AMNT
+				,   CASE WHEN (SELECT COUNT(*)
+					  			 FROM PURC_CNTR PCNTR
+					  			INNER JOIN PURC_CNTR_PYMT_EXPT PYMT
+					  			   ON PYMT.TEN_ID = PCNTR.TEN_ID
+					  			  AND PYMT.PURC_CNTR_UUID = PCNTR.PURC_CNTR_UUID
+					 			WHERE PCNTR.TEN_ID = CNTR.TEN_ID
+					   			  AND PCNTR.PURC_CNTR_UUID = CNTR.CNTR_CND_UUID
+					   			  AND PYMT.PYMT_TYP_CCD = 'APYMT') &gt; 0
+					   	 THEN 'Y'
+					   	 ELSE 'N'
+					END													AS UNDE_INDI_CURC /* 선금 지급 여부 */
+				,   (SELECT COUNT(*)
+						FROM PURC_CNTR PCNTR
+						INNER JOIN PURC_CNTR_PYMT_EXPT PYMT
+						ON PYMT.TEN_ID = PCNTR.TEN_ID
+						AND PYMT.PURC_CNTR_UUID = PCNTR.PURC_CNTR_UUID
+						WHERE PCNTR.TEN_ID = CNTR.TEN_ID
+						AND PCNTR.PURC_CNTR_UUID = CNTR.CNTR_CND_UUID
+						AND PYMT.PYMT_TYP_CCD = 'APYMT')						AS UNDE_NUMB_CONT
+				,   '20200202'											AS UNDE_FINI_TIME /* 일단 하드코딩 선급금 결제 기일 */
+				,   '1'													AS UNDE_MONT_NUME
+				,  CASE WHEN #{p.kisung_file_yn} = 'Y'
+				        THEN 'Y'
+				        ELSE 'N'
+				   END 												    AS UNDE_ACCO_CURC
+				, 'Y'													AS UNDE_CONT_CURC
+				, CASE WHEN CNTR.CNTR_TMPL_TYP_CCD = 'TMPL'
+				       THEN ECNTR.SGNCMPLD_CNTRDOC_ATHG_UUID
+				       ELSE ECNTR.TMPL_UNUD_CNTRDOC_ATHG_UUID
+				  END													AS CONTRACT_FILE_ATHG_UUID
+				, NULL													AS KISUNG_CONFIRM_FILE_ATHG_UUID
+				</if>
+			FROM CNTR CNTR
+		   INNER JOIN ECNTR ECNTR
+			  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		     AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+			INNER JOIN GUR GUR
+			   ON CNTR.TEN_ID = GUR.TEN_ID
+		      AND GUR.CNTR_UUID = CNTR.CNTR_UUID
+			INNER JOIN VD VD
+			   ON VD.TEN_ID = CNTR.TEN_ID
+			  AND VD.VD_CD = CNTR.VD_CD
+			INNER JOIN USR UR
+			   ON UR.TEN_ID = VD.TEN_ID
+			  AND UR.USR_ID = CNTR.CNTR_PIC_ID
+			INNER JOIN LOGIC_ORG ORG
+               ON ORG.TEN_ID = CNTR.TEN_ID
+              AND ORG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+              AND ORG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+			LEFT OUTER JOIN GUR BEFORE_GUAR
+               ON BEFORE_GUAR.TEN_ID = GUR.TEN_ID
+              AND BEFORE_GUAR.CNTR_NO = GUR.CNTR_NO
+              AND CAST(BEFORE_GUAR.CNTR_REVNO AS INT) = CAST(GUR.CNTR_REVNO AS INT) -1
+              AND BEFORE_GUAR.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+              AND BEFORE_GUAR.GUR_STS_CCD = 'APVD'
+			WHERE GUR.TEN_ID = #{g.tenant}
+			  AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<select id="getCountEgurdoc" resultType="int">
+ 	/* elecGuarantee.getCountEgurdoc : 보증서 조회 */
+  	   SELECT COUNT(*)
+  		 FROM EGURDOC
+  		WHERE TEN_ID =  #{g.tenant}
+  		  AND GUR_UUID = #{p.gur_uuid}
+		  AND ECNTR_UUID = #{p.ecntr_uuid}
+ 	</select>
+	<insert id="saveInsuranceForm">
+		/* elecGuarantee.saveInsuranceForm : 보증신청정보 저장 */
+		INSERT INTO EGUR_NOFNDOC
+		( TEN_ID
+		, INFORM_SEQ
+		, GUR_UUID
+		, ECNTR_UUID
+		, HEAD_MESG_SEND
+		, HEAD_MESG_RECV
+		, HEAD_FUNC_CODE
+		, HEAD_MESG_TYPE
+		, HEAD_MESG_NAME
+		, HEAD_MESG_VERS
+		, HEAD_DOCU_NUMB
+		, HEAD_MANG_NUMB
+		, HEAD_REFR_NUMB
+		, HEAD_TITL_NAME
+		, HEAD_ORGA_CODE
+		, BOND_KIND_CODE
+		, BOND_BEGN_DATE
+		, BOND_FNSH_DATE
+		, BOND_CURC_CODE
+		<if test="p.bond_penl_amnt != null">
+			, BOND_PENL_AMNT
+		</if>
+		, BOND_OPER_CODE
+		, BOND_APPL_CODE
+		, CONT_NUMB_TEXT
+		, CONT_NAME_TEXT
+		, CONT_PROC_TYPE
+		, CONT_TYPE_IDEN
+		<if test="p.cont_asgn_rate != null">
+			, CONT_ASGN_RATE
+		</if>
+		, CONT_NEWS_DIVS
+		, CONT_PLAN_DATE
+		, CONT_MAIN_DATE
+		, CONT_CURC_CODE
+		<if test="p.cont_main_amnt != null">
+			, CONT_MAIN_AMNT
+		</if>
+		, FORN_CURC_CODE
+		<if test="p.forn_main_amnt != null">
+			, FORN_MAIN_AMNT
+		</if>
+		, HIST_BOND_NUMB
+		, CONT_BEGN_DATE
+		, CONT_FNSH_DATE
+		, CONT_TERM_TEXT
+		<if test="p.cont_pric_rate != null">
+			, CONT_PRIC_RATE
+		</if>
+		, CONT_UNIT_DIVS
+		, PREP_PAYM_TYPE
+		, PREP_BEGN_DATE
+		, PREP_FNSH_DATE
+		, PREP_TERM_TEXT
+		, PREP_PAYM_DATE
+		, PREP_CURC_CODE
+		, PREP_PAYM_AMNT
+		<if test="p.prep_pric_rate != null">
+			, PREP_PRIC_RATE
+		</if>
+		, MORG_BEGN_DATE
+		, MORG_FNSH_DATE
+		, MORG_TERM_TEXT
+		<if test="p.morg_pric_rate != null">
+			, MORG_PRIC_RATE
+		</if>
+		, CRED_ORGA_NAME
+		, CRED_ORPS_DIVS
+		, CRED_ORGA_NUMB
+		, CRED_ORPS_IDEN
+		, CRED_OWNR_NUMB
+		, CRED_OWNR_NAME
+		, CRED_BOND_HOLD
+		, CRED_ADDN_NAME
+		, CRED_ORGA_POST
+		, CRED_ORGA_ADDR
+		, CRED_CHRG_NAME
+		, CRED_DEPT_NAME
+		, CRED_PHON_NUMB
+		, CRED_CELL_PHON
+		, CRED_SEND_MAIL
+		, CRED_USER_IDEN
+		, CRED_USER_TYPE
+		, APPL_ORGA_NAME
+		, APPL_ORPS_DIVS
+		, APPL_ORGA_NUMB
+		, APPL_ORPS_IDEN
+		, APPL_OWNR_NUMB
+		, APPL_OWNR_NAME
+		, APPL_ADDN_NAME
+		, APPL_ORGA_POST
+		, APPL_ORGA_ADDR
+		, APPL_CHRG_NAME
+		, APPL_DEPT_NAME
+		, APPL_OFFC_PHON
+		, APPL_CELL_PHON
+		, APPL_SEND_MAIL
+		, APPL_HOME_POST
+		, APPL_HOME_ADDR
+		, APPL_HOME_PHON
+		, APPL_USER_IDEN
+		, APPL_USER_TYPE
+		, ACK_CONT_NUMB
+		, ACK_RESP_TYPE_CD
+		, ACK_RESP_TYPE_NM
+		, ACK_RESP_MESG
+		, ACK_RESP_XML
+		, INSERT_DATE
+		, UPDATE_DATE
+		, XML_DATA
+		)
+		VALUES
+		( #{g.tenant}                                       /*SYS_ID*/
+		, #{g.uuid}                                         /*INFORM_SEQ*/
+		, #{p.gur_uuid}                                     /*GUR_UUID*/
+		, #{p.ecntr_uuid}                                   /*ECNTR_UUID*/
+		, #{p.head_mesg_send}                               /*HEAD_MESG_SEND*/
+		, #{p.head_mesg_recv}                               /*HEAD_MESG_RECV*/
+		, #{p.head_func_code}                               /*HEAD_FUNC_CODE*/
+		, #{p.head_mesg_type}                               /*HEAD_MESG_TYPE*/
+		, #{p.head_mesg_name}                               /*HEAD_MESG_NAME*/
+		, #{p.head_mesg_vers}                               /*HEAD_MESG_VERS*/
+		, #{p.head_docu_numb}                               /*HEAD_DOCU_NUMB*/
+		, #{p.head_mang_numb}                               /*HEAD_MANG_NUMB*/
+		, #{p.head_refr_numb}                               /*HEAD_REFR_NUMB*/
+		, #{p.head_titl_name}                               /*HEAD_TITL_NAME*/
+		, #{p.head_orga_code}                               /*HEAD_ORGA_CODE*/
+		, #{p.bond_kind_code}                               /*BOND_KIND_CODE*/
+		, #{p.bond_begn_date}                               /*BOND_BEGN_DATE*/
+		, #{p.bond_fnsh_date}                               /*BOND_FNSH_DATE*/
+		, #{p.bond_curc_code}                               /*BOND_CURC_CODE*/
+		<if test="p.bond_penl_amnt != null">
+			, #{p.bond_penl_amnt}                    /*BOND_PENL_AMNT*/
+		</if>
+		, #{p.bond_oper_code}                               /*BOND_OPER_CODE*/
+		, #{p.bond_appl_code}                               /*BOND_APPL_CODE*/
+		, #{p.cont_numb_text}                               /*CONT_NUMB_TEXT*/
+		, #{p.cont_name_text}                               /*CONT_NAME_TEXT*/
+		, #{p.cont_proc_type}                               /*CONT_PROC_TYPE*/
+		, #{p.cont_type_iden}                               /*CONT_TYPE_IDEN*/
+		<if test="p.cont_asgn_rate != null">
+			, #{p.cont_asgn_rate}                    /*CONT_ASGN_RATE*/
+		</if>
+		, #{p.cont_news_divs}                               /*CONT_NEWS_DIVS*/
+		, #{p.cont_plan_date}                               /*CONT_PLAN_DATE*/
+		, #{p.cont_main_date}                               /*CONT_MAIN_DATE*/
+		, #{p.cont_curc_code}                               /*CONT_CURC_CODE*/
+		<if test="p.cont_main_amnt != null">
+			, #{p.cont_main_amnt}                    /*CONT_MAIN_AMNT*/
+		</if>
+		, #{p.forn_curc_code}                               /*FORN_CURC_CODE*/
+		<if test="p.forn_main_amnt != null">
+			, #{p.forn_main_amnt}                    /*FORN_MAIN_AMNT*/
+		</if>
+		, #{p.hist_bond_numb}                               /*HIST_BOND_NUMB*/
+		, #{p.cont_begn_date}                               /*CONT_BEGN_DATE*/
+		, #{p.cont_fnsh_date}                               /*CONT_FNSH_DATE*/
+		, #{p.cont_term_text}                               /*CONT_TERM_TEXT*/
+		<if test="p.cont_pric_rate != null">
+			, #{p.cont_pric_rate}                    /*CONT_PRIC_RATE*/
+		</if>
+		, #{p.cont_unit_divs}                               /*CONT_UNIT_DIVS*/
+		, #{p.prep_paym_type}                               /*PREP_PAYM_TYPE*/
+		, #{p.prep_begn_date}                               /*PREP_BEGN_DATE*/
+		, #{p.prep_fnsh_date}                               /*PREP_FNSH_DATE*/
+		, #{p.prep_term_text}                               /*PREP_TERM_TEXT*/
+		, #{p.prep_paym_date}                               /*PREP_PAYM_DATE*/
+		, #{p.prep_curc_code}                               /*PREP_CURC_CODE*/
+		, #{p.prep_paym_amnt}                               /*PREP_PAYM_AMNT*/
+		<if test="p.prep_pric_rate != null">
+			, #{p.prep_pric_rate}                     /*PREP_PRIC_RATE*/
+		</if>
+		, #{p.morg_begn_date}                               /*MORG_BEGN_DATE*/
+		, #{p.morg_fnsh_date}                               /*MORG_FNSH_DATE*/
+		, #{p.morg_term_text}                               /*MORG_TERM_TEXT*/
+		<if test="p.morg_pric_rate != null">
+			, #{p.morg_pric_rate}                     /*MORG_PRIC_RATE*/
+		</if>
+		, #{p.cred_orga_name}                               /*CRED_ORGA_NAME*/
+		, #{p.cred_orps_divs}                               /*CRED_ORPS_DIVS*/
+		, #{p.cred_orga_numb}                               /*CRED_ORGA_NUMB*/
+		, #{p.cred_orps_iden}                               /*CRED_ORPS_IDEN*/
+		, #{p.cred_ownr_numb}                               /*CRED_OWNR_NUMB*/
+		, #{p.cred_ownr_name}                               /*CRED_OWNR_NAME*/
+		, #{p.cred_bond_hold}                               /*CRED_BOND_HOLD*/
+		, #{p.cred_addn_name}                               /*CRED_ADDN_NAME*/
+		, #{p.cred_orga_post}                               /*CRED_ORGA_POST*/
+		, #{p.cred_orga_addr}                               /*CRED_ORGA_ADDR*/
+		, #{p.cred_chrg_name}                               /*CRED_CHRG_NAME*/
+		, #{p.cred_dept_name}                               /*CRED_DEPT_NAME*/
+		, #{p.cred_phon_numb}                               /*CRED_PHON_NUMB*/
+		, #{p.cred_cell_phon}                               /*CRED_CELL_PHON*/
+		, #{p.cred_send_mail}                               /*CRED_SEND_MAIL*/
+		, #{p.cred_user_iden}                               /*CRED_USER_IDEN*/
+		, #{p.cred_user_type}                               /*CRED_USER_TYPE*/
+		, #{p.appl_orga_name}                               /*APPL_ORGA_NAME*/
+		, #{p.appl_orps_divs}                               /*APPL_ORPS_DIVS*/
+		, #{p.appl_orga_numb}                               /*APPL_ORGA_NUMB*/
+		, #{p.appl_orps_iden}                               /*APPL_ORPS_IDEN*/
+		, #{p.appl_ownr_numb}                               /*APPL_OWNR_NUMB*/
+		, #{p.appl_ownr_name}                               /*APPL_OWNR_NAME*/
+		, #{p.appl_addn_name}                               /*APPL_ADDN_NAME*/
+		, #{p.appl_orga_post}                               /*APPL_ORGA_POST*/
+		, #{p.appl_orga_addr}                               /*APPL_ORGA_ADDR*/
+		, #{p.appl_chrg_name}                               /*APPL_CHRG_NAME*/
+		, #{p.appl_dept_name}                               /*APPL_DEPT_NAME*/
+		, #{p.appl_offc_phon}                               /*APPL_OFFC_PHON*/
+		, #{p.appl_cell_phon}                               /*APPL_CELL_PHON*/
+		, #{p.appl_send_mail}                               /*APPL_SEND_MAIL*/
+		, #{p.appl_home_post}                               /*APPL_HOME_POST*/
+		, #{p.appl_home_addr}                               /*APPL_HOME_ADDR*/
+		, #{p.appl_home_phon}                               /*APPL_HOME_PHON*/
+		, #{p.appl_user_iden}                               /*APPL_USER_IDEN*/
+		, #{p.appl_user_type}                               /*APPL_USER_TYPE*/
+		, #{p.ack_cont_numb}                                /*ACK_CONT_NUMB*/
+		, #{p.ack_resp_type_cd}                             /*ACK_RESP_TYPE_CD*/
+		, #{p.ack_resp_type_nm}                             /*ACK_RESP_TYPE_NM*/
+		, #{p.ack_resp_mesg}                                /*ACK_RESP_MESG*/
+		, #{p.ack_resp_xml}                                 /*ACK_RESP_XML*/
+		, #{g.now}                                          /*INSERT_DATE*/
+		, #{g.now}                                          /*UPDATE_DATE*/
+		, #{p.xml_data}                                     /*XML_DATA*/
+		)
+	</insert>
+	<update id="updateCtgrSts">
+ 	/* elecGuarantee.updateCtgrSts : 보증 진행상태 변경 */
+	UPDATE GUR
+		SET GUR_STS_CCD = #{p.gur_sts_ccd}
+		<if test="p.gur_sts_ccd==&quot;APVL_WTG&quot;">
+			, GUR_BOND_NO = #{p.gur_bond_no}
+		</if>
+		<if test="p.gur_sts_ccd==&quot;RCPT_RET&quot;">
+			, GUR_BOND_NO = NULL
+		</if>
+		<if test="p.gur_sts_ccd == &quot;PUBL_WTG&quot;">
+			, GUR_INSCO_CCD = NULL
+			, GUR_ATH_TYP_CCD = NULL
+		</if>
+		<if test="p.gur_insco_ccd != null and p.gur_insco_ccd !=&quot;&quot;">
+			, GUR_INSCO_CCD = #{p.gur_insco_ccd}
+		</if>
+		<if test="p.resp_mesg_text != null and p.resp_mesg_text !=&quot;&quot;">
+			, RET_RSN = #{p.resp_mesg_text}
+		</if>
+		<if test="p.gur_ath_typ_ccd != null and p.gur_ath_typ_ccd !=&quot;&quot;">
+			, GUR_ATH_TYP_CCD = #{p.gur_ath_typ_ccd}
+		</if>
+		, MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		AND GUR_UUID = #{p.gur_uuid}
+ 	</update>
+ 	<select id="cancelEgur" resultType="map">
+ 	<bind name="nowDateFormat" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+ 	/* elecGuarantee.cancelEgur : 보증신청 취소  */
+	SELECT
+		   T.TEN_ID				AS TENANT
+		 , T.HEAD_MESG_SEND     AS HEAD_MESG_SEND
+         , T.HEAD_MESG_RECV     AS HEAD_MESG_RECV
+         , '1'          		AS HEAD_FUNC_CODE
+         , 'RBONGU'          	AS HEAD_MESG_TYPE
+         , '최종응답서'         	AS HEAD_MESG_NAME
+         , T.HEAD_MESG_VERS     AS HEAD_MESG_VERS
+         , T.HEAD_DOCU_NUMB     AS HEAD_DOCU_NUMB
+         , T.HEAD_MANG_NUMB 	AS HEAD_MANG_NUMB
+         , T.HEAD_REFR_NUMB     AS HEAD_REFR_NUMB
+         , '최종응답서'           AS HEAD_TITL_NAME
+         , T.HEAD_ORGA_CODE     AS HEAD_ORGA_CODE
+         , T.HEAD_DOCU_NUMB
+         , T.HEAD_REFR_NUMB
+	     ,TO_CHAR(#{g.now}, 'YYYYMMDD')  AS DOCU_ISSU_DATE
+         , T.HEAD_ORGA_CODE     AS DOCU_USER_TYPE
+         , T.CONT_NUMB_TEXT     AS CONT_NUMB_TEXT
+         , T.CONT_NAME_TEXT     AS CONT_MAIN_NAME
+         , T.CONT_MAIN_AMNT     AS CONT_MAIN_AMNT
+         , T.APPL_ORGA_NAME     AS APPL_ORGA_NAME
+         , T.APPL_ORPS_DIVS     AS APPL_ORPS_DIVS
+         , T.APPL_ORPS_IDEN     AS APPL_ORPS_IDEN
+         , T.APPL_OWNR_NAME     AS APPL_OWNR_NAME
+         , T.CRED_BOND_HOLD     AS CRED_BOND_HOLD
+         , T.CONT_CURC_CODE 	AS CONT_CURC_CODE
+         , 'DD'        			AS RESP_TYPE_CODE
+         , '취소'        	    AS RESP_TYPE_NAME
+         , '취소'        	    AS RESP_MESG_TEXT
+         , 'PUBL_WTG'         			AS PROG_STS
+         , T.HEAD_MESG_TYPE     AS GUAR_TYPE
+         , GUR.GUR_TYP_CCD      AS GUR_TYP_CCD
+         , ECNTR.ECNTR_UUID	    AS ECNTR_UUID
+         , GUR.GUR_UUID	        AS GUR_UUID
+      FROM EGUR_NOFNDOC T
+     INNER JOIN GUR GUR
+        ON GUR.TEN_ID = T.TEN_ID
+       AND GUR.GUR_UUID = T.GUR_UUID
+     INNER JOIN ECNTR ECNTR
+        ON ECNTR.TEN_ID = T.TEN_ID
+       AND ECNTR.ECNTR_UUID = T.ECNTR_UUID
+     WHERE GUR.TEN_ID = #{g.tenant}
+       AND GUR.GUR_UUID = #{p.gur_uuid}
+ 	</select>
+ 	<insert id="saveFinalResponse">
+ 	/* elecGuarantee.saveFinalResponse : 최종응답서 저장 */
+  	INSERT INTO EGUR_RESPDOC (
+  			   TEN_ID
+             , FINAL_RESPONSE_SEQ
+             , GUR_UUID
+             , ECNTR_UUID
+             , HEAD_MESG_SEND
+             , HEAD_MESG_RECV
+             , HEAD_FUNC_CODE
+             , HEAD_MESG_TYPE
+             , HEAD_MESG_NAME
+             , HEAD_MESG_VERS
+             , HEAD_DOCU_NUMB
+             , HEAD_MANG_NUMB
+             , HEAD_REFR_NUMB
+             , HEAD_TITL_NAME
+             , HEAD_ORGA_CODE
+             , DOCU_NUMB_TEXT
+             , DOCU_KIND_CODE
+             , DOCU_ISSU_DATE
+             , DOCU_USER_TYPE
+             , CONT_NUMB_TEXT
+             , CONT_MAIN_NAME
+             , CONT_CURC_CODE
+             , CONT_MAIN_AMNT
+             , APPL_ORGA_NAME
+             , APPL_ORPS_DIVS
+             , APPL_ORPS_IDEN
+             , APPL_OWNR_NAME
+             , CRED_BOND_HOLD
+             , RESP_TYPE_CODE
+             , RESP_TYPE_NAME
+             , RESP_MESG_TEXT
+             , XML_DATA
+             , INSERT_DATE
+             , UPDATE_DATE)
+	VALUES (
+			   #{g.tenant}
+    		 , #{g.uuid}
+	         , #{p.gur_uuid}
+    		 , #{p.ecntr_uuid}
+             , #{p.head_mesg_send}
+             , #{p.head_mesg_recv}
+             , #{p.head_func_code}
+             , #{p.head_mesg_type}
+             , #{p.head_mesg_name}
+             , #{p.head_mesg_vers}
+             , #{p.head_docu_numb}
+             , #{p.head_mang_numb}
+             , #{p.head_refr_numb}
+             , #{p.head_titl_name}
+             , #{p.head_orga_code}
+             , #{p.docu_numb_text}
+             , #{p.docu_kind_code}
+             , #{p.docu_issu_date}
+             , #{p.docu_user_type}
+             , #{p.cont_numb_text}
+             , #{p.cont_main_name}
+             , #{p.cont_curc_code}
+             , #{p.cont_main_amnt}
+             , #{p.appl_orga_name}
+             , #{p.appl_orps_divs}
+             , #{p.appl_orps_iden}
+             , #{p.appl_ownr_name}
+             , #{p.cred_bond_hold}
+             , #{p.resp_type_code}
+             , #{p.resp_type_name}
+             , #{p.resp_mesg_text}
+             , #{p.xml_data}
+             , #{g.now}
+             , #{g.now}
+	)
+ 	</insert>
+ 	<delete id="deleteEgurdoc">
+ 	/* elecGuarantee.deleteEgurdoc : 보증삭제 */
+	DELETE FROM EGURDOC
+  	 WHERE TEN_ID = #{g.tenant}
+  	   AND GUR_UUID = #{p.gur_uuid}
+ 	</delete>
+ 	<delete id="deleteRecvEgurdoc">
+ 	/* elecGuarantee.deleteRecvEgurdoc : 보증삭제 */
+	DELETE FROM EGURDOC
+  	 WHERE TEN_ID = #{g.tenant}
+  	   AND GUR_UUID = #{p.gur_uuid}
+ 	</delete>
+ 	<delete id="deleteNofndoc">
+ 	/* elecGuarantee.deleteNofndoc : 통보서 삭제*/
+	DELETE FROM EGUR_NOFNDOC
+	 WHERE TEN_ID = #{g.tenant}
+	   AND GUR_UUID = #{p.gur_uuid}
+ 	</delete>
+ 	<select id="checkGuarNofndoc" resultType="int">
+	/* elecGuarantee.checkGuarNofndoc 보낸 통보서가 있는지 확인 */
+		SELECT COUNT(*)
+		  FROM EGUR_NOFNDOC
+		 WHERE CONT_NUMB_TEXT = #{p.cont_numb_text}
+		   AND HEAD_MESG_TYPE = #{p.mesg_type}
+		   AND APPL_ORPS_IDEN = #{p.appl_orps_iden}
+	</select>
+	<select id="checkCntEgur" resultType="int">
+	/* elecGuarantee.checkCntEgur 보증서 확인*/
+		SELECT COUNT(*)
+		  FROM EGURDOC EGURDOC
+		 INNER JOIN GUR GUR
+		    ON GUR.TEN_ID = EGURDOC.TEN_ID
+		   AND GUR.GUR_UUID = EGURDOC.GUR_UUID
+		WHERE EGURDOC.CONT_NUMB_TEXT  = #{p.cont_numb_text}
+		  AND EGURDOC.HEAD_MESG_TYPE = #{p.head_mesg_type}
+	</select>
+	<insert id="insertEgurdoc">
+ 	/* elecGuarantee.insertEgurdoc : 보증서 내용 저장 */
+  	INSERT INTO EGURDOC (
+  	        TEN_ID
+          , GUARANTEE_SEQ
+		  , GUR_UUID
+          , ECNTR_UUID
+          , HEAD_MESG_SEND
+          , HEAD_MESG_RECV
+          , HEAD_FUNC_CODE
+          , HEAD_MESG_TYPE
+          , HEAD_MESG_NAME
+          , HEAD_MESG_VERS
+          , HEAD_DOCU_NUMB
+          , HEAD_MANG_NUMB
+          , HEAD_REFR_NUMB
+          , HEAD_TITL_NAME
+          , HEAD_ORGA_CODE
+          , BOND_ORGA_NAME
+          , BOND_ORGA_IDEN
+          , BOND_ORGA_ADDN
+          , BOND_ORGA_CEO
+          , GOVN_ORGA_NAME
+          , GOVN_ORGA_IDEN
+          , GOVN_ORGA_ADDN
+          , GOVN_OWNR_NAME
+          , DOCU_ISSU_DATE
+          , BUSI_CLAS_CODE
+          , BUSI_CLAS_NAME
+          , BOND_NUMB_TEXT
+          , BOND_PENL_TEXT
+          <if test="p.bond_penl_amnt != null">
+          , BOND_PENL_AMNT
+          </if>
+          , PENL_CURC_CODE
+          , BOND_BEGN_DATE
+          , BOND_FNSH_DATE
+          <if test="p.bond_prem_amnt != null">
+          , BOND_PREM_AMNT
+          </if>
+          , PREM_CURC_CODE
+          <if test="p.bond_pric_rate != null">
+          , BOND_PRIC_RATE
+          </if>
+          , APPL_ORGA_NAME
+          , APPL_ORPS_DIVS
+          , APPL_ORPS_IDEN
+          , APPL_OWNR_NAME
+          , CRED_ORGA_NAME
+          , CRED_ORPS_DIVS
+          , CRED_ORPS_IDEN
+          , BOND_HOLD_NAME
+          , CONT_NAME_TEXT
+          <if test="p.cont_main_amnt != null">
+          , CONT_MAIN_AMNT
+          </if>
+          , CONT_CURC_CODE
+          , CONT_NUMB_TEXT
+          , CONT_MAIN_DATE
+          , CONT_BEGN_DATE
+          , CONT_FNSH_DATE
+          , MORG_BEGN_DATE
+          , MORG_FNSH_DATE
+          , CONT_PERF_DATE
+          <if test="p.cont_paym_amnt != null">
+          , CONT_PAYM_AMNT
+          </if>
+          , PAYM_CURC_CODE
+          , CONT_PAYM_DATE
+          , SPCL_COND_TEXT
+          , SPCL_PROV_TEXT
+          , BOND_STAT_TEXT
+          , INVI_AGNC_NAME
+          , ISSU_ADDR_TXT1
+          , ISSU_ADDR_TXT2
+          , ISSU_ORGA_NAME
+          , ISSU_OWNR_NAME
+          , ISSU_DEPT_NAME
+          , ISSU_DEPT_OWNR
+          , CHRG_NAME_TEXT
+          , CHRG_PHON_TEXT
+          , CHRG_FAXS_TEXT
+          , GENE_NOTE_TEXT
+          , XML_DATA
+          , ACK_RESP_XML
+          , XML_PATH
+     	  )
+	VALUES (
+		    #{p.ten_id}
+          , #{g.uuid}
+       	  , #{p.gur_uuid}
+		  , #{p.ecntr_uuid}
+          , #{p.head_mesg_send}
+          , #{p.head_mesg_recv}
+          , #{p.head_func_code}
+          , #{p.head_mesg_type}
+          , #{p.head_mesg_name}
+          , #{p.head_mesg_vers}
+          , #{p.head_docu_numb}
+          , #{p.head_mang_numb}
+          , #{p.head_refr_numb}
+          , #{p.head_titl_name}
+          , #{p.head_orga_code}
+          , #{p.bond_orga_name}
+          , #{p.bond_orga_iden}
+          , #{p.bond_orga_addn}
+          , #{p.bond_orga_ceo}
+          , #{p.govn_orga_name}
+          , #{p.govn_orga_iden}
+          , #{p.govn_orga_addn}
+          , #{p.govn_ownr_name}
+          , #{p.docu_issu_date}
+          , #{p.busi_clas_code}
+          , #{p.busi_clas_name}
+          , #{p.bond_numb_text}
+          , #{p.bond_penl_text}
+          <if test="p.bond_penl_amnt != null">
+          , #{p.bond_penl_amnt}
+          </if>
+          , #{p.penl_curc_code}
+          , #{p.bond_begn_date}
+          , #{p.bond_fnsh_date}
+          <if test="p.bond_prem_amnt != null">
+          , #{p.bond_prem_amnt}
+          </if>
+          , #{p.prem_curc_code}
+          <if test="p.bond_pric_rate != null">
+          , #{p.bond_pric_rate}
+          </if>
+          , #{p.appl_orga_name}
+          , #{p.appl_orps_divs}
+          , #{p.appl_orps_iden}
+          , #{p.appl_ownr_name}
+          , #{p.cred_orga_name}
+          , #{p.cred_orps_divs}
+          , #{p.cred_orps_iden}
+          , #{p.bond_hold_name}
+          , #{p.cont_name_text}
+          <if test="p.cont_main_amnt != null">
+          , #{p.cont_main_amnt}
+          </if>
+          , #{p.cont_curc_code}
+          , #{p.cont_numb_text}
+          , #{p.cont_main_date}
+          , #{p.cont_begn_date}
+          , #{p.cont_fnsh_date}
+          , #{p.morg_begn_date}
+          , #{p.morg_fnsh_date}
+          , #{p.cont_perf_date}
+          <if test="p.cont_paym_amnt != null">
+          , #{p.cont_paym_amnt}
+          </if>
+          , #{p.paym_curc_code}
+          , #{p.cont_paym_date}
+          , #{p.spcl_cond_text}
+          , #{p.spcl_prov_text}
+          , #{p.bond_stat_text}
+          , #{p.invi_agnc_name}
+          , #{p.issu_addr_txt1}
+          , #{p.issu_addr_txt2}
+          , #{p.issu_orga_name}
+          , #{p.issu_ownr_name}
+          , #{p.issu_dept_name}
+          , #{p.issu_dept_ownr}
+          , #{p.chrg_name_text}
+          , #{p.chrg_phon_text}
+          , #{p.chrg_faxs_text}
+          , #{p.gene_note_text}
+          , #{p.xml_data}
+          , #{p.ack_resp_xml}
+          , #{p.xml_path}
+          )
+ 	</insert>
+	<update id="updateCtgr">
+ 	/* elecGuarantee.updateCtgr : 상태값 변경 */
+  	UPDATE GUR
+  	   SET GUR_STS_CCD = 'APVL_WTG'
+   		  ,GUR_BOND_NO = #{p.gur_bond_no}
+  	 WHERE TEN_ID 	= #{p.ten_id}
+  	   AND GUR_UUID   = #{p.gur_uuid}
+ 	</update>
+ 	<select id="getEgurInfo" resultType="map">
+ 	/* elecGuarantee.getEgurInfo : 전자보증 정보 조회 */
+ 	SELECT GUR.TEN_ID
+ 		 , GUR.GUR_UUID
+ 	     , GUR.GUR_STS_CCD
+ 	     , ECNTR.CNTR_UUID
+ 	     , ECNTR.ECNTR_UUID
+ 	  FROM GUR GUR
+ 	 INNER JOIN CNTR CNTR
+ 	    ON CNTR.TEN_ID = GUR.TEN_ID
+ 	   AND CNTR.CNTR_UUID = GUR.CNTR_UUID
+ 	 INNER JOIN ECNTR ECNTR
+ 	    ON ECNTR.TEN_ID = CNTR.TEN_ID
+ 	   AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+ 	 INNER JOIN EGUR_NOFNDOC GRIF
+ 	    ON GUR.TEN_ID = GRIF.TEN_ID
+ 	   AND GUR.GUR_UUID = GRIF.GUR_UUID
+     WHERE GUR.TEN_ID = #{g.tenant}
+       AND GRIF.CONT_NUMB_TEXT = #{p.cont_numb_text}
+	   AND GRIF.HEAD_MESG_TYPE = (CASE WHEN #{p.head_mesg_type} = 'CONGUA' THEN 'CONINF'
+	                                  WHEN #{p.head_mesg_type} = 'PREGUA' THEN 'PREINF'
+	                                  WHEN #{p.head_mesg_type} = 'FLRGUA' THEN 'FLRINF'
+	                                  WHEN #{p.head_mesg_type} = 'PAYGUA' THEN 'PAYINF'
+	    END)
+ 	</select>
+ 	<select id="rejectEgur" resultType="map">
+ 	<bind name="nowDateFormat" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+	/* elecGuarantee.rejectEgur : 보증보험 반려 */
+		SELECT
+			  EGURDOC.TEN_ID 						AS TENANT
+			 ,EGURDOC.HEAD_MESG_SEND 				HEAD_MESG_RECV
+			 ,EGURDOC.HEAD_MESG_RECV 				HEAD_MESG_SEND
+			 ,'53' 		 						HEAD_FUNC_CODE
+		     ,'RBONGU' 	 						HEAD_MESG_TYPE
+			 ,'최종응답서' 						HEAD_MESG_NAME
+			 ,EGURDOC.HEAD_MESG_VERS				HEAD_MESG_VERS
+			 ,EGURDOC.HEAD_DOCU_NUMB				HEAD_DOCU_NUMB
+			 ,EGURDOC.HEAD_MANG_NUMB				HEAD_MANG_NUMB
+			 ,EGURDOC.HEAD_REFR_NUMB				HEAD_REFR_NUMB
+			 ,'최종응답서' 						HEAD_TITL_NAME
+			 ,EGURDOC.HEAD_ORGA_CODE				HEAD_ORGA_CODE
+			 ,EGURDOC.HEAD_DOCU_NUMB
+ 		     ,TO_CHAR(#{g.now}, 'YYYYMMDD')  AS DOCU_ISSU_DATE
+ 		     ,EGURDOC.HEAD_ORGA_CODE 				DOCU_USER_TYPE
+		 	 ,EGURDOC.CONT_NUMB_TEXT				CONT_NUMB_TEXT
+			 ,EGURDOC.CONT_NAME_TEXT 				CONT_MAIN_NAME
+			 ,EGURDOC.CONT_CURC_CODE				CONT_CURC_CODE
+			 ,EGURDOC.CONT_MAIN_AMNT				CONT_MAIN_AMNT
+			 ,EGURDOC.APPL_ORGA_NAME				APPL_ORGA_NAME
+			 ,EGURDOC.APPL_ORPS_DIVS				APPL_ORPS_DIVS
+			 ,EGURDOC.APPL_ORPS_IDEN				APPL_ORPS_IDEN
+			 ,EGURDOC.APPL_OWNR_NAME				APPL_OWNR_NAME
+			 ,EGURDOC.BOND_HOLD_NAME  				CRED_BOND_HOLD
+			 ,'RE' 								RESP_TYPE_CODE
+			 ,'반려' 							RESP_TYPE_NAME
+			 ,#{p.resp_mesg_text} 				RESP_MESG_TEXT
+			 ,'RCPT_RET'						PROC_STAT
+			 ,#{p.guar_type} 					GUAR_TYPE
+			 ,GUR.GUR_UUID					    GUR_UUID
+			 ,GUR.GUR_TYP_CCD					GUR_TYP_CCD
+   		FROM EGURDOC EGURDOC
+   	   INNER JOIN GUR GUR
+   	      ON GUR.TEN_ID = EGURDOC.TEN_ID
+   	     AND GUR.GUR_UUID = EGURDOC.GUR_UUID
+  		WHERE GUR.TEN_ID = #{g.tenant}
+  		  AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<select id="approveEgur" resultType="map">
+	<bind name="nowDateFormat" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+	/* elecGuarantee.approveEgur : 보증보험 승인 */
+		SELECT
+			  EGUR.TEN_ID						AS TENANT
+			 ,EGUR.HEAD_MESG_SEND 				HEAD_MESG_RECV
+			 ,EGUR.HEAD_MESG_RECV 				HEAD_MESG_SEND
+			 ,'53' 		 						HEAD_FUNC_CODE
+		     ,'RBONGU' 	 						HEAD_MESG_TYPE
+			 ,'최종응답서' 						HEAD_MESG_NAME
+			 ,EGUR.HEAD_MESG_VERS				HEAD_MESG_VERS
+			 ,EGUR.HEAD_DOCU_NUMB				HEAD_DOCU_NUMB
+			 ,EGUR.HEAD_MANG_NUMB				HEAD_MANG_NUMB
+			 ,EGUR.HEAD_REFR_NUMB				HEAD_REFR_NUMB
+			 ,'최종응답서' 						HEAD_TITL_NAME
+			 ,EGUR.HEAD_ORGA_CODE				HEAD_ORGA_CODE
+			 ,EGUR.HEAD_DOCU_NUMB
+ 		     ,TO_CHAR(#{g.now}, 'YYYYMMDD')  AS DOCU_ISSU_DATE
+ 		     ,EGUR.HEAD_ORGA_CODE 				DOCU_USER_TYPE
+		 	 ,EGUR.CONT_NUMB_TEXT				CONT_NUMB_TEXT
+			 ,EGUR.CONT_NAME_TEXT 				CONT_MAIN_NAME
+			 ,EGUR.CONT_CURC_CODE				CONT_CURC_CODE
+			 ,EGUR.CONT_MAIN_AMNT				CONT_MAIN_AMNT
+			 ,EGUR.APPL_ORGA_NAME				APPL_ORGA_NAME
+			 ,EGUR.APPL_ORPS_DIVS				APPL_ORPS_DIVS
+			 ,EGUR.APPL_ORPS_IDEN				APPL_ORPS_IDEN
+			 ,EGUR.APPL_OWNR_NAME				APPL_OWNR_NAME
+			 ,EGUR.BOND_HOLD_NAME  				CRED_BOND_HOLD
+			 ,'AP' 								RESP_TYPE_CODE
+			 ,'접수' 							RESP_TYPE_NAME
+			 ,'접수' 							RESP_MESG_TEXT
+			 ,'APVD'   							PROC_STAT
+			 ,#{p.guar_type}		 			GUAR_TYPE
+			 ,GUR.GUR_UUID					    GUR_UUID
+			 ,EGUR.ECNTR_UUID                   ECNTR_UUID
+   		FROM EGURDOC EGUR
+   	   INNER JOIN GUR GUR
+   	      ON GUR.TEN_ID = EGUR.TEN_ID
+   	     AND GUR.GUR_UUID = EGUR.GUR_UUID
+	   WHERE GUR.TEN_ID = #{g.tenant}
+	     AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<select id="destroyEgur" resultType="map">
+	<bind name="nowDateFormat" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+	/* elecGuarantee.destroyEGuar : 보증 파기 최종응답서 정보 */
+		SELECT
+			  RDOC.TEN_ID				AS TENANT
+			, RDOC.HEAD_MESG_SEND      	AS HEAD_MESG_RECV
+	    	, RDOC.HEAD_MESG_RECV      	AS HEAD_MESG_SEND
+		    , #{p.head_func_code}      	AS HEAD_FUNC_CODE
+		    , 'RBONGU'         			AS HEAD_MESG_TYPE
+		    , '최종응답서'       			AS HEAD_MESG_NAME
+		    , RDOC.HEAD_MESG_VERS     	AS HEAD_MESG_VERS
+		    , RDOC.HEAD_DOCU_NUMB     	AS HEAD_DOCU_NUMB
+		    , RDOC.HEAD_MANG_NUMB 		AS HEAD_MANG_NUMB
+		    , RDOC.HEAD_REFR_NUMB     	AS HEAD_REFR_NUMB
+		    , '최종응답서'       			AS HEAD_TITL_NAME
+		    , RDOC.HEAD_ORGA_CODE     	AS HEAD_ORGA_CODE
+		    , RDOC.HEAD_DOCU_NUMB
+		    , TO_CHAR(#{g.now}, 'YYYYMMDD')  AS DOCU_ISSU_DATE
+		    , RDOC.HEAD_ORGA_CODE      			AS DOCU_USER_TYPE
+		    , RDOC.CONT_NUMB_TEXT     			AS CONT_NUMB_TEXT
+		    , RDOC.CONT_NAME_TEXT      			AS CONT_MAIN_NAME
+		    , RDOC.CONT_CURC_CODE     			AS CONT_CURC_CODE
+		    , RDOC.CONT_MAIN_AMNT     			AS CONT_MAIN_AMNT
+		    , RDOC.APPL_ORGA_NAME     			AS APPL_ORGA_NAME
+		    , RDOC.APPL_ORPS_DIVS     			AS APPL_ORPS_DIVS
+		    , RDOC.APPL_ORPS_IDEN     			AS APPL_ORPS_IDEN
+		    , RDOC.APPL_OWNR_NAME     			AS APPL_OWNR_NAME
+		    , RDOC.BOND_HOLD_NAME     			AS CRED_BOND_HOLD
+		    , 'DE'         						AS RESP_TYPE_CODE
+		    , '파기'         					AS RESP_TYPE_NAME
+		    , #{p.resp_mesg_text}     			AS RESP_MESG_TEXT
+		    , 'DESTR'           				AS PROG_STS
+		    , GUR.GUR_UUID				    	AS GUR_UUID
+			, RDOC.ECNTR_UUID                   AS ECNTR_UUID
+	     FROM EGURDOC RDOC
+	    INNER JOIN GUR GUR
+	       ON GUR.TEN_ID = RDOC.TEN_ID
+	      AND GUR.GUR_UUID = RDOC.GUR_UUID
+	    WHERE GUR.TEN_ID = #{g.tenant}
+	      AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<select id="getPrePaymentList" resultType="map">
+	/* elecGuarantee.getPrePaymentList : 지급이행보증용 선급금 목록 조회*/
+	 SELECT  PYMT.PURC_CNTR_PYMT_EXPT_UUID
+          , PYMT.PYMT_TYP_CCD
+	      ,	PYMT.PYMT_REVNO			AS UNDE_SEQU_CONT
+          , PYMT.PYMT_RO
+          , PYMT.PYMT_AMT				AS UNDE_SEQU_AMNT
+          , PYMT.PYMT_EXPT_DT			AS UNDE_SEQU_TIME
+          , 'N'						AS UNDE_SEQU_CURC /* 우선 지급예정으로 셋팅 */
+     FROM CNTR CNTR
+	INNER JOIN PURC_CNTR PCNTR
+       ON PCNTR.TEN_ID = CNTR.TEN_ID
+      AND PCNTR.PURC_CNTR_UUID = CNTR.CNTR_CND_UUID
+    INNER JOIN PURC_CNTR_PYMT_EXPT PYMT
+       ON PYMT.TEN_ID = PCNTR.TEN_ID
+      AND PYMT.PURC_CNTR_UUID = PCNTR.PURC_CNTR_UUID
+     WHERE CNTR.TEN_ID = #{g.tenant}
+       AND CNTR.CNTR_UUID  = #{p.cntr_uuid}
+       AND PYMT.PYMT_TYP_CCD = 'APYMT'
+       AND ROWNUM = 1 </select>
+	<select id="getBondType" resultType="string">
+	/* elecGuarantee.getBondType : 보증 종류 확인*/
+	SELECT CASE WHEN GUR.GUR_TYP_CCD = 'CPGUR'
+				    THEN 'CONINF'
+				 WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR'
+				    THEN 'PREINF'
+				 WHEN GUR.GUR_TYP_CCD = 'DEFPGUR'
+			         THEN 'FLRINF'
+				 WHEN GUR.GUR_TYP_CCD = 'PYMTPGUR'
+			         THEN 'PAYINF'
+		   END HEAD_MESG_TYPE
+	FROM GUR GUR
+	 INNER JOIN CNTR CNTR
+	    ON CNTR.TEN_ID = GUR.TEN_ID
+	   AND CNTR.CNTR_UUID = GUR.CNTR_UUID
+	 INNER JOIN ECNTR ECNTR
+	    ON ECNTR.TEN_ID = GUR.TEN_ID
+	   AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+     WHERE GUR.TEN_ID = #{g.tenant}
+       AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<select id="getCredInfo" resultType="map">
+	/* elecGuarantee.getCredInfo : 채권자 담당자 정보조회*/
+		SELECT  CASE WHEN USR_NM IS NULL OR USR_NM = ''
+				   THEN ' '
+				   ELSE USR_NM
+				    END AS CRED_CHRG_NAME	            /* 협력사 담당자 이름 */
+		    , CASE WHEN DEPT_NM IS NULL OR DEPT_NM = ''
+			       THEN ' '
+			       ELSE DEPT_NM
+			        END AS CRED_DEPT_NAME	            /* 협력사 담당자 소속 부서 명 */
+			, CASE WHEN TEL IS NULL OR TEL = ''
+				   THEN ' '
+				   ELSE TEL
+					END AS CRED_PHON_NUMB	            /* 협력사 담당자 전화번호 */
+		  FROM (SELECT USR.USR_NM
+					 , DEPT.DEPT_NM
+					 , USR.TEL
+				  FROM USR USR
+				  LEFT JOIN ROLE_USR RUSR
+					ON RUSR.TEN_ID = USR.TEN_ID
+				   AND RUSR.USR_ID = USR.USR_ID
+				   AND RUSR.ROLE_CD = 'V500'            /* 역할 코드 : 정규업체(V500) */
+				  LEFT JOIN DEPT DEPT
+					ON DEPT.TEN_ID = USR.TEN_ID
+				   AND DEPT.DEPT_CD = USR.DEPT_CD
+				 WHERE USR.TEN_ID = #{g.tenant}
+				   AND USR.USR_TYP_CCD = 'VD'           /* 사용자 유형 : 협력사(VD) */
+				   AND USR.VD_CD = #{p.vd_cd}
+				   AND USR.USE_YN = 'Y'
+				   AND USR.STS <![CDATA[<>]]> 'D') A
+			 WHERE ROWNUM = '1' </select>
+	<select id="getPayBondInfo" resultType="map">
+		/*elecGuarantee.getPayBondInfo : 보증서 상세조회 */
+			SELECT  CNTR.TEN_ID		AS TENANT
+			    ,   CNTR.VD_CD
+				,	CNTR.CNTR_UUID
+			    ,   CNTR.CNTR_NO
+				,	CNTR.CNTR_REVNO
+				,   CNTR.CNTR_TYP_CCD
+				,   CNTR.CNTR_ST_DT
+				,   CNTR.CNTR_EXP_DT
+				,   CNTR.CNTR_DT
+				,   CNTR.CNTR_AMT
+				,   GUR.GUR_RO
+				,   GUR.GUR_UUID
+				,   GUR.GUR_TYP_CCD
+				,	#{p.head_mesg_type}									    AS HEAD_MESG_TYPE
+				,	'지급정보통보서'											AS HEAD_MESG_NAME
+				,	CNTR.CNTR_REVNO										AS REVISION_NO
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS BOND_CURC_CODE
+			    , CASE WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR'           /* 선급금 이행 보증 */
+				       THEN (GUR.APYMT_PYMT_AMT * GUR.GUR_RO) / 100
+			           ELSE CNTR.CNTR_AMT * GUR.GUR_RO / 100
+						END AS BOND_PENL_AMNT
+			    ,	GUR.GUR_ST_DT										AS BOND_BEGN_DATE
+				,	GUR.GUR_EXP_DT										AS BOND_FNSH_DATE
+				,   '006'												AS BOND_KIND_CODE
+				,   '000' AS CONT_PROC_TYPE--계약구분코드
+				,	CNTR.CNTR_NM											AS CONT_NAME_TEXT
+				,	'2'														AS CONT_TYPE_IDEN
+				,	CASE WHEN CNTR.CNTR_TYP_CCD = 'D02'
+				         THEN '1'
+				         ELSE '2'
+				    END													AS CONT_UNIT_DIVS
+				,	CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+						 THEN '1'
+						 ELSE '2'
+					END													AS CONT_NEWS_DIVS
+				,	CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+						 THEN '10' -- 배서업무구분 : 신규
+						 ELSE CASE WHEN CNTR.CNTR_EXP_DT <![CDATA[>]]> (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO =  CAST(BEFORE_GUAR.CNTR_REVNO AS INT))
+									AND CNTR.CNTR_AMT <![CDATA[>]]> (SELECT CNTR_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '62' -- 배서업무구분 : 연장증액
+								WHEN CNTR.CNTR_EXP_DT <![CDATA[>]]> (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '20' -- 배서업무구분 : 연장
+								WHEN CNTR.CNTR_AMT <![CDATA[>]]> (SELECT CNTR_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '60' -- 배서업무구분 : 증액
+								WHEN CNTR.CNTR_AMT <![CDATA[<]]> (SELECT CNTR_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '70' -- 배서업무구분 : 감액
+								ELSE '90'
+							END
+					END													AS BOND_APPL_CODE
+			     ,  CASE WHEN BEFORE_GUAR.GUR_UUID IS NULL OR BEFORE_GUAR.GUR_UUID = ''
+			     		 THEN '신규'
+			     		 ELSE CASE WHEN CNTR.CNTR_EXP_DT  <![CDATA[>]]>  (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT))
+                                    AND CNTR.SUP_AMT  <![CDATA[>]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '연장증액'
+                                WHEN CNTR.CNTR_EXP_DT  <![CDATA[>]]>  (SELECT CNTR_EXP_DT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '연장'
+                                WHEN CNTR.SUP_AMT  <![CDATA[>]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '증액'
+                                WHEN CNTR.SUP_AMT  <![CDATA[<]]>  (SELECT SUP_AMT FROM CNTR WHERE TEN_ID = #{g.tenant} AND CNTR_NO = #{p.cntr_no} AND CNTR_REVNO = CAST(BEFORE_GUAR.CNTR_REVNO AS INT)) THEN '감액'
+                                ELSE '기타'
+                            END
+                    END                                                 AS BOND_APPL_TXT
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS CONT_CURC_CODE
+				,   CNTR.CNTR_AMT
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS FORN_CURC_CODE
+				,  CNTR.CNTR_DT										    AS CONT_MAIN_DATE
+				,  CNTR.CNTR_ST_DT                                   		AS CONT_BEGN_DATE
+				,  CNTR.CNTR_EXP_DT                                       AS CONT_FNSH_DATE
+				,	CASE WHEN CNTR.CNTR_TYP_CCD = 'D02'
+				         THEN 0
+				         ELSE GUR.GUR_RO
+				    END    									    		AS CONT_PRIC_RATE
+				,	GUR.GUR_ST_DT										AS MORG_BEGN_DATE
+				,	GUR.GUR_EXP_DT										AS MORG_FNSH_DATE
+				,	GUR.GUR_RO									        AS MORG_PRIC_RATE
+				,	CNTR.CNTR_AMT									        AS DEFECT_AMT
+				,	GUR.GUR_RO									    	AS PREP_PRIC_RATE
+				,   CNTR.CNTR_ST_DT                                   		AS PREP_BEGN_DATE
+				,   CNTR.CNTR_EXP_DT                                       AS PREP_FNSH_DATE
+				,	GUR.APYMT_PYMT_DT									AS PREP_PAYM_DATE
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS PREP_CURC_CODE
+				,	CNTR.CNTR_AMT									        AS PREP_PAYM_AMNT
+				,	CASE
+						WHEN CNTR.CUR_CCD = 'KRW' THEN 'WON'
+						ELSE CNTR.CUR_CCD
+					END													AS FPRE_CURC_CODE
+				,	VD.VD_NM											AS CRED_ORGA_NAME
+				,	'O'													AS CRED_ORPS_DIVS
+				,   VD.CORPNO											AS CRED_ORGA_NUMB
+				,   VD.BIZREGNO											AS CRED_ORPS_IDEN
+				,	VD.CEO_NM                         					AS CRED_OWNR_NAME
+				,	VD.VD_NM											AS CRED_BOND_HOLD
+				,   OG.CORPNO											AS CORP_REG_NO
+				,   OG.BIZREGNO											AS BP_BIZREGNO
+				,	'1111111111111'										AS CRED_OWNR_NUMB
+				,   CASE WHEN VD.ZIPCD IS NULL OR VD.ZIPCD = ''
+				         THEN ' '
+				         ELSE VD.ZIPCD
+				    END													AS BP_ZIPCD
+				,	CONCAT(VD.DTL_ADDR_1 , VD.DTL_ADDR_2)             	AS CRED_ORGA_ADDR
+			    , CASE WHEN VUSR.USR_NM IS NULL OR VUSR.USR_NM = ''
+				       THEN ' '
+			           ELSE VUSR.USR_NM
+						END AS CRED_CHRG_NAME
+		        ,   ' '				    								AS DEPT_NM
+			    , CASE WHEN VUSR.TEL IS NULL OR VUSR.TEL = ''
+				       THEN ' '
+			           ELSE VUSR.TEL
+						END AS CRED_PHON_NUMB
+				,	VD.VD_EML											AS CRED_SEND_MAIL
+				,	OG.LOGIC_ORG_NM										AS APPL_ORGA_NAME
+				,	'O'													AS APPL_ORPS_DIVS
+				,	''													AS APPL_ORGA_NUMB
+				,   OG.BIZREGNO											AS SP_BIZREGNO
+				,	'1111111111111'										AS APPL_OWNR_NUMB
+				,	OG.CEO_NM									     	AS APPL_OWNR_NAME
+				,   OG.ZIPCD											AS SP_ZIPCD
+				,	OG.ADDR										        AS APPL_ORGA_ADDR
+				,	UR.USR_NM	         			               		AS APPL_CHRG_NAME
+				,	''													AS APPL_DEPT_NAME
+				,	UR.TEL												AS APPL_OFFC_PHON
+				,	TRIM(UR.EML)										AS APPL_SEND_MAIL
+				,	(SELECT
+						GUR_BOND_NO
+					FROM
+						CNTR_EGUR EGUR1
+					WHERE TEN_ID = #{g.tenant}
+					    AND EGUR1.ECNTR_NO = CNTR.CNTR_NO
+						AND EGUR1.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+						AND EGUR1.ECNTR_REVNO =
+						(SELECT
+							MAX(EGUR2.ECNTR_REVNO)
+						FROM
+							CNTR_EGUR EGUR2
+						WHERE TEN_ID = #{g.tenant}
+							AND EGUR2.ECNTR_NO =  CNTR.CNTR_NO
+							AND EGUR2.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+						GROUP BY EGUR2.ECNTR_NO))						AS HIST_BOND_NUMB
+				,   GUR.ATHG_UUID   									AS ATHG_UUID
+				,   '1'													AS CONT_COMM_DIVS
+				,   '2'													AS CONT_PLDG_YSNO
+				,   'O'													AS CONT_PLDG_DIVS
+				,   VD.BIZREGNO											AS CONT_PLDG_IDEN
+				,   VD.VD_NM											AS CONT_PLDG_NAME
+				,   '1'													AS CONT_PREM_YSNO
+				,   'O'													AS CONT_PREM_DIVS
+				,   ''													AS CONT_PREM_IDEN
+				,   ''													AS CONT_PREM_NAME
+				,   CNTR.CNTR_ST_DT										AS PAYM_BEGN_DATE
+				,   CNTR.CNTR_EXP_DT										AS PAYM_FNSH_DATE
+				,   'WON'												AS PAYM_BEFR_CURC
+				,   1234211												AS PAYM_BEFR_AMNT
+				,   'WON'												AS FPAY_BEFR_CURC
+				,   '10000'												AS FPAY_BEFR_AMNT
+				,   '20050505'											AS PAYM_DEBT_DATE
+				,   '1'													AS PAYM_ACNT_METH
+				,   CNTR.CNTR_DT											AS UNDE_LAST_DATE
+				,   'WON'												AS UNDE_TOTA_CURC
+				,   CNTR.CNTR_AMT											AS UNDE_TOTA_AMNT
+				,   CASE WHEN (SELECT COUNT(*)
+				                          FROM PURC_CNTR PCNTR
+										 INNER JOIN PURC_CNTR_PYMT_EXPT PYMT
+                                            ON PYMT.TEN_ID = PCNTR.TEN_ID
+	                                       AND PYMT.PURC_CNTR_UUID = PCNTR.PURC_CNTR_UUID
+				                         WHERE PCNTR.TEN_ID = CNTR.TEN_ID
+					                       AND PCNTR.PURC_CNTR_UUID = CNTR.CNTR_CND_UUID
+					                       AND PYMT.PYMT_TYP_CCD = 'APYMT') &gt; 0
+					                    THEN 'Y'
+				                    ELSE 'N'
+					END													AS UNDE_INDI_CURC /* 선금 지급 여부 */
+				,  (SELECT COUNT(*)
+				      FROM PURC_CNTR PCNTR
+					 INNER JOIN PURC_CNTR_PYMT_EXPT PYMT
+					    ON PYMT.TEN_ID = PCNTR.TEN_ID
+					   AND PYMT.PURC_CNTR_UUID = PCNTR.PURC_CNTR_UUID
+				     WHERE PCNTR.TEN_ID = CNTR.TEN_ID
+					   AND PCNTR.PURC_CNTR_UUID = CNTR.CNTR_CND_UUID
+					   AND PYMT.PYMT_TYP_CCD = 'APYMT')							AS UNDE_NUMB_CONT
+				,   '20200202'												AS UNDE_FINI_TIME /* 일단 하드코딩 선급금 결제 기일 */
+				,   '1'														AS UNDE_MONT_NUME
+				,  CASE WHEN #{p.kisung_file_yn} = 'Y'
+				        THEN 'Y'
+				        ELSE 'N'
+				   END 													    AS UNDE_ACCO_CURC
+				, 'Y'														AS UNDE_CONT_CURC
+				, CASE WHEN ECNTR.CNTR_TMPL_TYP_CCD = 'TMPL'
+				       THEN ECNTR.SGNCMPLD_CNTRDOC_ATHG_UUID
+				       ELSE ECNTR.TMPL_UNUD_CNTRDOC_ATHG_UUID
+				  END														AS CONTRACT_FILE_ATHG_UUID
+				, NULL														AS KISUNG_CONFIRM_FILE_ATHG_UUID
+			FROM CNTR CNTR
+		   INNER JOIN ECNTR ECNTR
+			  ON ECNTR.TEN_ID = CNTR.TEN_ID
+			 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+		   INNER JOIN GUR GUR
+			  ON GUR.TEN_ID = CNTR.TEN_ID
+			 AND GUR.CNTR_UUID = CNTR.CNTR_UUID
+		   INNER JOIN VD VD
+			  ON VD.TEN_ID = CNTR.TEN_ID
+			 AND VD.VD_CD = CNTR.VD_CD
+		   INNER JOIN USR UR
+			  ON UR.TEN_ID = VD.TEN_ID
+			 AND UR.USR_ID = CNTR.REGR_ID
+		   INNER JOIN USR VUSR
+		      ON VUSR.TEN_ID = VD.TEN_ID
+		     AND VUSR.VD_CD = VD.VD_CD
+		     AND VUSR.USR_TYP_CCD = 'VD'
+		     AND VUSR.USE_YN = 'Y'
+		     AND VUSR.STS <![CDATA[<>]]> 'D'
+		    LEFT JOIN ROLE_USR RUSR
+		      ON RUSR.TEN_ID = VUSR.TEN_ID
+		     AND RUSR.USR_ID = VUSR.USR_ID
+		     AND RUSR.ROLE_CD = 'V500'
+		INNER JOIN LOGIC_ORG OG
+			  ON OG.TEN_ID = CNTR.TEN_ID
+			 AND OG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+			 AND OG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		    LEFT OUTER JOIN GUR BEFORE_GUAR
+              ON BEFORE_GUAR.TEN_ID = GUR.TEN_ID
+             AND BEFORE_GUAR.CNTR_NO = GUR.CNTR_NO
+             AND CAST(BEFORE_GUAR.CNTR_REVNO AS INT) = CAST(GUR.CNTR_REVNO AS INT) -1
+             AND BEFORE_GUAR.GUR_TYP_CCD = GUR.GUR_TYP_CCD
+             AND BEFORE_GUAR.GUR_STS_CCD = 'APVD'
+		   WHERE GUR.TEN_ID = #{g.tenant}
+			 AND GUR.GUR_UUID = #{p.gur_uuid}
+			WHERE ROWNUM = '1' </select>
+	<select id="getGuarDetail" resultType="map">
+		/* elecGuarantee.getGuarDetail */
+		SELECT EGURDOC.XML_PATH
+			 , EGURDOC.HEAD_MESG_TYPE
+			 , EGURDOC.BOND_STAT_TEXT
+			 , EGURDOC.SPCL_PROV_TEXT
+			 , EGURDOC.SPCL_COND_TEXT
+			 , EGURDOC.INVI_AGNC_NAME
+			 , EGURDOC.BOND_PRIC_RATE
+			 , EGURDOC.CRED_ORPS_DIVS
+			 , GUR.GUR_STS_CCD AS STATUS
+			 , GUR.GUR_TYP_CCD AS GUAR_TYPE
+			 , GUR.GUR_TYP_CCD AS GUR_TYP_CCD
+			 , EGURDOC.CONT_NUMB_TEXT
+			 , GUR.GUR_BOND_NO
+			 , GUR.GUR_INSCO_CCD
+			 , EGURDOC.BOND_PENL_AMNT
+			 , EGURDOC.CRED_ORPS_IDEN
+			 , SUBSTR(EGURDOC.HEAD_DOCU_NUMB, 7, 21)  AS GUR_BOND_NO
+			 , EGURDOC.HEAD_DOCU_NUMB
+			 , EGURDOC.BOND_PENL_TEXT
+			 , EGURDOC.CONT_MAIN_AMNT
+			 , EGURDOC.CONT_NAME_TEXT
+			 , EGURDOC.CONT_MAIN_DATE
+			 , EGURDOC.CONT_FNSH_DATE
+			 , EGURDOC.SPCL_COND_TEXT
+			 , EGURDOC.APPL_OWNR_NAME
+			 , EGURDOC.APPL_ORGA_NAME
+			 , EGURDOC.APPL_ORPS_DIVS
+			 , EGURDOC.APPL_ORPS_IDEN
+			 , EGURDOC.BOND_PREM_AMNT
+			 , EGURDOC.BOND_BEGN_DATE
+			 , EGURDOC.BOND_FNSH_DATE
+			 , EGURDOC.CONT_BEGN_DATE
+			 , EGURDOC.CONT_CURC_CODE
+			 , EGURDOC.CONT_PAYM_AMNT
+			 , EGURDOC.CONT_PAYM_DATE
+			 , EGURDOC.BOND_NUMB_TEXT
+			 , EGURDOC.DOCU_ISSU_DATE
+			 , EGURDOC.ISSU_ADDR_TXT1
+			 , EGURDOC.ISSU_DEPT_NAME
+			 , EGURDOC.CHRG_PHON_TEXT
+			 , EGURDOC.ISSU_DEPT_OWNR
+			 , EGURDOC.CHRG_NAME_TEXT
+			 , EGURDOC.ISSU_ADDR_TXT2
+			 , EGURDOC.CRED_ORGA_NAME
+			 , EGURDOC.HEAD_MESG_TYPE
+			 , EGURDOC.PENL_CURC_CODE
+			 ,	CASE
+					  WHEN EGURDOC.HEAD_MESG_TYPE = 'CONGUA' THEN '계약보증서'
+					  WHEN EGURDOC.HEAD_MESG_TYPE = 'PREGUA' THEN '선금급보증서'
+					  WHEN EGURDOC.HEAD_MESG_TYPE = 'FLRGUA' THEN '하자보수보증서'
+					  WHEN EGURDOC.HEAD_MESG_TYPE = 'PAYGUA' THEN '지급보증서'
+					  ELSE ''
+			END													AS HEAD_MESG_NAME
+		FROM GUR GUR
+	   INNER JOIN CNTR CNTR
+		  ON CNTR.TEN_ID = GUR.TEN_ID
+		 AND CNTR.CNTR_UUID = GUR.CNTR_UUID
+	   INNER JOIN ECNTR ECNTR
+		  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN EGURDOC EGURDOC
+	      ON EGURDOC.TEN_ID = GUR.TEN_ID
+	     AND EGURDOC.GUR_UUID = GUR.GUR_UUID
+		WHERE GUR.TEN_ID = #{g.tenant}
+		  AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+</mapper>

@@ -1,0 +1,188 @@
+<dom-module id="ep-fi-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+		<sc-request-group init>
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<sc-code code="P094" value="{{codes.P094}}"></sc-code>
+				<sc-code code="C077" value="{{codes.C077}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<sc-ajax id="findListFieldIntroPopup"
+				 url="findListFieldIntroPopup.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}"></sc-ajax>
+		<sc-ajax id="findInfoFieldIntro"
+				 url="findInfoFieldIntro.do"></sc-ajax>
+		
+		<cc-search-condition-panel on-search="onFindList" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-multi-combobox-field id="operorgcombobox"
+												 oper-unit-cd="PO" value="{{searchParam.oorg_cd}}"
+												 placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_date}}" to-value="{{searchParam.to_date}}"
+									  default-from-value="-1M" default-to-value="1M" string-date="false">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{searchParam.sitebrfg_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="작성자"></sc-label>
+				<cc-user-search id="userSearch" value="{{searchParam.sitebrfg_pic_nm}}" result-field="usr_id" result-value="{{searchParam.sitebrfg_pic_id}}"></cc-user-search>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" editable="false" use-dummy="false"
+				 use-state="false" selection-mode="radio"
+				 data-provider="{{resultList}}"
+				 on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="선택" on-click="onSelection"></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="170"
+									display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="sitebrfg_sts_ccd" header-text="상태" width="120"
+									display-field="label" value-field="data" items="{{codes.P094}}"></sc-combobox-column>
+				<sc-data-column data-field="sitebrfg_no" header-text="현장설명회 번호" width="120" text-align="center"></sc-data-column>
+				<sc-group-column hide-child-headers="true" header-text="제목" width="330">
+					<sc-data-column data-field="sitebrfg_tit" width="300" text-align="left"></sc-data-column>
+					<sc-image-column singular-source="ui/assets/img/grid/ico_grd_select.png" data-field="btn_select" width="30" text-align="center" editable="false"></sc-image-column>
+				</sc-group-column>
+				<sc-date-column data-field="sitebrfg_st_dttm" header-text="현장설명회 일시" width="120" text-align="center" format-type="datetime" string-date="false"></sc-date-column>
+				<sc-data-column data-field="sitebrfg_pic_nm" header-text="작성자" width="120" text-align="center"></sc-data-column>
+				<sc-data-column data-field="sitebrfg_inchr_dept_nm" header-text="작성자 부서" width="120" text-align="center"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+	<script>
+		Polymer({
+			is: "ep-fi-list",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							P094: [], // 현장설명회 진행상태
+							oorgCd: [] // 구매운영 조직
+						};
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				// 전달 할 객체
+				parameter: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			load: function() {
+				var me = this;
+				me.onFindList();
+			},
+			
+			onFindList: function() {
+				var me = this;
+				
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+				UT.request(me.$.findListFieldIntroPopup);
+			},
+			
+			onItemClick: function(e) {
+				var me   = this,
+					data = e.detail.data,
+					item = e.detail.item;
+				
+				if(item.dataField === "btn_select") {
+					
+					// 정보 조회 이후 데이터 전달
+					me.$.findInfoFieldIntro.body = {sitebrfg_uuid: data.sitebrfg_uuid};
+					UT.request(me.$.findInfoFieldIntro, function(e, res) {
+						var result    = res.response,
+							fiData    = result.fiData,
+							fiItems   = result.fiItems,
+							fiVendors = result.fiVendors;
+						
+						fiVendors.forEach(function(el) {
+							el["vd_pic_tel"] = el["vd_pic_ctc"];
+							el["rcmd_yn"] = 'N';
+							el["exc_yn"] = 'N';
+							delete el["vd_pic_ctc"];
+						});
+						me.set("parameter.fiData", fiData);
+						me.set("parameter.items", fiItems);
+						me.set("parameter.vendors", fiVendors);
+						me.fire("selected-item", me.parameter);
+						
+					});
+					
+				}
+			},
+			
+			onSelection: function() {
+				var me   = this,
+					data = me.$.gridPanel.getDataProvider().selectionCheckedItems()[0];
+				
+				if(!data) {
+					return;
+				}
+				// 정보 조회 이후 데이터 전달
+				me.$.findInfoFieldIntro.body = {sitebrfg_uuid: data.sitebrfg_uuid};
+				UT.request(me.$.findInfoFieldIntro, function(e, res) {
+					var result    = res.response,
+						fiData    = result.fiData,
+						fiItems   = result.fiItems,
+						fiVendors = result.fiVendors;
+					
+					fiVendors.forEach(function(el) {
+						el["vd_pic_tel"] = el["vd_pic_ctc"];
+						el["rcmd_yn"] = 'N';
+						el["exc_yn"] = 'N';
+						delete el["vd_pic_ctc"];
+					});
+					me.set("parameter.fiData", fiData);
+					me.set("parameter.items", fiItems);
+					me.set("parameter.vendors", fiVendors);
+					me.fire("selected-item", me.parameter);
+					
+				});
+			}
+			
+		})
+	
+	</script>
+
+</dom-module>

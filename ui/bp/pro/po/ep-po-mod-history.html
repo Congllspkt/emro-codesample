@@ -1,0 +1,900 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="ep-po-mod-history">
+
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<sc-ajax
+			id="findCurrentPo"
+	        url="findCurrentPo.do"
+	        body="{{searchParam}}"
+	        on-response="completeFindCurrentPo">
+	    </sc-ajax>
+	    
+		<sc-ajax id="findListPoHistory"
+				 url="findListPoHistory.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListPoHistory">
+		</sc-ajax>
+		
+		<sc-ajax id="findPoCompare"
+				 url="findPoCompare.do"
+				 body="{{compareParam}}"
+				 on-response="completeFindPoCompare">
+		</sc-ajax>
+		
+       	<sc-code-group>
+            <sc-code code="C004" value="{{codes.cur}}" ></sc-code>          <!-- 통화 -->
+            <sc-code code="C007" value="{{codes.uomCcd}}" ></sc-code>       <!-- UOM -->
+            <sc-code code="C024" value="{{codes.domovrsDivCcd}}" ></sc-code>  <!-- 내외자 구분 공통코드 -->
+            <sc-code code="C031" value="{{codes.taxTypCcd}}" ></sc-code>        <!-- 세금코드 -->
+            <sc-code code="P009" value="{{codes.pymtmethCcd}}" ></sc-code>   <!-- 지급방법 -->
+            <sc-code code="P010" value="{{codes.delyTermsCd}}" ></sc-code>  <!-- 납품방법 -->
+            <sc-code code="P045" value="{{codes.purcTypCcd}}" ></sc-code>      <!-- 구매 유형 공통코드 -->
+            <sc-code code="P048" value="{{codes.maintBondTyp}}" ></sc-code> <!-- 하자보증타입 -->
+            <sc-code code="P064" value="{{codes.bondCls}}" ></sc-code>      <!-- 계약이행 보증구분/하자보증구분/선급금보증구분 -->
+            <sc-code code="D015" value="{{codes.stamptaxIssueRateTyp}}" ></sc-code>      <!-- 인지세 납부 비율 유형 -->
+            <sc-code code="P091" value="{{codes.payClsCd}}"></sc-code>		<!-- 지급구분 (선급금/중도금/잔금) -->
+        </sc-code-group>
+        
+		<cc-page-title-bar title-text="[[pageTitle]]" i18n-disabled>
+            <sc-button text="변경 이력" on-click="onShowPoHistory" hidden="[[!showHistoryBtn]]"></sc-button>
+        </cc-page-title-bar>
+        
+        <div id="div_po_history" class="vbox flex">
+			<sc-grid id="poGridPanel" class="flex" collapsible="true" use-dummy="false"
+					 use-selection="true"
+					 use-state="false"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="비교" on-click="onShowPoCompare"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column 	data-field="po_revno"				header-text="차수"					width="50"	text-align="center"	></sc-data-column>
+					<sc-data-column 	data-field="po_tit"				header-text="제목"				width="300"	text-align="left"	></sc-data-column>
+					<sc-combobox-column	data-field="cur_ccd"				header-text="통화"					width="70"	text-align="center"
+										display-field="data"			value-field="data"					items="{{codes.cur}}"	></sc-combobox-column>
+					<sc-data-column		data-field="po_amt"			header-text="금액"				width="140"	text-align="right"
+										data-type="number"				format-type="amt"	></sc-data-column>
+					<sc-date-column		data-field="cntr_st_dt"		header-text="계약 시작 일자"			width="100"	text-align="center"	></sc-date-column>
+					<sc-date-column		data-field="cntr_exp_dt"		header-text="계약 만료 일자"			width="100"	text-align="center"	></sc-date-column>
+					<sc-date-column		data-field="po_crn_dt"		header-text="등록 일자"				width="100"	text-align="center"	></sc-date-column>
+					<sc-image-column	data-field="img_po_rem"			header-text="비고"				width="80"	text-align="center"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-image-column	data-field="img_mod_req_cause"	header-text="변경 요청 사유"			width="80"	text-align="center"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-attachment-column	shared-group-field="athg_uuid"
+											data-field="att_cnt"		header-text="첨부파일"				width="100"	text-align="right"	></sc-attachment-column>
+				</sc-grid-columns>
+			</sc-grid>
+			
+			<sc-grid id="poItemGridPanel" class="flex" collapsible="true" use-dummy="false"
+					 use-selection="false"
+					 use-state="false"
+					 on-item-click="onItemGridClick">
+				<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="po_lno"			header-text="항번"				width="50"	text-align="center"	data-type="number"	mergeable="true"></sc-data-column>
+					<sc-data-column		data-field="po_revno"			header-text="차수"				width="50"	text-align="center"	data-type="number"></sc-data-column>
+					<sc-data-column		data-field="item_mod_state"	header-text="상태"				width="80"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"			width="100"	text-align="center"	mergeable="true"	merge-based-field="po_lno"></sc-data-column>
+					<sc-data-column		data-field="disp_item_nm"		header-text="품목 명"			width="250"	text-align="left"	mergeable="true"	merge-based-field="po_lno"></sc-data-column>
+					<sc-data-column		data-field="item_spec"			header-text="품목 규격"				width="250"	text-align="left"	mergeable="true"	merge-based-field="po_lno"></sc-data-column>
+					<sc-image-column	data-field="img_item_spec_dtl"	header-text="품목 규격 상세"			width="100"	text-align="center"	mergeable="true"	merge-based-field="po_lno"	visible="[[formula('hasNoCdItem')]]"
+										image-change-function="onItemImageChangeFn"></sc-image-column>
+					<sc-checkbox-column	data-field="df_yn"	header-text="면세 여부"			width="60"	display-checkbox="false"></sc-checkbox-column>
+					<sc-combobox-column	data-field="uom_ccd"		header-text="UOM"				width="60"	text-align="center"
+										display-field="data"		value-field="data"				items="{{codes.uomCcd}}" ></sc-combobox-column>
+					<sc-data-column		data-field="po_qty"		header-text="수량"			width="80"	text-align="right"
+										data-type="number"			format-type="qty" 				></sc-data-column>
+					<sc-data-column		data-field="po_uprc"		header-text="단가"			width="100"	text-align="right"
+										data-type="number"			format-type="price"				></sc-data-column>
+					<sc-data-column		data-field="po_amt"		header-text="금액"			width="140"	text-align="right"
+										data-type="number"			format-type="amt"				></sc-data-column>
+					<sc-date-column		data-field="req_dlvy_dt"		header-text="요청 납품 일자"			width="120"	visible="[[formula('showMTColumn')]]"></sc-date-column>
+                	<sc-date-column		data-field="const_st_dt"			header-text="공사 시작 일자"		width="80"	visible="[[formula('showCTColumn')]]"></sc-date-column>
+					<sc-date-column		data-field="const_exp_dt"			header-text="공사 종료 일자"		width="80"	visible="[[formula('showCTColumn')]]"></sc-date-column>
+					<sc-data-column		data-field="dlvy_plc"		header-text="납품 장소"	width="150"	text-align="left"	></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="구매 그룹"			width="180"	text-align="center"	>
+						<sc-data-column	data-field="purc_grp_cd"									width="50"	text-align="center"	></sc-data-column>
+						<sc-data-column	data-field="purc_grp_nm"									width="100"	text-align="center"	></sc-data-column>
+					</sc-group-column>
+					<sc-data-column		data-field="pr_realusr_nm"		header-text="구매요청 실수요자"		width="100"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="gr_pic_nm"		header-text="입고 담당자"		width="100"	text-align="center"	></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec_dtl"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_nm"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<div id="div_po_compare" class="page flex">
+			<cc-form-panel title-text="일반 정보">
+            	<cc-fieldset>
+							<sc-label text="발주 차수"></sc-label>
+							<sc-label text="{{comparePoData.prev_po_revno}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="{{comparePoData.post_po_revno}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="제목"></sc-label>
+							<sc-label text="{{comparePoData.prev_po_tit}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="po_tit">
+							<sc-label text="{{comparePoData.post_po_tit}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="통화"></sc-label>
+							<sc-label text="{{comparePoData.prev_cur_ccd}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="cur">
+							<sc-label text="{{comparePoData.post_cur_ccd}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="금액"></sc-label>
+							<sc-label text="[[formatFn(comparePoData.prev_po_tot_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="po_amt">
+							<sc-label text="[[formatFn(comparePoData.post_po_tot_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="계약기간"></sc-label>
+							<div class="field-box" style="width:100%">
+								<sc-label text="[[formatFn(comparePoData.prev_cntr_st_dt, 'date')]]" i18n-disabled></sc-label>
+								<span style="margin:0 2px">~</span>
+								<!--<sc-label text="~" style="margin:0 2px"></sc-label>-->
+								<sc-label text="[[formatFn(comparePoData.prev_cntr_exp_dt, 'date')]]" i18n-disabled></sc-label>
+							</div>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="cntr_prd">
+							<div class="field-box" style="width:100%">
+								<sc-label text="[[formatFn(comparePoData.post_cntr_st_dt, 'date')]]" i18n-disabled></sc-label>
+								<span style="margin:0 2px">~</span>
+								<!--<sc-label text="~" style="margin:0 2px"></sc-label>-->
+								<sc-label text="[[formatFn(comparePoData.post_cntr_exp_dt, 'date')]]" i18n-disabled></sc-label>
+							</div>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="계약 금액(VAT포함)"></sc-label>
+							<sc-label text="[[formatFn(comparePoData.prev_cntr_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="cntr_amt">
+							<sc-label text="[[formatFn(comparePoData.post_cntr_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="공급가액"></sc-label>
+							<sc-label text="[[formatFn(comparePoData.prev_sup_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="sup_amt">
+							<sc-label text="[[formatFn(comparePoData.post_sup_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="VAT"></sc-label>
+							<sc-label text="[[formatFn(comparePoData.prev_vat_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="vat_amt">
+							<sc-label text="[[formatFn(comparePoData.post_vat_amt, 'amt')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="등록 일자"></sc-label>
+							<sc-label text="[[formatFn(comparePoData.prev_po_crn_dt, 'date')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="po_crn_dt">
+							<sc-label text="[[formatFn(comparePoData.post_po_crn_dt, 'date')]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="비고"></sc-label>
+							<sc-textarea-field value="{{comparePoData.prev_po_rmk}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="po_rem">
+							<sc-textarea-field value="{{comparePoData.post_po_rmk}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="변경 사유"></sc-label>
+							<sc-textarea-field value="{{comparePoData.prev_po_chg_req_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="po_chg_req_rsn">
+							<sc-textarea-field value="{{comparePoData.post_po_chg_req_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+				<cc-form-panel title-text="첨부파일" collapsible="false"  form-cls="label-column">
+				<cc-fieldset>
+							<sc-upload id="prevAtt" class="h-200" value="{{comparePoData.prev_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+            	<cc-fieldset>
+							<sc-upload id="postAtt" class="h-200" value="{{comparePoData.post_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+				<cc-form-panel title-text="지급방법">
+            	<cc-fieldset>
+                        <sc-label text="지급방법"></sc-label>
+                            <div class="field-box" style="width:100%">
+                                <sc-label text="[[_getCodeName('pymtmethCcd', comparePoData.prev_pymtmeth_ccd)]]" i18n-disalbed></sc-label>
+                            </div>
+                </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="pymtmeth_ccd">
+                            <div class="field-box" style="width:100%">
+                                <sc-label text="[[_getCodeName('pymtmethCcd', comparePoData.post_pymtmeth_ccd)]]" i18n-disalbed></sc-label>
+                            </div>
+                 </cc-fieldset>
+            	<cc-fieldset>
+					<sc-label text="지급방법 설명"></sc-label>
+                            <sc-label text="{{comparePoData.prev_pymtmeth_expln}}" i18n-disalbed></sc-label>
+                </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="pymtmeth_expln">
+                            <sc-label text="{{comparePoData.post_pymtmeth_expln}}" i18n-disalbed></sc-label>
+                </cc-fieldset>
+            	<cc-fieldset>
+                        <sc-label text="납품방법"></sc-label>
+                            <div class="field-box" style="width:100%">
+                                <sc-label text="[[_getCodeName('delyTermsCd', comparePoData.prev_dlvymeth_ccd)]]" i18n-disalbed></sc-label>
+                            </div>
+                 </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="dlvymeth_ccd">
+                            <div class="field-box" style="width:100%">
+                                <sc-label text="[[_getCodeName('delyTermsCd', comparePoData.post_dlvymeth_ccd)]]" i18n-disalbed></sc-label>
+                            </div>
+                </cc-fieldset>
+            	<cc-fieldset>
+                        <sc-label text="납품방법 설명"></sc-label>
+                            <sc-label text="{{comparePoData.prev_dlvymeth_expln}}" i18n-disalbed></sc-label>
+                 </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="dlvymeth_expln">
+                            <sc-label text="{{comparePoData.post_dlvymeth_expln}}" i18n-disalbed></sc-label>
+                </cc-fieldset>
+            	<cc-fieldset>
+                        <sc-label text="세금 코드"></sc-label>
+                            <sc-label text="[[_getCodeName('taxTypCcd', comparePoData.prev_tax_typ_ccd)]]" i18n-disalbed></sc-label>
+                 </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="tax_typ_ccd">
+                            <sc-label text="[[_getCodeName('taxTypCcd', comparePoData.post_tax_typ_ccd)]]" i18n-disalbed></sc-label>
+                </cc-fieldset>
+            	<cc-fieldset>
+                        <sc-label text="대금지급조건"></sc-label>
+                            <sc-textarea-field class="h-50" value="{{comparePoData.prev_pymtmeth_cnd}}" readonly="true"></sc-textarea-field>
+                </cc-fieldset>
+            	<cc-fieldset class$="{{postClassNm}}" id="pymtmeth_cnd">
+                            <sc-textarea-field class="h-50" value="{{comparePoData.post_pymtmeth_cnd}}" readonly="true"></sc-textarea-field>
+                </cc-fieldset>
+            	<cc-fieldset>
+							<sc-label text="지급 조건"></sc-label>
+                            <sc-grid id="prevPaymentPlanGrid" class="h-150"
+                            		 editable="false"
+                            		 sortable="false"
+                            		 use-dummy="false"
+                            		 column-fit-style="evenFill"
+                            		 use-state="false"
+                            		 use-selection="false">
+                            	<cc-grid-toolbar>
+				                </cc-grid-toolbar>
+				                <sc-grid-columns>
+				                	<sc-combobox-column	data-field="pymt_typ_ccd"		header-text="지급 구분"		width="90"	required="true"
+				                						display-field="label"		value-field="data"			items="{{codes.payClsCd}}"></sc-combobox-column>
+				                	<sc-data-column		data-field="pymt_ro"		header-text="지급 비율(%)"		width="80"	required="true"		text-align="right"
+				                						data-type="number"			format-type="decimal" ></sc-data-column>
+				                	<sc-data-column		data-field="pymt_amt"		header-text="지급 금액"		width="180"	editable="false"	text-align="right"
+				                						data-type="number"			format-type="amt"></sc-data-column>
+				                	<sc-date-column		data-field="pymt_expt_dt"	header-text="지급 예정 일자"	width="100"	editable="true"		required="true"
+				                						value-format="yyyyMMdd"		string-date="true"></sc-date-column>
+				                </sc-grid-columns>
+                            </sc-grid>
+                </cc-fieldset>
+            	<cc-fieldset>
+                            <sc-grid id="postPaymentPlanGrid" class="h-150"
+                            		 editable="false"
+                            		 sortable="false"
+                            		 use-dummy="false"
+                            		 column-fit-style="evenFill"
+                            		 use-state="false"
+                            		 use-selection="false"
+                            		 row-style-function="onPayPlanRowStyle">
+                            	<cc-grid-toolbar>
+				                </cc-grid-toolbar>
+				                <sc-grid-columns>
+				                	<sc-combobox-column	data-field="pymt_typ_ccd"		header-text="지급 구분"		width="90"	required="true"
+				                						display-field="label"		value-field="data"			items="{{codes.payClsCd}}"></sc-combobox-column>
+				                	<sc-data-column		data-field="pymt_ro"		header-text="지급 비율(%)"		width="80"	required="true"		text-align="right"
+				                						data-type="number"			format-type="decimal" 		item-style-function="onPayPlanItemStyleFn"></sc-data-column>
+				                	<sc-data-column		data-field="pymt_amt"		header-text="지급 금액"		width="180"	editable="false"	text-align="right"
+				                						data-type="number"			format-type="amt"			item-style-function="onPayPlanItemStyleFn"></sc-data-column>
+				                	<sc-date-column		data-field="pymt_expt_dt"	header-text="지급 예정 일자"	width="100"	editable="true"		required="true"
+				                						value-format="yyyyMMdd"		string-date="true"			item-style-function="onPayPlanItemStyleFn"></sc-date-column>
+				                </sc-grid-columns>
+				                <sc-grid-fields>
+				                	<sc-grid-field data-field="rate_changed"></sc-grid-field>
+				                	<sc-grid-field data-field="amt_changed"></sc-grid-field>
+				                	<sc-grid-field data-field="expt_date_changed"></sc-grid-field>
+				                	<sc-grid-field data-field="row_sts"></sc-grid-field>
+				                </sc-grid-fields>
+                            </sc-grid>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="compareItemGrid" class="h-300" collapsible="true" use-dummy="false"
+					 use-selection="false"
+					 use-state="false"
+					 on-item-click="onItemGridClick">
+				<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column			data-field="po_lno"				header-text="항번"				width="50"	text-align="center"	data-type="number"	></sc-data-column>
+					<sc-data-column			data-field="disp_item_cd"		header-text="품목 코드"			width="100"	text-align="center"	></sc-data-column>
+					<sc-data-column			data-field="disp_item_nm"			header-text="품목 명"			width="250"	text-align="left"	></sc-data-column>
+					<sc-data-column			data-field="item_spec"				header-text="품목 규격"				width="250"	text-align="left"	></sc-data-column>
+					<sc-image-column		data-field="img_dtl_spec"		header-text="품목 규격 상세"			width="60"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+											image-change-function="onItemImageChangeFn"></sc-image-column>
+					<sc-combobox-column		data-field="uom_ccd"			header-text="UOM"				width="60"	text-align="center"
+											display-field="data"			value-field="data"				items="{{codes.uomCcd}}" ></sc-combobox-column>
+					<sc-group-column		header-text="면세 여부"			width="120"	text-align="center">
+						<sc-checkbox-column	data-field="prev_duty_free_yn"	header-text="[[formula('prevRevText')]]"	width="60"	display-checkbox="false"	i18n-disabled></sc-checkbox-column>
+						<sc-checkbox-column	data-field="post_duty_free_yn"	header-text="[[formula('postRevText')]]"	width="60"	display-checkbox="false"	i18n-disabled></sc-checkbox-column>
+					</sc-group-column>
+					<sc-group-column		header-text="수량"			width="160"	text-align="center">
+						<sc-data-column		data-field="prev_po_qty"		header-text="[[formula('prevRevText')]]"	width="80"	text-align="right"	data-type="number"	format-type="qty"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_po_qty"		header-text="[[formula('postRevText')]]"	width="80"	text-align="right"	data-type="number"	format-type="qty" 	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="단가"			width="200"	text-align="center">
+						<sc-data-column		data-field="prev_po_uprc"	header-text="[[formula('prevRevText')]]"	width="100"	text-align="right"	data-type="number"	format-type="price"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_po_uprc"	header-text="[[formula('postRevText')]]"	width="100"	text-align="right"	data-type="number"	format-type="price"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="금액"			width="280"	text-align="center">
+						<sc-data-column		data-field="prev_po_amt"		header-text="[[formula('prevRevText')]]"	width="140"	text-align="right"	data-type="number"	format-type="amt"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_po_amt"		header-text="[[formula('postRevText')]]"	width="140"	text-align="right"	data-type="number"	format-type="amt"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="요청 납품 일자"			width="160"	text-align="center"	visible="[[formula('showMTColumn')]]"	>
+						<sc-date-column		data-field="prev_req_dlvy_dt"		header-text="[[formula('prevRevText')]]"	width="80"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_req_dlvy_dt"		header-text="[[formula('postRevText')]]"	width="80"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="공사 시작 일자"		width="200"	text-align="center"	visible="[[formula('showCTColumn')]]"	>
+						<sc-date-column		data-field="prev_const_st_dt"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_const_st_dt"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="공사 종료 일자"		width="200"	text-align="center"	visible="[[formula('showCTColumn')]]"	>
+						<sc-date-column		data-field="prev_const_exp_dt"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_const_exp_dt"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="납품 장소"	width="300"	text-align="center"	>
+						<sc-data-column		data-field="prev_dlvy_plc"		header-text="[[formula('prevRevText')]]"	width="150"	text-align="left"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_dlvy_plc"		header-text="[[formula('postRevText')]]"	width="150"	text-align="left"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매 그룹"			width="200"	text-align="center"	>
+						<sc-data-column		data-field="prev_purc_grp_nm"	header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_purc_grp_nm"	header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매요청 실수요자"		width="200"	text-align="center"	>
+						<sc-data-column		data-field="prev_pr_realusr_nm"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_pr_realusr_nm"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="입고 담당자"		width="200"	text-align="center"	>
+						<sc-data-column		data-field="prev_gr_chr_nm"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_gr_chr_nm"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="prev_dtl_spec"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="post_item_spec_dtl"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_nm"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<!-- 특약사항 dialog -->
+		<sc-dialog id="dialog_po_rem" title-text="[[dialogTitle]]" title-align="left" style="width:400px;height:180px" modal="true" i18n-disabled>
+			<div style="display:flex; flex-direction:column; height:100%; width:100%;">
+	            <table class="tb-form">
+	            	<colgroup>
+	            		<col style="width:100px;">
+	            		<col>
+	            	</colgroup>
+	            	<tr>
+	            		<th>
+	            			<sc-label text="비고"></sc-label>
+	            		</th>
+	            		<td>
+	            			<sc-textarea-field id="po_rem" class="h-100" max-length="1000" readonly></sc-textarea-field>
+	            		</td>
+	            	</tr>
+	            </table>
+            </div>
+        </sc-dialog>
+        
+		<!-- 변경사유 dialog -->
+		<sc-dialog id="dialog_mod_req_cause" title-text="[[dialogTitle]]" title-align="left" style="width:400px;height:180px" modal="true" i18n-disabled>
+			<div style="display:flex; flex-direction:column; height:100%; width:100%;">
+	            <table class="tb-form">
+	            	<colgroup>
+	            		<col style="width:100px;">
+	            		<col>
+	            	</colgroup>
+	            	<tr>
+	            		<th>
+	            			<sc-label text="변경 사유"></sc-label>
+	            		</th>
+	            		<td>
+	            			<sc-textarea-field id="po_chg_req_rsn" class="h-100" readonly></sc-textarea-field>
+	            		</td>
+	            	</tr>
+	            </table>
+            </div>
+        </sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-po-mod-history',
+			properties : {
+				postClassNm: {
+					type: String,
+					value: function() {
+						return "post-po-td";
+					}
+				},
+				pageTitle : {
+					type : String,
+					value : function() {
+						return "";
+					}
+				},
+				dialogTitle : {
+					type : String,
+					value : function() {
+						return "";
+					}
+				},
+                codes : {
+                	type : Object,
+                	value :  function(){
+                		return {
+                			cur            : [],
+                            uomCcd         : [],
+                            domovrsDivCcd    : [],
+                            taxTypCcd          : [],
+                            pymtmethCcd     : [],
+                            delyTermsCd    : [],
+                            payClsCd       : [],
+                            purcTypCcd        : [],
+                            maintBondTyp   : [],
+                            bondCls        : [],
+                            stamptaxIssueRateTyp : []
+                		};
+                	},
+                	reset: false
+                },
+                showHistoryBtn : {
+                	type : Boolean,
+                	value : function() {
+                		return false;
+                	}
+                },
+                searchParam : {
+                	type : Object,
+                	value : function() {
+                		return {
+                			po_no : ""
+                		}
+                	}
+                },
+                compareParam : {
+                	type : Object,
+                	value : function() {
+                		return {
+                			po_no : "",
+                			prev_po_revno : "",
+                			post_po_revno : ""
+                		}
+                	}
+                },
+				poData : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				},
+				comparePoData : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				}
+			},
+			formulas : {
+				showMTColumn : function() {
+					var me = this;
+					return (me.get("poData.purc_typ_ccd") === "QTY");
+				},
+				showCTColumn : function() {
+					var me = this;
+					return (me.get("poData.purc_typ_ccd") === "CONSTSVC");
+				},
+				rdLocatTitle : function() {
+					var me = this;
+					//사용안함
+					return (me.get("poData.purc_typ_ccd") === "QTY") ? me.translate("납품 장소") : me.translate("수행 장소");
+				},
+				gridTitle : function() {
+					var me = this;
+					return (me.get("poData.purc_typ_ccd") === "QTY") ? this.translate("품목 정보") : this.translate("공사/용역정보");
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					
+					return me.get("poData.has_no_cd_item") === "Y";
+				},
+				prevRevText : function() {
+					var me = this;
+					
+					if(me.get("comparePoData.prev_po_revno")) {
+						return me.translate("STD.PR1030", null, me.get("comparePoData.prev_po_revno"));
+					}
+					return "";
+				},
+				postRevText : function() {
+					var me = this;
+					
+					if(me.get("comparePoData.post_po_revno")) {
+						return me.translate("STD.PR1030", null, me.get("comparePoData.post_po_revno"));
+					}
+					return "";
+				}
+			},
+			formatFn : function(value, type) {
+				if(value)
+					return SCFormatter.format(type, value);
+			},
+			_getCodeName: function(code, value) {
+				var me = this;
+				var codes = me.get("codes."+code);
+				var filtered = codes.filter(function(cd) {
+					return cd["data"] === value;
+				});
+				if(filtered.length > 0) {
+					return filtered[0]["label"];
+				}
+				return null;
+			},
+			// 1. 화면 initialized
+			initialized : function() {
+				
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				me.set("searchParam.po_no", param.po_no);
+				me.set("searchParam.purc_typ_ccd",param.purc_typ_ccd || "QTY");
+				me.set("searchParam.compareOnly", param.compareOnly);
+				me.set("searchParam.cntr_no",param.cntr_no);
+				me.set("pageType",param.pageType || "PO");
+				
+				if(param.compareOnly) {
+					me.onFindPoCompare(param);
+				} else {
+					me.onFindCurrentPo();
+					me.onShowPoHistory();
+				}
+				me.setPageTitle(param.compareOnly);
+			},
+			setPageTitle: function(compareOnly){
+				var me = this,message = "", no = "";
+				if(me.get("pageType") === "CNTR"){
+					//계약 변경 비교 :  계약 변경 이력
+					message = compareOnly ? "STD.PO1102": "STD.PO1103";
+					no = me.get("searchParam.cntr_no");
+				}else{
+					//발주 변경 비교 :  발주 변경 이력
+					message = compareOnly ?"STD.PO1053" : "STD.PO1052";
+					no = me.get("searchParam.po_no");
+				}
+				me.set("pageTitle", me.translate(message, null, no));
+			},
+			// PO 일반정보 조회
+			onFindCurrentPo : function() {
+				var me = this;
+				
+				UT.request(me.$.findCurrentPo);
+			},
+			// PO 일반정보 조회 완료
+			completeFindCurrentPo : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.set("poData", result.currentPoData);
+
+				me.applyFormula('showMTColumn', 'showCTColumn', 'gridTitle', 'rdLocatTitle', 'hasNoCdItem');
+				me.onFindPoHistoryList();
+			},
+			// PO 변경이력 조회
+			onFindPoHistoryList : function() {
+				var me = this;
+				
+				UT.request(me.$.findListPoHistory);
+			},
+			// PO 변경이력 조회 완료
+			completeFindListPoHistory : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					me.$.poGridPanel.setDataProvider(result.resultData.poList),
+					me.$.poItemGridPanel.setDataProvider(result.resultData.poItemList);
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// PO 헤더 변경이력 그리드 item-click 이벤트
+			onItemClick : function(event) {
+				var me = this,
+					e = event.detail,
+					data = e.data,
+					item = e.item,
+					provider = e.provider;
+				
+				if(item.dataField === "img_po_rem") {				// 특약사항
+					if(UT.isNotEmpty(data["po_rem"])) {
+						me.showPoRemDialog(data);
+					}
+				} else if(item.dataField === "img_mod_req_cause") {	// 변경사유
+					if(UT.isNotEmpty(data["po_chg_req_rsn"])) {
+						me.showModReqCauseDialog(data);
+					}
+				}
+			},
+			onItemGridClick: function(event) {
+				var me = this;
+				var data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// PO 헤더 변경이력 그리드 sc-image-column의 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_po_rem") {				// 특약사항
+					if(UT.isNotEmpty(data["po_rem"])) {
+						return "link";
+					}
+				} else if(item.dataField === "img_mod_req_cause") {	// 변경사유
+					if(UT.isNotEmpty(data["po_chg_req_rsn"])) {
+						return "link";
+					}
+				}
+				return null;
+			},
+			onItemImageChangeFn : function(data, item) {
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                	return "link";
+                }
+				return null;
+			},
+            // 상세규격 팝업
+            showDetailSpec: function(data) {
+            	var me = this;
+            	
+            	var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+            	popup.show();
+            	popup.getWindowContent().load(data);
+            },
+			// 특약사항 dialog
+			showPoRemDialog : function(data) {
+				var me = this;
+				
+				me.set("dialogTitle", me.translate("발주 차수") + " : " + data["po_revno"]);
+				me.$.po_rem.value = data["po_rem"];
+				me.$.dialog_po_rem.show();
+			},
+			// 변경사유 dialog
+			showModReqCauseDialog : function(data) {
+				var me = this;
+				
+				me.set("dialogTitle", me.translate("발주 차수") + " : " + data["po_revno"]);
+				me.$.po_chg_req_rsn.value = data["po_chg_req_rsn"];
+				me.$.dialog_mod_req_cause.show();
+			},
+			// 발주 비교 버튼 클릭
+			onShowPoCompare: function() {
+				var me = this;
+				var provider = me.$.poGridPanel.getDataProvider(),
+					selected = provider.selectionCheckedItems();
+				
+				// 두 개씩만 비교 가능
+				if(selected.length === 2) {
+					var prevRev, postRev;
+					if(selected[0].po_revno < selected[1].po_revno) {
+						prevRev = selected[0].po_revno;
+						postRev = selected[1].po_revno;
+					} else {
+						prevRev = selected[1].po_revno;
+						postRev = selected[0].po_revno;
+					}
+					
+					me.onFindPoCompare({
+						"po_no"      : me.searchParam.po_no,
+						"prev_po_revno": prevRev,
+						"post_po_revno": postRev
+					});
+				} else {
+					UT.alert("STD.PO1054");
+				}
+			},
+			onFindPoCompare: function(param) {
+				var me = this;
+				me.set("compareParam", param);
+				UT.request(me.$.findPoCompare);
+			},
+			completeFindPoCompare: function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus === "S") {
+					me.$.div_po_history.style.display = "none";
+					me.$.div_po_compare.style.display = "";
+					
+					me.$.prevAtt.doContentElementResize();
+					me.$.postAtt.doContentElementResize();
+					me.$.compareItemGrid.doContentElementResize();
+					me.$.prevPaymentPlanGrid.doContentElementResize();
+					me.$.postPaymentPlanGrid.doContentElementResize();
+					
+					me.set("showHistoryBtn", !me.get("searchParam.compareOnly"));
+
+					me.set("comparePoData", result.resultData.comparePoData);
+					me._poCompareTableStyleFn();
+					
+					me.$.compareItemGrid.setDataProvider(result.resultData.comparePoItems);
+					me.$.prevPaymentPlanGrid.setDataProvider(result.resultData.prevPaymentPlans);
+					me.$.postPaymentPlanGrid.setDataProvider(me._comparePaymentPlans(result.resultData.prevPaymentPlans, result.resultData.postPaymentPlans));
+
+					me.set("poData.purc_typ_ccd", UT.copy(me.get("searchParam.purc_typ_ccd")));
+					me.applyFormula('prevRevText', 'postRevText','gridTitle', 'rdLocatTitle', 'hasNoCdItem');
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			_poCompareTableStyleFn: function() {
+				var me = this,
+					postTds = me.$.div_po_compare.querySelectorAll("." + me.postClassNm);
+				
+				for(var i=0, len=postTds.length; i<len; i++) {
+					var postTd = postTds[i],
+						k = postTd.id,
+						changed = false;
+					
+					if(k === "cntr_prd") {
+						changed = me.get("comparePoData.prev_" + k + "_sd") !== me.get("comparePoData.post_" + k + "_sd") || me.get("comparePoData.prev_" + k + "_ed") !== me.get("comparePoData.post_" + k + "_ed");
+					} else {
+						changed = me.get("comparePoData.prev_" + k) !== me.get("comparePoData.post_" + k);
+					}
+					if(changed) {
+						postTd.style.background = "#fff575";
+					} else {
+						postTd.style = "";
+					}
+				}
+			},
+			_comparePaymentPlans: function(prevPaymentPlans, postPaymentPlans) {
+				var me = this;
+				if(prevPaymentPlans.length > 0) {
+					var prevAp = prevPaymentPlans[0]["pymt_typ_ccd"] === "APYMT" ? prevPaymentPlans[0] : null;
+					var prevBp = prevPaymentPlans[prevPaymentPlans.length -1];
+					var postAp = postPaymentPlans[0]["pymt_typ_ccd"] === "APYMT" ? postPaymentPlans[0] : null;
+					
+					for(var i=0, len=postPaymentPlans.length; i<len; i++) {
+						var postPayPlan = postPaymentPlans[i];
+						if(postPayPlan["pymt_typ_ccd"] === "APYMT") {
+							if(prevAp === null) {
+								postPayPlan["row_sts"] = "NEW";
+							} else {
+								postPayPlan["row_sts"] = "NONE";
+								postPayPlan["rate_changed"] = (prevAp["pymt_ro"] !== postPayPlan["pymt_ro"]) ? "Y" : "N";
+								postPayPlan["amt_changed"] = (prevAp["pymt_amt"] !== postPayPlan["pymt_amt"]) ? "Y" : "N";
+								postPayPlan["expt_date_changed"] = (prevAp["pymt_expt_dt"] !== postPayPlan["pymt_expt_dt"]) ? "Y" : "N";
+							}
+						} else if(postPayPlan["pymt_typ_ccd"] === "IPYMT") {
+							var prevPlan = null;
+							if(prevAp !== null && postAp === null) {
+								prevPlan = prevPaymentPlans[i+1];
+							} else if(prevAp === null && postAp !== null) {
+								prevPlan = prevPaymentPlans[i-1];
+							} else {
+								prevPlan = prevPaymentPlans[i];
+							}
+							if(prevPlan === null || prevPlan["pymt_typ_ccd"] !== "IPYMT") {
+								postPayPlan["row_sts"] = "NEW";
+							} else {
+								postPayPlan["row_sts"] = "NONE";
+								postPayPlan["rate_changed"] = (prevPlan["pymt_ro"] !== postPayPlan["pymt_ro"]) ? "Y" : "N";
+								postPayPlan["amt_changed"] = (prevPlan["pymt_amt"] !== postPayPlan["pymt_amt"]) ? "Y" : "N";
+								postPayPlan["expt_date_changed"] = (prevPlan["pymt_expt_dt"] !== postPayPlan["pymt_expt_dt"]) ? "Y" : "N";
+							}
+						} else if(postPayPlan["pymt_typ_ccd"] === "BAL") {
+							postPayPlan["row_sts"] = "NONE";
+							postPayPlan["rate_changed"] = (prevBp["pymt_ro"] !== postPayPlan["pymt_ro"]) ? "Y" : "N";
+							postPayPlan["amt_changed"] = (prevBp["pymt_amt"] !== postPayPlan["pymt_amt"]) ? "Y" : "N";
+							postPayPlan["expt_date_changed"] = (prevBp["pymt_expt_dt"] !== postPayPlan["pymt_expt_dt"]) ? "Y" : "N";
+						}
+					}
+				}
+				return postPaymentPlans;
+			},
+			onPayPlanRowStyle: function(data) {
+				if(data["row_sts"] === "NEW") {
+					return {
+						fontWeight : "bold",
+						background : "#d5e79c"
+					};
+				}
+			},
+			onPayPlanItemStyleFn: function(data, item) {
+				if(data["row_sts"] === "NONE") {
+					var styleObj = {
+						fontWeight : "bold",
+						background : "#fff575"
+					};
+					
+					if(item.dataField === "pymt_ro" && data["rate_changed"] === "Y") {
+						return styleObj;
+					} else if(item.dataField === "pymt_amt" && data["amt_changed"] === "Y") {
+						return styleObj;
+					} else if(item.dataField === "pymt_expt_dt" && data["expt_date_changed"] === "Y") {
+						return styleObj;
+					}
+				}
+				return {};
+			},
+			// 발주 비교 그리드 item-style-function
+			onItemStyleFn : function(data, item) {
+				var postFieldName = item.dataField,
+					prevFieldName = "prev_" + postFieldName.substring(5, postFieldName.length),
+					prevFieldData = data[prevFieldName],
+					postFieldData = data[postFieldName];
+				
+				if(UT.isEmpty(data["prev_po_item_id"]) && UT.isNotEmpty(data["post_po_item_id"])) {			// 추가
+					return {
+						fontWeight : "bold",
+						background : "#d5e79c"
+					}
+				} else if(UT.isNotEmpty(data["prev_po_item_id"]) && UT.isEmpty(data["post_po_item_id"])) {	// 삭제
+					return {
+						background : "#ffd3d3"
+					}
+				} else if(UT.isNotEmpty(prevFieldData) && UT.isNotEmpty(postFieldData)) {
+					if(UT.isDate(prevFieldData)) {
+						prevFieldData = prevFieldData.getTime();
+					}
+					if(UT.isDate(postFieldData)) {
+						postFieldData = postFieldData.getTime();
+					}
+					if(prevFieldData !== postFieldData) {					// 수정
+						return {
+							fontWeight : "bold",
+							background : "#fff575"
+						}
+					}
+				}
+			},
+			// 발주 변경이력 보기
+			onShowPoHistory: function() {
+				var me = this;
+				
+				me.$.div_po_history.style.display = "";
+				me.$.div_po_compare.style.display = "none";
+				
+				me.$.poGridPanel.doContentElementResize();
+				me.$.poItemGridPanel.doContentElementResize();
+				
+				me.set("showHistoryBtn", false);
+			}
+		});
+	</script>	
+</dom-module>

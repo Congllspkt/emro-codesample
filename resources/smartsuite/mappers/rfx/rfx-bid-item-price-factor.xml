@@ -1,0 +1,480 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-bid-item-price-factor">
+	<select id="findListPrevRevBidItemPriceFactorForAgent" resultType="map">
+		/* rfx-bid-price-factor.findListPrevRevBidItemPriceFactorForAgent */
+		SELECT RFX_ITEM.RFX_UUID
+		     , NULL AS RFX_BID_UUID
+		     , NULL AS RFX_BID_ITEM_UUID
+		     , RFX_BID_ITEM.RFX_BID_LNO
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , CASE WHEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD IS NOT NULL  THEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD
+		            ELSE RFX_BID_ITEM.UOM_CCD
+		        END AS COSTFACT_UOM_CCD
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY
+		            ELSE 0
+		        END AS COSTFACT_SUBM_QTY
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC
+		            ELSE 0
+		        END AS COSTFACT_SUBM_UPRC
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT
+		            ELSE 0
+		        END AS COSTFACT_SUBM_AMT
+		     , COSTFACT_GRPG.OORG_CD
+		     , COSTFACT_GRPG.COSTFACT_GRP_CD
+		     , COSTFACT_GRPG.COSTFACT_CD
+		     , COSTFACT.COSTFACT_NM
+		     , COSTFACT.PRC_YN
+		     , RFX_BID_COSTFACT.RMK
+		  FROM RFX_ITEM RFX_ITEM
+		 INNER JOIN RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		    ON RFX_ITEM_COSTFACT.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		   AND RFX_ITEM_COSTFACT.STS          != 'D'
+		 INNER JOIN COSTFACT_GRPG COSTFACT_GRPG
+		    ON COSTFACT_GRPG.TEN_ID         = RFX_ITEM_COSTFACT.TEN_ID
+		   AND COSTFACT_GRPG.OORG_CD        = RFX_ITEM.OORG_CD
+		   AND COSTFACT_GRPG.COSTFACT_CD     = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND COSTFACT_GRPG.COSTFACT_GRP_CD = RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		   AND COSTFACT_GRPG.STS           != 'D'
+		 INNER JOIN COSTFACT COSTFACT
+		    ON COSTFACT.TEN_ID     = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT.OORG_CD    = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT.COSTFACT_CD = COSTFACT_GRPG.COSTFACT_CD
+		   AND COSTFACT.USE_YN     = 'Y'
+		   AND COSTFACT.STS       != 'N'
+		  LEFT OUTER JOIN (
+		                   SELECT RFX_BID_ITEM.TEN_ID
+		                        , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		                        , RFX_BID_ITEM.RFX_ITEM_UUID
+		                        , RFX_BID_ITEM.RFX_LNO
+		                        , RFX_BID_ITEM.RFX_NO
+		                        , RFX_BID_ITEM.RFX_BID_LNO
+		                        , RFX_BID_ITEM.UOM_CCD
+		                     FROM RFX_BID RFX_BID
+		                    INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		                       ON RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+		                      AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		                    WHERE RFX_BID.TEN_ID       = #{g.tenant}
+		                      AND RFX_BID.RFX_NO       = #{p.rfx_no}
+		                      AND RFX_BID.RFX_RND      = CAST(#{p.rfx_rnd} AS INT)
+		                      AND RFX_BID.VD_CD        = #{p.vd_cd}
+		                      AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		                      AND RFX_BID.STS         != 'D'
+		                      AND RFX_BID_ITEM.STS    != 'D'
+		                  ) RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID       = RFX_ITEM.TEN_ID
+		   AND RFX_BID_ITEM.RFX_LNO = RFX_ITEM.RFX_LNO
+		   AND RFX_BID_ITEM.RFX_NO       = RFX_ITEM.RFX_NO
+		  LEFT OUTER JOIN RFX_BID_COSTFACT RFX_BID_COSTFACT
+		    ON RFX_BID_COSTFACT.TEN_ID            = RFX_BID_ITEM.TEN_ID
+		   AND RFX_BID_COSTFACT.RFX_ITEM_UUID     = RFX_BID_ITEM.RFX_ITEM_UUID
+		   AND RFX_BID_COSTFACT.RFX_BID_ITEM_UUID = RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		   AND RFX_BID_COSTFACT.COSTFACT_CD        = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND RFX_BID_COSTFACT.STS              != 'D'
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT), RFX_ITEM_COSTFACT.COSTFACT_CD
+	</select>
+	<select id="findListBidItemPriceFactorForAgent" resultType="map">
+		/* rfx-bid-price-factor.findListBidItemPriceFactorForAgent */
+		SELECT RFX_ITEM.RFX_UUID
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_BID_ITEM.RFX_BID_UUID
+		     , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		     , RFX_BID_ITEM.RFX_BID_LNO
+		     , CASE WHEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD IS NOT NULL  THEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD
+		            ELSE RFX_BID_ITEM.UOM_CCD
+		        END AS COSTFACT_UOM_CCD
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY
+		            ELSE 0
+		        END AS COSTFACT_SUBM_QTY
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC
+		            ELSE 0
+		        END AS COSTFACT_SUBM_UPRC
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT
+		            ELSE 0
+		        END AS COSTFACT_SUBM_AMT
+		     , RFX_BID_COSTFACT.RMK
+		     , COSTFACT_GRPG.OORG_CD
+		     , COSTFACT_GRPG.COSTFACT_GRP_CD
+		     , COSTFACT_GRPG.COSTFACT_CD
+		     , COSTFACT.COSTFACT_NM
+		     , COSTFACT.PRC_YN
+		  FROM RFX_ITEM RFX_ITEM
+		 INNER JOIN RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		    ON RFX_ITEM_COSTFACT.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		   AND RFX_ITEM_COSTFACT.STS          != 'D'
+		 INNER JOIN COSTFACT_GRPG COSTFACT_GRPG
+		    ON COSTFACT_GRPG.TEN_ID         = RFX_ITEM_COSTFACT.TEN_ID
+		   AND COSTFACT_GRPG.OORG_CD        = RFX_ITEM.OORG_CD
+		   AND COSTFACT_GRPG.COSTFACT_CD     = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND COSTFACT_GRPG.COSTFACT_GRP_CD = RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		   AND COSTFACT_GRPG.STS           != 'D'
+		 INNER JOIN COSTFACT COSTFACT
+		    ON COSTFACT.TEN_ID     = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT.OORG_CD    = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT.COSTFACT_CD = COSTFACT_GRPG.COSTFACT_CD
+		   AND COSTFACT.USE_YN     = 'Y'
+		   AND COSTFACT.STS       != 'N'
+		   LEFT OUTER JOIN (
+		                    SELECT RFX_BID_ITEM.TEN_ID
+		                         , RFX_BID_ITEM.RFX_BID_UUID
+		                         , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		                         , RFX_BID_ITEM.RFX_BID_LNO
+		                         , RFX_BID_ITEM.RFX_ITEM_UUID
+		                         , RFX_BID_ITEM.UOM_CCD
+		                      FROM RFX_BID RFX_BID
+		                     INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		                        ON RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+		                       AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		                     WHERE RFX_BID.TEN_ID       = #{g.tenant}
+		                       AND RFX_BID.RFX_BID_UUID = #{p.rfx_bid_uuid}
+		                       AND RFX_BID.VD_CD        = #{p.vd_cd}
+		                       AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		                       AND RFX_BID.STS         != 'D'
+		                       AND RFX_BID_ITEM.STS    != 'D'
+		                   ) RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		  LEFT OUTER JOIN RFX_BID_COSTFACT RFX_BID_COSTFACT
+		    ON RFX_BID_COSTFACT.TEN_ID            = RFX_ITEM_COSTFACT.TEN_ID
+		   AND RFX_BID_COSTFACT.RFX_ITEM_UUID     = RFX_ITEM_COSTFACT.RFX_ITEM_UUID
+		   AND RFX_BID_COSTFACT.COSTFACT_CD        = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND RFX_BID_COSTFACT.RFX_BID_ITEM_UUID = RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		   AND RFX_BID_COSTFACT.STS              != 'D'
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT), RFX_ITEM_COSTFACT.COSTFACT_CD
+	</select>
+	<insert id="insertRfxBidPriceFactor">
+		/* rfx-bid-item-price-factor.insertRfxBidPriceFactor */
+		INSERT INTO RFX_BID_COSTFACT (
+			TEN_ID
+			, RFX_ITEM_UUID
+			, COSTFACT_CD
+			, RFX_BID_ITEM_UUID
+			, COSTFACT_UOM_CCD
+			<choose>
+			    <when test="p.prc_yn eq 'Y'.toString()">
+			        , COSTFACT_SUBM_UPRC
+			        , COSTFACT_SUBM_QTY
+			        , COSTFACT_SUBM_AMT
+			        , ENCPT_COSTFACT_SUBM_UPRC
+			        , ENCPT_COSTFACT_SUBM_AMT
+			    </when>
+			    <otherwise>
+			        , RMK
+			    </otherwise>
+			</choose>
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_item_uuid}
+			, #{p.costfact_cd}
+			, #{p.rfx_bid_item_uuid}
+			, #{p.costfact_uom_ccd}
+			<choose>
+			    <when test="p.prc_yn eq 'Y'.toString()">
+			        , CAST(#{p.costfact_subm_uprc} AS FLOAT  )
+			        , CAST(#{p.costfact_subm_qty} AS FLOAT  )
+			        , CAST(#{p.costfact_subm_amt} AS FLOAT  )
+			        , #{p.encpt_costfact_subm_uprc}
+			        , #{p.encpt_costfact_subm_amt}
+			    </when>
+			    <otherwise>
+			        , #{p.rmk}
+			    </otherwise>
+			</choose>
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateRfxBidPriceFactor">
+		/* rfx-bid-item-price-factor.updateRfxBidPriceFactor */
+		UPDATE RFX_BID_COSTFACT
+		   SET STS      = 'U'
+		     , MODR_ID  = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		     <choose>
+		         <when test="p.prc_yn eq 'Y'.toString()">
+		             , COSTFACT_SUBM_UPRC = CAST(#{p.costfact_subm_uprc} AS FLOAT  )
+		             , COSTFACT_SUBM_QTY = CAST(#{p.costfact_subm_qty} AS FLOAT  )
+		             , COSTFACT_SUBM_AMT = CAST(#{p.costfact_subm_amt} AS FLOAT  )
+		             , ENCPT_COSTFACT_SUBM_UPRC = #{p.encpt_costfact_subm_uprc}
+		             , ENCPT_COSTFACT_SUBM_AMT  = #{p.encpt_costfact_subm_amt}
+		         </when>
+		         <otherwise>
+		             , RMK      = #{p.rmk}
+		         </otherwise>
+		     </choose>
+		 WHERE TEN_ID            = #{g.tenant}
+		   AND RFX_ITEM_UUID     = #{p.rfx_item_uuid}
+		   AND COSTFACT_CD        = #{p.costfact_cd}
+		   AND RFX_BID_ITEM_UUID = #{p.rfx_bid_item_uuid}
+	</update>
+	<select id="selectSumPriceFactorBidItems" resultType="map">
+		/* rfx-bid-item-price-factor.selectSumPriceFactorBidItems */
+		SELECT RFX_BID_COSTFACT.TEN_ID
+		     , RFX_BID_COSTFACT.RFX_BID_ITEM_UUID
+		     , SUM(RFX_BID_COSTFACT.COSTFACT_SUBM_AMT)     AS TOT_FACT_ITEM_AMT
+		     , RFX_BID.CUR_CCD
+		  FROM RFX_BID RFX_BID
+		 INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+		   AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		   AND RFX_BID_ITEM.STS         != 'D'
+		 INNER JOIN RFX_BID_COSTFACT RFX_BID_COSTFACT
+		    ON RFX_BID_COSTFACT.TEN_ID            = RFX_BID_ITEM.TEN_ID
+		   AND RFX_BID_COSTFACT.RFX_BID_ITEM_UUID = RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		 WHERE RFX_BID.TEN_ID       = #{g.tenant}
+		   AND RFX_BID.RFX_BID_UUID = #{p.rfx_bid_uuid}
+		 GROUP BY RFX_BID_COSTFACT.TEN_ID
+		        , RFX_BID_COSTFACT.RFX_BID_ITEM_UUID
+		        , RFX_BID.CUR_CCD
+	</select>
+	<resultMap id="rfxItemPriceFactorMap" type="java.util.HashMap">
+		<result column="RFX_ITEM_UUID" property="rfx_item_uuid"/>
+		<result column="RFX_LNO" property="rfx_lno"/>
+		<result column="ITEM_CD_CRN_TYP_CCD" property="item_cd_crn_typ_ccd"/>
+	    <result column="DISP_ITEM_CD" property="disp_item_cd"/>
+		<result column="ITEM_CD" property="item_cd"/>
+		<result column="ITEM_NM" property="item_nm"/>
+		<result column="UOM_CCD" property="uom_ccd"/>
+		<result column="ITEM_SPEC" property="item_spec"/>
+		<result column="ITEM_SPEC_DTL" property="item_spec_dtl"/>
+		<result column="COSTFACT_CD" property="costfact_cd"/>
+		<result column="COSTFACT_NM" property="costfact_nm"/>
+		<result column="COSTSTR_PURC_TYP_CCD" property="coststr_purc_typ_ccd"/>
+		<result column="COSTFACT_GRP_CD" property="costfact_grp_cd"/>
+		<result column="COSTFACT_UOM_CCD" property="costfact_uom_ccd"/>
+		<collection javaType="java.util.ArrayList" property="qtaItemPriceFactors" resultMap="qtaItemPriceFactorMap"/>
+	</resultMap>
+	<resultMap id="qtaItemPriceFactorMap" type="java.util.HashMap">
+		<result column="VD_CD" property="vd_cd"/>
+		<result column="COSTFACT_SUBM_QTY" property="costfact_subm_qty"/>
+		<result column="COSTFACT_SUBM_UPRC" property="costfact_subm_uprc"/>
+		<result column="COSTFACT_SUBM_AMT" property="costfact_subm_amt"/>
+		<result column="RMK" property="rmk"/>
+	</resultMap>
+	<select id="findListRfxBidItemPriceFactorCompare" resultMap="rfxItemPriceFactorMap">
+		/* rfx-bid-price-factor.findListRfxBidItemPriceFactorCompare */
+		SELECT RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_ITEM_COSTFACT.COSTFACT_CD
+		     , CONCAT(CONCAT(CONCAT('[', RFX_ITEM_COSTFACT.COSTFACT_CD), ']'), COSTFACT.COSTFACT_NM) AS COSTFACT_NM
+		     , RFX_ITEM_COSTFACT.COSTSTR_PURC_TYP_CCD
+		     , RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		     , RFX_ITEM_COSTFACT.COSTFACT_UOM_CCD
+		     , RFX_BID.VD_CD
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY
+		            ELSE 0
+		        END AS COSTFACT_SUBM_QTY
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC
+		            ELSE 0
+		        END AS COSTFACT_SUBM_UPRC
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT
+		            ELSE 0
+		        END AS COSTFACT_SUBM_AMT
+		     , RFX_BID_COSTFACT.RMK
+		     , COSTFACT.PRC_YN
+		  FROM RFX_ITEM RFX_ITEM
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID   = RFX_ITEM.TEN_ID
+		   AND RFX.RFX_UUID = RFX_ITEM.RFX_UUID
+		   AND RFX.STS     != 'D'
+		 INNER JOIN RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		    ON RFX_ITEM_COSTFACT.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		 INNER JOIN COSTFACT_GRPG COSTFACT_GRPG
+		    ON COSTFACT_GRPG.TEN_ID         = RFX_ITEM_COSTFACT.TEN_ID
+		   AND COSTFACT_GRPG.OORG_CD        = RFX_ITEM.OORG_CD
+		   AND COSTFACT_GRPG.COSTFACT_CD     = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND COSTFACT_GRPG.COSTFACT_GRP_CD = RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		   AND COSTFACT_GRPG.STS           != 'D'
+		 INNER JOIN COSTFACT COSTFACT
+		    ON COSTFACT.TEN_ID     = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT.OORG_CD    = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT.COSTFACT_CD = COSTFACT_GRPG.COSTFACT_CD
+		   AND COSTFACT.USE_YN     = 'Y'
+		   AND COSTFACT.STS       != 'N'
+		 INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		 INNER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID          = RFX_BID_ITEM.TEN_ID
+		   AND RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		 INNER JOIN RFX_BID_COSTFACT RFX_BID_COSTFACT
+		    ON RFX_BID_COSTFACT.TEN_ID            = RFX_ITEM_COSTFACT.TEN_ID
+		   AND RFX_BID_COSTFACT.RFX_ITEM_UUID     = RFX_ITEM_COSTFACT.RFX_ITEM_UUID
+		   AND RFX_BID_COSTFACT.COSTFACT_CD        = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND RFX_BID_COSTFACT.RFX_BID_ITEM_UUID = RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT), RFX_BID.VD_CD, RFX_ITEM_COSTFACT.COSTFACT_CD
+	</select>
+	<resultMap id="resultMap-findListBidItemPriceFactor" type="map">
+		<result column="ENCPT_COSTFACT_SUBM_UPRC" javaType="string" property="encpt_costfact_subm_uprc" typeHandler="stringClob"/>
+		<result column="ENCPT_COSTFACT_SUBM_AMT" javaType="string" property="encpt_costfact_subm_amt" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findListBidItemPriceFactor" resultMap="resultMap-findListBidItemPriceFactor">
+		/* rfx-bid-price-factor.findListQtaItemPriceFactor */
+		SELECT RFX_ITEM.RFX_UUID
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , T.RFX_BID_UUID
+		     , T.RFX_BID_ITEM_UUID
+		     , T.RFX_BID_LNO
+		     , CASE WHEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD IS NOT NULL  THEN RFX_BID_COSTFACT.COSTFACT_UOM_CCD
+		            ELSE T.UOM_CCD
+		        END AS COSTFACT_UOM_CCD
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_QTY
+		            ELSE 0
+		        END AS COSTFACT_SUBM_QTY
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_UPRC
+		            ELSE 0
+		        END AS COSTFACT_SUBM_UPRC
+		     , CASE WHEN COSTFACT.PRC_YN = 'N' THEN NULL
+		            WHEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT IS NOT NULL THEN RFX_BID_COSTFACT.COSTFACT_SUBM_AMT
+		            ELSE 0
+		        END AS COSTFACT_SUBM_AMT
+		     , COSTFACT_GRPG.OORG_CD
+		     , COSTFACT_GRPG.COSTFACT_GRP_CD
+		     , COSTFACT_GRPG.COSTFACT_CD
+		     , COSTFACT.COSTFACT_NM
+		     , COSTFACT.PRC_YN
+		     , RFX_BID_COSTFACT.RMK
+		     , RFX_BID_COSTFACT.ENCPT_COSTFACT_SUBM_UPRC
+		     , RFX_BID_COSTFACT.ENCPT_COSTFACT_SUBM_AMT
+		  FROM RFX_ITEM RFX_ITEM
+		 INNER JOIN RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		    ON RFX_ITEM_COSTFACT.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		   AND RFX_ITEM_COSTFACT.STS          != 'D'
+		 INNER JOIN COSTFACT_GRPG COSTFACT_GRPG
+		    ON COSTFACT_GRPG.TEN_ID         = RFX_ITEM_COSTFACT.TEN_ID
+		   AND COSTFACT_GRPG.OORG_CD        = RFX_ITEM.OORG_CD
+		   AND COSTFACT_GRPG.COSTFACT_CD     = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND COSTFACT_GRPG.COSTFACT_GRP_CD = RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		   AND COSTFACT_GRPG.STS           != 'D'
+		 INNER JOIN COSTFACT COSTFACT
+		    ON COSTFACT.TEN_ID     = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT.OORG_CD    = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT.COSTFACT_CD = COSTFACT_GRPG.COSTFACT_CD
+		   AND COSTFACT.USE_YN     = 'Y'
+		   AND COSTFACT.STS       != 'D'
+		 INNER JOIN COSTFACT_GRP COSTFACT_GRP
+		    ON COSTFACT_GRP.TEN_ID     = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT_GRP.OORG_CD    = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT_GRP.COSTFACT_GRP_CD = COSTFACT_GRPG.COSTFACT_GRP_CD
+		   AND COSTFACT.STS       != 'D'
+		  LEFT OUTER JOIN (
+						   SELECT RFX_BID_ITEM.TEN_ID
+								, RFX_BID_ITEM.RFX_ITEM_UUID
+								, RFX_BID_ITEM.RFX_BID_UUID
+								, RFX_BID_ITEM.RFX_BID_ITEM_UUID
+								, RFX_BID_ITEM.RFX_BID_LNO
+								, RFX_BID_ITEM.UOM_CCD
+							 FROM RFX_BID RFX_BID
+							INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+							   ON RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+							  AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+							WHERE RFX_BID.TEN_ID       = #{g.tenant}
+							  AND RFX_BID.RFX_UUID     = #{p.rfx_uuid}
+							  <if test="p.vd_cd != null and p.vd_cd != ''">
+							      AND RFX_BID.VD_CD = #{p.vd_cd}
+							  </if>
+							  AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+							  AND RFX_BID.STS      != 'D'
+							  AND RFX_BID_ITEM.STS != 'D'
+						  ) T
+			ON T.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND T.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		  LEFT OUTER JOIN RFX_BID_COSTFACT RFX_BID_COSTFACT
+		    ON RFX_BID_COSTFACT.TEN_ID            = RFX_ITEM_COSTFACT.TEN_ID
+		   AND RFX_BID_COSTFACT.RFX_ITEM_UUID     = RFX_ITEM_COSTFACT.RFX_ITEM_UUID
+		   AND RFX_BID_COSTFACT.COSTFACT_CD       = RFX_ITEM_COSTFACT.COSTFACT_CD
+		   AND RFX_BID_COSTFACT.RFX_BID_ITEM_UUID = T.RFX_BID_ITEM_UUID
+		   AND RFX_BID_COSTFACT.STS              != 'D'
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT), RFX_ITEM_COSTFACT.COSTFACT_CD
+	</select>
+	<update id="updateDecryptBidPriceFactor">
+		/* rfx-bid-price-factor.updateQtaPriceFactor */
+		UPDATE RFX_BID_COSTFACT
+		   SET COSTFACT_SUBM_UPRC = CAST(#{p.costfact_subm_uprc} AS FLOAT  )
+		     , COSTFACT_SUBM_AMT  = CAST(#{p.costfact_subm_amt} AS FLOAT  )
+		     , RMK               = #{p.rmk}
+		     , STS               = 'U'
+		 WHERE TEN_ID            = #{g.tenant}
+		   AND RFX_ITEM_UUID     = #{p.rfx_item_uuid}
+		   AND COSTFACT_CD        = #{p.costfact_cd}
+		   AND RFX_BID_ITEM_UUID = #{p.rfx_bid_item_uuid}
+	</update>
+</mapper>

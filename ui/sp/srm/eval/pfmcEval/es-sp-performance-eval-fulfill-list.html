@@ -1,0 +1,209 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 퍼포먼스평가 수행 리스트(외부)
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.21
+	******************************************************************************************
+-->
+
+<dom-module id="es-sp-performance-eval-fulfill-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+		<!-- 공통코드 조회 -->
+		<sc-request-group id="codes" init>
+			<sc-ajax
+					url="findListOperationOrganizationBySupplier.do"
+					body="SO"
+					content-type="text/plain"
+					last-response="{{codes.oorg_cd}}"><!-- srm 운영조직 콤보박스 목록 조회 -->
+			</sc-ajax>
+            <sc-code-group>
+                <sc-code code="R704" value="{{codes.R704}}"></sc-code><!-- 평가업무구분 -->
+                <sc-code code="R301" value="{{codes.R301}}"></sc-code><!-- 평가수행상태 -->
+            </sc-code-group>
+        </sc-request-group>
+		
+		<!-- Performance평가 수행 목록 조회 -->
+		<sc-ajax id="findListPerformanceEvalFulfill" url="findListPerformanceEvalFulfill.do" body="{{searchParam}}" on-response="completeFindListEvalMon"></sc-ajax>
+        
+    	<cc-auth-checker check-list="auth-r"></cc-auth-checker>
+
+		<cc-page-title-bar></cc-page-title-bar>
+         
+        <!-- 조회 테이블 -->
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" validation-group="searchParam" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field
+						display-field="logic_org_nm" value-field="oorg_cd" selected-index="0" on-change="onChangeOorgCombo"
+						items="{{codes.oorg_cd}}" value="{{searchParam.oorg_cd}}" placeholder="선택" required="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field value="{{searchParam.eval_nm}}" max-length="60" on-enter="onSearch"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 대상 연도"></sc-label>
+				<cc-year-combo value="{{searchParam.eval_subj_yr}}" max="0" min="10" sort="desc"></cc-year-combo>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="상태"></sc-label>
+				<sc-combobox-field id="stsComboBox" display-field="label" value-field="data" input-clear="true"
+									items="{{codes.R301}}" value="{{searchParam.pe_sts_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" use-state="false" use-selection="false" on-item-click="onDataCellClicked">
+            <cc-grid-toolbar></cc-grid-toolbar> 
+            <sc-grid-columns>
+                <sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="200" mergeable="true"
+									display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorg_cd}}"></sc-combobox-column>
+                <sc-data-column data-field="eval_nm"  header-text="평가 명" width="400" text-align="left" style-name="link"></sc-data-column>
+                <sc-data-column data-field="eval_subj_yr" header-text="평가 대상 연도" width="100"></sc-data-column>
+                <sc-combobox-column data-field="pe_sts_ccd" header-text="상태" width="200"
+                                    display-field="label" value-field="data" items="{{codes.R301}}"></sc-combobox-column>
+                <sc-data-column data-field="tot_cnt" header-text="평가 대상 수" width="80" text-align="right" data-type="number" format-type="integer"></sc-data-column>
+                <sc-data-column data-field="end_cnt" header-text="실행" width="80" text-align="right" data-type="number" format-type="integer"></sc-data-column>
+                <sc-data-column data-field="fail_cnt" header-text="미실행" width="80" text-align="right" data-type="number" format-type="integer"></sc-data-column>
+                <sc-data-column data-field="end_per" header-text="실행율" width="70" text-align="right" data-type="number" format-type="percent"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field data-field="oorg_cd"></sc-grid-field>
+                <sc-grid-field data-field="pe_uuid"></sc-grid-field>
+                <sc-grid-field data-field="eval_cd"></sc-grid-field>
+                <sc-grid-field data-field="slfch_subj_yn"></sc-grid-field>
+                <sc-grid-field data-field="pe_ed_yn"></sc-grid-field>
+                <sc-grid-field data-field="pe_ed_dt"></sc-grid-field>
+                <sc-grid-field data-field="pe_subj_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+ 
+    <script>
+        Polymer({
+            is: "es-sp-performance-eval-fulfill-list",
+            
+            properties:  {
+                // 코드
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return {
+                            oorg_cd: [],
+                            pegCodes: [],
+                            R704: [],   // 평가업무구분
+                            R301: []    // 평가수행상태
+                        };
+                    }
+                },
+                // 평가그룹 목록
+                pegList : {
+                    type: Array,
+                    value: function(){
+                        return [];
+                    }
+
+                },
+                // 조회조건 Object
+                searchParam : {
+                    type: Object,
+                    value: function(){
+                        return {
+							pe_sts_ccd : "QUALI_EVAL_PRGSG",
+                            eval_task_typ_ccd : "PE"
+                        };
+                    }
+                }
+            },
+            
+            initialized: function() {
+                var me = this;
+                me.setFilteredPegCodes();
+                me.setFilteredPeStsCodes(); // R301
+                me.set("searchParam.eval_subj_yr", new Date().getFullYear()); // 디폴트 년도로 현재년도로 셋팅
+                
+            },
+			
+            load: function(param) {
+                var me = this;
+                me.set("searchParam.eval_task_typ_ccd", param.eval_task_typ_ccd);
+                me.onSearch();
+            },
+			
+            /* 그리드 셀 클릭함수 */
+            onDataCellClicked: function(event) {
+                var me = this, detail = event.detail,
+                    data = detail.data,
+                    item = detail.item,
+                    fieldName = item.dataField,
+                    itemIndex = item.rowIndex;
+                
+                // 평가명 클릭 시 상세조회
+                if (fieldName === "eval_nm") {
+                    // detail 화면 호출
+                    me.fire("show-detail", data);
+                }
+            },
+            
+            /* 운영조직 combo 변경 처리 */
+            onChangeOorgCombo: function(e) {
+                var me = this;
+                if(!me.isAttached) return;
+                
+                if(UT.isNotEmpty(me.get("pegList"))){
+                    me.setFilteredPegCodes();
+                }
+            },
+            
+            /* 평가그룹 콤보 목록 filtering */
+            setFilteredPegCodes : function() {
+                var me = this;
+                var searchParam = me.get("searchParam");
+                var pegList = me.get("pegList");
+                
+                var filtered = UT.arrayFilterChange(pegList,{key : "oorg_cd" , value: searchParam.oorg_cd});
+                
+                me.set("codes.pegCodes", filtered);
+                me.$.pegComboBox.selectedItem = {};
+            },
+            
+			/* 평가수행상태 콤보 filtering */
+            setFilteredPeStsCodes : function(){
+				var me = this;
+				var evalExecuteCodes = me.get("codes.R301");
+				
+				var filtered = evalExecuteCodes.filter(function(element, index, array){
+					return element.data === "QUALI_EVAL_PRGSG" || element.data ==="EVAL_RES_CALC_CMPLD"; /* 정성평가, 집계완료 */
+				});
+				me.set("codes.R301", filtered);
+				
+				if (UT.isNotEmpty(filtered) && filtered.length > 0) {
+					me.$.stsComboBox.selectedItem = filtered[0];
+				}
+            },
+            
+            /* 조회 */
+            onSearch: function(){
+                var me = this;
+                if(!me.validate()){
+                    return UT.alert("STD.E0000");
+                }
+                UT.request(me.$.findListPerformanceEvalFulfill);
+            },
+            
+            /* 조회완료 */
+            completeFindListEvalMon : function(e, res){
+                var me = this;
+                me.$.gridPanel.setDataProvider(res.response);
+            }
+        });
+    </script>
+
+</dom-module>

@@ -1,0 +1,721 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="vd-mgmt-setup">
+    <!-- 협력사관리유형 목록 조회 -->
+    <select id="findListVmt" resultType="map">
+    /* vd-mgmt-setup.findListVmt: 협력사관리유형 목록 조회 */
+        SELECT VMT.TEN_ID                   /* 테넌트 아이디 */
+             , VMT.VMT_UUID                 /* 협력사관리유형 UUID */
+             , VMT.VMT_CCD                  /* 협력사관리유형 코드 */
+             , DTLCD_MULTLANG.DTLCD_NM AS VMT_NM
+             , VMT.USE_YN                   /* 사용여부 */
+             , VMT.STS                      /* 상태 */
+             , VMT.RMK                      /* 비고 */
+             , VMT.REGR_ID                   /* 등록자 아이디 */
+             , VMT.REG_DTTM                   /* 등록 일시 */
+             , VMT.MODR_ID                   /* 수정자 아이디 */
+             , VMT.MOD_DTTM                   /* 수정 일시	 */
+             , CASE ( SELECT COUNT(VMG.VMG_UUID)
+                        FROM VMG VMG     /* VMG : 협력사관리그룹 */
+                       WHERE VMG.TEN_ID = VMT.TEN_ID
+                         AND VMG.VMT_UUID = VMT.VMT_UUID
+                         AND VMG.STS != 'D')
+                    WHEN 0 THEN 'N'
+                    ELSE 'Y'
+                END    AS GRP_MAPPING_YN    /* 협력사관리그룹 매핑여부 */
+          FROM VMT VMT    /* VMT : 협력사관리유형 */
+          LEFT OUTER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD_MULTLANG.TEN_ID = VMT.TEN_ID
+		   AND DTLCD_MULTLANG.DTLCD  = VMT.VMT_CCD
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		   AND DTLCD_MULTLANG.CCD    = 'E900'
+       <trim prefix="WHERE" prefixOverrides="AND">
+           AND VMT.TEN_ID = #{g.tenant}
+           AND VMT.STS != 'D'
+         <if test="p.use_yn != null and p.use_yn != ''">
+           AND VMT.USE_YN            = #{p.use_yn}                              /* 사용여부 */
+         </if>
+         <if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+           AND VMT.VMT_CCD            = #{p.vmt_ccd}            /* 협력사관리유형 코드 */
+         </if>
+       </trim>
+        ORDER BY VMT.VMT_CCD
+    </select>
+	<select id="findListUnregisteredVendorManagementType" resultType="map">
+    /* vd-mgmt-setup.findListUnregisteredVendorManagementType 미등록 협력사관리유형 조회 */
+        SELECT CD.DTLCD AS VMT_CCD             /* 관리유형 코드*/
+             , CD_DTLMULT.DTLCD_NM AS VMT_NM
+          FROM DTLCD CD
+          LEFT OUTER JOIN DTLCD_MULTLANG CD_DTLMULT
+            ON CD_DTLMULT.TEN_ID   = CD.TEN_ID
+           AND CD_DTLMULT.CCD      = CD.CCD
+           AND CD_DTLMULT.DTLCD    = CD.DTLCD
+           AND CD_DTLMULT.LANG_CCD = #{g.locale}
+         WHERE CD.TEN_ID           = #{g.tenant}
+           AND CD.CCD              = 'E900'
+           AND CD.USE_YN           = 'Y'
+           AND CD.STS             != 'D'
+           AND CD.DTLCD NOT IN ( SELECT VMT_CCD
+                                   FROM VMT
+                                  WHERE TEN_ID     = #{g.tenant}
+                                    AND STS       != 'D'
+                               )
+         ORDER BY CD.DTLCD
+    </select>
+    <!--협력사관리유형 삭제 (delete) -->
+    <delete id="deleteVmt">
+        /* vd-mgmt-setup.deleteVmt : 협력사관리유형 삭제 */
+        DELETE FROM VMT    /* 협력사 유형  */
+        WHERE TEN_ID          = #{g.tenant}
+          AND VMT_CCD = #{p.vmt_ccd}
+    </delete>
+    <!-- 협력사관리유형 저장 (Insert) -->
+    <insert id="insertListVmt">
+        /* vd-mgmt-setup.insertListVmt : 협력사관리유형 저장 */
+        INSERT INTO VMT        /* 협력사관리유형  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                /* 테넌트 아이디 */
+            , VMT_UUID      /* 협력사관리유형 UUID */
+            , VMT_CCD       /* 협력사관리유형 코드 */
+            , USE_YN                /* 사용여부 */
+            , STS                   /* 상태 */
+            , RMK                   /* 비고 */
+            , REGR_ID                /* 등록자 아이디 */
+            , REG_DTTM                /* 등록 일시 */
+            , MODR_ID                /* 수정자 아이디 */
+            , MOD_DTTM                /* 수정 일시	 */
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{g.uuid}
+            , #{p.vmt_ccd}
+            , #{p.use_yn}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 협력사관리유형 수정 -->
+    <update id="updateListVmt">
+        /* vd-mgmt-setup.updateListVmt : 협력사관리유형 수정 */
+        UPDATE VMT        /* 협력사관리유형 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID               = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM               = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            <if test="p.use_yn != null and p.use_yn != ''">
+                , USE_YN               = #{p.use_yn}            /* 사용여부 */
+            </if>
+            <if test="p.rmk != null">
+                , RMK                  = #{p.rmk}               /* 비고 */
+            </if>
+        </trim>
+         WHERE TEN_ID = #{g.tenant}                             /* 시스템 아이디 */
+           AND VMT_UUID = #{p.vmt_uuid}         /* 협력사 유형 코드 */
+    </update>
+    <!-- 협력사관리유형 상태 변경 (sts = 'D')-->
+    <update id="updateVmtStsByDelete">
+        /* vd-mgmt-setup.updateVmtStsByDelete : 협력사관리유형 삭제(STS = 'D') */
+        UPDATE VMT                  /* 협력사관리유형 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}        /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND VMT_UUID = #{p.vmt_uuid}     /* 협력사관리유형 UUID */
+        </trim>
+    </update>
+    <!-- 협력사관리그룹 목록 조회 -->
+    <select id="findListVmg" resultType="map">
+        /* vd-mgmt-setup.findListVmg: 협력사관리그룹 목록 조회 */
+        SELECT VMG.TEN_ID                   /* 테넌트 아이디 */
+             , VMG.VMG_UUID
+             , VMG.VMT_UUID         /* 협력사관리유형 UUID */
+             , VMT.VMT_CCD          /* 협력사관리유형 UUID */
+             , VMG.VMG_TYP_CCD       /* 협력사관리유형 코드 */
+             , VMG.VMG_CD           /* 협력사관리그룹 코드 */
+             , VMG.VMG_NM           /* 협력사관리그룹 명 */
+             , VMG.VMG_NM_EN        /* 협력사관리그룹 명 영문 */
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END AS DISPLAY_VMG_NM
+             , VMG.SORT                     /* 정렬 */
+             , VMG.STS                      /* 상태 */
+             , VMG.RMK                      /* 비고 */
+             , VMG.REGR_ID                   /* 등록자 아이디 */
+             , VMG.REG_DTTM                   /* 등록 일시 */
+             , VMG.MODR_ID                   /* 수정자 아이디 */
+             , VMG.MOD_DTTM                   /* 수정 일시 */
+		     , CASE WHEN (SELECT COUNT(*)
+					        FROM VMG_OORG VO     /* OV :  협력사관리그룹 운영조직 */
+		                   WHERE VO.TEN_ID = VMG.TEN_ID
+		                     AND VO.VMG_UUID = VMG.VMG_UUID
+		                     AND VO.STS != 'D'
+		        ) = 0
+			    THEN 'N'
+			    ELSE 'Y'
+			    END AS VMG_OORG_USING_YN    /* 운영조직 매핑 여부 */
+        FROM VMG VMG        /* VMG : 협력사관리그룹 */
+       INNER JOIN VMT VMT  /* VMT : 협력사관리유형 */
+          ON VMT.TEN_ID = VMG.TEN_ID
+         AND VMT.VMT_UUID = VMG.VMT_UUID
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND VMG.TEN_ID = #{g.tenant}
+            AND VMG.STS != 'D'
+            AND VMT.STS != 'D'
+            <if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+                AND VMT.VMT_CCD            = #{p.vmt_ccd}            /* 협력사관리유형 코드 */
+            </if>
+            <if test="p.vmg_cd != null and p.vmg_cd != ''">
+                <bind name="vmgCd" value="'%' + p.vmg_cd+ '%'"/>
+                AND UPPER(VMG.VMG_CD) LIKE UPPER(#{vmgCd})             /* 협력사관리그룹 코드 */
+            </if>
+            <if test="p.vmg_nm != null and p.vmg_nm != ''">
+                <bind name="vmgNm" value="'%' + p.vmg_nm+ '%'"/>
+                AND UPPER(VMG.VMG_NM) LIKE UPPER(#{vmgNm})             /* 협력사관리그룹 명 */
+            </if>
+        </trim>
+        ORDER BY VMT.VMT_CCD, VMG.SORT, VMG.VMG_TYP_CCD
+    </select>
+	<select id="findSourcingGroupDetail" resultType="map">
+		/*vd-mgmt-setup.findSourcingGroupDetail : 소싱그룹 상세 정보 조회*/
+		SELECT TEN_ID
+			 , VMG_UUID
+			 , VMT_UUID
+			 , VMG_TYP_CCD
+			 , VMG_CD
+			 , VMG_NM
+			 , VMG_NM_EN
+			 , SORT
+			 , ATHG_UUID
+			 , (SELECT COUNT(*)
+			      FROM ITEMCAT IC
+			     WHERE IC.TEN_ID = VG.TEN_ID
+			       AND IC.SG_CD = VG.VMG_CD
+			       AND STS != 'D') AS ITEMCAT_CNT
+			, CASE WHEN (SELECT COUNT(*)
+					        FROM VMG_OORG VO     /* OV :  협력사관리그룹 운영조직 */
+		                   WHERE VO.TEN_ID = VG.TEN_ID
+		                     AND VO.VMG_UUID = VG.VMG_UUID
+		                     AND VO.STS != 'D'
+		        ) = 0
+			    THEN 'N'
+			    ELSE 'Y'
+			    END AS VMG_OORG_USING_YN    /* 운영조직 매핑 여부 */
+			 , REGR_ID
+			 , REG_DTTM
+			 , MODR_ID
+			 , MOD_DTTM
+			 , RMK
+		  FROM VMG VG
+		WHERE TEN_ID = #{g.tenant}
+		  AND VMG_CD = #{p.vmg_cd}
+		  AND STS != 'D'
+	</select>
+	<select id="findSourcingGroupItemCategoryList" resultType="map">
+		/*vd-mgmt-setup.findSourcingGroupItemCategoryList : 소싱그룹 품목분류 조회*/
+		  SELECT  TEN_ID
+				, ITEMCAT_CD
+				, CASE WHEN #{g.locale} = 'ko_KR'
+					THEN ITEMCAT_NM
+					ELSE (CASE WHEN ITEMCAT_NM_EN IS NULL OR ITEMCAT_NM_EN = ''
+							   THEN ITEMCAT_NM
+							   ELSE ITEMCAT_NM_EN END) END
+		       AS ITEMCAT_NM
+				, SORT
+				, REGR_ID
+				, REG_DTTM
+				, MODR_ID
+				, MOD_DTTM
+				, SG_CD
+		  FROM ITEMCAT
+		WHERE TEN_ID = #{g.tenant}
+		  AND SG_CD = #{p.vmg_cd}
+		  <if test="p.itemcat_cd != null and p.itemcat_cd != ''">
+			  <bind name="itemcatCdPattern" value="'%' + p.itemcat_cd + '%'"/>
+		        AND UPPER(ITEMCAT_CD) LIKE #{itemcatCdPattern}
+		  </if>
+		  <if test="p.itemcat_nm != null and p.itemcat_nm != ''">
+			  <bind name="itemcatNmPattern" value="'%' + p.itemcat_nm + '%'"/>
+		        AND UPPER(ITEMCAT_NM) LIKE #{itemcatNmPattern}
+		  </if>
+		  AND STS != 'D'
+ 	 ORDER BY ITEMCAT_CD
+	</select>
+	<update id="saveSgItemCategoryList">
+		/*vd-mgmt-setup.saveSgItemCategoryList : 소싱그룹 품목분류를 저장한다.*/
+		UPDATE ITEMCAT
+		   SET SG_CD = #{p.sg_cd}
+			 , STS = 'U'
+			 , MODR_ID = #{g.username}
+			 , MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND ITEMCAT_CD = #{p.itemcat_cd}
+	</update>
+	<select id="findListNonMappingOorgVmg" resultType="map">
+		/*vd_mgmt-setup.findListNonMappingOorgVmg : 운영조직과 매핑되지 않은 VMG 목록 조회*/
+			SELECT VG.TEN_ID
+				 , VG.VMG_UUID
+				 , VG.VMT_UUID
+				 , VG.VMG_TYP_CCD
+			     , VG.VMG_CD
+				 , VG.VMG_NM
+				 , VG.VMG_NM_EN
+				 , CASE WHEN 'ko_KR' = #{g.locale} THEN VG.VMG_NM ELSE VG.VMG_NM_EN END AS DISPLAY_VMG_NM
+				 , VG.SORT
+				 , #{p.oorg_cd} AS OORG_CD
+				 , VT.VMT_CCD
+			FROM VMG VG
+	  INNER JOIN VMT VT
+			 ON VG.TEN_ID = VT.TEN_ID
+			AND VG.VMT_UUID = VT.VMT_UUID
+		<if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+			AND VT.VMT_CCD = #{p.vmt_ccd}
+		</if>
+			WHERE VG.TEN_ID = #{g.tenant}
+			  AND VG.STS != 'D'
+			  AND NOT EXISTS(SELECT OV.TEN_ID, OV.VMG_UUID
+			                   FROM VMG_OORG OV
+			                   WHERE VG.TEN_ID = OV.TEN_ID
+			                     AND VG.VMG_UUID = OV.VMG_UUID
+			                     AND OV.STS != 'D'
+			                     AND OV.OORG_CD = #{p.oorg_cd}
+			                )
+		ORDER BY VMT_CCD, VMG_CD
+	</select>
+	<!-- 운영조직 협력사관리그룹 목록 조회 -->
+	<select id="findListOorgVmg" resultType="map">
+		/*vd-mgmt-setup.findListVmgOorg : 운영조직 협력사관리그룹 목록 조회*/
+		  SELECT OV.TEN_ID
+			   , OV.VMG_OORG_UUID
+			   , OV.VMG_UUID
+		       , OV.OORG_CD
+			   , OV.USE_YN
+			   , VG.VMG_CD
+			   , VG.VMG_TYP_CCD
+		       , VG.VMG_NM
+			   , VG.VMG_NM_EN        /* 협력사관리그룹 명 영문 */
+		       , VG.SORT
+			   , CASE WHEN 'ko_KR' = #{g.locale} THEN VG.VMG_NM ELSE VG.VMG_NM_EN END AS DISPLAY_VMG_NM
+		       , VT.VMT_UUID
+		       , VT.VMT_CCD
+			<if test="g.existModule(&quot;VS&quot;)">
+				, CASE WHEN (SELECT COUNT(*)
+						  	   FROM OEG_VMG OVMG     /* OVMG : 온보딩평가그룹 협력사관리그룹 */
+					LEFT OUTER JOIN (SELECT TEN_ID, VMG_OORG_UUID
+									   FROM OE_VMG
+									  WHERE STS != 'D'
+								   GROUP BY TEN_ID, VMG_OORG_UUID
+								   ) OVG
+								ON OVG.TEN_ID = OVMG.TEN_ID
+							   AND OVG.VMG_OORG_UUID = OVMG.VMG_OORG_UUID
+							 WHERE OVMG.TEN_ID = OV.TEN_ID
+							   AND OVMG.VMG_OORG_UUID = OV.VMG_OORG_UUID
+							   AND OVMG.STS != 'D') = 0
+					THEN 'N'
+					ELSE 'Y'
+					END AS OE_USING_YN    /* 온보딩평가 사용여부 */
+			</if>
+			<if test="g.existModule(&quot;SRM&quot;)">
+				, CASE WHEN (SELECT COUNT(*)
+							   FROM PEG_VMG PVMG     /* PVMG : 퍼포먼스평가그룹 협력사관리그룹 */
+					LEFT OUTER JOIN (SELECT TEN_ID, VMG_OORG_UUID
+									   FROM PE_SUBJ
+									  WHERE STS != 'D'
+								   GROUP BY TEN_ID, VMG_OORG_UUID
+								   ) PV
+								ON PV.TEN_ID = PVMG.TEN_ID
+							   AND PV.VMG_OORG_UUID = PVMG.VMG_OORG_UUID
+							 WHERE PVMG.TEN_ID = OV.TEN_ID
+							   AND PVMG.VMG_OORG_UUID = OV.VMG_OORG_UUID
+							   AND PVMG.STS != 'D') = 0
+					THEN 'N'
+					ELSE 'Y'
+					END AS PE_USING_YN   /* 퍼포먼스평가 사용여부 */
+			</if>
+			FROM VMG_OORG OV
+	  INNER JOIN VMG VG
+			  ON OV.TEN_ID = VG.TEN_ID
+			 AND OV.VMG_UUID = VG.VMG_UUID
+			 AND VG.STS != 'D'
+	  INNER JOIN VMT VT
+			  ON OV.TEN_ID = VT.TEN_ID
+			 AND VG.VMT_UUID = VT.VMT_UUID
+			 AND VT.STS != 'D'
+		<if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+			AND VT.VMT_CCD            = #{p.vmt_ccd}            /* 협력사관리유형 코드 */
+		</if>
+		   WHERE OV.TEN_ID = #{g.tenant}
+		<if test="p.oorg_cd != null and p.oorg_cd != ''">
+		     AND OV.OORG_CD = #{p.oorg_cd}
+		</if>
+		<if test="p.vmg_cd != null and p.vmg_cd != ''">
+			<bind name="vmgCd" value="'%' + p.vmg_cd+ '%'"/>
+			AND UPPER(VG.VMG_CD) LIKE UPPER(#{vmgCd})             /* 협력사관리그룹 코드 */
+		</if>
+		<if test="p.vmg_nm != null and p.vmg_nm != ''">
+			<bind name="vmgNm" value="'%' + p.vmg_nm+ '%'"/>
+			AND UPPER(VG.VMG_NM) LIKE UPPER(#{vmgNm})             /* 협력사관리그룹 명 */
+		</if>
+		<if test="p.use_yn != null and p.use_yn != ''">
+			AND OV.USE_YN = #{p.use_yn}
+		</if>
+		<choose>
+			<when test="p.vmg_oorg_uuid != null and p.vmg_oorg_uuid.size() != 0">
+				AND VO.VMG_OORG_UUID IN
+				<foreach close=")" collection="p.vmg_oorg_uuid" item="vmg_oorg_uuid" open="(" separator=",">
+					#{vmg_oorg_uuid}
+				</foreach>
+			</when>
+			<when test="p.vmg_oorg_uuid != null and p.vmg_oorg_uuid != ''">
+				AND VO.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+			</when>
+		</choose>
+			AND OV.STS != 'D'
+	   ORDER BY VT.VMT_CCD, VG.SORT, VG.VMG_TYP_CCD
+	</select>
+	<select id="validateDeleteVmg" resultType="int">
+		/*vd-mgmt-setup.validateDeleteVmg : VMG 삭제 시 Validation Check*/
+		SELECT COUNT(*)
+		  FROM VMG_OORG
+		 WHERE TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.vmg_uuid != null and p.vmg_uuid.size() != 0">
+				AND VMG_UUID IN
+				<foreach close=")" collection="p.vmg_uuid" item="vmg_uuid" open="(" separator=",">
+					#{vmg_uuid}
+				</foreach>
+			</when>
+			<when test="p.vmg_uuid != null and p.vmg_uuid != ''">
+				AND VMG_UUID = #{p.vmg_uuid}
+			</when>
+		</choose>
+		   AND STS != 'D'
+	</select>
+	<insert id="insertListOorgVmg">
+		/*vd-mgmt-setup.insertListOorgVmg : 운영조직 협력사관리그룹 등록*/
+		INSERT INTO VMG_OORG
+		<trim prefix="(" prefixOverrides="," suffix=")">
+			  TEN_ID
+			, VMG_OORG_UUID
+			, VMG_UUID
+			, OORG_CD
+			, USE_YN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		</trim>
+		<trim prefix="VALUES (" prefixOverrides="," suffix=")">
+			  #{g.tenant}
+			, #{p.vmg_oorg_uuid}
+			, #{p.vmg_uuid}
+			, #{p.oorg_cd}
+			, #{p.use_yn}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		</trim>
+	</insert>
+	<select id="validateDeleteVmgOorg" resultType="map">
+		/*vd-mgmt-setup.validateDeleteVmgOorg : 삭제 validation check (평가 사용 여부 check)*/
+		SELECT T.*
+		FROM (SELECT VO.TEN_ID
+		  <if test="g.existModule(&quot;VS&quot;)">
+			, CASE WHEN (SELECT COUNT(*)
+				FROM OEG_VMG OVMG     /* OVMG : 온보딩평가그룹 협력사관리그룹 */
+				LEFT OUTER JOIN (SELECT TEN_ID, VMG_OORG_UUID
+				FROM OE_VMG
+				WHERE STS != 'D'
+				GROUP BY TEN_ID, VMG_OORG_UUID
+			) OVG
+				ON OVG.TEN_ID = OVMG.TEN_ID
+				AND OVG.VMG_OORG_UUID = OVMG.VMG_OORG_UUID
+				WHERE OVMG.TEN_ID = VO.TEN_ID
+				AND OVMG.VMG_OORG_UUID = VO.VMG_OORG_UUID
+				AND OVMG.STS != 'D') = 0
+				THEN 'N'
+				ELSE 'Y'
+			END AS OE_USING_YN    /* 온보딩평가 사용여부 */
+		</if>
+		<if test="g.existModule(&quot;SRM&quot;)">
+			, CASE WHEN (SELECT COUNT(*)
+				FROM PEG_VMG PVMG     /* PVMG : 퍼포먼스평가그룹 협력사관리그룹 */
+				LEFT OUTER JOIN (SELECT TEN_ID, VMG_OORG_UUID
+				FROM PE_SUBJ
+				WHERE STS != 'D'
+				GROUP BY TEN_ID, VMG_OORG_UUID
+				) PV
+				ON PV.TEN_ID = PVMG.TEN_ID
+				AND PV.VMG_OORG_UUID = PVMG.VMG_OORG_UUID
+				WHERE PVMG.TEN_ID = VO.TEN_ID
+				AND PVMG.VMG_OORG_UUID = VO.VMG_OORG_UUID
+				AND PVMG.STS != 'D') = 0
+			THEN 'N'
+			ELSE 'Y'
+			END AS PE_USING_YN   /* 퍼포먼스평가 사용여부 */
+		</if>
+		 FROM VMG_OORG VO
+		WHERE VO.TEN_ID = #{g.tenant}
+		<choose>
+			<when test="p.vmg_oorg_uuid != null and p.vmg_oorg_uuid.size() != 0">
+				AND VO.VMG_OORG_UUID IN
+				<foreach close=")" collection="p.vmg_oorg_uuid" item="vmg_oorg_uuid" open="(" separator=",">
+					#{vmg_oorg_uuid}
+				</foreach>
+			</when>
+			<otherwise>
+				AND VO.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+			</otherwise>
+		</choose>
+		AND VO.STS != 'D'
+		) T
+		WHERE T.TEN_ID = #{g.tenant}
+		<choose>
+			<when test="g.existModule(&quot;VS&quot;) and g.existModule(&quot;SRM&quot;)">
+				AND (T.OE_USING_YN = 'Y' OR T.PE_USING_YN = 'Y')
+			</when>
+		    <when test="g.existModule(&quot;VS&quot;)">
+			    AND T.OE_USING_YN = 'Y'
+		    </when>
+			<when test="g.existModule(&quot;SRM&quot;)">
+				AND T.PE_USING_YN = 'Y'
+			</when>
+		</choose>
+	</select>
+	<update id="updateListOorgVmg">
+		/*vd-mgmt-setup.updateListOorgVmg : 운영조직 협력사관리그룹 저장*/
+		UPDATE VMG_OORG
+		   SET USE_YN = #{p.use_yn}
+		     , STS = 'U'
+			 , MODR_ID = #{g.username}
+			 , MOD_DTTM = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+	</update>
+	<delete id="deleteListOorgVmg">
+		/*vd-mgmt-setup.deleteListOorgVmg : 운영조직 협력사관리그룹 삭제*/
+		UPDATE VMG_OORG
+		<trim prefix="SET" prefixOverrides=",">
+			, STS = 'D'
+			, MODR_ID = #{g.username}        /* 수정자 아이디 */
+			, MOD_DTTM = #{g.now}             /* 수정 일시 */
+		</trim>
+		WHERE TEN_ID = #{g.tenant}
+		  AND VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+	</delete>
+    <select id="checkValidBeforeSaveListVmg" resultType="map">
+        /* vd-mgmt-setup.checkValidBeforeSaveListVmg: 협력사관리그룹 목록을 저장 전 validation */
+        SELECT CASE WHEN #{p.vmg_typ_ccd} = 'SG' AND  /* 협력사관리그룹 유형이 SG인 경우, 동일한 SG존재여부 체크 */
+                         ( SELECT COUNT(VMG_UUID)
+                             FROM VMG
+                            WHERE TEN_ID = #{g.tenant}
+                              AND VMG_TYP_CCD = #{p.vmg_typ_ccd}
+                              AND VMG_CD  = #{p.vmg_cd}
+                              AND STS != 'D'
+                         ) != 0
+                     THEN 'SAME_SG_EXIST'
+                     ELSE 'VALID_PASS'
+              END AS VALID_RESULT_TYP
+        FROM DUM_TBL
+    </select>
+    <!-- 협력사관리그룹 저장 (Insert) -->
+    <insert id="insertListVmg">
+        /* vd-mgmt-setup.insertListVmg : 협력사관리그룹 저장 */
+        INSERT INTO VMG        /* 협력사관리그룹  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                   /* 테넌트 아이디 */
+            , VMG_UUID         /* 협력사관리그룹 UUID */
+            , VMT_UUID         /* 협력사관리유형 UUID */
+            , VMG_TYP_CCD       /* 협력사관리그룹 유형 공통코드 */
+            , VMG_CD           /* 협력사관리그룹 코드 */
+            , VMG_NM           /* 협력사관리그룹 명 */
+            , VMG_NM_EN        /* 협력사관리그룹 명 영문 */
+            , SORT
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.vmg_uuid}
+            , #{p.vmt_uuid}
+            , #{p.vmg_typ_ccd}
+            , #{p.vmg_cd}
+            , #{p.vmg_nm}
+            , #{p.vmg_nm_en}
+		    , #{p.sort}  , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 협력사관리그룹 수정 -->
+    <update id="updateListVmg">
+        /* vd-mgmt-setup.updateListVmg : 협력사관리그룹 수정 */
+        UPDATE VMG        /* 협력사관리그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID              = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM             = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , VMT_UUID             = #{p.vmt_uuid}
+            , VMG_NM               = #{p.vmg_nm}
+            , VMG_NM_EN            = #{p.vmg_nm_en}
+	        , RMK                  = #{p.rmk}
+            <if test="p.athg_uuid != null and p.athg_uuid != ''">
+	            , ATHG_UUID = #{p.athg_uuid}
+            </if>
+		    , SORT                 = #{p.sort} </trim>
+        WHERE TEN_ID = #{g.tenant}                         /* 시스템 아이디 */
+          AND VMG_UUID = #{p.vmg_uuid}     /* 협력사관리그룹 UUID */
+    </update>
+    <!-- 협력사관리그룹 상태 변경 (sts = 'D')-->
+    <update id="updateVmgStsByDelete">
+        /* vd-mgmt-setup.updateVmgStsByDelete : 협력사관리그룹 삭제(STS = 'D') */
+        UPDATE VMG                  /* 협력사관리그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}        /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        WHERE TEN_ID = #{g.tenant}                         /* 시스템 아이디 */
+          AND VMG_UUID = #{p.vmg_uuid}     /* 협력사관리그룹 UUID */
+    </update>
+    <select id="findListVendorManagementGroupEvaltr" resultType="Map">
+    /* vd-mgmt-setup.findListVendorManagementGroupEvaltr : 협력사관리그룹 평가자 목록 조회 */
+        SELECT VE.TEN_ID
+             , VE.VMG_OORG_EVALTR_UUID          /* 협력사관리그룹 평가자 아이디 */
+             , VE.VMG_OORG_UUID                 /* 운영조직 협력사관리그룹 UUID */
+             , VE.EVALTR_ID                /* 평가자 아이디 */
+             , USR.USR_NM   AS EVALTR_NM   /* 평가자 명 */
+             , USR.DEPT_CD                 /* 부서 코드 */
+             , ( SELECT CASE #{g.locale} WHEN 'ko_KR' THEN DEPT_NM
+                                         ELSE DEPT_NM_EN END AS DEPT_NM  /* 부서 명 */
+                   FROM DEPT /* 부서 */
+                  WHERE TEN_ID   = USR.TEN_ID
+                    AND DEPT_CD  = USR.DEPT_CD
+                    AND STS     != 'D'
+               )  AS DEPT_NM          /* 부서 명 */
+             , VE.REG_DTTM
+             , VE.MOD_DTTM
+             , VE.RMK
+             , VE.REGR_ID
+             , VE.MODR_ID
+             , VG.VMG_TYP_CCD
+             , VG.VMG_CD
+          FROM VMG_OORG_EVALTR VE                /* VE : 협력사관리그룹 평가자 */
+         INNER JOIN USR USR                 /* USR : 사용자 */
+            ON VE.TEN_ID     = USR.TEN_ID
+           AND VE.EVALTR_ID  = USR.USR_ID   /* 평가자 아이디 */
+           AND USR.STS      != 'D'
+         INNER JOIN VMG_OORG V
+            ON V.TEN_ID     = VE.TEN_ID
+           AND V.VMG_OORG_UUID   = VE.VMG_OORG_UUID
+           AND V.STS      != 'D'
+        INNER JOIN VMG VG
+          ON VG.TEN_ID = VE.TEN_ID
+          AND VG.VMG_UUID = V.VMG_UUID
+          AND VG.STS != 'D'
+         WHERE VE.TEN_ID     = #{g.tenant}
+           AND VE.VMG_OORG_UUID   = #{p.vmg_oorg_uuid}
+           AND VE.STS       != 'D'
+    </select>
+	<select id="findListVendorManagementGroupEvaltrForView" resultType="Map">
+    /* vd-mgmt-setup.findListVendorManagementGroupEvaltrForView : 협력사관리그룹 평가자 목록 조회 */
+        SELECT DISTINCT VE.TEN_ID
+             , VE.EVALTR_ID                /* 평가자 아이디 */
+             , USR.USR_NM   AS EVALTR_NM   /* 평가자 명 */
+             , USR.DEPT_CD                 /* 부서 코드 */
+             , ( SELECT CASE #{g.locale} WHEN 'ko_KR' THEN DEPT_NM
+                                         ELSE DEPT_NM_EN END AS DEPT_NM  /* 부서 명 */
+                   FROM DEPT /* 부서 */
+                  WHERE TEN_ID   = USR.TEN_ID
+                    AND DEPT_CD  = USR.DEPT_CD
+                    AND STS     != 'D'
+               )  AS DEPT_NM          /* 부서 명 */
+          FROM VMG_OORG_EVALTR VE                /* VE : 협력사관리그룹 평가자 */
+         INNER JOIN USR USR                 /* USR : 사용자 */
+            ON VE.TEN_ID     = USR.TEN_ID
+           AND VE.EVALTR_ID  = USR.USR_ID   /* 평가자 아이디 */
+           AND USR.STS      != 'D'
+         WHERE VE.TEN_ID     = #{g.tenant}
+       <choose>
+         <when test="p.vmg_oorg_uuids != null and p.vmg_oorg_uuids.size() != 0">
+           AND VE.VMG_OORG_UUID IN
+           <foreach close=")" collection="p.vmg_oorg_uuids" item="vmg_oorg_uuids" open="(" separator=",">
+             #{vmg_oorg_uuids}
+           </foreach>
+         </when>
+         <otherwise>
+           AND (VE.VMG_OORG_UUID IS NULL OR VE.VMG_OORG_UUID = '')
+         </otherwise>
+       </choose>
+           AND VE.STS       != 'D'
+    </select>
+    <insert id="insertVendorManagementGroupEvaltr">
+    /* vd-mgmt-setup.insertVendorManagementGroupEvaltr : 협력사관리그룹 평가자 저장 (Insert) */
+        INSERT INTO VMG_OORG_EVALTR (
+        	  TEN_ID
+        	, VMG_OORG_EVALTR_UUID
+        	, VMG_OORG_UUID
+        	, EVALTR_ID
+        	, RMK
+        	, STS
+        	, REGR_ID
+        	, REG_DTTM
+        	, MODR_ID
+        	, MOD_DTTM
+        ) VALUES (
+        	  #{g.tenant}
+        	, #{g.uuid}
+            , #{p.vmg_oorg_uuid}
+            , #{p.evaltr_id}
+            , #{p.rmk}
+            , 'C'
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        )
+    </insert>
+    <delete id="deleteListVendorManagementGroupEvaltr">
+    /* vd-mgmt-setup.deleteListVendorManagementGroupEvaltr : 협력사관리그룹 평가자 삭제 (delete) */
+        DELETE FROM VMG_OORG_EVALTR                         /* 협력사관리그룹 평가자 */
+         WHERE TEN_ID          = #{g.tenant}           /* 테넌트 아이디 */
+           AND VMG_OORG_EVALTR_UUID = #{p.vmg_oorg_evaltr_uuid}  /* 협력사관리그룹 평가자 아이디 */
+    </delete>
+    <delete id="deleteVendorManagementGroupEvaltrBySourcingGroup">
+    /* vd-mgmt-setup.deleteVendorManagementGroupEvaltrBySourcingGroup : 협력사관리그룹 평가자 삭제 (delete) */
+        DELETE FROM VMG_OORG_EVALTR                         /* 협력사관리그룹 평가자 */
+         WHERE TEN_ID          = #{g.tenant}           /* 테넌트 아이디 */
+           AND VMG_OORG_UUID IN (SELECT VMG_OORG_UUID
+                                   FROM VMG_OORG VO
+                                  WHERE VO.TEN_ID = #{g.tenant}
+                                    AND VO.VMG_UUID = #{p.vmg_uuid}
+                                    AND VO.STS != 'D')  /* 협력사관리그룹 UUID */
+           AND EVALTR_ID       = #{p.evaltr_id}        /* 평가자 아이디 */
+    </delete>
+	<update id="updateVenderManagementGroupNameBySourcingGroup">
+	/* vd-mgmt-setup.updateVenderManagementGroupNameBySourcingGroup : 협력사관리그룹 명 수정 */
+		UPDATE VMG
+		   SET VMG_NM    = #{p.sg_nm}
+		     , VMG_NM_EN = #{p.sg_nm_en}
+		 WHERE TEN_ID    = #{g.tenant}
+		   AND VMG_CD    = #{p.sg_cd}
+		   AND STS      != 'D'
+	</update>
+</mapper>

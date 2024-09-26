@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="task-exception">
+	<select id="findTaskTitleByPrItem" resultType="java.lang.String">
+    /* task-exception.findTaskTitleByPrItem */
+    SELECT CONCAT(CONCAT(PRHD.PR_TIT, '-'), PRDT.ITEM_NM)  AS TICK_TIT
+      FROM ESPPRHD PRHD
+     INNER JOIN ESPPRDT PRDT
+        ON PRDT.SYS_ID = PRHD.SYS_ID
+       AND PRDT.PR_ID  = PRHD.PR_ID
+     WHERE PRHD.SYS_ID     = #{g.tenant}
+       AND PRDT.PR_ITEM_ID = #{p.app_id}
+    </select>
+    <select id="findTaskTitleByPoItem" resultType="java.lang.String">
+    /* task-exception.findTaskTitleByPoItem */
+    SELECT CONCAT(CONCAT(POHD.PO_TIT, '-'), PODT.ITEM_NM)  AS TICK_TIT
+      FROM ESPPOHD POHD
+     INNER JOIN ESPPODT PODT
+        ON PODT.SYS_ID = POHD.SYS_ID
+       AND PODT.PO_ID  = POHD.PO_ID
+     WHERE POHD.SYS_ID     = #{g.tenant}
+       AND PODT.PO_ITEM_ID = #{p.app_id}
+    </select>
+    <select id="findTaskTitleByProEval" resultType="java.lang.String">
+    /* task-exception.findTaskTitleByProEval */
+    SELECT CONCAT(CONCAT(EVMA.EVAL_NM, '-'), VD_NM)  AS TICK_TIT
+      FROM ESREVMA EVMA
+     INNER JOIN ESREVQS EVQS
+        ON EVQS.SYS_ID  = EVMA.SYS_ID
+       AND EVQS.EVAL_ID = EVMA.EVAL_ID
+       AND EVQS.STS    <![CDATA[<>]]> 'D'
+     INNER JOIN ESMVDGL VDGL
+        ON VDGL.SYS_ID = EVQS.SYS_ID
+       AND VDGL.VD_CD  = EVQS.VD_CD
+     WHERE EVMA.SYS_ID               = #{g.tenant}
+       AND EVQS.SRV_EVAL_PROG_MGT_ID = #{p.app_id}
+    </select>
+    <select id="findCloseDtInfoByPrNcCt" resultType="map">
+    /* task-exception.findCloseDtInfoByPrNcCt */
+    SELECT TO_DATE(T.CLOSE_DT, 'YYYYMMDD')    AS CLOSE_DT
+         , TO_DATE(T.CLOSE_DT, 'YYYYMMDD')<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if>    AS ARR_START_DT
+      FROM ( SELECT PRHD.PR_ID
+                  , MIN(PRDT.PRD_SD)    AS CLOSE_DT
+               FROM ESPPRHD PRHD
+              INNER JOIN ESPPRDT PRDT
+                 ON PRDT.SYS_ID = PRHD.SYS_ID
+                AND PRDT.PR_ID  = PRHD.PR_ID
+              WHERE PRHD.SYS_ID       = #{g.tenant}
+              <choose>
+                <when test="p.tick_app_col == 'PR_ITEM_ID'">
+                AND PRDT.PR_ITEM_ID   = #{p.app_id}
+                </when>
+                <otherwise>
+                AND PRHD.PR_ID        = #{p.app_id}
+                AND PRDT.STS         <![CDATA[<>]]> 'D'
+                </otherwise>
+              </choose>
+                AND PRHD.PURC_REQ_TYP = 'NC'
+                AND PRHD.PURC_TYP     = 'CT'
+              GROUP BY PRHD.PR_ID
+           ) T
+    </select>
+    <select id="findCloseDtInfoByRfxImdtStart" resultType="map">
+    /* task-exception.findCloseDtInfoByRfxImdtStart */
+    SELECT TO_DATE(TO_CHAR(RFX_CLOSE_DT, 'YYYYMMDD'), 'YYYYMMDD')    AS CLOSE_DT
+         , TO_DATE(TO_CHAR(RFX_CLOSE_DT, 'YYYYMMDD'), 'YYYYMMDD')<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if>    AS ARR_START_DT
+      FROM ESPRQHD
+     WHERE SYS_ID        = #{g.tenant}
+       AND RFX_ID        = #{p.app_id}
+       AND IMDT_START_YN = 'Y'
+    </select>
+    <select id="findCloseDtInfoByRfxNcCt" resultType="map">
+    /* task-exception.findCloseDtInfoByRfxNcCt */
+    SELECT TO_DATE(T.CLOSE_DT, 'YYYYMMDD')    AS CLOSE_DT
+         , TO_DATE(T.CLOSE_DT, 'YYYYMMDD')<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if>    AS ARR_START_DT
+      FROM ( SELECT RQHD.RFX_ID
+                  , MIN(RQDT.PRD_SD)    AS CLOSE_DT
+               FROM ESPRQHD RQHD
+              INNER JOIN ESPRQDT RQDT
+                 ON RQDT.SYS_ID = RQHD.SYS_ID
+                AND RQDT.RFX_ID = RQHD.RFX_ID
+                AND RQDT.STS   <![CDATA[<>]]> 'D'
+              WHERE RQHD.SYS_ID       = #{g.tenant}
+                AND RQHD.RFX_ID       = #{p.app_id}
+                AND RQHD.RFX_RES_TYP  = 'NC'
+                AND RQHD.PURC_TYP     = 'CT'
+              GROUP BY RQHD.RFX_ID
+           ) T
+    </select>
+    <select id="findCloseDtInfoByPoCt" resultType="map">
+    /* task-exception.findCloseDtInfoByPoCt */
+    SELECT TO_DATE(T.CLOSE_DT, 'YYYYMMDD')    AS CLOSE_DT
+         , TO_DATE(T.CLOSE_DT, 'YYYYMMDD')<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if>    AS ARR_START_DT
+      FROM ( SELECT POHD.PO_ID
+             <choose>
+               <when test="p.aggregate_type != null and p.aggregate_type == 'MAX'">
+                  , MAX(PODT.PRD_ED)    AS CLOSE_DT
+               </when>
+               <otherwise>
+                  , MIN(PODT.PRD_SD)    AS CLOSE_DT
+               </otherwise>
+             </choose>
+               FROM ESPPOHD POHD
+              INNER JOIN ESPPODT PODT
+                 ON PODT.SYS_ID = POHD.SYS_ID
+                AND PODT.PO_ID  = POHD.PO_ID
+                AND PODT.STS   <![CDATA[<>]]> 'D'
+              WHERE POHD.SYS_ID   = #{g.tenant}
+                AND POHD.PO_ID    = #{p.app_id}
+                AND POHD.PURC_TYP = 'CT'
+              GROUP BY POHD.PO_ID
+           ) T
+    </select>
+    <select id="findCloseDtInfoForDateType" resultType="map">
+    /* task-exception.findCloseDtInfoForDateType */
+    <bind name="nowDate" value="g.getDateWithNoTime(g.now)"/>
+    SELECT T.CLOSE_DT    AS CLOSE_DT
+            , T.CLOSE_DT<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if> AS ARR_START_DT
+            , #{nowDate}<if test="p.new_bas_day != null"> + #{p.new_bas_day}</if> AS NEW_CLOSE_DT  FROM ( SELECT MIN(TO_DATE(TO_CHAR(${p.close_col}, 'YYYYMMDD'), 'YYYYMMDD')) AS CLOSE_DT  FROM ${p.close_tb}
+              WHERE SYS_ID  = #{g.tenant}
+                AND ${p.close_link_col} = ( SELECT ${p.close_link_col}
+                                             FROM ${p.tick_tb}
+                                            WHERE SYS_ID = #{g.tenant} 
+                                              AND ${p.tick_app_col} = #{p.app_id}
+                                         )
+           ) T
+    </select>
+</mapper>

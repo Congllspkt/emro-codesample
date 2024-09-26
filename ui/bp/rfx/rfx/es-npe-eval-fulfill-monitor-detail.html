@@ -1,0 +1,351 @@
+<dom-module id="es-npe-eval-fulfill-monitor-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 콤보 목록 조회 서비스 그룹 -->
+		<sc-code-group init>
+			<!-- 평가자 평가 진행상태 -->
+			<sc-code code="P095" value="{{codes.evalStsCcd}}"></sc-code>
+			<sc-code code="R707" value="{{codes.R707}}"></sc-code><!-- 평가항목 담당 그룹 공통코드 -->
+			<sc-code code="R001" value="{{codes.R001}}"></sc-code><!-- 정량/정성 유형 -->
+			<sc-code code="R301" value="{{codes.R301}}"></sc-code><!-- 퍼포먼스평가 상태 -->
+		</sc-code-group>
+		
+		<!-- 비가격 평가 대상목록 조회 -->
+		<sc-ajax id="findNpeEvalSubjectInfo" url="findNpeEvalSubjectInfo.do" body="{{searchParam}}" on-response="completeFindNpeEvalSubjectInfo"></sc-ajax>
+		
+		<!-- 비가격 수행 평가항목 목록 조회 -->
+		<sc-ajax id="findNpeEvalfactFulfillInfo" url="findNpeEvalfactFulfillInfo.do" body="{{evalSubjectInfo}}" on-response="completeFindNpeEvalfactFulfillInfo"></sc-ajax>
+		
+		<!-- 비가격평가 정보 저장 -->
+		<sc-ajax id="saveNpeEvalFulfillment" url="saveNpeEvalFulfillment.do" on-response="onResultSaveHandler"></sc-ajax>
+		
+		<sc-ajax id="completeNpeEval" url="completeNpeEval.do" on-response="completeCompleteNpeEval"></sc-ajax>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="[[formula('titleText')]]" i18n-disabled>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex" style="overflow:hidden;">
+			<cc-sub-title-bar title-text="◈ [{{evalSubjectInfo.disp_vd_nm}} ({{evalSubjectInfo.disp_vd_cd}})] [[translate('평가')]]"
+							  hidden="[[!formula('factTitleVisible')]]" i18n-disabled>
+			</cc-sub-title-bar>
+			<div class="vspace-5" style="border-bottom: solid 1px #ccc;" hidden="[[!formula('factTitleVisible')]]"></div>
+			<cc-evaltemplate-evalfact-list id="factArea" class="flex" eval-template-list="{{evalTemplateList}}" rmk="{{evalInfo.rmk}}" codes="{{codes}}"
+										   read-only="[[!formula('isEditable')]]" hidden="[[formula('isGridType')]]"></cc-evaltemplate-evalfact-list>
+			<cc-evaltemplate-evalfact-grid id="factGridArea" class="flex" eval-template-list="{{evalTemplateList}}" evalfact-eval-list="{{evalfactEvalList}}" rmk="{{evalInfo.rmk}}" codes="{{codes}}"
+										   read-only="[[!formula('isEditable')]]" hidden="[[!formula('isGridType')]]"></cc-evaltemplate-evalfact-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-npe-eval-fulfill-monitor-detail",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							R001: [],
+							evalStsCcd: [],
+							R707: [],
+							R708: [],
+							R107: []
+						};
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// 퍼포먼스평가 정보
+				evalInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// 평가 대상 정보
+				evalSubjectInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// (검색용) 평가항목 목록
+				evalfactSearchList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				// 평가템플릿 목록
+				evalTemplateList: {
+					type: Array,
+					notify: true,
+					value: function() {
+						return [];
+					}
+				},
+				// 평가지 조회용 평가항목 목록
+				evalfactEvalList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				editable: { // 화면 수정 가능 여부
+					type: Boolean,
+					value: false
+				},
+				allowReval: { // 재 평가 허용 여부
+					type: Boolean,
+					value: false
+				},
+				isPopup: { // 팝업여부
+					type: Boolean,
+					value: false
+				}
+			},
+			formulas: {
+				isEditable: function() {
+					return this.get("editable");
+				},
+				factTitleVisible: function() {
+					var me = this;
+					var subject = me.get("evalSubjectInfo");
+					return UT.isNotEmpty(subject);
+				},
+				titleText: function() {
+					var me = this;
+					var evalNm = me.get("evalInfo.rfx_tit");
+					return me.translate('비가격평가 수행') + "-" + evalNm;
+				},
+				isGridType: function() {
+					var me               = this,
+						evaldocLytTypCcd = me.evalSubjectInfo.evaldoc_lyt_typ_ccd;
+					return evaldocLytTypCcd == "GRID";
+				}
+			},
+			
+			// 화면 초기화 완료
+			initialized: function() {
+				var me = this;
+			},
+			
+			/* 리스트 화면에서 전달받은 데이터 setting */
+			load: function(param) {
+				var me = this;
+				
+				me.set("evalSubjectInfo", param.data);
+				me.set("evalInfo", param.rfxInfo);
+				me.set("editable", false);
+				
+				me.set("allowReval", false); //재평가 허용여부
+				me.set("isPopup", UT.isBoolean(param.isPopup) ? param.isPopup : false);
+				
+				me.applyFormula();
+				me.onSearchDetail();
+			},
+			
+			/* 퍼포먼스평가 평가대상 평가정보 조회 */
+			onSearchDetail: function() {
+				var me = this;
+				
+				if(!me.formula("isGridType")) {
+					me.$.factArea.onClear();
+				} else {
+					me.$.factGridArea.onClear();
+				}
+				UT.request(me.$.findNpeEvalfactFulfillInfo);
+			},
+			
+			/* 평가항목, 평가지 조회 후처리 */
+			completeFindNpeEvalfactFulfillInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				var resultData = result.resultData;
+				var readOnly = !me.formula('isEditable');
+				
+				if(UT.isEmpty(result) || result.resultStatus !== 'S' || UT.isEmpty(resultData)) {
+					return UT.alert("STD.E9999");
+				}
+				
+				var searchFactList = resultData.evalfactSearchList;
+				me.set("evalfactSearchList", searchFactList);
+				
+				// survey 형식
+				if(!me.formula("isGridType")) {
+					var evalTemplateList = resultData.evalTemplateList || [];
+					var evalfactEvalList = resultData.evalfactEvalList || [];
+					var factScaleList = resultData.factScaleList || [];
+					var quantFactResult = resultData.quantFactResult || [];
+					
+					if(evalfactEvalList && evalfactEvalList.length) {
+						var factGrpFactList = []; // 템플릿 - 항목군
+						
+						for(var i = 0; i < evalfactEvalList.length; i++) {
+							var arr = [];
+							var rmk = '', athg_uuid = '', att_cnt;
+							var select_scale_cds = []; //SLCTD_SCALE_CD
+							var select_scale_cd = "";
+							var fact = evalfactEvalList[i];
+							
+							// 평가항목 스케일 설정
+							for(var j = 0; j < factScaleList.length; j++) {
+								var scale = factScaleList[j];
+								if(fact.evaltmpl_evalfact_uuid === scale.evaltmpl_evalfact_uuid) {
+									if(scale.select_yn === "Y") {
+										if(fact.evalfact_typ_ccd === "QUALI_MULTPL_SEL") { //다중선택 항목
+											select_scale_cds.push(scale.scale_cd);
+										} else {
+											select_scale_cd = scale.scale_cd;
+											if(fact.evalfact_typ_ccd === "QUALI_SC_INP") { //직접입력 항목
+												factScaleList[j].slctd_scale_sc = factScaleList[j].orgn_slctd_scale_sc;
+											}
+										}
+										rmk = factScaleList[j].rmk;
+										athg_uuid = factScaleList[j].athg_uuid;
+										att_cnt = factScaleList[j].att_cnt;
+									}
+									// 선택항목 라벨 설정(실제 반영되는 점수 sc2)
+									factScaleList[j].label = scale.scale_nm + " [" + scale.sc2 + me.translate("점") + "]";
+									arr.push(factScaleList[j]);
+								}
+							}
+							
+							// 정량항목 계산값
+							if(fact.evalfact_typ_ccd == "QUANT") {
+								var quantFactResList = [];
+								for(var k = 0; k < quantFactResult.length; k++) {
+									var calcRes = quantFactResult[k];
+									if(fact.evaltmpl_evalfact_uuid == calcRes.evaltmpl_evalfact_uuid) {
+										quantFactResList.push(calcRes);
+									}
+								}
+								evalfactEvalList[i].quantFactResList = quantFactResList;
+							}
+							
+							// 다중선택항목
+							if(fact.evalfact_typ_ccd === "QUALI_MULTPL_SEL") {
+								evalfactEvalList[i].slctd_scale_cd = select_scale_cds;
+							} else {
+								evalfactEvalList[i].slctd_scale_cd = select_scale_cd
+							}
+							evalfactEvalList[i].factScaleList = arr;
+							// 평가항목별 의견, 첨부파일 세팅
+							evalfactEvalList[i].rmk = rmk;
+							evalfactEvalList[i].athg_uuid = athg_uuid;
+							evalfactEvalList[i].att_cnt = att_cnt;
+							evalfactEvalList[i].scaleDisabled = readOnly;
+							// fact.apply_yn = fact.apply_yn ? fact.apply_yn : "Y";
+							
+							// 항목군 - 항목
+							var pushFlag = false;
+							for(var j = 0; j < factGrpFactList.length; j++) {
+								var tmplFactGrp = factGrpFactList[j];
+								if(tmplFactGrp.evaltmpl_efactg_uuid === fact.evaltmpl_efactg_uuid) {
+									tmplFactGrp.children.push(evalfactEvalList[i]);
+									pushFlag = true;
+									break;
+								}
+							}
+							if(!pushFlag) {
+								factGrpFactList.push({
+									evaltmpl_efactg_uuid: fact.evaltmpl_efactg_uuid,
+									evaltmpl_efactg_sort: fact.evaltmpl_efactg_sort,
+									evaltmpl_uuid: fact.evaltmpl_uuid,
+									evaltmpl_cd: fact.evaltmpl_cd,
+									efactg_uuid: fact.efactg_uuid,
+									efactg_cd: fact.efactg_cd,
+									efactg_nm: fact.efactg_nm,
+									children: [evalfactEvalList[i]]
+								});
+							}
+						}
+						
+						// 템플릿 - 항목군
+						if(evalTemplateList && evalTemplateList.length && factGrpFactList && factGrpFactList.length) {
+							for(var i = 0; i < evalTemplateList.length; i++) {
+								var evTmpl = evalTemplateList[i];
+								var tmplFactGrpList = [];
+								for(var j = 0; j < factGrpFactList.length; j++) {
+									data = factGrpFactList[j];
+									if(evTmpl.evaltmpl_cd == data.evaltmpl_cd) {
+										tmplFactGrpList.push(data);
+									}
+								}
+								evTmpl.tmplFactGrpList = tmplFactGrpList;
+							}
+						}
+					}
+					me.set("evalTemplateList", evalTemplateList ? evalTemplateList : []);
+				} else {
+					// 그리드 형식
+					var evalTemplateList = resultData.evalTemplateList || [];
+					var evalfactEvalList = resultData.evalfactEvalList || [];
+					var factScaleList = resultData.factScaleList || [];
+					
+					if(evalTemplateList && evalTemplateList.length && factScaleList && factScaleList.length) {
+						for(var i = 0; i < evalTemplateList.length; i++) {
+							var evTmpl = evalTemplateList[i];
+							var tmplFactScaleList = [];
+							evTmpl.scaleDisabled = readOnly;
+							for(var j = 0; j < factScaleList.length; j++) {
+								data = factScaleList[j];
+								if(evTmpl.evaltmpl_cd == data.evaltmpl_cd) {
+									data.rmkDisabled = readOnly;
+									if(data.select_yn === 'Y') {
+										for(var k = 0; k < evalfactEvalList.length; k++) {
+											var factItem = evalfactEvalList[k];
+											if(data.evaltmpl_evalfact_uuid == factItem.evaltmpl_evalfact_uuid) {
+												evalfactEvalList[k].rmk = data.rmk;
+												evalfactEvalList[k].athg_uuid = data.athg_uuid;
+												evalfactEvalList[k].att_cnt = data.att_cnt;
+											}
+											;
+										}
+									}
+									tmplFactScaleList.push(data);
+								}
+							}
+							
+							// 선택되지 않은 스케일에도 항목별 의견, 첨부파일 동일하게 세팅해줘야 함
+							for(var k = 0; k < tmplFactScaleList.length; k++) {
+								var scaleItem = tmplFactScaleList[k];
+								var scaleFactInfo = evalfactEvalList.filter(function(item) {
+									return item.evaltmpl_evalfact_uuid == scaleItem.evaltmpl_evalfact_uuid;
+								});
+								tmplFactScaleList[k].rmk = scaleFactInfo[0].rmk;
+								tmplFactScaleList[k].athg_uuid = scaleFactInfo[0].athg_uuid;
+								tmplFactScaleList[k].att_cnt = scaleFactInfo[0].att_cnt;
+							}
+							evTmpl.tmplFactScaleList = tmplFactScaleList;
+						}
+					}
+					
+					me.set("evalfactEvalList", evalfactEvalList ? evalfactEvalList : []);
+					me.set("evalTemplateList", evalTemplateList ? evalTemplateList : []);
+				}
+			},
+			
+			/* 닫기 */
+			onClose: function() {
+				var me = this;
+				
+				me.reset();
+				me.fire("close-eval");
+			}
+		});
+	</script>
+
+</dom-module>

@@ -1,0 +1,490 @@
+<sc-link rel="import" href="/ui/bp/pricedoctor/priceforecasting/popup/ep-price-forecasting-report.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/pricedoctor/kpi/ep-kpi-item-detail.html"></sc-link>
+
+<dom-module id="es-unitprice-stats">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		
+		.reportBar {
+			border:1px solid #d2d2d2;
+			background: #fff;
+			margin: 10px 0 5px 0;
+			padding: 6px;
+		}
+		.reportBar .title {
+			font-size: 16px;
+			font-weight: bold;
+		}
+		.reportBar .desc {
+			margin-left: 15px;
+			font-size: 13px;
+			color: #777;
+		}
+		.reportBar .contents {
+			width:100%;
+			margin: 5px 0 5px 0;
+		}
+		.reportBar .contents .wrap-card {
+			width: 25%;
+			min-width: 91px;
+			display: inline-block;
+			line-height: 18px;
+		}
+		.reportBar .contents .card-box {
+			margin: 0 5px;
+			box-shadow: 0 0 0 1px #e4e4e4 inset;
+			padding: 10px 15px;
+		}
+		.reportBar .contents  .card-box > p:first-child {
+			font-size: 15px;
+			font-weight: bold;
+			color: #555;
+			height: 42px;
+		}
+		.reportBar .contents  .card-box span {
+			font-size: 15px;
+			font-weight: bold;
+			color: #555;
+		}
+		.reportBar .contents  .card-box > p:last-child {
+			font-size: 27px;
+			font-weight: bold;
+		}
+		.reportBar .contents  .card-box  .simCount {
+			margin-top: 14px;
+			text-align: center;
+		}
+		.reportBar .contents #masterTotal {border-top: 2px solid #777777;}
+		.reportBar .contents #resultTotal {border-top: 2px solid #5e8fc1;}
+		.reportBar .contents #high {border-top: 2px solid #cf5d5b;}
+		.reportBar .contents #normal {border-top: 2px solid #e4af4e;}
+		.reportBar .contents #low {border-top: 2px solid #98bf55;}
+		
+		.reportBar .reset {
+			font: normal normal normal 15px/18px FontAwesome;
+			background: transparent;
+			color: #777777;
+			margin-left: 10px;
+			margin-top: 5px;
+			float: right;
+		}
+		.reportBar .reset:before {
+			content : "\f021";
+		}
+		.reportBar .reset:hover {
+			color : #66afe9;
+		}
+	</style>
+	
+	<template>
+		<sc-code-group>
+			<!-- 구매 유형 -->
+			<sc-code code="P045" value="{{codes.purcTypCcd}}"></sc-code>
+			<!-- 통화 -->
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+		</sc-code-group>
+		
+		<sc-ajax id="findListUnitPriceHistrec"
+				 url="findListUnitPriceHistrec.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListUnitPriceHistrec">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindList" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-multi-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{searchParam.oorg_cds}}"
+												 placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="구매 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.purcTypCcd}}" value="{{searchParam.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_uprc_efct_dt}}" to-value="{{searchParam.to_uprc_efct_dt}}"
+									  default-from-value="0d" default-to-value="6M" string-date="true" required="true">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<cc-multi-text-field value="{{searchParam.vd_nm}}" multi-value="{{searchParam.vd_nms}}" placeholder="협력사 명" on-enter="onFindList"></cc-multi-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="품목"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.item_cd}}" class="w-100" placeholder="품목 코드" on-enter="onFindList"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{searchParam.item_nm}}" placeholder="품목 명" on-enter="onFindList"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<div class="reportBar">
+			<span class="title">[[translate('단가계약 Summary')]]</span><span class="desc"></span>
+			<!--
+			<button class="reset" on-tap="findAutoPoItemRecommendationSummary"></button>
+			-->
+			<div class="contents">
+				<div class="wrap-card">
+					<div id="masterTotal" class="card-box">
+						<p>[[translate('단가계약 건수')]]</p>
+						<p class="simCount">[[_getFormat(priceContractSummary.cnt, 'integer')]] <span>[[translate('건')]]</span></p>
+					</div>
+				</div>
+				<div class="wrap-card">
+					<div id="resultTotal" class="card-box">
+						<p>[[translate('단가계약 발주 금액')]]</p>
+						<p class="simCount">[[_getFormat(priceContractSummary.po_amount, 'number')]]m <span>(USD)</span></p> <!--[[priceContractSummary.bas_cur]]-->
+					</div>
+				</div>
+				<div class="wrap-card">
+					<div id="high" class="card-box" on-click="onCardBoxClick" data-type="normal">
+						<p>[[translate('AI 추정 단가보다 낮은 품목')]]</p>
+						<p class="simCount">[[_getFormat(priceContractSummary.lower_ai_cnt, 'integer')]] <span>[[translate('건')]] ([[_getCalcAiRate(priceContractSummary.tot_ai_cnt, priceContractSummary.lower_ai_cnt)]]%)</span></p>
+					</div>
+				
+				</div>
+				<div class="wrap-card">
+					<div id="normal" class="card-box" on-click="onCardBoxClick" data-type="high">
+						<p>[[translate('AI 추정 단가보다 높은 품목')]]</p>
+						<p class="simCount">[[_getFormat(priceContractSummary.higher_ai_cnt, 'integer')]] <span>[[translate('건')]] ([[_getCalcAiRate(priceContractSummary.tot_ai_cnt, priceContractSummary.higher_ai_cnt)]]%)</span></p>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<sc-grid id="gridPanel" class="flex" use-dummy="false" editable="false" use-selection="false" show-tooltip="true"
+				 use-state="false"
+				 on-item-click="onItemClick">
+			<!-- 그리드 toolbar -->
+			<cc-grid-toolbar>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="130" text-align="center" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-data-column data-field="cntr_no" header-text="단가계약 번호" width="100" text-align="center"></sc-data-column>
+				<!--<sc-data-column data-field="uprccntr_revno" header-text="차수" width="50" text-align="center" data-type="number"></sc-data-column>-->
+				<sc-data-column data-field="item_cd" header-text="품목 코드" width="90" text-align="center"></sc-data-column>
+				<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="170" text-align="left"></sc-data-column>
+				<sc-data-column data-field="disp_vd_nm" header-text="협력사 명" width="170" text-align="left"></sc-data-column>
+				<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="50" display-field="data" value-field="data" items="{{codes.uomCcd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="uprccntr_uprc" header-text="단가계약 단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+				<sc-group-column header-text="계약 기간" width="165" hide-child-headers="true">
+					<sc-date-column data-field="uprc_efct_st_dt" width="80"></sc-date-column>
+					<sc-data-column data-field="uprc_efct_term_str" width="5" text-align="center" item-label-function="onItemLabelFn"></sc-data-column>
+					<sc-date-column data-field="uprc_efct_exp_dt" width="80"></sc-date-column>
+				</sc-group-column>
+				<!--<sc-date-column data-field="uprccntr_dt" header-text="최초 계약 일자" width="90"></sc-date-column>-->
+				<sc-group-column header-text="트랜잭션 데이터" width="250">
+					<sc-data-column data-field="po_cnt" header-text="# of PO" width="60"></sc-data-column>
+					<sc-data-column data-field="po_tot_amt" header-text="총 금액" width="110" text-align="right"	data-type="number"	format-type="price"></sc-data-column>
+					<sc-data-column data-field="avg_po_ltm" header-text="평균 리드타임" width="80" item-label-function="onItemLabelFn"></sc-data-column>
+				</sc-group-column>
+				<sc-data-column data-field="ade_indicator" header-text="적정성 지표"	width="50"	item-style-function="onItemStyleFn"	visible="[[formula('isExistPriceDoctorModule')]]"></sc-data-column>
+				<sc-group-column	header-text="AI 추정 단가"	width="250"	visible="[[formula('isExistPriceDoctorModule')]]">
+					<sc-group-column	header-text="추정 단가"	width="140"	hide-child-headers="true">
+						<sc-data-column		data-field="exch_fcst_uprc"			width="100"	text-align="right"	editable="false"
+											   data-type="number"					format-type="price"></sc-data-column>
+						<sc-data-column		data-field="uprccntr_fcst_uprc_sts"	width="20"	text-align="center"	item-label-function="onItemLabelFn"	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-data-column		data-field="fcst_uprc_rate"			header-text="비율"		width="70"	text-align="right"	editable="false"
+										   data-type="number"					format-type="percentDecimal"	item-style-function="onItemStyleFn"></sc-data-column>
+					<sc-image-column	data-field="img_fcst_uprc"			header-text="리포트"				width="60"	text-align="center"	editable="false"
+										image-change-function="onImageChangeFn"></sc-image-column>
+				</sc-group-column>
+				<sc-group-column header-text="가격 적정성 검토"	width="250"	visible="[[formula('isExistPriceDoctorModule')]]">
+					<sc-group-column	header-text="시장 가격"	width="140"	hide-child-headers="true">
+						<sc-data-column data-field="exch_mktprc"			width="100"	text-align="right"	editable="false"
+										data-type="number"	format-type="price"></sc-data-column>
+						<sc-data-column		data-field="uprccntr_mk_uprc_sts"	width="20"	text-align="center"	item-label-function="onItemLabelFn"	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-data-column	data-field="mktprc_rate"			header-text="비율"		width="70"	text-align="right"	editable="false"
+									data-type="number"					format-type="percentDecimal"	item-style-function="onItemStyleFn"></sc-data-column>
+					<sc-image-column	data-field="img_mktprc"			header-text="리포트"				width="60"	text-align="center"	editable="false"
+										image-change-function="onImageChangeFn"></sc-image-column>
+				</sc-group-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="scn_ccd"></sc-grid-field>
+				<sc-grid-field data-field="fcst_tmpt"></sc-grid-field>
+				<sc-grid-field data-field="publ_yr"></sc-grid-field>
+				<sc-grid-field data-field="publ_mn"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-unitprice-stats",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							oorgCd: [],
+							purcTypCcd: [],
+							curCcd: [],
+							uomCcd: []
+						};
+					}
+				},
+				
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				priceContractSummary: {
+					type: Object,
+					value: function() {
+						return {
+							cnt: 0,
+							po_amount: 0,
+							lower_ai_cnt: 0,
+							higher_ai_cnt: 0,
+						};
+					}
+				}
+			},
+			
+			formulas: {
+				isExistPriceDoctorModule: function() {
+					return SCModuleManager.exist("price-doctor");
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.set("codes.oorgCd",me.$.operorgcombobox.codes.operOrgCd);
+				me.onFindList();
+			},
+			
+			onFindList: function() {
+				var me = this;
+				if(!me.validate("search")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(me.$.findListUnitPriceHistrec);
+			},
+			
+			completeFindListUnitPriceHistrec: function(e, res) {
+				var me = this,
+					response = res.response;
+				
+				me.$.gridPanel.setDataProvider(response.histrecList);
+				me.set("priceContractSummary", response.histrecSummary);
+			},
+			
+			_getFormat: function(value, format) {
+				return SCFormatter.format(format, value);
+			},
+			
+			_getCalcAiRate: function(totalCnt, cnt) {
+				return SCFormatter.format("decimal", (cnt / totalCnt) * 100);
+			},
+			
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_fcst_uprc" && UT.isNotEmpty(data["exch_fcst_uprc"])) {
+					return "link";
+				} else if(item.dataField === "img_mktprc" && UT.isNotEmpty(data["exch_mktprc"])) {
+					return "link";
+				} else {
+					return null;
+				}
+			},
+			
+			// grid item click 이벤트
+			onItemClick: function(event) {
+				var me       = this,
+					data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "img_fcst_uprc" && UT.isNotEmpty(data["exch_fcst_uprc"])) {
+					me.showPriceForecastingReport(data);
+				} else if(item.dataField === "img_mktprc" && UT.isNotEmpty(data["exch_mktprc"])) {
+					me.showMkPriceReport(data);
+				}
+			},
+			
+			// DX그룹 price-doctor 구매단가 예측 리포트 팝업
+			showPriceForecastingReport: function(data) {
+				var me = this;
+				
+				var popup = UT.popup("ep-price-forecasting-report", me, "90%", "90%", {}, {
+					titleText: "AI 추정 단가 리포트"
+				});
+				popup.show();
+				popup.getWindowContent().load({
+					item_cd: data.item_cd,
+					fcst_tmpt: data.fcst_tmpt,
+					cur_ccd: data.cur_ccd
+				}, "ITEM");
+			},
+			// DX그룹 price-doctor 한국물가정보 마켓 단가 리포트 팝업
+			showMkPriceReport: function(data) {
+				var me = this;
+				
+				var popup = UT.popup("ep-kpi-item-detail", me, 900, "90%", {});
+				popup.show();
+				popup.getWindowContent().load({
+					item_cd: data.item_cd,
+					publ_yr: data.publ_yr,
+					publ_mn: data.publ_mn
+				});
+			},
+			
+			onItemLabelFn: function(data, item) {
+				if(item.dataField === "uprccntr_fcst_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchFcstUprc = data.exch_fcst_uprc;
+					
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchFcstUprc)) {
+						if(uprccntrUprc < exchFcstUprc) {
+							return "▲";
+						} else if(uprccntrUprc > exchFcstUprc) {
+							return "▼";
+						}
+						return "";
+					}
+				} else if(item.dataField === "uprccntr_mk_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchMkPrice = data.exch_mktprc;
+					
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchMkPrice)) {
+						if(uprccntrUprc < exchMkPrice) {
+							return "▲";
+						} else if(uprccntrUprc > exchMkPrice) {
+							return "▼";
+						}
+						return "";
+					}
+				} else if(item.dataField === "uprc_efct_term_str") {
+					return "-";
+				} else if(item.dataField === "avg_po_ltm") {
+					if(UT.isNotEmpty(data[item.dataField])) {
+						return SCFormatter.format("number", data[item.dataField]) + " days";
+					}
+				}
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var red = "#EB7575",
+					green = "#72B0EA",
+					yellow = "#F5BC5F";
+				
+				if(item.dataField === "uprccntr_fcst_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchFcstUprc = data.exch_fcst_uprc;
+					
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchFcstUprc)) {
+						if(uprccntrUprc < exchFcstUprc) {
+							return {
+								fontColor: green
+							};
+						} else if(uprccntrUprc > exchFcstUprc) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "uprccntr_mk_uprc_sts") {
+					var uprccntrUprc = data.uprccntr_uprc;
+					var exchMkPrice = data.exch_mktprc;
+					
+					if(UT.isNotEmpty(uprccntrUprc) && UT.isNotEmpty(exchMkPrice)) {
+						if(uprccntrUprc < exchMkPrice) {
+							return {
+								fontColor: green
+							};
+						} else if(uprccntrUprc > exchMkPrice) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "fcst_uprc_rate") {
+					var fcstUprcRate = data.fcst_uprc_rate;
+					
+					if(UT.isNotEmpty(fcstUprcRate)) {
+						if(fcstUprcRate > 0) {
+							return {
+								fontColor: green
+							};
+						} else if(fcstUprcRate < 0) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "mktprc_rate") {
+					var mkPriceRate = data.mktprc_rate;
+					
+					if(UT.isNotEmpty(mkPriceRate)) {
+						if(mkPriceRate > 0) {
+							return {
+								fontColor: green
+							};
+						} else if(mkPriceRate < 0) {
+							return {
+								fontColor: red
+							};
+						}
+					}
+				} else if(item.dataField === "ade_indicator") {
+					var bg = "";
+					var x = 3;
+					var fcstUprcRate = data.fcst_uprc_rate,
+						mkPriceRate = data.mktprc_rate;
+					
+					// AI 예측 비율과 시장가 비율 둘다 존재하는 경우 둘다 95% 미만이면 빨강 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하는 경우 95% 이상 100% 미만인 경우 노랑 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하는 경우 100% 이상인 경우 초록 / 하나만 존재하는 경우 하나만 계산
+					// 둘다 존재하지 않는 경우 색상 표시 안함
+					if(UT.isNotEmpty(fcstUprcRate) && UT.isNotEmpty(mkPriceRate)) {
+						if(fcstUprcRate >= x || mkPriceRate >= x) {
+							bg = green;
+						} else if((fcstUprcRate >= -x && fcstUprcRate < x) || (mkPriceRate >= -x && mkPriceRate < x)) {
+							bg = yellow;
+						} else if(fcstUprcRate < -x || mkPriceRate < -x) {
+							bg = red;
+						} else {
+							bg = yellow;
+						}
+					} else
+						if(UT.isNotEmpty(fcstUprcRate || mkPriceRate)) {
+						var rate = fcstUprcRate || mkPriceRate;
+						if(rate < -x) {
+							bg = red;
+						} else if(rate >= -x && rate < x) {
+							bg = yellow;
+						} else if(rate >= x) {
+							bg = green;
+						}
+					}
+					
+					return {
+						background: bg
+					}
+				}
+			}
+		});
+	</script>
+</dom-module>

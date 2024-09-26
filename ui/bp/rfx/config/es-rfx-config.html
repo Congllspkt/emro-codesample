@@ -1,0 +1,220 @@
+<sc-link rel="import" href="es-rfx-config-first.html"></sc-link>
+<sc-link rel="import" href="es-rfx-config-second.html"></sc-link>
+<sc-link rel="import" href="es-rfx-config-third.html"></sc-link>
+<sc-link rel="import" href="es-rfx-config-fourth.html"></sc-link>
+
+<dom-module id="es-rfx-config">
+	<style>
+		:host {
+			@apply (--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findDataByReqItemIdsFromConfig"
+				 url="findDataByReqItemIdsFromConfig.do">
+		</sc-ajax>
+		
+		<sc-pages id="pages" selected="0" class="flex">
+			<es-rfx-config-first
+					id="first"
+					on-second-page="onSecondPage"
+					on-selected-no="onSelectedNo"
+					on-reset-header="onResetHeader"
+					on-close="onClose">
+			</es-rfx-config-first>
+			<template>
+				<es-rfx-config-second
+						id="second"
+						on-first-page="onFirstPage"
+						on-third-page="onThirdPage"
+						on-selected-no="onSelectedNo"
+						on-close="onClose">
+				</es-rfx-config-second>
+			</template>
+			<template>
+				<es-rfx-config-third
+						id="third"
+						on-second-page="onSecondPage"
+						on-fourth-page="onFourthPage"
+						on-selected-no="onSelectedNo"
+						on-close="onClose">
+				</es-rfx-config-third>
+			</template>
+			<template>
+				<es-rfx-config-fourth
+						id="fourth"
+						on-third-page="onThirdPage"
+						on-show-rfx-input="onShowRfxInput"
+						on-selected-no="onSelectedNo"
+						on-close="onClose">
+				</es-rfx-config-fourth>
+			</template>
+		</sc-pages>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-rfx-config',
+			properties : {
+				//작성된 page 목록
+				checkList : {
+					type : Array,
+					value : function() {
+						return [1];
+					}
+				},
+				pageList : {
+					type : Array,
+					value : function() {
+						return [
+								'first'
+								, 'second'
+								, 'third'
+								, 'fourth'
+						];
+					}
+				},
+				rfxReqRcptUuids: {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				prItemList : {
+					type  : Array,
+					value : function() {
+						return [];
+					}
+				}
+			},
+			// [24.01.11] 구매요청 접수에서만 들어온 함수(다른 화면 추가시 수정 필요)
+			load : function(data) {
+				var me = this;
+				if(!UT.isEmpty(data.rfx_req_rcpt_uuids)) {
+					me.set("rfxReqRcptUuids", data.rfx_req_rcpt_uuids);
+				}
+				me.$.first.load(data);
+			},
+			//작성된 page를 초기화
+			onResetHeader : function(e, data) {
+				var me = this;
+				me.set("checkList", [1]);
+			},
+			// 첫번째 page로 이동
+			onFirstPage : function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.first);
+				me.$.first.load(UT.copy(data));
+			},
+			// 두번째 page로 이동
+			onSecondPage : function(e, data) {
+				var me = this;
+				if(!UT.isEmpty(data.typ) && data.typ == 'next') {
+					me.checkList.push(2);
+				}
+				if(!UT.isEmpty(me.get("rfxReqRcptUuids"))) {
+					me.$.findDataByReqItemIdsFromConfig.body = {
+						rfx_req_rcpt_uuids: me.get("rfxReqRcptUuids"),
+						rfx_typ_ccd : data.rfxInfo.rfx_typ_ccd
+					};
+					
+					UT.request(me.$.findDataByReqItemIdsFromConfig, function(e, res) {
+						var result = res.response;
+						var dfltData = new Object();
+						if(data.rfxInfo.rfx_typ_ccd == 'RAUC') {
+							for(var key in result) {
+								if(key !== "auctionItems") {
+									dfltData[key] = result[key];
+								}
+							}
+							me.set("prItemList", UT.copy(result.auctionItems));
+						} else {
+							for(var key in result) {
+								if(key !== "rfxItems") {
+									dfltData[key] = result[key];
+								}
+							}
+							me.set("prItemList", UT.copy(result.rfxItems));
+						}
+						
+						data.dfltData = dfltData;
+						me.$.pages.selectItem(me.$.second);
+						me.$.second.load(UT.copy(data));
+					});
+				} else {
+					me.$.pages.selectItem(me.$.second);
+					me.$.second.load(UT.copy(data));
+				}
+			},
+			// 세번째 page로 이동
+			onThirdPage : function(e, data) {
+				var me = this;
+				if(!UT.isEmpty(data.typ) && data.typ == 'next') {
+					me.checkList.push(3);
+				}
+				me.$.pages.selectItem(me.$.third);
+				me.$.third.load(UT.copy(data));
+			},
+			// 네번째 page로 이동
+			onFourthPage : function(e, data) {
+				var me = this;
+				if(!UT.isEmpty(data.typ) && data.typ == 'next') {
+					me.checkList.push(4);
+				}
+				me.$.pages.selectItem(me.$.fourth);
+				me.$.fourth.load(UT.copy(data));
+			},
+			// 첫번째 page로 이동(reset)
+			onShowFirst : function() {
+				var me = this;
+				me.onResetHeader();
+				me.$.pages.selectItem(me.$.first);
+				me.$.first.load();
+			},
+		
+			// RFx 작성 하는 곳으로 이동
+			onShowRfxInput : function(e, data) {
+				var me = this;
+				var rfxInfo = data.rfxInfo;
+				var dfltData = data.dfltData;
+				
+				for(var key in dfltData) {
+					if(key !== "pr_item_uuids") {
+						rfxInfo[key] = dfltData[key];
+					}
+				}
+				data.pr_item_list = me.get("prItemList");
+				
+				//역경매 작성
+				if(rfxInfo.rfx_typ_ccd == 'RAUC') {
+					me.fire('show-auction-detail', data);
+				} else {
+					me.fire('show-rfx-detail', data);
+				}
+				//초기화
+				me.$.first.onResetCard();
+				me.reset();
+			},
+			
+			// header의 번호를 클릭했을 때 이동
+			onSelectedNo : function(e, data) {
+				var me = this;
+				var lvl = Number(UT.copy(data.lvl));
+				if(me.get("checkList").indexOf(lvl) > -1) {
+					me.$.pages.selectItem(me.$[me.get("pageList")[lvl - 1]]);
+					me.$[me.get("pageList")[lvl - 1]].load(UT.copy(data));
+				} else {
+					UT.alert("STD.RFX1206");	//이전 단계를 먼저 작성하여야 합니다.
+					return;
+				}
+			},
+			onClose : function() {
+				var me = this;
+				me.$.first.onResetCard();
+				me.reset();
+				me.fire('close');
+			}
+		});
+	</script>
+</dom-module>

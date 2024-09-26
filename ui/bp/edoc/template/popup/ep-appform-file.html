@@ -1,0 +1,103 @@
+<dom-module id="ep-appform-file">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <!-- 첨부서식 파일 저장 -->
+        <sc-ajax id="saveAppFormFile"
+                 url="saveAppFormFile.do"
+                 body="{{appFormInfo.param}}"
+                 last-response="{{appFormInfo.result}}"
+                 on-response="completeSave"></sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<cc-page-title-bar>
+            <sc-button text="저장" on-click="onSaveFile" hidden="[[formula('viewState')]]" auth-s></sc-button>
+		</cc-page-title-bar>
+		<sc-upload id="upload"
+                   value="{{appFormInfo.param.athg_uuid}}"
+                   editable="[[!formula('viewState')]]"
+                   sort-data-field="name" sort-direction="asc"
+                   max-total-file-count="1" max-total-file-size="10MB"
+                   extension="jpg,gif,png,tif,bmp,txt,xls,doc,ppt,xlsx,docx,pptx,rtf,gul,hwp,pdf,mht,mp4,dwg,eml,msg"
+                   restrict-extension="exe,vbs,zip"
+        		   class="h-250">
+        </sc-upload>
+    </template>
+
+    <script>
+        Polymer({
+            is: "ep-appform-file",
+
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "부속서류 상세"
+				},
+                // 첨부서식 정보
+                appFormInfo: {
+                    type: Object,
+                    value: function () {
+                        return {
+                            param: {},
+                            result: {}
+                        }
+                    }
+                },
+                //true 읽기 전용, false 저장 가능
+                viewMode: String
+            },
+
+            formulas: {
+                //true 읽기 전용, false 저장 가능
+                viewState: function () {
+                    return this.viewMode === "view";
+                }
+            },
+
+            // 파일 저장할 첨부서식 대상(es-appform-list 에서 받아옴)
+            load: function (data, mode) {
+                var me = this;
+                me.set("appFormInfo.param", data);
+                me.set("viewMode", mode);
+
+                if(data.appx_typ_ccd === "FILE_LIST"){
+                	me.$.upload.maxTotalFileCount = 10;
+                } else {
+                	me.$.upload.maxTotalFileCount = 1;
+                }
+                this.applyFormula();
+            },
+
+            // 첨부서식 파일 저장
+            onSaveFile: function () {
+                var me = this;
+
+                me.$.upload.upload().then(function () {
+                    UT.request(me.$.saveAppFormFile);
+                });
+            },
+            
+            completeSave: function (e, res) {
+                var me = this;
+                var result = res.response;
+              	
+                if(result.resultStatus === "S"){
+                	me.reset();
+                	me.fire("save");
+                }else{
+                	UT.alert("STD.E9999");
+                }
+            },
+            
+            clear: function () {
+                var me = this;
+                me.set("appFormInfo", me.getPropertyInfo('appFormInfo').value());
+            }
+        });
+    </script>
+</dom-module>

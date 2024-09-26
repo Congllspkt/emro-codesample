@@ -1,0 +1,608 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cms-common">
+    <update id="updateCountInfoItemAttributeGroup">
+	    /* cms-common.updateCountInfoItemAttributeGroup : 속성 그룹 배정 속성, 사용 분류 집계 */
+		UPDATE IATTR_GRP SET
+			ASGD_IATTR_CNT = (
+								SELECT
+									COUNT(1)
+								FROM IATTR_GRPG
+								WHERE TEN_ID = #{g.tenant}
+								AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+								AND STS != 'D'
+							) /*배정 속성 수*/
+			, ASGD_ITEMCAT_CNT = (
+		                     		SELECT
+										COUNT(1)
+									FROM (
+									    	SELECT
+												IATTR_GRP_CD
+											FROM ITEMCAT_IATTR
+											WHERE TEN_ID = #{g.tenant}
+											AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+											AND STS != 'D'
+											GROUP BY TEN_ID, ITEMCAT_CD, IATTR_GRP_CD
+										) A
+								) /*사용 분류 수*/
+		WHERE TEN_ID = #{g.tenant}
+		AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+    </update>
+	<select id="findListItemAsgnAttrByItemcat" resultType="map">
+		/* cms-common.findListItemAsgnAttrByItemcat : 기본 배정속성 정보 조회 */
+		SELECT
+			ITEMCAT.TEN_ID
+			, ITEMCAT.IATTR_GRP_CD
+			, ITEMCAT.IATTR_CD
+			, ITEMCAT.IATTR_UUID
+			, GRPG.ASGD_IATTR_NM
+			, GRPG.ASGD_IATTR_NM_EN
+			, GRPG.IATTR_UOM_USE_YN
+			, GRPG.MAND_YN
+			, GRPG.DAT_TYP_CCD
+			, GRPG.INP_VAL_LEN
+			, GRPG.DFLT_VAL
+			, GRPG.LIST_SHOW_YN
+			, IATTR.IATTR_NM
+			, IATTR.IATTR_NM_EN
+			, ITEMCAT.SCR_DSPY_ORD
+			, ITEMCAT.ITEMCAT_CD
+			, ITEMCAT.ITEMCAT_LVL
+			, ITEMCAT.RMK
+			, ITEMCAT.IH_ITEMCAT_LVL
+			, CASE WHEN 'en_US' = #{g.locale} THEN GRP.IATTR_GRP_NM_EN
+			       ELSE GRP.IATTR_GRP_NM
+				END DISP_IATTR_GRP_NM
+			, GRP.IATTR_GRP_NM
+			, GRP.IATTR_GRP_NM_EN
+			, ITEMCAT.USE_YN
+			, IATTR.EXPLN_TYP_CCD
+			, IATTR.IATTR_UOM_CLS_CCD
+			, IATTR.COMM_YN
+			, IATTR.LOV_INP_VAL
+			, IATTR.INP_VAL_ST
+			, IATTR.INP_VAL_ED
+			, IATTR.INP_VAL_SAMP
+		FROM ITEMCAT_IATTR ITEMCAT
+		INNER JOIN IATTR_GRPG GRPG
+		ON GRPG.TEN_ID = ITEMCAT.TEN_ID
+		AND GRPG.IATTR_GRP_CD = ITEMCAT.IATTR_GRP_CD
+		AND GRPG.IATTR_CD = ITEMCAT.IATTR_CD
+		AND GRPG.IATTR_UUID = ITEMCAT.IATTR_UUID
+		AND GRPG.STS != 'D'
+		INNER JOIN IATTR_GRP GRP
+		ON GRP.TEN_ID = GRPG.TEN_ID
+		AND GRP.IATTR_GRP_CD = GRPG.IATTR_GRP_CD
+		AND GRP.STS != 'D'
+		INNER JOIN IATTR IATTR
+		ON IATTR.TEN_ID = GRP.TEN_ID
+		AND IATTR.IATTR_CD = GRPG.IATTR_CD
+		AND IATTR.STS != 'D'
+		WHERE ITEMCAT.TEN_ID = #{g.tenant}
+		AND ITEMCAT.ITEMCAT_CD = #{p.itemcat_cd}
+		AND ITEMCAT.ITEMCAT_LVL = #{p.itemcat_lvl}
+		AND ITEMCAT.STS != 'D'
+		ORDER BY ITEMCAT.SCR_DSPY_ORD
+	</select>
+	<select id="findListItemAsgnAttrByItemIattr" resultType="map">
+		/* cms-common.findListItemAsgnAttrByItemIattr : 배정속성 정보 조회(item_iattr 기반) */
+		SELECT
+			ITEM.TEN_ID
+			 , ITEM.IATTR_GRP_CD
+			 , ITEM.IATTR_CD
+			 , ITEM.IATTR_UUID
+		     , ITEM.IATTR_INP_VAL
+		     , ITEM.IATTR_UOM_CCD
+			 , GRPG.ASGD_IATTR_NM
+			 , GRPG.ASGD_IATTR_NM_EN
+			 , GRPG.IATTR_UOM_USE_YN
+			 , GRPG.MAND_YN
+			 , GRPG.DAT_TYP_CCD
+			 , GRPG.INP_VAL_LEN
+			 , GRPG.DFLT_VAL
+			 , GRPG.LIST_SHOW_YN
+			 , IATTR.IATTR_NM
+			 , IATTR.IATTR_NM_EN
+			 , ITEM.ITEMCAT_CD
+			 , ITEM.RMK
+			 , GRP.IATTR_GRP_NM
+			 , GRP.IATTR_GRP_NM_EN
+			 , CASE WHEN 'en_US' = #{g.locale} THEN GRP.IATTR_GRP_NM_EN
+			     ELSE GRP.IATTR_GRP_NM
+				END DISP_IATTR_GRP_NM
+			 , IATTR.EXPLN_TYP_CCD
+			 , IATTR.IATTR_UOM_CLS_CCD
+			 , IATTR.COMM_YN
+			 , IATTR.LOV_INP_VAL
+			 , IATTR.INP_VAL_ST
+			 , IATTR.INP_VAL_ED
+			 , IATTR.INP_VAL_SAMP
+			 , ITEMCAT.SCR_DSPY_ORD
+			 , ITEMCAT.ITEMCAT_CD
+			 , ITEMCAT.ITEMCAT_LVL
+			 , ITEMCAT.RMK
+			 , ITEMCAT.IH_ITEMCAT_LVL
+			 , ITEMCAT.USE_YN
+		FROM ITEM_IATTR ITEM
+		INNER JOIN ITEMCAT_IATTR ITEMCAT
+		ON ITEMCAT.TEN_ID = ITEM.TEN_ID
+		AND ITEMCAT.ITEMCAT_CD = ITEM.ITEMCAT_CD
+		AND ITEMCAT.IATTR_GRP_CD = ITEM.IATTR_GRP_CD
+		AND ITEMCAT.IATTR_CD = ITEM.IATTR_CD
+		AND ITEMCAT.IATTR_UUID = ITEM.IATTR_UUID
+		AND ITEMCAT.STS != 'D'
+		INNER JOIN IATTR_GRPG GRPG
+		ON GRPG.TEN_ID = ITEM.TEN_ID
+		AND GRPG.IATTR_GRP_CD = ITEM.IATTR_GRP_CD
+		AND GRPG.IATTR_CD = ITEM.IATTR_CD
+		AND GRPG.IATTR_UUID = ITEM.IATTR_UUID
+		AND GRPG.STS != 'D'
+		INNER JOIN IATTR_GRP GRP
+		ON GRP.TEN_ID = GRPG.TEN_ID
+		AND GRP.IATTR_GRP_CD = GRPG.IATTR_GRP_CD
+		AND GRP.STS != 'D'
+		INNER JOIN IATTR IATTR
+		ON IATTR.TEN_ID = GRP.TEN_ID
+		AND IATTR.IATTR_CD = GRPG.IATTR_CD
+		AND IATTR.STS != 'D'
+		WHERE ITEM.TEN_ID = #{g.tenant}
+		AND ITEM.ITEM_CD = #{p.item_cd}
+		AND ITEM.STS != 'D'
+	</select>
+	<select id="findListAssignedAttribute" resultType="map">
+		/* cms-common.findListAssignedAttribute : 배정속성조회 */
+		SELECT
+			A.IATTR_GRP_CD        /*속성 그룹*/
+			, A.IATTR_CD            /*속성 코드*/
+			, A.IATTR_UUID            /*속성 일련번호*/
+			, A.ASGD_IATTR_NM       /*배정 속성 명*/
+			, A.ASGD_IATTR_NM_EN    /*배정 속성 영문 명*/
+			, A.IATTR_UOM_USE_YN           /*속성 유형*/
+			, A.MAND_YN            /*필수 여부*/
+			, A.DAT_TYP_CCD           /*데이터 유형*/
+			, A.INP_VAL_LEN           /*데이터 길이*/
+			, A.DFLT_VAL            /*기본  값*/
+			, A.LIST_SHOW_YN       /*목록 VIEW 여부*/
+			, A.REG_DTTM             /*등록 일시*/
+			, (
+			 	SELECT
+					CONCAT(CONCAT(CAST(COUNT(1) AS NVARCHAR2(8)), '/'), CAST(SUM(CASE WHEN IATTR_INP_VAL = '' OR IATTR_INP_VAL IS NULL
+																						THEN 0
+																					ELSE 1
+																				END) AS NVARCHAR2(8)))  FROM ITEM_IATTR
+			    WHERE TEN_ID = E.TEN_ID
+				AND IATTR_GRP_CD = E.IATTR_GRP_CD
+				AND IATTR_CD = E.IATTR_CD
+				AND IATTR_UUID = E.IATTR_UUID
+			    GROUP BY TEN_ID, IATTR_GRP_CD, IATTR_CD, IATTR_UUID
+				)  AS USE_CNT
+			, C.IATTR_NM
+			, E.SCR_DSPY_ORD
+			, E.ITEMCAT_CD              /*분류 코드 */
+			, E.ITEMCAT_LVL             /*분류 레벨 */
+			, E.RMK                  /*비고 */
+			, E.IH_ITEMCAT_LVL         /*상속 분류 레벨*/
+			, D.IATTR_GRP_NM
+			, E.USE_YN
+			, C.EXPLN_TYP_CCD             /*Description 포함 유형 */
+			, C.IATTR_UOM_CLS_CCD          /*단위 Pool 그룹 코드*/
+			, C.COMM_YN               /*공통 여부*/
+			, C.LOV_INP_VAL       /*입력 값 목록*/
+			, C.INP_VAL_ST  /*입력 값 범위 시작*/
+			, C.INP_VAL_ED    /*입력 값 범위 종료*/
+			, C.INP_VAL_SAMP        /*입력 값 예시*/
+		FROM IATTR_GRPG A
+		INNER JOIN IATTR C
+		ON A.TEN_ID  = C.TEN_ID
+		AND A.IATTR_CD = C.IATTR_CD
+		INNER JOIN IATTR_GRP D
+		ON A.TEN_ID      = D.TEN_ID
+		AND A.IATTR_GRP_CD = D.IATTR_GRP_CD
+		INNER JOIN ITEMCAT_IATTR E
+		ON A.TEN_ID      = E.TEN_ID
+		AND A.IATTR_GRP_CD = E.IATTR_GRP_CD
+		AND A.IATTR_CD     = E.IATTR_CD
+		AND A.IATTR_UUID     = E.IATTR_UUID
+		WHERE E.TEN_ID   = #{g.tenant}
+		AND E.ITEMCAT_CD  = #{p.itemcat_cd}
+			AND E.ITEMCAT_LVL = CAST(#{p.itemcat_lvl} AS INT)  AND E.STS != 'D'
+		AND E.USE_YN = 'Y'
+		ORDER BY E.SCR_DSPY_ORD, A.IATTR_GRP_CD
+	</select>
+	<select id="findListReqAsgnAttr" resultType="map">
+		/* cms-common.findListReqAsgnAttr : 품목등록요청 속성값을 조회 */
+		SELECT
+			A.IATTR_GRP_CD        /*속성 그룹*/
+			, A.IATTR_CD            /*속성 코드*/
+			, A.IATTR_UUID            /*속성 일련번호*/
+			, A.ASGD_IATTR_NM       /*배정 속성 명*/
+			, A.ASGD_IATTR_NM_EN    /*배정 속성 영문 명*/
+			, A.IATTR_UOM_USE_YN           /*속성 유형*/
+			, A.MAND_YN            /*필수 여부*/
+			, A.DAT_TYP_CCD           /*데이터 유형*/
+			, A.INP_VAL_LEN           /*데이터 길이*/
+			, A.DFLT_VAL            /*기본  값*/
+			, A.LIST_SHOW_YN       /*목록 VIEW 여부*/
+			, A.REG_DTTM             /*등록 일시*/
+			, (
+				SELECT
+			        	CONCAT(CONCAT(CAST(COUNT(1) AS NVARCHAR2(8)), '/'), CAST(SUM(CASE WHEN IATTR_INP_VAL = '' OR IATTR_INP_VAL IS NULL
+				                                                                		THEN 0
+			                                                                     	ELSE 1
+																				END) AS NVARCHAR2(8)))  FROM ITEM_IATTR
+				WHERE TEN_ID = E.TEN_ID
+				AND IATTR_GRP_CD = E.IATTR_GRP_CD
+				AND IATTR_CD = E.IATTR_CD
+				AND IATTR_UUID = E.IATTR_UUID
+				GROUP BY TEN_ID, IATTR_GRP_CD, IATTR_CD, IATTR_UUID
+			)  AS USE_CNT
+			, C.IATTR_NM
+			, E.SCR_DSPY_ORD
+			, E.ITEMCAT_CD              /*분류 코드 */
+			, E.ITEMCAT_LVL             /*분류 레벨 */
+			, E.RMK                  /*비고 */
+			, E.IH_ITEMCAT_LVL         /*상속 분류 레벨*/
+			, D.IATTR_GRP_NM
+			, E.USE_YN
+			, C.EXPLN_TYP_CCD             /*Description 포함 유형 */
+			, C.IATTR_UOM_CLS_CCD          /*단위 Pool 그룹 코드*/
+			, C.COMM_YN               /*공통 여부*/
+			, C.LOV_INP_VAL       /*입력 값 목록*/
+			, C.INP_VAL_ST  /*입력 값 범위 시작*/
+			, C.INP_VAL_ED    /*입력 값 범위 종료*/
+			, C.INP_VAL_SAMP        /*입력 값 예시*/
+			, F.IATTR_INP_VAL             /* 속성 값 */
+			, F.IATTR_UOM_CCD          /* 단위 코드 값 */
+		FROM IATTR_GRPG A
+		INNER JOIN IATTR C
+		ON A.TEN_ID  = C.TEN_ID
+		AND A.IATTR_CD = C.IATTR_CD
+		INNER JOIN IATTR_GRP D
+		ON A.TEN_ID      = D.TEN_ID
+		AND A.IATTR_GRP_CD = D.IATTR_GRP_CD
+		INNER JOIN ITEMCAT_IATTR E
+		ON A.TEN_ID      = E.TEN_ID
+		AND A.IATTR_GRP_CD = E.IATTR_GRP_CD
+		AND A.IATTR_CD     = E.IATTR_CD
+		AND A.IATTR_UUID     = E.IATTR_UUID
+		LEFT OUTER JOIN ITEM_IATTR_REG_REQ F
+		ON F.TEN_ID 		= E.TEN_ID
+		AND F.ITEM_REG_REQ_NO 	= #{p.item_reg_req_no}
+		AND F.ITEMCAT_CD 	= E.ITEMCAT_CD
+		AND F.IATTR_GRP_CD = E.IATTR_GRP_CD
+		AND F.IATTR_CD 	= E.IATTR_CD
+		AND F.IATTR_UUID 	= E.IATTR_UUID
+		WHERE E.TEN_ID   = #{g.tenant}
+		AND E.ITEMCAT_CD  = #{p.itemcat_cd}
+			AND E.ITEMCAT_LVL = CAST(#{p.itemcat_lvl} AS INT)  AND E.STS != 'D'
+		AND E.USE_YN = 'Y'
+		ORDER BY E.SCR_DSPY_ORD, A.IATTR_GRP_CD
+	</select>
+	<select id="findListRegAttr" resultType="map">
+		/* cms-common.findListRegAttr : 품목 속성 조회 */
+		SELECT
+			A.IATTR_GRP_CD          /*속성 그룹*/
+			, A.IATTR_CD              /*속성 코드*/
+			, A.IATTR_UUID              /*속성 일련번호*/
+			, A.ASGD_IATTR_NM         /*배정 속성 명*/
+			, A.ASGD_IATTR_NM_EN      /*배정 속성 영문 명*/
+			, A.IATTR_UOM_USE_YN             /*속성 유형*/
+			, A.MAND_YN              /*필수 여부*/
+			, A.DAT_TYP_CCD             /*데이터 유형*/
+			, A.INP_VAL_LEN             /*데이터 길이*/
+			, A.DFLT_VAL              /*기본  값*/
+			, A.LIST_SHOW_YN         /*목록 VIEW 여부*/
+			, A.REG_DTTM               /*등록 일시*/
+			, (
+				SELECT
+						CONCAT(CONCAT(CAST(COUNT(1) AS NVARCHAR2(8)), '/'), CAST(SUM(CASE WHEN IATTR_INP_VAL = '' OR IATTR_INP_VAL IS NULL
+																							THEN 0
+																						ELSE 1
+																					END) AS NVARCHAR2(8)))  FROM ITEM_IATTR
+				WHERE TEN_ID = E.TEN_ID
+				AND IATTR_GRP_CD = E.IATTR_GRP_CD
+				AND IATTR_CD = E.IATTR_CD
+				AND IATTR_UUID = E.IATTR_UUID
+				GROUP BY TEN_ID, IATTR_GRP_CD, IATTR_CD, IATTR_UUID
+				)  AS USE_CNT
+			, C.IATTR_NM
+			, E.SCR_DSPY_ORD
+			, E.ITEMCAT_CD              /*분류 코드 */
+			, E.ITEMCAT_LVL             /*분류 레벨 */
+			, E.RMK                  /*비고 */
+			, E.IH_ITEMCAT_LVL         /*상속 분류 레벨*/
+			, D.IATTR_GRP_NM
+			, E.USE_YN
+			, C.EXPLN_TYP_CCD             /*Description 포함 유형 */
+			, C.IATTR_UOM_CLS_CCD          /*단위 Pool 그룹 코드*/
+			, C.COMM_YN               /*공통 여부*/
+			, C.LOV_INP_VAL       /*입력 값 목록*/
+			, C.INP_VAL_ST  /*입력 값 범위 시작*/
+			, C.INP_VAL_ED    /*입력 값 범위 종료*/
+			, C.INP_VAL_SAMP        /*입력 값 예시*/
+			, F.IATTR_INP_VAL             /* 속성 값 */
+			, F.IATTR_UOM_CCD          /* 단위 코드 값 */
+		FROM IATTR_GRPG A
+		INNER JOIN IATTR C
+		ON A.TEN_ID  = C.TEN_ID
+		AND A.IATTR_CD = C.IATTR_CD
+		INNER JOIN IATTR_GRP D
+		ON A.TEN_ID      = D.TEN_ID
+		AND A.IATTR_GRP_CD = D.IATTR_GRP_CD
+		INNER JOIN ITEMCAT_IATTR E
+		ON A.TEN_ID      = E.TEN_ID
+		AND A.IATTR_GRP_CD = E.IATTR_GRP_CD
+		AND A.IATTR_CD     = E.IATTR_CD
+		AND A.IATTR_UUID     = E.IATTR_UUID
+		LEFT OUTER JOIN ITEM_IATTR F
+		ON F.TEN_ID 		= E.TEN_ID
+		AND F.ITEM_CD 	= #{p.item_cd}
+		AND F.ITEMCAT_CD 	= E.ITEMCAT_CD
+		AND F.IATTR_GRP_CD = E.IATTR_GRP_CD
+		AND F.IATTR_CD 	= E.IATTR_CD
+		AND F.IATTR_UUID 	= E.IATTR_UUID
+		WHERE E.TEN_ID   = #{g.tenant}
+		AND E.ITEMCAT_CD  = #{p.itemcat_cd}
+			AND E.ITEMCAT_LVL = CAST(#{p.itemcat_lvl} AS INT)  AND E.STS != 'D'
+		AND E.USE_YN = 'Y'
+		ORDER BY E.SCR_DSPY_ORD, A.IATTR_UUID
+	</select>
+	<insert id="insertItemRegReq">
+		/* cms-common.insertItemRegReq : 품목 등록 요청 테이블 insert */
+		INSERT INTO ITEM_REG_REQ (
+			TEN_ID /*시스템 아이디 */
+			, ITEM_REG_REQ_NO /*등록 요청 번호 */
+			, REQ_TYP_CCD /*요청 유형 */
+			, ITEM_CD /*품목 코드 */
+			, ITEM_NM /*품목 명 */
+			, ITEM_NM_EN /*품목 영문 명 */
+			, ITEM_SIMWORD /*동의어 */
+			, ITEM_SPEC /*규격 */
+			, UOM_CCD /*기본 단위 코드 */
+			, ITEMCAT_LVL_1_CD /*분류1 코드 */
+			, ITEMCAT_LVL_2_CD /*분류2 코드 */
+			, ITEMCAT_LVL_3_CD /*분류3 코드 */
+			, ITEMCAT_LVL_4_CD /*분류4 코드 */
+			, ITEMCAT_LVL_5_CD /*분류5 코드 */
+			, SG_CD /*소싱그룹 코드 */
+			, ATHG_UUID /*첨부 번호 */
+			, IMG_ATHG_UUID /*이미지 첨부 번호 */
+			, DWG_NO /*도면 번호 */
+			, MFGR_CD /*제조사 코드 */
+			, MFGR_NM /*제조사 명 */
+			, MDL_NO /*모델 번호 */
+			, HS_NO /*HS 번호 */
+			, REP_ITEM_CD_YN /*대표 코드 여부 */
+			, RMK /*비고 */
+			, REQR_ID /*요청자 아이디 */
+			, REQ_DTTM /*요청 일시 */
+			, APVR_ID /*승인자 아이디 */
+			, APVD_DTTM /*승인 일시 */
+			, ITEM_REG_REQ_RET_RSN /*반려 사유 */
+			, ITEM_REG_REQ_STS_CCD /*진행 상태 T:임시저장,P:요청,C:승인,B:반려*/
+			, STS /*상태*/
+			, ITEM_CHG_REQ_CONT /*변경요청내용*/
+			, REGR_ID /*등록자 아이디 */
+			, REG_DTTM /*등록 일시 */
+			, MODR_ID /*수정자 아이디 */
+			, MOD_DTTM /*수정 일시 */
+		) VALUES (
+			#{g.tenant} /*시스템 아이디 */
+			, #{p.item_reg_req_no} /*등록 요청 번호 */
+			, #{p.req_typ_ccd} /*요청 유형 */
+			, #{p.item_cd} /*품목 코드 */
+			, #{p.item_nm} /*품목 명 */
+			, #{p.item_nm_en} /*품목 영문 명 */
+			, #{p.item_simword} /*동의어 */
+			, #{p.item_spec} /*규격 */
+			, #{p.uom_ccd} /*구매 단위 코드 */
+			, #{p.itemcat_lvl_1_cd} /*분류1 코드 */
+			, #{p.itemcat_lvl_2_cd} /*분류2 코드 */
+			, #{p.itemcat_lvl_3_cd} /*분류3 코드 */
+			, #{p.itemcat_lvl_4_cd} /*분류4 코드 */
+			, #{p.itemcat_lvl_5_cd} /*분류5 코드 */
+			, #{p.sg_cd} /*소싱그룹 코드 */
+			, #{p.athg_uuid} /*첨부 번호 */
+			, #{p.img_athg_uuid} /*이미지 첨부 번호 */
+			, #{p.dwg_no} /*도면 번호 */
+			, #{p.mfgr_cd} /*제조사 코드 */
+			, #{p.mfgr_nm} /*제조사 명 */
+			, #{p.mdl_no} /*모델 번호 */
+			, #{p.hs_no} /*hs 번호 */
+			, #{p.rep_item_cd_yn} /*대표 코드 여부 */
+			, #{p.rmk} /*비고 */
+			, #{g.username} /*요청자 아이디 */
+			, #{g.now} /*요청 일시 */
+			, #{p.apvr_id} /*승인자 아이디 */
+			, #{p.apvd_dttm} /*승인 일시 */
+			, #{p.item_reg_req_ret_rsn} /*반려 사유 */
+			, #{p.item_reg_req_sts_ccd} /*진행 상태 t:임시저장,p:요청,c:승인,b:반려*/
+			, 'C' /*상태*/
+			, #{p.item_chg_req_cont} /*변경요청내용*/
+			, #{g.username} /*등록자 아이디 */
+			, #{g.now} /*등록 일시 */
+			, #{g.username} /*수정자 아이디 */
+			, #{g.now} /*수정 일시 */
+		)
+	</insert>
+	<insert id="insertItemOorgRegReq">
+		/* cms-common.insertItemOorgRegReq : 품목 운영조직 등록 요청 insert */
+		INSERT INTO ITEM_OORG_REG_REQ (
+			TEN_ID        /*-- 시스템 아이디 */
+			, ITEM_REG_REQ_NO    /*-- 등록 요청 번호 */
+			, OORG_CD   /*-- 운영 조직 코드 */
+			, ITEM_CD       /*-- 품목 코드 */
+			, ITEM_LDTM       /*-- 품목 소요일 */
+			, QTA_YN			/*-- 쿼터 여부 */
+			, TL_YN			/*-- TOUCHLESS 여부 */
+			, RMK           /*-- 비고 */
+			, STS       /*-- 등록 상태 */
+			, REGR_ID        /*-- 등록자 아이디 */
+			, REG_DTTM        /*-- 등록 일시 */
+			, MODR_ID        /*-- 수정자 아이디 */
+			, MOD_DTTM        /*-- 수정 일시*/
+		) VALUES (
+			#{g.tenant}                      /*-- 시스템 아이디 */
+			, #{p.item_reg_req_no}                  /*-- 등록 요청 번호 */
+			, #{p.oorg_cd}                 /*-- 운영 조직 코드 */
+			, #{p.item_cd}                     /*-- 품목 코드 */
+			, CAST(#{p.item_ldtm} AS FLOAT  )/*-- 품목 소요일 */
+			, #{p.qta_yn}                        /*-- 쿼터 여부 */
+			, #{p.tl_yn}                         /*-- TOUCHLESS 여부 */
+			, #{p.rmk}                         /*-- 비고 */
+			, 'C'                     /*-- 등록 상태 */
+			, #{g.username}                    /*-- 등록자 아이디 */
+			, #{g.now}                         /*-- 등록 일시 */
+			, #{g.username}                    /*-- 수정자 아이디 */
+			, #{g.now}                         /*-- 수정 일시 */
+		)
+	</insert>
+	<update id="updateItemRegReq">
+		/* cms-common.updateItemRegReq : 품목 등록 요청 update */
+		UPDATE ITEM_REG_REQ SET
+			STS                  = 'U'
+			, MODR_ID              = #{g.username} /*수정자 아이디*/
+			, MOD_DTTM             = #{g.now} /*수정 일시*/
+			, REQ_TYP_CCD          = #{p.req_typ_ccd} /*요청 유형*/
+			, ITEM_CD              = #{p.item_cd} /*품목 코드*/
+			, ITEM_NM              = #{p.item_nm} /*품목 명*/
+			, ITEM_NM_EN           = #{p.item_nm_en} /*품목 영문 명*/
+			, ITEM_SIMWORD         = #{p.item_simword} /*동의어*/
+			, ITEM_SPEC            = #{p.item_spec} /*규격*/
+			, UOM_CCD              = #{p.uom_ccd} /*기본 단위 코드*/
+			, ITEMCAT_LVL_1_CD     = #{p.itemcat_lvl_1_cd} /*분류1 코드*/
+			, ITEMCAT_LVL_2_CD     = #{p.itemcat_lvl_2_cd} /*분류2 코드*/
+			, ITEMCAT_LVL_3_CD     = #{p.itemcat_lvl_3_cd} /*분류3 코드*/
+			, ITEMCAT_LVL_4_CD     = #{p.itemcat_lvl_4_cd} /*분류4 코드*/
+			, ITEMCAT_LVL_5_CD     = #{p.itemcat_lvl_5_cd} /*분류5 코드*/
+			, SG_CD                = #{p.sg_cd} /*소싱그룹 코드*/
+			, ATHG_UUID            = #{p.athg_uuid} /*첨부 번호*/
+			, IMG_ATHG_UUID        = #{p.img_athg_uuid} /*이미지 첨부 번호*/
+			, DWG_NO               = #{p.dwg_no} /*도면 번호*/
+			, MFGR_CD              = #{p.mfgr_cd} /*제조사 코드*/
+			, MFGR_NM              = #{p.mfgr_nm} /*제조사 명*/
+			, MDL_NO               = #{p.mdl_no} /*모델 번호*/
+			, HS_NO                = #{p.hs_no} /*번호*/
+			, REP_ITEM_CD_YN       = #{p.rep_item_cd_yn} /*대표 코드 여부*/
+			, RMK                  = #{p.rmk} /*비고*/
+			, APVR_ID              = CASE WHEN #{p.item_reg_req_sts_ccd} = 'APVD' THEN #{g.username}
+			                              WHEN #{p.item_reg_req_sts_ccd} = 'RET' THEN #{g.username}
+										ELSE #{p.aprv_id}
+									END /*승인자 아이디*/
+			, APVD_DTTM            = CASE WHEN #{p.item_reg_req_sts_ccd} = 'APVD' THEN #{g.now}
+			                              WHEN #{p.item_reg_req_sts_ccd} = 'RET' THEN #{g.now}
+										ELSE APVD_DTTM
+									END /*승인 일시*/
+			, ITEM_REG_REQ_RET_RSN = #{p.item_reg_req_ret_rsn} /*반려 사유*/
+			, ITEM_REG_REQ_STS_CCD = #{p.item_reg_req_sts_ccd} /*진행 상태 T:임시저장,P:요청,C:승인,B:반려*/
+			, ITEM_CHG_REQ_CONT    = #{p.item_chg_req_cont} /*변경요청내용*/
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_REG_REQ_NO = #{p.item_reg_req_no}
+	</update>
+	<update id="updateItemOorgRegReq">
+		/* cms-common.updateItemOorgRegReq : 품목 운영 정보 등록 요청 UPDATE */
+		UPDATE ITEM_OORG_REG_REQ
+		SET OORG_CD = #{p.oorg_cd}
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_REG_REQ_NO = #{p.item_reg_req_no}
+	</update>
+	<delete id="deleteItemIattrRegReq">
+		/* cms-common.deleteItemIattrRegReq : 품목속성 등록 요청 삭제 */
+		DELETE FROM ITEM_IATTR_REG_REQ
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_REG_REQ_NO = #{p.item_reg_req_no}
+	</delete>
+	<delete id="deleteAllItemOorgRegReq">
+		/* item-req.deleteAllItemOorgRegReq : 품목 운영조직 등록 요청 전체 삭제 */
+		DELETE FROM ITEM_OORG_REG_REQ
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_REG_REQ_NO = #{p.item_reg_req_no}
+	</delete>
+	<insert id="insertItemIattrRegReq">
+		/* cms-common.insertItemIattrRegReq : 품목속성등록요청 insert */
+		INSERT INTO ITEM_IATTR_REG_REQ (
+			TEN_ID        /*시스템 아이디 */
+			, ITEM_REG_REQ_NO	   /*등록 요청 번호 */
+			, ITEMCAT_CD	   /*분류 코드 */
+			, IATTR_GRP_CD   /*속성 그룹 코드 */
+			, IATTR_CD	   /*속성 코드 */
+			, IATTR_UUID	   /*속성 일련번호 */
+			, IATTR_INP_VAL	   /*속성 값 */
+			, IATTR_UOM_CCD   /*단위 코드 값 */
+			, RMK	       /*비고 */
+			, STS	       /*상태 */
+			, REGR_ID	       /*등록자 아이디 */
+			, REG_DTTM	       /*등록 일시 */
+			, MODR_ID	       /*수정자 아이디 */
+			, MOD_DTTM	       /*수정 일시 */
+		) VALUES (
+			#{g.tenant}
+			, #{p.item_reg_req_no}
+			, #{p.itemcat_cd}	    /*분류 코드 */
+			, #{p.iattr_grp_cd}		/*속성 그룹 코드 */
+			, #{p.iattr_cd}	    /*속성 코드 */
+			, #{p.iattr_uuid}	    /*속성 일련번호 */
+			, #{p.iattr_inp_val}	    /*속성 값 */
+			, #{p.iattr_uom_ccd}	/*단위 코드 값 */
+			, #{p.rmk}	        /*비고 */
+			, 'C'	            /*상태 */
+			, #{g.username}	    /*등록자 아이디 */
+			, #{g.now}	        /*등록 일시 */
+			, #{g.username}	    /*수정자 아이디 */
+			, #{g.now}	        /*수정 일시 */
+		)
+	</insert>
+	<insert id="insertItemIattr">
+		/* cms-common.insertItemIattr : 품목 속성 등록 */
+		INSERT INTO ITEM_IATTR (
+			TEN_ID       /*시스템 아이디 */
+			, ITEM_CD      /*품목 코드 */
+			, ITEMCAT_CD      /*분류 코드 */
+			, IATTR_GRP_CD  /*속성 그룹 코드 */
+			, IATTR_CD      /*속성 코드 */
+			, IATTR_UUID      /*속성 일련번호 */
+			, IATTR_INP_VAL     /*속성 값 */
+			, IATTR_UOM_CCD  /*단위 코드 값 */
+			, RMK          /*비고 */
+			, STS          /*상태 */
+			, REGR_ID       /*등록자 아이디 */
+			, REG_DTTM       /*등록 일시 */
+			, MODR_ID       /*수정자 아이디 */
+			, MOD_DTTM       /*수정 일시 */
+		) VALUES (
+			#{g.tenant}
+			, #{p.item_cd}
+			, #{p.itemcat_cd}
+			, #{p.iattr_grp_cd}
+			, #{p.iattr_cd}
+			, #{p.iattr_uuid}
+			, #{p.iattr_inp_val}
+			, #{p.iattr_uom_ccd}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<delete id="deleteItemIattr">
+		/* cms-common.deleteItemIattr : 품목 속성 삭제 */
+		DELETE FROM ITEM_IATTR
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_CD = #{p.item_cd}
+	</delete>
+	<select id="findListItemOorgRegReq" resultType="map">
+		/* cms-common.findListItemOorgRegReq : 품목 등록 요청 운영조직 조회 */
+		SELECT
+			OORG_CD
+			, QTA_YN
+			, TL_YN
+		FROM ITEM_OORG_REG_REQ
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEM_REG_REQ_NO = #{p.item_reg_req_no}
+		AND STS != 'D'
+	</select>
+</mapper>

@@ -1,0 +1,621 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사 profile 운영조직 탭
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.09
+	******************************************************************************************
+-->
+
+<sc-link rel="import" href="../shared/ep-vendor-management-group-reg-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-management-group-reg-cancel-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-po-limit-req-apvl.html"></sc-link>
+
+<dom-module id="ep-vendor-orginfo">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+	
+	<template>
+		<!-- 협력사 운영조직 & 미등록/등록 SG 목록 조회 -->
+		<sc-ajax id="findVendorOorgInfo"
+				 url="findVendorOorgInfo.do"
+				 on-response="completeFindVendorOorgInfo">
+		</sc-ajax>
+		
+		<!-- 미등록/등록 소싱그룹 목록 조회 -->
+		<sc-ajax id="findListSgByVendorOorg"
+				 url="findListSgByVendorOorg.do"
+				 on-response="completeFindListSgByVendorOorg">
+		</sc-ajax>
+		
+		<!-- 등록 소싱그룹 목록 조회 -->
+		<sc-ajax id="findListRegisteredSg"
+				 url="findListRegisteredSg.do"
+				 on-response="completeFindListRegisteredSg">
+		</sc-ajax>
+		
+		<!-- 운영조직 담당자 정보 저장 -->
+		<sc-ajax id="saveVendorOperationOrganizationPicInfo" url="saveVendorOperationOrganizationPicInfo.do"></sc-ajax>
+		
+		<!-- rfx 추천 대상 여부 저장 -->
+		<sc-ajax id="saveVendorOperationOrganizationSgRcmdYn" url="saveVendorOperationOrganizationVmgRcmdYn.do" on-response="completeSaveVendorOperationOrganizationSgRcmdYn"></sc-ajax>
+		
+		<!-- 협력사상태조회 (특정 품의에 대한) -->
+		<sc-ajax id="findVendorModifyStatus" url="findVendorModifyStatus.do" on-response="completeFindVendorModifyStatus"></sc-ajax>
+		
+		<sc-request-group id="codes" init>
+			<!-- 운영조직 조회 -->
+			<sc-ajax
+					url="findListOperationOrganizationByUser.do"
+					body="EO"
+					content-type="text/plain"
+					last-response="{{codes.oorg_cd}}">
+			</sc-ajax>
+			
+			<sc-code-group>
+				<!-- 협력사관리유형 -->
+				<sc-code code="E900" value="{{codes.vmt_ccd}}"></sc-code>
+				<!-- 온보딩 유형 -->
+				<sc-code code="E902" value="{{codes.obd_typ_ccd}}"></sc-code>
+				<!-- 내외자 구분 -->
+				<sc-code code="C024" value="{{codes.domovrs_typ_ccd}}"></sc-code>
+				<!-- 세금 유형 -->
+				<sc-code code="E021" value="{{codes.tax_typ_ccd}}"></sc-code>
+				<!-- 통화 -->
+				<sc-code code="C004" value="{{codes.cur_ccd}}"></sc-code>
+				<!-- 지급 방법 -->
+				<sc-code code="P009" value="{{codes.pymtmeth_ccd}}"></sc-code>
+				<!-- 납품 방법 -->
+				<sc-code code="P010" value="{{codes.dlvymeth_ccd}}"></sc-code>
+				<!-- 결재상태 공통코드콤보 조회 -->
+				<sc-code code="G002" value="{{codes.chgReqStsCcd}}" ></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-vs"></cc-auth-checker>
+		
+		<cc-sub-title-bar>
+			<sc-button text="발주 제한 요청" on-click="onFindPoLimitReqSts" hidden="[[!formula('onReqPoLimitBtnState')]]" auth-vs></sc-button>
+		</cc-sub-title-bar>
+		
+		<cc-form-panel form-cls="label-row" style="margin-bottom: 10px;" title-text="[[translate('운영조직 정보')]]" i18n-disabled>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field
+						display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorg_cd}}" value="{{vdOorgInfo.oorg_cd}}"
+						placeholder="전체" required="true" on-change="onChangedOorgCd" input-clear="false">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="발주 가능 여부"></sc-label>
+				<sc-text-field value="{{vdOorgInfo.po_poss_yn}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="온보딩 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.obd_typ_ccd}}" value="{{vdOorgInfo.obd_typ_ccd}}" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="내외자 구분"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.domovrs_typ_ccd}}" value="{{vdOorgInfo.domovrs_typ_ccd}}" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="통화"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.cur_ccd}}" value="{{vdOorgInfo.cur_ccd}}" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="세금 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.tax_typ_ccd}}" value="{{vdOorgInfo.tax_typ_ccd}}" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<!--			<cc-fieldset>-->
+			<!--				<sc-label text="운영조직 최초거래시작일"></sc-label>-->
+			<!--				<sc-date-field class="date" value="{{vdOorgInfo.oorg_ini_transn_st_dt}}" string-date="true" readonly="true"></sc-date-field>-->
+			<!--			</cc-fieldset>-->
+			
+			<cc-fieldset>
+				<sc-label text="지급방법"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.pymtmeth_ccd}}" value="{{vdOorgInfo.pymtmeth_ccd}}" readonly="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납품방법"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data"
+								   items="{{codes.dlvymeth_ccd}}" value="{{vdOorgInfo.dlvymeth_ccd}}" readonly="true" >
+				</sc-combobox-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="지급방법 설명"></sc-label>
+				<sc-text-field value="{{vdOorgInfo.pymtmeth_expln}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납품방법 설명"></sc-label>
+				<sc-text-field value="{{vdOorgInfo.dlvymeth_expln}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			
+			<cc-fieldset>
+				<sc-label text="구매 담당자"></sc-label>
+				<cc-user-dept-by-operorg-search id="purcPic" value="{{vdOorgInfo.purc_pic_nm}}" result-value-id="{{vdOorgInfo.purc_pic_id}}" result-value-dept="{{vdOorgInfo.purc_pic_dept}}"
+												readonly="true" on-result="onChangedPic" oorg-cd="[[vdOorgInfo.oorg_cd]]"></cc-user-dept-by-operorg-search>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="품질 담당자"></sc-label>
+				<cc-user-dept-by-operorg-search id="qlyPic" value="{{vdOorgInfo.qly_pic_nm}}" result-value-id="{{vdOorgInfo.qly_pic_id}}" result-value-dept="{{vdOorgInfo.qly_pic_dept}}"
+												readonly="true" on-result="onChangedPic" oorg-cd="[[vdOorgInfo.oorg_cd]]"></cc-user-dept-by-operorg-search>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<div class="vbox flex">
+			<div class="hbox flex-5" hidden="[[!formula('isVisibleSg')]]">
+				<sc-grid id="registeredSgGridPanel" class="flex-5" editable="true" use-selection="false" use-state="[[formula('isExistsRegisteredSgList')]]" hidden="[[!formula('isVisibleSg')]]">
+					<cc-grid-toolbar title-text="[[translate('등록된 소싱그룹')]]" i18n-disabled>
+						<sc-button text="소싱그룹 등록 취소 요청" on-click="onFindSgRegCancelReqSts" hidden="[[!formula('isExistsRegisteredSgList')]]" auth-vs></sc-button>
+						<!--<sc-button text="저장" on-click="onSaveVendorOperationOrganizationSgRcmdYn" hidden="[[!formula('isExistsRegisteredSgList')]]" auth-vs></sc-button>-->
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-combobox-column data-field="vmt_ccd" header-text="협력사관리유형" width="150" editable="false"
+											items="{{codes.vmt_ccd}}" display-field="label" value-field="data"></sc-combobox-column>
+						<sc-group-column header-text="소싱그룹" width="200" text-align="center" hide-child-headers="true">
+							<sc-data-column data-field="vmg_cd" header-text="소싱그룹 코드" width="70" editable="false"></sc-data-column>
+							<sc-data-column data-field="vmg_nm" header-text="소싱그룹 명" width="130" editable="false"></sc-data-column>
+						</sc-group-column>
+						<!-- todo RFX 모듈에서 추천 기능 미개발 (추후 개발 후 활성화)-->
+						<!--<sc-checkbox-column data-field="rfx_rcmd_subj_yn" header-text="RFX 추천 대상 여부" width="130" editable="true" text-align="center"
+											checked-value="Y" un-checked-value="N" display-checkbox="false"></sc-checkbox-column>-->
+						<sc-date-column data-field="supavl_st_dt" header-text="유효 시작 일자" width="140" editable="false" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="vd_oorg_vmg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vd_oorg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vmt_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vmg_oorg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vd_cd"></sc-grid-field>
+						<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+						<sc-grid-field data-field="vd_mst_chg_histrec_uuid"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+				
+				<div class="hspace-10"></div>
+				
+				<sc-grid id="unregisteredSgGridPanel" class="flex-5" editable="false" use-selection="false" use-state="false" hidden="[[!formula('isVisibleSg')]]">
+					<cc-grid-toolbar title-text="[[translate('등록가능 SG')]]" i18n-disabled>
+						<sc-button text="소싱그룹 등록 요청" on-click="onFindSgRegReqSts" hidden="[[!formula('isExistsUnregisteredSgList')]]" auth-vs></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-group-column header-text="온보딩평가그룹" width="200" text-align="center" hide-child-headers="true">
+							<sc-data-column data-field="oeg_cd" header-text="온보딩평가그룹 코드" width="70" text-align="center" mergeable="true" merge-based-field="oeg_uuid"></sc-data-column>
+							<sc-data-column data-field="oeg_nm" header-text="온보딩평가그룹 명" width="130" text-align="left" mergeable="true" merge-based-field="oeg_uuid"></sc-data-column>
+						</sc-group-column>
+						<sc-date-column data-field="efct_exp_dt" header-text="유효 기간" width="120" text-align="center" display-format="yyyy/MM/dd" mergeable="true" merge-based-field="oeg_uuid"></sc-date-column>
+						<sc-combobox-column data-field="vmt_ccd" header-text="협력사관리유형" width="120" editable="false"
+											items="{{codes.vmt_ccd}}" display-field="label" value-field="data"></sc-combobox-column>
+						<sc-group-column header-text="소싱그룹" width="200" text-align="center" hide-child-headers="true">
+							<sc-data-column data-field="vmg_cd" header-text="소싱그룹 코드" width="70" editable="false"></sc-data-column>
+							<sc-data-column data-field="vmg_nm" header-text="소싱그룹 명" width="130" editable="false"></sc-data-column>
+						</sc-group-column>
+						<sc-combobox-column data-field="chg_req_sts_ccd" header-text="결재 상태" width="120"
+											items="{{codes.chgReqStsCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="oeg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vmg_uuid"></sc-grid-field>
+						<sc-grid-field data-field="vd_mst_chg_histrec_uuid"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+		</div>
+	</template>
+	
+    <script>
+    Polymer({
+        is: "ep-vendor-orginfo",
+        
+        properties: {
+            codes: {
+                type: Object,
+                value: function() {
+                    return {
+						oorg_cd: [],
+						vmt_ccd: [],
+                        obd_typ_ccd: [],
+						domovrs_typ_ccd: [],
+						tax_typ_ccd: [],
+						dlvymeth_ccd: [],
+						chgReqStsCcd: []
+                    };
+                },
+                reset: false
+            },
+            
+            vdInfo: {
+                type: Object,
+                value: function() {
+					return {};
+				}
+            },
+			
+			/* 운영조직 */
+			vdOorgInfo: {
+                type: Object,
+                value: function() {
+					return {};
+				}
+            },
+			
+			unregisteredSgList: {
+				type: Array,
+				value: function() {
+					return [];
+				}
+			},
+			
+            registeredSgList: {
+                type: Array,
+                value: function() {
+					return [];
+				}
+            },
+			
+			chgTypCcd: {
+				type: String,
+                value: ""
+			}
+        },
+
+        formulas:{
+			onReqPoLimitBtnState: function(){
+				var me = this;
+				var poPossYn = me.get("vdOorgInfo.po_poss_yn")
+				
+				if(poPossYn === "Y"){
+					return true;
+				}else {
+					return false;
+				}
+			},
+			isVisibleSg: function() {
+				return SCModuleManager.exist("VS");
+			},
+			isExistsUnregisteredSgList: function() {
+				var me = this;
+				var unregisteredSgList = me.get("unregisteredSgList");
+				return !UT.isEmpty(unregisteredSgList) && unregisteredSgList.length > 0;
+			},
+			isExistsRegisteredSgList: function() {
+				var me = this;
+                var registeredSgList = me.get("registeredSgList");
+				return !UT.isEmpty(registeredSgList) && registeredSgList.length > 0;
+            }
+        },
+		
+        /* tab에서 전달받은 파라미터 객체 setting */
+        load: function(data) {
+            var me = this;
+            
+            me.reset();
+            me.applyFormula();
+            
+            me.set("vdInfo", data);
+            me.onFindVendorOorgInfo(data);
+        },
+        
+        /* 협력사 운영조직 & 미등록/등록 SG 목록 조회 */
+        onFindVendorOorgInfo: function(data) {
+            var me = this;
+			
+			if(data) {
+				me.$.findVendorOorgInfo.body = data;
+			} else {
+				var param = UT.copy(me.vdInfo);
+				param.oorg_cd = me.vdOorgInfo.oorg_cd;
+				me.$.findVendorOorgInfo.body = param;
+			}
+			
+            UT.request(me.$.findVendorOorgInfo);
+        },
+		
+		/* 협력사 운영조직 & 미등록/등록 SG 목록 조회 후처리 */
+		completeFindVendorOorgInfo: function(e, res) {
+			var me = this;
+			var result = res.response;
+			
+			if(UT.isEmpty(result.vdOorgInfo)) {
+				UT.alert("STD.E9999");
+			}
+			
+			me.set("vdOorgInfo", result.vdOorgInfo);
+			me.set("aprvInfo", result.aprvInfo);
+			
+			if(me.formula("isVisibleSg")) {
+				me._setSgList(res.response);
+			}
+			
+			me.applyFormula();
+		},
+		
+		/* 미등록/등록 SG 목록 조회 */
+		onFindListSg: function() {
+			var me = this;
+			
+			if(me.formula("isVisibleSg")) {
+				me.$.findListSgByVendorOorg.body = {
+					vd_cd: me.get("vdOorgInfo.vd_cd"),
+					oorg_cd: me.get("vdOorgInfo.oorg_cd")
+				};
+				UT.request(me.$.findListSgByVendorOorg);
+			}
+		},
+		
+		/* 미등록/등록 SG 목록 조회 후처리 */
+		completeFindListSgByVendorOorg: function(e, res) {
+			var me = this;
+			me._setSgList(res.response);
+		},
+		
+		/* 등록 SG 목록 조회 */
+		onFindListRegisteredSg: function() {
+			var me = this;
+			
+			if(me.formula("isVisibleSg")) {
+				me.$.findListRegisteredSg.body = {
+					vd_cd: me.get("vdOorgInfo.vd_cd"),
+					oorg_cd: me.get("vdOorgInfo.oorg_cd")
+				};
+				UT.request(me.$.findListRegisteredSg);
+			}
+		},
+		
+		/* 등록 SG 목록 조회 후처리 */
+		completeFindListRegisteredSg: function(e, res) {
+			var me = this;
+			var result = res.response;
+			me.set("registeredSgList", result);
+			me.$.registeredSgGridPanel.setDataProvider(result);
+			me.applyFormula();
+		},
+		
+		_setSgList: function(data) {
+			var me = this;
+			
+			me.set("unregisteredSgList", data.unregisteredSgList);
+			me.set("registeredSgList", data.registeredSgList);
+			
+			me.$.unregisteredSgGridPanel.setDataProvider(data.unregisteredSgList);
+			me.$.registeredSgGridPanel.setDataProvider(data.registeredSgList);
+			
+			me.applyFormula();
+		},
+		
+		/* 운영조직 changed */
+		onChangedOorgCd: function(event) {
+			var me = this,
+				data = event.detail.selectedItem;
+			
+			if (!data) return;
+			var param = UT.copy(me.get("vdInfo"));
+			param.oorg_cd = data.oorg_cd;
+			
+			// 미등록/등록 SG 그리드 초기화
+			me.$.unregisteredSgGridPanel.getDataProvider().removeAll();
+			me.$.registeredSgGridPanel.getDataProvider().removeAll();
+			
+			me.onFindVendorOorgInfo(); // 운영조직, 통과된 OEG, SG 정보 재조회
+		},
+		
+		/* 운영조직정보 담당자 변경 */
+		onChangedPic: function(e) {
+			var me = this;
+			var targetId = e.currentTarget.id;
+			
+			if(UT.isEmpty(me.vdOorgInfo.oorg_cd)) {
+				// '{0}'을(를) 선택하세요.
+				return UT.alert(me.translate("STD.N4200", null, me.translate("운영조직")), function() {
+					// 선택한 담당자 정보 초기화 후 저장X
+					if (targetId === "purcPic") {
+						me.set("vdOorgInfo.purc_pic_id", null);
+						me.set("vdOorgInfo.purc_pic_nm", null);
+						me.set("vdOorgInfo.purc_pic_dept", null);
+					} else if (targetId === "qlyPic") {
+						me.set("vdOorgInfo.qly_pic_id", null);
+						me.set("vdOorgInfo.qly_pic_nm", null);
+						me.set("vdOorgInfo.qly_pic_dept", null);
+					}
+				});
+			}
+			
+			// 담당자정보 변경시 바로 저장
+			me.$.saveVendorOperationOrganizationPicInfo.body = {
+				vdOorgInfo: UT.copy(me.get("vdOorgInfo"))
+			};
+			
+			UT.request(me.$.saveVendorOperationOrganizationPicInfo, function(e, res) {
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					// 저장 완료
+					UT.completeAlert("저장", function() {
+						me.onFindVendorOorgInfo();
+						me.fire("change-profile");
+					});
+				} else {
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			});
+		},
+		
+        onSaveVendorOperationOrganizationSgRcmdYn: function(){
+            var me = this;
+            var grid = me.$.registeredSgGridPanel,
+                provider = grid.getDataProvider();
+            var updated = provider.getUpdateItems();
+            
+            if (UT.isEmpty(updated)) {
+                return UT.alert("STD.N1700"); // 변경된 내용이 없습니다.
+            }
+
+            if(!grid.validate()){
+                return UT.alert("STD.E0000");
+            }
+
+            UT.confirm("STD.N1200", function() {
+				me.$.saveVendorOperationOrganizationSgRcmdYn.set("body", {
+                    updateList : updated
+                });
+                UT.request(me.$.saveVendorOperationOrganizationSgRcmdYn);
+            });
+        },
+		
+		completeSaveVendorOperationOrganizationSgRcmdYn: function(e, res) {
+			var me = this;
+			var result = res.response;
+			if(result.resultStatus === "S") {
+				// 저장 완료
+				UT.completeAlert("저장", function() {
+					me.onFindListRegisteredSg();
+					me.fire("change-profile");
+				});
+			} else {
+				//저장실패
+				UT.alert("STD.E9999");
+			}
+		},
+		
+		/* 협력사상태조회 (특정 품의에 대한) */
+		findVendorModifyStatus: function(data) {
+			var me = this;
+			me.set("chgTypCcd", data.chg_typ_ccd);
+			
+			me.$.findVendorModifyStatus.body = {
+				vd_cd: data.vd_cd,
+				oorg_cd: data.oorg_cd,
+				chg_typ_ccd: data.chg_typ_ccd,
+				view: true
+			};
+			UT.request(me.$.findVendorModifyStatus);
+		},
+		
+		/* 협력사상태조회 후 callback */
+		completeFindVendorModifyStatus: function(e,res) {
+			var me = this;
+			var result = res.response;
+			var chgTypCcd = me.get("chgTypCcd");
+			
+			if(chgTypCcd === "PO_LMT_REQ") {  // 발주 제한 요청
+				me.onShowPoLimitReqPopup(result);
+			} else if(chgTypCcd === "VMG_REG_REQ") { // 소싱그룹 등록 요청
+				me.onShowSgRegReqPopup(result);
+			} else if(chgTypCcd === "VMG_REG_CNCL_REQ") {  // 소싱그룹 등록 취소 요청
+				me.onShowSgRegCancelReqPopup(result);
+			}
+		},
+		
+		/* 발주 제한 요청 상태 조회 */
+		onFindPoLimitReqSts: function() {
+			var me = this;
+			var data = me.get("vdOorgInfo");
+			
+			/* 협력사상태조회 (특정 품의에 대한) */
+			data.chg_typ_ccd = "PO_LMT_REQ";
+			me.findVendorModifyStatus(data);
+		},
+		
+		/* 발주 제한 요청 팝업 조회 */
+		onShowPoLimitReqPopup: function(data) {
+			var me = this;
+			if(UT.isEmpty(data)) {
+				data = me.get("vdOorgInfo");
+			}
+			
+			var aprvPoLimitReqPopup = UT.popup("ep-vendor-po-limit-req-apvl", me, 1000, 900, {
+				"complete-save" : function(){
+					me.onFindVendorOorgInfo();
+				},
+				"close-popup" : function(popup, e){
+					me.onFindVendorOorgInfo();
+					popup.close();
+				}
+			}, { titleText:"발주 제한 요청" } );
+			aprvPoLimitReqPopup.show();
+			aprvPoLimitReqPopup.getWindowContent().load(data);
+		},
+		
+		/* 소싱그룹 등록 요청 상태 조회 */
+		onFindSgRegReqSts: function() {
+			var me = this;
+			var data = me.get("vdOorgInfo");
+			
+			/* 협력사상태조회 (특정 품의에 대한) */
+			data.chg_typ_ccd = "VMG_REG_REQ";
+			me.findVendorModifyStatus(data);
+		},
+		
+		/* 소싱그룹 등록 요청 팝업 조회 */
+		onShowSgRegReqPopup: function(data) {
+			var me = this;
+			if(UT.isEmpty(data)) {
+				data = me.get("vdOorgInfo");
+			}
+			
+			var aprvSgRegReqPopup = UT.popup("ep-vendor-management-group-reg-req-apvl", me, 1000, 900, {
+				"complete-save": function() {
+					me.onFindListSg();
+				},
+				"close-popup": function(popup) {
+					me.onFindListSg();
+					popup.close();
+				}
+			}, { titleText: "소싱그룹 등록 요청" });
+			aprvSgRegReqPopup.show();
+			aprvSgRegReqPopup.getWindowContent().load({
+				...data,
+				vmg_uuids: me.get("unregisteredSgList").map(sg => sg.vmg_uuid)
+			});
+		},
+		
+		/* 소싱그룹 등록 취소 요청 상태 조회 */
+		onFindSgRegCancelReqSts: function() {
+			var me = this;
+			var data = me.get("vdOorgInfo");
+			
+			/* 협력사상태조회 (특정 품의에 대한) */
+			data.chg_typ_ccd = "VMG_REG_CNCL_REQ";
+			me.findVendorModifyStatus(data);
+		},
+		
+		/* 소싱그룹 등록 취소 요청 팝업 조회 */
+		onShowSgRegCancelReqPopup: function(data) {
+			var me = this;
+			if(UT.isEmpty(data)) {
+				data = me.get("vdOorgInfo");
+			}
+			
+			var aprvSgRegCancelReqPopup = UT.popup("ep-vendor-management-group-reg-cancel-req-apvl", me, 1000, 900, {
+				"complete-save" : function(){
+					me.onFindListSg();
+				},
+				"close-popup" : function(popup){
+					me.onFindListSg();
+					popup.close();
+				}
+			}, { titleText: "소싱그룹 등록 취소 요청" } );
+			aprvSgRegCancelReqPopup.show();
+			aprvSgRegCancelReqPopup.getWindowContent().load(data);
+		},
+    });
+    </script>
+</dom-module>

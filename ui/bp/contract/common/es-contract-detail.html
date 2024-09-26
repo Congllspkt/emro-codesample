@@ -1,0 +1,844 @@
+<sc-link rel="import" href="es-contract-master.html"></sc-link>
+<sc-link rel="import" href="es-contract-info.html"></sc-link>
+<sc-link rel="import" href="es-contract-document.html"></sc-link>
+
+<dom-module id="es-contract-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 계약 정보 조회 -->
+		<sc-ajax id="findContract"
+				url="findContract.do"
+				body="{{searchParam}}"
+				on-response="completeFindInfo">
+		</sc-ajax>
+		<!-- 변경 계약 정보 조회 -->
+		<sc-ajax id="findChangeContract"
+				url="findChangeContract.do"
+				body="{{searchParam}}"
+				on-response="completeFindInfo">
+		</sc-ajax>
+		<!-- 계약 정보 저장 -->
+		<sc-ajax id="saveContract"
+				url="saveDraftContract.do"
+				on-response="completeSaveInfo">
+		</sc-ajax>
+		<!-- 계약서 생성 -->
+		<sc-ajax id="createContractDocument"
+				url="createContractDocument.do"
+				on-response="completeCreateDocument">
+		</sc-ajax>
+		<!-- 계약서 삭제 -->
+		<sc-ajax id="deleteContractDocument"
+				url="deleteContractDocument.do"
+				body="{{cntrInfo}}">
+		</sc-ajax>
+		<!-- 계약 요청 반려 -->
+		<sc-ajax id="returnContractReq"
+				url="/bp/contract/cntrreq/returnContractReq.do"
+				body="{{dialog}}"
+				on-response="completeReturn">
+		</sc-ajax>
+		<!-- 계약 요청 목록으로 반환 (계약 삭제) -->
+		<sc-ajax id="returnContract"
+				url="/bp/contract/cntrreq/returnContract.do"
+				body="{{cntrInfo}}"
+				on-response="completeReturn">
+		</sc-ajax>
+		<!-- 계약 발신 -->
+		<sc-ajax id="sendContract"
+				url="sendContract.do"
+				body="{{cntrInfo}}">
+		</sc-ajax>
+		<!-- 계약 해지 -->
+		<sc-ajax id="terminateContract"
+				url="terminateContract.do">
+		</sc-ajax>
+		<!-- 계약서 회수 -->
+		<sc-ajax id="withdrawalContractDoc"
+				 url="withdrawalContractDoc.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeWithdrawalContractDoc">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r, auth-s, auth-a"></cc-auth-checker>
+
+		<!-- 화면 -->
+		<cc-page-title-bar title-text="계약">
+			<div hidden="[[!formula('existCntrDoc')]]">
+				<sc-button text="Docusign Template 생성" on-click="onCreateDsgnTmpl" hidden="[[!formula('createDsgnTmplBtn')]]"></sc-button>
+				<sc-button text="Docusign Template 수정" on-click="onEditDsgnTmpl" hidden="[[!formula('editDsgnTmplBtn')]]"></sc-button>
+				<sc-button text="Docusign Template 삭제" on-click="onDeleteDsgnTmpl" hidden="[[!formula('editDsgnTmplBtn')]]"></sc-button>
+				<sc-button text="Docusign Envelope 확인" on-click="onViewDsgnEnvelope" hidden="[[!formula('viewEnvelopeBtn')]]"></sc-button>
+				<sc-button text="Docusign Envelope 삭제" on-click="onDeleteDsgnEnvelope" hidden="[[!formula('deleteEnvelopeBtn')]]"></sc-button>
+				
+				<sc-button text="간편 서명 Template 생성" on-click="onEditEFormTmpl" hidden="[[!formula('createEFormTmplBtn')]]"></sc-button>
+				<sc-button text="간편 서명 Template 수정" on-click="onEditEFormTmpl" hidden="[[!formula('editEFormTmplBtn')]]"></sc-button>
+				<sc-button text="간편 서명 Template 삭제" on-click="onDeleteEFormTmpl" hidden="[[!formula('editEFormTmplBtn')]]"></sc-button>
+				
+				<sc-button text="AdobeSign 계약서 생성" on-click="onCreateAdobeSign" hidden="[[!formula('createAdobeSignBtn')]]"></sc-button>
+				<sc-button text="AdobeSign 계약서 재생성" on-click="onReCreateAdobeSign" hidden="[[!formula('reCreateAdobeSignBtn')]]"></sc-button>
+				<sc-button text="AdobeSign 계약서 수정" on-click="onEditAdobeSign" hidden="[[!formula('editAdobeSignBtn')]]"></sc-button>
+				<sc-button text="AdobeSign 계약서 확인" on-click="onCheckAdobeSign" hidden="[[!formula('checkAdobeSignBtn')]]"></sc-button>
+				<sc-button text="AdobeSign 계약서 삭제" on-click="onDeleteAdobeSign" hidden="[[!formula('deleteAdobeSignBtn')]]"></sc-button>
+
+				<sc-button text="계약서 삭제" on-click="onDeleteCntr" hidden="[[!formula('deleteBtn')]]" auth-s></sc-button>
+				<sc-button text="부속서류 요청" on-click="onRequestAppx" hidden="[[!formula('reqAppxBtn')]]" auth-s></sc-button>
+				<sc-button text="부속서류 거부" on-click="onRejectAppx" hidden="[[!formula('rejectAppxBtn')]]" auth-s></sc-button>
+				<sc-button text="발신" on-click="onSend" hidden="[[!formula('sendBtn')]]" auth-s></sc-button>
+				<sc-button text="결재 요청" on-click="onApproval" hidden="[[!formula('approvalBtn')]]" auth-a></sc-button>
+				
+				<sc-button text="서명 확인" on-click="onConfirmSign" hidden="[[!formula('confirmSignBtn')]]" auth-r></sc-button>
+				<sc-button text="계약서 다운로드" on-click="onDownloadPdf" hidden="[[!formula('downloadPdfBtn')]]" auth-r></sc-button>
+				<sc-button text="이력 문서 다운로드" on-click="onDownloadHistPdf" hidden="[[!formula('downloadHistPdfBtn')]]"></sc-button>
+				<sc-button text="PDF 미리보기" on-click="onPreviewPdf" hidden="[[!formula('previewPdfBtn')]]" auth-r></sc-button>
+			</div>
+			<div>
+				<sc-button text="해지" on-click="onTermination" hidden="[[!formula('terminationBtn')]]" auth-s></sc-button>
+				<sc-button text="계약서 회수" on-click="onWithdrawal" hidden="[[!formula('withdrawalBtn')]]" auth-s></sc-button>
+				<sc-button text="닫기" on-click="onClose"></sc-button>
+			</div>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-3">
+				<cc-sub-title-bar hidden="[[!formula('editableMaster')]]" title-text="계약 일반정보">
+					<sc-button text="반려" on-click="onPopupDialogReturn" hidden="[[!formula('returnCntrBtn')]]" auth-s></sc-button>
+					<sc-button text="삭제" on-click="onDelete"  hidden="[[!formula('deleteCntrBtn')]]" auth-s></sc-button>
+					<sc-button text="저장" on-click="onSaveContract" auth-s></sc-button>
+					<sc-button text="계약서 작성" on-click="onCreateDocument" hidden="[[!formula('createDocBtn')]]" auth-s></sc-button>
+					<sc-button text="결재 요청" on-click="onApprovalOfflnCntr" hidden="[[!formula('approvalOfflnCntrBtn')]]" auth-a></sc-button>
+				</cc-sub-title-bar>
+				<es-contract-master id="master" readonly="[[!formula('editableMaster')]]"
+								on-changed-cntr-sgnmeth-ccd="changedCntrSgnmethCcd"></es-contract-master>
+			</div>
+			
+			<div class="hspace-10"></div>
+			
+			<sc-tab-navigation id="tabNavi" class="flex-7">
+				<es-contract-info id="info" title-text="계약 참조정보" readonly="[[!formula('editableMaster')]]"></es-contract-info>
+				<es-contract-document id="document" title-text="계약서" hidden="[[!formula('existCntrDoc')]]"
+									on-find-info="onFindInfo"
+									on-validated-send="validatedSendContract"></es-contract-document>
+			</sc-tab-navigation>
+		</div>
+		
+		<sc-dialog id="dialogReturn" title-text="반려 사유 작성" style="width:600px; height:280px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="반려" on-click="onReturn"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{dialog.reason}}"></sc-textarea-field>
+		</sc-dialog>
+	</template>
+
+	<!-- 스크립트  -->
+	<script>
+		Polymer({
+			is: "es-contract-detail",
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				cntrrList: {
+					type: Object,
+					value: function() {
+						return [];
+					}
+				},
+				dialog: {
+					type: Object,
+					value: function () {
+						return {
+							cntr_uuid: "",
+							cntr_req_rcpt_uuid: "",
+							reason: ""
+						};
+					}
+				},
+				approvalInfo: {
+					type: Object,
+					value: function() {
+						return {
+							isApproval: false,
+							apvl_typ_ccd: "CNTR"
+						};
+					}
+				},
+				isSaveCntrInfo: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				}
+			},
+			
+			formulas: {
+				existCntrDoc: function() {
+					return SCModuleManager.exist("EDOC") && UT.isNotEmpty(this.get("cntrInfo.ecntr_uuid"));
+				},
+				isNew: function() {
+					return UT.isEmpty(this.get("cntrInfo.cntr_uuid"));
+				},
+				createDocBtn: function() {
+					return this.get("isSaveCntrInfo") === "Y";
+				},
+				isOffline: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return UT.isEmpty(sgnMethCcd) || sgnMethCcd === "OFFLINE";
+				},
+				isPKI: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "PKI";
+				},
+				isDocusign: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "DOCUSIGN";
+				},
+				isEFormsign: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "EFORM";
+				},
+				isAdobeSign: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "ADOBESIGN";
+				},
+				editableMaster: function() {
+					if(!this.formula("isOffline") && this.formula("existCntrDoc")) {
+						return false;
+					}
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isNew") || cntrStsCcd === "CCMPLD";
+				},
+				deleteCntrBtn: function() {
+					return UT.isNotEmpty(this.get("cntrInfo.cntr_uuid"));
+				},
+				approvalOfflnCntrBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return UT.isNotEmpty(sgnMethCcd) && sgnMethCcd === "OFFLINE" && (this.formula("isNew") || cntrStsCcd === "CCMPLD");
+				},
+				returnCntrBtn: function() {
+					return UT.isNotEmpty(this.get("cntrInfo.cntr_req_rcpt_uuid"));
+				},
+				deleteBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "SGN_WTG" || cntrStsCcd === "VD_RET";
+				},
+				reqAppxBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var tmplTypCcd = this.get("cntrInfo.cntr_tmpl_typ_ccd");
+					if( this.formula("isPKI")
+							|| (this.formula("isDocusign") && UT.isEmpty(this.get("cntrInfo.dsgn_uuid")))
+							|| (this.formula("isEFormsign") && UT.isEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid")))
+							|| (this.formula("isAdobeSign") && UT.isEmpty(this.get("cntrInfo.asgn_uuid")))) {
+						return tmplTypCcd  === "TMPL" && (cntrStsCcd === "CCMPLD" || cntrStsCcd === "VD_RET");
+					}
+					return false;
+				},
+				rejectAppxBtn: function() {
+					if(UT.isNotEmpty(this.get("cntrInfo.dsgn_uuid"))) return false;
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return cntrStsCcd === "APPX_RVG";
+				},
+				sendBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var dsgnStsCcd = this.get("cntrInfo.dsgn_sts_ccd");
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					if(this.formula("isPKI")) {
+						return cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET";
+						
+					} else if( (this.formula("isDocusign") && (dsgnStsCcd === "bp_temp" || dsgnStsCcd === "sent"))
+							|| (this.formula("isEFormsign") && UT.isNotEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid")))
+							|| (this.formula("isAdobeSign") && (asgnStsCcd === "sent"))) {
+						return cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "SGN_WTG" || cntrStsCcd === "VD_RET";
+					}
+					return false;
+				},
+				approvalBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var dsgnStsCcd = this.get("cntrInfo.dsgn_sts_ccd");
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					if( this.formula("isPKI")
+							|| (this.formula("isDocusign") && (dsgnStsCcd === "bp_temp" || dsgnStsCcd === "sent"))
+							|| (this.formula("isEFormsign") && UT.isNotEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid")))
+							|| (this.formula("isAdobeSign") && (asgnStsCcd === "bp_temp" || asgnStsCcd === "sent"))) {
+						return cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET";
+					}
+					return false;
+				},
+				previewPdfBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var tmplTypCcd = this.get("cntrInfo.cntr_tmpl_typ_ccd");
+					return this.formula("isPKI") && tmplTypCcd  === "TMPL"
+						&& (!(cntrStsCcd === "APPX_REQ" || cntrStsCcd === "APPX_RET" || cntrStsCcd === "CNTR_CMPLD" || cntrStsCcd === "CNTR_TRMN"));
+				},
+				confirmSignBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					return this.formula("isPKI") && cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN";
+				},
+				downloadPdfBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN" && sgnMethCcd !== "OFFLINE";
+				},
+				downloadHistPdfBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					return this.formula("isEFormsign") && cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN";
+				},
+				createDsgnTmplBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isDocusign") && UT.isEmpty(this.get("cntrInfo.dsgn_uuid")) 
+						&& (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				editDsgnTmplBtn: function() {
+					var dsgnStsCcd = this.get("cntrInfo.dsgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return dsgnStsCcd === "bp_temp" && (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				viewEnvelopeBtn: function() {
+					var dsgnStsCcd = this.get("cntrInfo.dsgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return (dsgnStsCcd === "sent" || dsgnStsCcd === "signing_complete")
+							&& (cntrStsCcd === "SND" || cntrStsCcd === "VD_RET" || cntrStsCcd === "CNTR_CMPLD");
+				},
+				deleteEnvelopeBtn: function() {
+					var dsgnStsCcd = this.get("cntrInfo.dsgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return dsgnStsCcd === "sent" && (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				createEFormTmplBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isEFormsign") && UT.isEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid"))
+						&& (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				editEFormTmplBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isEFormsign") && UT.isNotEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid"))
+						&& (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				createAdobeSignBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isAdobeSign") && UT.isEmpty(this.get("cntrInfo.asgn_uuid"))
+							&& (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				reCreateAdobeSignBtn: function() {
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return this.formula("isAdobeSign") && cntrStsCcd === "VD_RET" && asgnStsCcd === "declined";
+				},
+				editAdobeSignBtn: function() {
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return asgnStsCcd === "bp_temp" && (cntrStsCcd === "CCMPLD" || cntrStsCcd === "VD_RET");
+				},
+				checkAdobeSignBtn: function() {
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return (asgnStsCcd === "completed" || asgnStsCcd === "sent" || asgnStsCcd === "bp_sign" || asgnStsCcd === "declined")
+							&& (cntrStsCcd === "SND" || cntrStsCcd === "VD_RET" || cntrStsCcd === "CNTR_CMPLD" || cntrStsCcd === "VD_RCPT_CONFM" || cntrStsCcd === "CCMPLD");
+				},
+				deleteAdobeSignBtn: function() {
+					var asgnStsCcd = this.get("cntrInfo.asgn_sts_ccd");
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return (asgnStsCcd === "bp_temp" || asgnStsCcd === "sent") && (cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET");
+				},
+				terminationBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					return cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd === "TRMN" && UT.isEmpty(this.get("cntrInfo.cntr_trmn_dt"));
+				},
+				withdrawalBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var wdPossYn  = this.get("cntrInfo.wd_poss_yn");
+					return (cntrStsCcd === "SND" || cntrStsCcd === "VD_RCPT_CONFM") && wdPossYn === "Y";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("searchParam", data);
+				
+				if(UT.isNotEmpty(data.cntr_uuid)) { // 계약 조회
+					me.onFindInfo();
+				} else if(UT.isNotEmpty(data.orgn_cntr_uuid)) { // 변경,해지 작성 조회
+					me.onFindChangeInfo();
+				} else { // 신규 작성
+					me.set("cntrInfo", data.cntrInfo);
+					me.set("cntrInfo.cntr_typ_ccd", "NEW");
+					me.set("cntrrList", data.contractorList);
+					me.set("isSaveCntrInfo", "N");
+					me.applyFormula();
+					me.loadDetail();
+				}
+			},
+			
+			onFindInfo: function() {
+				var me = this;
+				UT.request(me.$.findContract);
+			},
+			
+			onFindChangeInfo: function() {
+				var me = this;
+				UT.request(me.$.findChangeContract);
+			},
+			
+			completeFindInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) {
+					me.set("cntrInfo", result.resultData.cntrInfo);
+					me.set("cntrrList", result.resultData.contractorList);
+					me.applyFormula();
+					me.loadDetail();
+				} else {
+					UT.alert("STD.E9999");
+					me.onClose();
+				}
+			},
+			
+			loadDetail: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				me.$.master.load({
+					cntrInfo: cntrInfo,
+					cntrrList: me.get("cntrrList")
+				});
+				me.$.info.load(cntrInfo);
+				if(me.formula("existCntrDoc")) {
+					me.$.tabNavi.selectItem(me.$.document);
+					me.$.document.load(cntrInfo);
+				} else {
+					me.$.tabNavi.selectItem(me.$.info);
+				}
+			},
+			
+			// 계약 서명방법 변경
+			changedCntrSgnmethCcd: function(data) {
+				var me = this;
+				me.set("cntrInfo.cntr_sgnmeth_ccd", data.detail);
+				me.applyFormula();
+			},
+			
+			// 계약 저장
+			onSaveContract: function() {
+				var me = this;
+				if(!me.$.master.validateOnSave()) { // 계약 정보 유효성 검증
+					return;
+				}
+				if(!me.$.info.validateOnSave()) { // 계약조건 정보 유효성 검증
+					return;
+				}
+				
+				me.set("approvalInfo.isApproval", false);
+				UT.confirm("STD.N1200", function() { // 저장하시겠습니까?
+					me.onSave(me.$.saveContract);
+				});
+			},
+			
+			// 계약서 생성
+			onCreateDocument: function() {
+				var me = this;
+				
+				if(!me.$.master.validateOnCreateDocument()) { // 계약 정보 유효성 검증
+					return;
+				}
+				if(!me.$.info.validateOnCreateDocument()) { // 계약조건 정보 유효성 검증
+					return;
+				}
+				
+				me.set("approvalInfo.isApproval", false);
+				UT.confirm("STD.EDO2004", function() { // 작성하시겠습니까?
+					me.onSave(me.$.createContractDocument);
+				});
+			},
+			
+			// 결재 요청 (오프라인계약)
+			onApprovalOfflnCntr: function() {
+				var me = this;
+				
+				if(!me.$.master.validateOnCreateDocument()) { // 계약 정보 유효성 검증
+					return;
+				}
+				if(!me.$.info.validateOnCreateDocument()) { // 계약조건 정보 유효성 검증
+					return;
+				}
+				
+				me.set("approvalInfo.isApproval", true);
+				UT.confirm("STD.N2300", function() { // 결재 상신하시겠습니까?
+					me.onSave(me.$.saveContract);
+				});
+			},
+			
+			// 저장
+			onSave: function(ajax) {
+				var me = this;
+				me.$.master.saveParameter(function(e) {
+					ajax.body = {
+						cntrInfo: e,
+						cntrCndInfo: me.$.info.saveParameter()
+					};
+					UT.request(ajax);
+				});
+			},
+			
+			completeCreateDocument: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.success) {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.set("searchParam", result.resultData);
+					me.onFindInfo();
+				} else {
+					if(UT.isNotEmpty(result.resultMessage)){
+						UT.alert(result.resultMessage);
+					}else{
+						UT.alert("STD.E9999");
+					}
+				}
+			},
+			
+			completeSaveInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.success) {
+					me.set("searchParam", result.resultData);
+					me.set("isSaveCntrInfo", "Y");
+					
+					if(me.get("approvalInfo.isApproval")) { // 결재요청
+						me.onPopupApproval(result.resultData.cntr_uuid);
+					} else {
+						UT.completeAlert(); // 요청을 완료 하였습니다.
+						me.onFindInfo();
+					}
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 결재요청 팝업
+			onPopupApproval: function(cntrId) {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				UT.confirm("STD.N2300", function() { // 결재요청을 하시겠습니까?
+					UT.popupApproval(me, {
+								task_uuid: UT.isEmpty(cntrId) ? cntrInfo.cntr_uuid : cntrId,
+								apvl_typ_ccd: me.get("approvalInfo.apvl_typ_ccd"),
+								apvl_tit: cntrInfo.cntr_nm
+							},
+							function(aprvSts) {
+								if(aprvSts === "PRGSG") { // 결재상신 시
+									me.onClose();
+								} else {
+									me.onFindInfo();
+								}
+							}
+					);
+				});
+			},
+			
+			// 계약 요청 반려 사유 팝업
+			onPopupDialogReturn: function() {
+				var me = this;
+				me.set("dialog.cntr_uuid", me.get("cntrInfo.cntr_uuid"));
+				me.set("dialog.cntr_req_rcpt_uuid", me.get("cntrInfo.cntr_req_rcpt_uuid"));
+				me.set("dialog.reason", null);
+				me.$.dialogReturn.show();
+			},
+			
+			// 계약 요청 반려
+			onReturn: function() {
+				var me = this;
+				var cntrReqRetRsn = me.get("dialog.reason");
+				
+				if(UT.isEmpty(cntrReqRetRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("반려 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				me.$.dialogReturn.close();
+				
+				UT.confirm("STD.N3000", function() { // 반려하시겠습니까?
+					UT.request(me.$.returnContractReq);
+				});
+			},
+			
+			completeReturn: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.onClose();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 계약 삭제
+			onDelete: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function () { // 삭제하시겠습니까?
+					UT.request(me.$.returnContract);
+				});
+			},
+			
+			// 계약서 삭제
+			onDeleteCntr: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function () { // 삭제하시겠습니까?
+					UT.request(me.$.deleteContractDocument, function(e, res) {
+						var result = res.response;
+						if(result.success) { // 성공
+							UT.completeAlert(); // 요청을 완료 하였습니다.
+							me.onFindInfo();
+						} else {
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 부속서류 요청
+			onRequestAppx: function() {
+				var me = this;
+				me.$.document.onPopupDialogRequestAppx();
+			},
+			
+			// 부속서류 거부
+			onRejectAppx: function() {
+				var me = this;
+				me.$.document.onPopupDialogRejectAppx();
+			},
+			
+			// 계약 발신
+			onSend: function() {
+				var me = this;
+				me.set("approvalInfo.isApproval", false);
+				me.$.document.validateOnSendContract(); // 계약서 발신 유효성 검증
+			},
+			
+			// 결재 요청
+			onApproval: function() {
+				var me = this;
+				me.set("approvalInfo.isApproval", true);
+				me.$.document.validateOnSendContract(); // 계약서 발신 유효성 검증
+			},
+			
+			// 계약서 발신 유효성 검증 완료
+			validatedSendContract: function(data) {
+				var me = this;
+				var isValidated = data.detail;
+				
+				if(isValidated) {
+					if(me.get("approvalInfo.isApproval")) { // 결재요청
+						me.onPopupApproval();
+					} else {
+						// 발신
+						if(me.formula("isPKI")) {
+							UT.confirm("STD.N3500", function() { //발송하시겠습니까?
+								me.onSendContract();
+							});
+						} else if(me.formula("isDocusign")) {
+							me.$.document.onCreateDsgnEnvelope();
+						} else if(me.formula("isAdobeSign")) {
+							me.$.document.onSignAdobeSign();
+						} else if(me.formula("isEFormsign")) {
+							me.$.document.onSendEFormsign();
+						}
+					}
+				}
+			},
+			
+			// 계약서 발신
+			onSendContract: function() {
+				var me = this;
+				UT.request(me.$.sendContract, function(e, res) {
+					var result = res.response;
+					if(result.success) { // 성공
+						UT.completeAlert(); // 요청을 완료 하였습니다.
+						me.onFindInfo();
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+			
+			// 서명 확인
+			onConfirmSign: function() {
+				var me = this;
+				me.$.document.onConfirmSign();
+			},
+			
+			// PDF 미리보기
+			onPreviewPdf: function() {
+				var me = this;
+				me.$.document.onPreviewPdf();
+			},
+			
+			// 완료 계약서 다운로드
+			onDownloadPdf: function() {
+				var me = this;
+				me.$.document.onDownloadPdf();
+			},
+			
+			// 이력 문서 다운로드
+			onDownloadHistPdf: function() {
+				var me = this;
+				me.$.document.onDownloadHistPdf();
+			},
+			
+			// 닫기
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.$.master.reset();
+				me.$.info.reset();
+				me.$.document.reset();
+				me.fire("close-remove");
+			},
+			
+			// docusign template 생성
+			onCreateDsgnTmpl: function() {
+				var me = this;
+				me.$.document.onCreateDsgnTmpl();
+			},
+			
+			// docusign template 수정
+			onEditDsgnTmpl: function() {
+				var me = this;
+				me.$.document.findDocusignTemplate(me.get("cntrInfo.dsgn_uuid"));
+			},
+			
+			// docusign template 삭제
+			onDeleteDsgnTmpl: function() {
+				var me = this;
+				me.$.document.onDeleteDsgnTmpl();
+			},
+			
+			// docusign envelope 확인
+			onViewDsgnEnvelope: function() {
+				var me = this;
+				me.$.document.findDocusignEnvelope(me.get("cntrInfo.dsgn_uuid"));
+			},
+			
+			// docusign envelope 삭제
+			onDeleteDsgnEnvelope: function() {
+				var me = this;
+				me.$.document.onDeleteDsgnEnvelope();
+			},
+			
+			// 간편 서명 template 작성
+			onEditEFormTmpl: function() {
+				var me = this;
+				me.$.document.onEditEFormTmpl();
+			},
+			
+			// 간편 서명 template 삭제
+			onDeleteEFormTmpl: function() {
+				var me = this;
+				me.$.document.onDeleteEFormTmpl();
+			},
+			
+			// adobesign 계약서 생성
+			onCreateAdobeSign: function() {
+				var me = this;
+				me.$.document.onCreateAdobeSign();
+			},
+			
+			// adobesign 계약서 재생성
+			onReCreateAdobeSign: function() {
+				var me = this;
+				me.$.document.onReCreateAdobeSign();
+			},
+			
+			// adobesign 수정
+			onEditAdobeSign: function() {
+				var me = this;
+				me.$.document.onEditAdobeSign();
+			},
+			
+			// adobesign 확인
+			onCheckAdobeSign: function() {
+				var me = this;
+				me.$.document.onCheckAdobeSign();
+			},
+			
+			// adobesign 계약서 삭제
+			onDeleteAdobeSign: function() {
+				var me = this;
+				me.$.document.onDeleteAdobeSign();
+			},
+			
+			// 계약 해지
+			onTermination: function() {
+				var me = this;
+				var cntrTrmnRsn = me.$.master.cntrInfo.cntr_trmn_rsn;
+				
+				if(UT.isEmpty(cntrTrmnRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("해지 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				UT.confirm("STD.EDO1021", function() { // 해지하시겠습니까?
+					me.$.terminateContract.body = {
+						cntr_uuid: me.get("cntrInfo.cntr_uuid"),
+						cntr_trmn_rsn: cntrTrmnRsn,
+						cntr_req_rcpt_uuid: me.get("searchParam.cntr_req_rcpt_uuid"),
+						cntr_req_uuid: me.get("searchParam.cntr_req_uuid")
+					};
+					UT.request(me.$.terminateContract, function(e, res) {
+						var result = res.response;
+						if(result.success) { // 성공
+							UT.completeAlert(); // 요청을 완료 하였습니다.
+							me.onClose();
+						} else {
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 계약서 회수
+			onWithdrawal: function() {
+				var me = this;
+				UT.request(me.$.withdrawalContractDoc);
+			},
+			
+			completeWithdrawalContractDoc: function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.success) {
+					UT.alert("STD.EDO3001"); // 계약서를 회수하였습니다.
+					me.onFindInfo();
+				} else {
+					if(result.resultMessage == "SIGNED_LOCK") {
+						UT.alert("STD.EDO3024");	// 협력사가 서명 진행중으로 회수가 불가능합니다.
+					} else {
+						UT.alert("STD.EDO3023"); // 회수 가능한 상태가 아닙니다.
+					}
+				}
+			}
+		});
+	</script>
+</dom-module>

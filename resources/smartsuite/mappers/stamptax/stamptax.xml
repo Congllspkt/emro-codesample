@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="stamptax">
+	<select id="searchListStampTax" resultType="map">
+	/* stamptax.searchListStampTax : 인지세 현황 조회 */
+		SELECT CNTR.OORG_CD
+			, CNTR.CNTR_UUID
+			, CNTR.CNTR_NO
+			, CNTR.CNTR_DT
+			, CNTR.CNTR_REVNO
+			, CNTR.CNTR_NM
+			, CNTR.CNTR_AMT
+			, CNTR.CNTR_STS_CCD
+			, CNTRR.VD_CD
+			, CNTRR.CNTRR_TYP_CCD
+			, CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+			, VD.ERP_VD_CD
+			, VD.BIZREGNO
+			, STAX.STAX_UUID
+			, STAX.STTPYMT_AMT
+			, STAX.STTPYMT_STS_CCD
+			, STAX.STTPYMT_RO
+			, STAX.STTPYMT_AMT
+			, STAX.STAX_AMT
+			, STAX.STTPYMTMETH_CCD
+			, (SELECT CASE WHEN C.CNTR_AMT IS NULL
+						   THEN 0
+						   ELSE C.CNTR_AMT END
+				 FROM CNTR C
+				WHERE C.TEN_ID = CNTR.TEN_ID
+				  AND C.CNTR_NO = CNTR.CNTR_NO
+				  AND C.CNTR_REVNO = (SELECT MAX(CN.CNTR_REVNO)
+										FROM CNTR CN
+									   WHERE CN.TEN_ID = CNTR.TEN_ID
+										 AND CN.CNTR_NO = CNTR.CNTR_NO)) AS CNTR_MAX_REVNO_CNTR_AMT  /* 계약번호 기준 최대차수 계약금액 */
+		FROM CNTR CNTR
+	   INNER JOIN CNTRR CNTRR
+	      ON CNTR.TEN_ID = CNTRR.TEN_ID
+	     AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+	   INNER JOIN STAX STAX
+	      ON STAX.TEN_ID = CNTRR.TEN_ID
+	     AND STAX.CNTR_UUID = CNTRR.CNTR_UUID
+	     AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   INNER JOIN VD VD
+		  ON VD.TEN_ID = CNTR.TEN_ID
+	     AND VD.VD_CD  = CNTR.VD_CD
+	   WHERE CNTR.TEN_ID = #{g.tenant}
+	    <if test="p.cntr_no != null and p.cntr_no != ''">
+		    <bind name="cntr_no" value="'%'+p.cntr_no+'%'"/>
+		    AND UPPER(CNTR.CNTR_NO) LIKE UPPER(#{cntr_no})
+	    </if>
+	    <if test="p.cntr_from_date != null and p.cntr_from_date">
+		    AND CNTR.CNTR_DT &gt;= #{p.cntr_from_date}
+	    </if>
+	    <if test="p.cntr_to_date != null and p.cntr_to_date">
+		    AND CNTR.CNTR_DT <![CDATA[<=]]> #{p.cntr_to_date}
+	    </if>
+	    <if test="p.vd_cd != null and p.vd_cd != ''">
+		    AND CNTRR.VD_CD = #{p.vd_cd}
+	    </if>
+	    <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+		    <bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+		    AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+	    </if>
+	    <if test="p.vd_nm != null and p.vd_nm != ''">
+		    <bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+		    AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm}))
+	    </if>
+		<if test="p.sttpymt_sts_ccd != null and p.sttpymt_sts_ccd != ''">
+			AND STAX.STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+		</if>
+		<if test="p.sttpymt_meth_ccd != null and p.sttpymt_meth_ccd != ''">
+			AND STAX.STTPYMTMETH_CCD = #{p.sttpymt_meth_ccd}
+		</if>
+	    ORDER BY CNTR.CNTR_NO DESC, CNTR.CNTR_REVNO DESC
+    </select>
+    <select id="getBuyerBizRegNo" resultType="string">
+    /* stamptax.getBuyerBizRegNo 구매사 사업자번호 조회 */
+	SELECT BIZREGNO
+	  FROM LOGIC_ORG
+	 WHERE TEN_ID = #{g.tenant}
+	   AND LOGIC_ORG_TYP_CCD = 'COMPANY'
+	   AND LOGIC_ORG_CD = #{g.co_cd}
+    </select>
+	<update id="updateStampTaxSts">
+		/* stmptax.updateStampTaxSts : 인지세 상태 변경*/
+		UPDATE STAX
+		SET   STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+			 , MOD_DTTM = #{g.now}
+		     , MODR_ID = #{g.username}
+		WHERE TEN_ID = #{g.tenant}
+		  AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<update id="updateStampTax">
+		/* stmptax.updateStampTax : 인지세 정보 저장*/
+		UPDATE STAX
+		SET MOD_DTTM = #{g.now}
+		  , MODR_ID = #{g.username}
+		  <if test="p.sttpymt_amt != null and p.sttpymt_amt !=''">
+		  , STTPYMT_AMT = #{p.sttpymt_amt}
+		  </if>
+		<if test="p.sttpymt_no != null and p.sttpymt_no !=''">
+			, STTPYMT_NO = #{p.sttpymt_no}
+		</if>
+		<if test="p.sttpymt_sts_ccd != null and p.sttpymt_sts_ccd !=''">
+			, STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+		</if>
+		<if test="p.sttpymtmeth_ccd != null and p.sttpymtmeth_ccd !=''">
+			, STTPYMTMETH_CCD = #{p.sttpymtmeth_ccd}
+		</if>
+		<if test="p.sttpymt_athg_uuid != null and p.sttpymt_athg_uuid !=''">
+			, STTPYMT_ATHG_UUID = #{p.sttpymt_athg_uuid}
+		</if>
+		<if test="p.sttpymt_ro != null and p.sttpymt_ro !=''">
+			, STTPYMT_RO = #{p.sttpymt_ro}
+		</if>
+		WHERE TEN_ID = #{g.tenant}
+		  AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<select id="findStampTax" resultType="map">
+	/* stamptax.findStampTax : 인지세 정보 조회*/
+		SELECT CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+		     , CNTR.CNTR_STS_CCD
+			 , STAX.STAX_UUID
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT
+			 , STAX.STTPYMT_STS_CCD
+			 , STAX.STTPYMTMETH_CCD
+			 , STAX.STTPYMT_RO
+		     , STAX.STTPYMT_ATHG_UUID
+			 , ECNTR.ECNTR_UUID
+			 , CNTRR.CNTRR_UUID
+		     , CNTRR.CNTRR_TYP_CCD
+			 , STAX.STAX_REFUND_AMT
+		FROM CNTR CNTR
+	    LEFT JOIN ECNTR ECNTR
+		  ON ECNTR.TEN_ID = CNTR.TEN_ID
+		 AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+	   INNER JOIN CNTRR CNTRR
+	      ON CNTRR.TEN_ID = CNTR.TEN_ID
+	     AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+	     AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+	   INNER JOIN STAX STAX
+	      ON STAX.TEN_ID = CNTRR.TEN_ID
+	     AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	   WHERE STAX.TEN_ID = #{g.tenant}
+		 AND STAX.STAX_UUID = #{p.stax_uuid}
+	</select>
+	<insert id="insertStampTax">
+		/* stamptax.insertStampTax : 인지세 생성 */
+		INSERT INTO STAX
+		( TEN_ID
+		, STAX_UUID
+		, CNTR_UUID
+		, CNTRR_UUID
+		, STTPYMT_RO
+		, STAX_AMT
+		, STTPYMT_AMT
+		, STTPYMT_ATHG_UUID
+		, STTPYMT_NO
+		, STTPYMT_STS_CCD
+		, STTPYMTMETH_CCD
+		, STS
+		, RMK
+		, REGR_ID
+		, REG_DTTM
+		, MODR_ID
+		, MOD_DTTM)
+		VALUES ( #{g.tenant}
+		       , #{p.stax_uuid}
+		       , #{p.cntr_uuid}
+		       , #{p.cntrr_uuid}
+		       , #{p.sttpymt_ro}
+		       , #{p.stax_amt}
+		       , #{p.sttpymt_amt}
+		       , #{p.sttpymt_athg_uuid}
+		       , #{p.sttpymt_no}
+		       , #{p.sttpymt_sts_ccd}
+		       , #{p.sttpymtmeth_ccd}
+		       , 'C'
+		       , #{p.rmk}
+		       , #{g.username}
+		       , #{g.now}
+		       , #{g.username}
+		       , #{g.now}
+		       )
+	</insert>
+	<select id="findStampTaxWithCntr" resultType="map">
+	/* stamptax.findStampTaxWithCntr : 계약에서 인지세 정보 조회 */
+	SELECT    CNTR.CNTR_UUID
+			, CNTR.CNTR_AMT
+		FROM CNTR CNTR
+	   WHERE CNTR.TEN_ID = #{g.tenant}
+		 AND CNTR.CNTR_UUID = #{p.cntr_uuid}
+		 AND CNTR.STAX_YN = 'Y'
+	</select>
+	<select id="findContractorInfo" resultType="map">
+		/* stamptax.findContractorInfo : 계약자 정보조회 */
+		SELECT CNTRR.CNTRR_UUID
+		     , CNTRR.CNTRR_TYP_CCD
+		FROM CNTRR CNTRR
+	   INNER JOIN CNTR CNTR
+		  ON CNTR.TEN_ID = CNTRR.TEN_ID
+		 AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+	   WHERE CNTR.TEN_ID = #{g.tenant}
+		 AND CNTR.CNTR_UUID = #{p.cntr_uuid}
+		 AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+	<if test="p.rep_vd_yn != null and p.rep_vd_yn != ''">
+		 AND CNTRR.REP_VD_YN = #{p.rep_vd_yn}
+	</if>
+	</select>
+	<select id="findStampTaxCnt" resultType="int">
+		/* stamptax.findStampTaxCnt : 계약자별 인지세 데이터 건수  */
+		SELECT COUNT(*) cnt
+		FROM CNTRR CNTRR
+		INNER JOIN CNTR CNTR
+		ON CNTR.TEN_ID = CNTRR.TEN_ID
+		AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+		INNER JOIN STAX STAX
+		ON STAX.TEN_ID = CNTRR.TEN_ID
+		AND STAX.CNTR_UUID = CNTRR.CNTR_UUID
+		AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+		WHERE CNTR.TEN_ID = #{g.tenant}
+		AND CNTR.CNTR_UUID = #{p.cntr_uuid}
+		AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+		<if test="p.rep_vd_yn != null and p.rep_vd_yn != ''">
+			AND CNTRR.REP_VD_YN = #{p.rep_vd_yn}
+		</if>
+	</select>
+	<select id="findOfflStampTaxInfo" resultType="map">
+		/* stamptax.findOfflStampTaxInfo : 오프라인 인지세 정보 조회 */
+		SELECT CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+			 , CNTR.CNTR_STS_CCD
+			 , STAX.STAX_UUID
+			 , STAX.STTPYMT_NO
+			 , STAX.STAX_AMT
+			 , STAX.STTPYMT_AMT
+			 , STAX.STTPYMT_STS_CCD
+			 , STAX.STTPYMTMETH_CCD
+			 , STAX.STTPYMT_RO
+			 , STAX.STTPYMT_ATHG_UUID
+			 , STAX.STAX_REFUND_AMT
+			 , CNTRR.CNTRR_UUID
+			 , CNTRR.CNTRR_TYP_CCD
+		FROM CNTR CNTR
+			     INNER JOIN CNTRR CNTRR
+			                ON CNTRR.TEN_ID = CNTR.TEN_ID
+				                AND CNTRR.CNTR_UUID = CNTR.CNTR_UUID
+				                AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+			     INNER JOIN STAX STAX
+			                ON STAX.TEN_ID = CNTRR.TEN_ID
+				                AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+		WHERE STAX.TEN_ID = #{g.tenant}
+		  AND STAX.STAX_UUID = #{p.stax_uuid}
+	</select>
+	<update id="saveStampTaxFile">
+		/* stamptax.saveStampTaxFile : 오프라인 인지세 파일 저장 */
+		UPDATE STAX
+		SET STTPYMT_NO = #{p.sttpymt_no}
+		  , STTPYMT_STS_CCD = #{p.sttpymt_sts_ccd}
+		  , STTPYMT_AMT = #{p.sttpymt_amt}
+		  , STTPYMT_ATHG_UUID = #{p.sttpymt_athg_uuid}
+		  <if test="p.stax_refund_amt != null and p.stax_refund_amt !=''">
+			  , STAX_REFUND_AMT = #{p.stax_refund_amt}
+		  </if>
+		  , STS = 'U'
+		  , MOD_DTTM = #{g.now}
+		  , MODR_ID = #{g.username}
+		WHERE TEN_ID = #{g.tenant}
+		  AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<select id="findPreContractCnt" resultType="int">
+		/* stamptax.findPreContractCnt : 이전 계약 카운트 */
+		SELECT COUNT(*)
+		  FROM CNTR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND CNTR_NO = (SELECT C.CNTR_NO
+			 			    FROM CNTR C
+			 			   WHERE C.TEN_ID = #{g.tenant}
+						     AND C.CNTR_UUID = #{p.cntr_uuid})
+		   AND CNTR_REVNO <![CDATA[<]]> CAST(#{p.cntr_revno} AS INT)
+		   AND STS  <![CDATA[<>]]> 'D'
+	</select>
+	<select id="findListPreContractInfo" resultType="map">
+		/* stamptax.findListPreContractInfo : 이전 계약정보 조회 */
+		SELECT CNTR.TEN_ID
+			 , CNTR.CNTR_UUID
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+		     , CNTR.CNTR_AMT
+			 , STAX.STAX_UUID
+			 , STAX.STAX_AMT
+			 , COALESCE(STAX.STTPYMT_AMT, 0) AS STTPYMT_AMT
+			 , COALESCE(CAST(STAX.STAX_REFUND_AMT AS INT), 0) AS STAX_REFUND_AMT
+		 FROM CNTR CNTR
+		 LEFT JOIN STAX STAX
+           ON CNTR.TEN_ID = STAX.TEN_ID
+          AND CNTR.CNTR_UUID = STAX.CNTR_UUID
+		WHERE CNTR.TEN_ID = #{g.tenant}
+		  AND CNTR.CNTR_NO = (SELECT C.CNTR_NO
+						        FROM CNTR C
+						       WHERE C.TEN_ID = #{g.tenant}
+						         AND C.CNTR_UUID = #{p.cntr_uuid})
+		  AND CNTR.CNTR_REVNO <![CDATA[<]]> CAST(#{p.cntr_revno} AS INT)
+		ORDER BY CNTR_REVNO DESC
+	</select>
+	<select id="findListStampTaxPayHistory" resultType="map">
+		/* stamptax.findListStampTaxPayHistory : 인지세 납부 이력 조회 */
+		SELECT STAX.TEN_ID
+			 , STAX.STAX_UUID
+			 , STAX.CNTR_UUID
+			 , STAX.STTPYMT_AMT 	        /* 납부한 금액 */
+			 , STAX.STAX_REFUND_AMT         /* 환불받은 금액 */
+			 , CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_NM
+			 , CNTR.CNTR_AMT
+			 , USR.USR_NM
+			 , CNTRR.CNTRR_TYP_CCD
+	      FROM CNTR CNTR
+	     INNER JOIN CNTRR CNTRR
+	        ON CNTR.TEN_ID = CNTRR.TEN_ID
+		   AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+		  LEFT JOIN STAX STAX
+	        ON STAX.TEN_ID = CNTRR.TEN_ID
+	       AND STAX.CNTR_UUID = CNTRR.CNTR_UUID
+	       AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+	      LEFT JOIN USR USR
+	        ON CNTRR.TEN_ID = USR.TEN_ID
+		   AND CNTRR.USR_ID = USR.USR_ID
+		 WHERE CNTR.TEN_ID = #{g.tenant}
+		   AND CNTR.CNTR_NO = (SELECT C.CNTR_NO FROM CNTR C WHERE C.TEN_ID = #{g.tenant} AND C.CNTR_UUID = #{p.cntr_uuid})
+		   AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+		 ORDER BY CNTR.CNTR_NO, CNTR.CNTR_REVNO
+	</select>
+	<select id="findTotalPreStampTaxPay" resultType="map">
+	/* stamptax.findTotalPreStampTaxPay : 이전 계약 인지세 기납부 총액 및 환불 총액 조회 */
+		SELECT SUM(COALESCE(STAX.STTPYMT_AMT, 0)) AS PRE_TOTAL_STTPYMT_AMT
+			 , SUM(COALESCE(CAST(STAX.STAX_REFUND_AMT AS INT), 0)) AS PRE_TOTAL_REFUND_AMT
+		  FROM STAX STAX
+		 INNER JOIN CNTR CNTR
+		    ON STAX.TEN_ID = CNTR.TEN_ID
+		   AND STAX.CNTR_UUID = CNTR.CNTR_UUID
+		 INNER JOIN CNTRR CNTRR
+		    ON CNTR.TEN_ID = CNTRR.TEN_ID
+		   AND CNTR.CNTR_UUID = CNTRR.CNTR_UUID
+		   AND STAX.CNTRR_UUID = CNTRR.CNTRR_UUID
+		 WHERE STAX.TEN_ID = #{g.tenant}
+		   AND CNTRR.CNTRR_TYP_CCD = #{p.cntrr_typ_ccd}
+		   AND CNTR.CNTR_NO = #{p.cntr_no}
+		   AND CNTR.CNTR_REVNO <![CDATA[<]]> CAST(#{p.cntr_revno} AS INT)
+	</select>
+	<update id="saveRefundStampTax">
+	/* stamptax.saveRefundStampTax : 인지세 환불금액 저장 */
+		UPDATE STAX
+		   SET STS = 'U'
+		<choose>
+			<when test="p.stax_refund_amt != null and p.stax_refund_amt !=''">
+		     , STAX_REFUND_AMT = #{p.stax_refund_amt}
+			</when>
+			<otherwise>
+		     , STAX_REFUND_AMT = NULL
+			</otherwise>
+		</choose>
+	     WHERE TEN_ID = #{g.tenant}
+		   AND STAX_UUID = #{p.stax_uuid}
+	</update>
+	<select id="findPreRefundInfo" resultType="map">
+		/* stamptax.findPreRefundInfo : 인지세 환불정보 조회 */
+		SELECT STAX_UUID
+		     , CNTR_UUID
+			 , STAX_AMT
+			 , COALESCE(STTPYMT_AMT, 0) AS STTPYMT_AMT
+			 , COALESCE(CAST(STAX_REFUND_AMT AS INT), 0) AS STAX_REFUND_AMT
+	      FROM STAX
+         WHERE TEN_ID = #{g.tenant}
+           AND STAX_UUID = #{p.stax_uuid}
+	</select>
+	<select id="findListStaxByCntrNo" resultType="Map">
+	/* stamptax.findListStaxByCntrNo : 이전 인지세 계약차수 목록 조회 */
+		SELECT CNTR.CNTR_REVNO
+		  FROM CNTR
+		 INNER JOIN STAX
+		   ON STAX.TEN_ID = CNTR.TEN_ID
+		  AND STAX.CNTR_UUID = CNTR.CNTR_UUID
+		  AND STAX.STS <![CDATA[<>]]> 'D'
+		WHERE CNTR.TEN_ID = #{g.tenant}
+		  AND CNTR.CNTR_NO = #{p.cntr_no}
+		  AND CNTR.CNTR_REVNO <![CDATA[<>]]> (SELECT MAX(C.CNTR_REVNO)
+											    FROM CNTR C
+											   INNER JOIN STAX S
+												  ON S.TEN_ID = C.TEN_ID
+												 AND S.CNTR_UUID = C.CNTR_UUID
+											   WHERE C.TEN_ID = #{g.tenant}
+											     AND C.CNTR_NO = #{p.cntr_no})
+		  AND CNTR.STS <![CDATA[<>]]> 'D'
+		ORDER BY CNTR_REVNO DESC
+	</select>
+	<select id="findTotalStampTaxPay" resultType="map">
+	/* stamptax.findTotalStampTaxPay : 기납부 총액 및 기환불 총액 조회 */
+		SELECT SUM(COALESCE(STAX.STTPYMT_AMT, 0)) AS TOTAL_STTPYMT_AMT
+			 , SUM(COALESCE(CAST(STAX.STAX_REFUND_AMT AS INT), 0)) AS TOTAL_STAX_REFUND_AMT
+		  FROM STAX STAX
+		 INNER JOIN CNTR CNTR
+		    ON CNTR.TEN_ID = STAX.TEN_ID
+		   AND CNTR.CNTR_UUID = STAX.CNTR_UUID
+		 WHERE CNTR.TEN_ID = #{g.tenant}
+		   AND CNTR.CNTR_NO = (SELECT C.CNTR_NO FROM CNTR C WHERE C.TEN_ID = #{g.tenant} AND C.CNTR_UUID = #{p.cntr_uuid})
+		   AND CNTR.STS <![CDATA[<>]]> 'D'
+	</select>
+	<select id="findMaxRevNoStampTaxAmtByCntrNo" resultType="map">
+	/* stamptax.findMaxRevNoStampTaxAmtByCntrNo : 최종차수 계약금액 조회 */
+		SELECT CNTR.CNTR_NO
+			 , CNTR.CNTR_REVNO
+			 , CNTR.CNTR_AMT
+		  FROM CNTR
+		 WHERE CNTR.TEN_ID = #{g.tenant}
+		   AND CNTR.CNTR_NO = #{p.cntr_no}
+		   AND CNTR.CNTR_REVNO = (SELECT MAX(C.CNTR_REVNO)
+								    FROM CNTR C
+								   WHERE C.TEN_ID = #{g.tenant}
+								     AND C.CNTR_NO = #{p.cntr_no})
+		   AND CNTR.STS <![CDATA[<>]]>  'D'
+	</select>
+	<select id="findMaxStaxCntrRevNoByCntrUuid" resultType="int">
+	/* stamptax.findMaxStaxCntrRevNoByCntrUuid : 계약 최종차수 조회 */
+		SELECT MAX(CNTR_REVNO) AS MAX_CNTR_REVNO
+		  FROM CNTR CNTR
+		 INNER JOIN STAX
+		    ON STAX.TEN_ID = CNTR.TEN_ID
+		   AND STAX.CNTR_UUID = CNTR.CNTR_UUID
+		   AND STAX.STS <![CDATA[<>]]> 'D'
+		 WHERE CNTR.TEN_ID = #{g.tenant}
+		   AND CNTR.CNTR_NO = (SELECT C.CNTR_NO
+							     FROM CNTR C
+						        WHERE C.TEN_ID = #{g.tenant}
+						          AND C.CNTR_UUID = #{p.cntr_uuid})
+		   AND CNTR.STS <![CDATA[<>]]> 'D'
+	</select>
+	<select id="findCntrListForStampTax" resultType="map">
+	/* stamptax.findCntrListForStampTax : 인지세 대상 계약건 조회 */
+	SELECT T.* FROM (
+		        SELECT CNTR.OORG_CD
+			         , CNTR.CNTR_UUID
+			         , CNTR.CNTR_NO
+			         , CNTR.CNTR_REVNO
+			         , CNTR.CNTR_NM
+			         , CNTR.CNTR_AMT
+			         , CNTR.CNTR_SGNMETH_CCD
+			         , CNTR.CNTR_STS_CCD
+			         , VD.ERP_VD_CD
+			         , VD.BIZREGNO
+			         , VD.CTRY_CCD
+			         , CNTR.CNTR_DT
+			         , CNTR.CNTR_ST_DT
+			         , CNTR.CNTR_EXP_DT
+			         , CASE WHEN 'ko_KR' = #{g.locale} THEN US.USR_NM ELSE US.USR_NM_EN END AS CNTR_PIC_NM
+			         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+		             , VD.VD_NM_EN
+		             , CNTR.TEN_ID
+		             , CNTR.CNTR_TYP_CCD
+			         , (SELECT C.CNTR_AMT
+			                    FROM CNTR C
+			                    WHERE C.TEN_ID = CNTR.TEN_ID
+				                  AND C.CNTR_NO = CNTR.CNTR_NO
+				                  AND C.CNTR_REVNO = (SELECT MAX(CN.CNTR_REVNO)
+				                                      FROM CNTR CN
+				                                      WHERE CN.TEN_ID = CNTR.TEN_ID
+						                                AND CN.CNTR_NO = CNTR.CNTR_NO)) AS CNTR_MAX_REVNO_CNTR_AMT   /* 계약번호 기준 최대차수 계약금액 */
+		        FROM CNTR CNTR
+		   LEFT JOIN ECNTR ECNTR
+		       ON ECNTR.TEN_ID = CNTR.TEN_ID
+		       AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+		   LEFT OUTER JOIN USR US
+		       ON US.TEN_ID = CNTR.TEN_ID
+			  AND US.USR_ID = CNTR.CNTR_PIC_ID
+		INNER JOIN VD VD
+		        ON VD.TEN_ID = CNTR.TEN_ID
+		       AND VD.VD_CD  = CNTR.VD_CD) T
+	WHERE T.CNTR_STS_CCD = 'CNTR_CMPLD'
+	  AND CAST(T.CNTR_AMT AS INT) &gt; 10000000
+	  AND T.CTRY_CCD = 'KR'
+	  AND NOT EXISTS(SELECT 1
+	                 FROM STAX STAX
+	                 WHERE STAX.TEN_ID = T.TEN_ID
+	                   AND STAX.CNTR_UUID = T.CNTR_UUID)
+		<if test="p.cntr_no != null and p.cntr_no != ''">
+			<bind name="cntr_no" value="'%'+p.cntr_no+'%'"/>
+			AND UPPER(T.CNTR_NO) LIKE UPPER(#{cntr_no})
+		</if>
+		<if test="p.cntr_revno != null and p.cntr_revno != ''">
+			AND T.CNTR_REVNO = CAST(#{p.cntr_revno} AS INT)
+		</if>
+		<if test="p.cntr_from_date != null and p.cntr_from_date">
+			AND T.CNTR_DT &gt;= #{p.cntr_from_date}
+		</if>
+		<if test="p.cntr_to_date != null and p.cntr_to_date">
+			AND T.CNTR_DT <![CDATA[<=]]> #{p.cntr_to_date}
+		</if>
+		<if test="p.vd_cd != null and p.vd_cd != ''">
+			AND T.VD_CD = #{p.vd_cd}
+		</if>
+		<if test="p.cntr_sgnmeth_ccd != null and p.cntr_sgnmeth_ccd != ''">
+			AND T.CNTR_SGNMETH_CCD = #{p.cntr_sgnmeth_ccd}
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+			<bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+			AND UPPER(T.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm != ''">
+			<bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+			AND (UPPER(T.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(T.VD_NM_EN) LIKE UPPER(#{vdNm}))
+		</if>
+	</select>
+	<delete id="deleteStampTax">
+	/* stamptax.deleteStampTax : 인지세 삭제 */
+	DELETE FROM STAX
+	WHERE TEN_ID = #{g.tenant}
+	  AND STAX_UUID = #{p.stax_uuid}
+	</delete>
+</mapper>

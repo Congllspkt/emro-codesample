@@ -1,0 +1,504 @@
+<dom-module id="es-qta-detail">
+	<!--
+/**
+ *
+ *	@description : 
+ *  <pre>
+ * </pre>
+ * @author : user
+ * @FileName : es-qta-detail.html
+ * @Since 오후 4:34
+ * @변경이력 : [오후 4:34] user 최초작성
+ */
+-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findQta"
+				 url="findQta.do"
+				 body="{{qtaData}}"
+				 on-response="completeFindQta">
+		</sc-ajax>
+		
+		<sc-ajax id="saveDraftQta"
+				 url="saveDraftQta.do"
+				 on-response="completeSaveQta">
+		</sc-ajax>
+		<sc-ajax id="directQta"
+				 url="directQta.do"
+				 body="{{qtaData}}"
+				 on-response="completeDirectQta">
+		</sc-ajax>
+		<sc-ajax id="deleteQta"
+				 url="deleteQta.do"
+				 on-response="completeDeleteQta">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-request-group init>
+			<!-- 사용자 품목 운영조직 조회 -->
+			<sc-ajax url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>
+				<!-- 쿼터등록유형  -->
+				<sc-code code="P246" value="{{codes.P246}}"></sc-code>
+				<!-- 쿼터율 합계 -->
+				<sc-code code="P247" value="{{codes.P247}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-a, auth-s, auth-r"></cc-auth-checker>
+		<cc-page-title-bar title-text="쿼터 작성">
+			<sc-button text="저장" on-click="onTempSave" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="등록" on-click="onSaveDirect" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="결재 요청" on-click="onSaveApproval" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('deleteEditable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		<div class="flex page">
+			<cc-form-panel title-text="일반 정보" collapsible="true" validation-group="qtaData">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{qtaData.oorg_cd}}" selected-index="0" placeholder="필수" disabled="true"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="쿼터 번호"></sc-label>
+					<sc-text-field class="w-150" value="{{qtaData.qta_no}}" readonly></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{qtaData.qta_tit}}" required="true" readonly="[[!formula('editable')]]" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자"></sc-label>
+					<sc-text-field value="{{qtaData.qta_crtr_nm}}" readonly></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자 전화"></sc-label>
+					<sc-text-field value="{{qtaData.qta_crtr_tel}}" readonly="[[!formula('editable')]]" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="작성자 부서"></sc-label>
+					<sc-text-field value="{{qtaData.qta_crtr_dept_nm}}" readonly>
+					</sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="적용 일자"></sc-label>
+					<sc-date-field class="w-110" min-date="{{nowDate}}" value="{{qtaData.appl_dt}}" default-value="0d" string-date="true" required="true" readonly="[[!formula('editable')]]"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field value="{{qtaData.qta_rmk}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="upload" class="h-200" value="{{qtaData.athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			<sc-grid id="gridPanel" class="h-500" editable="[[formula('editable')]]" use-dummy="false" use-state="true"
+					 use-selection="[[formula('editable')]]" on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar>
+					<!--<sc-button text="삭제"	on-click="onDeleteRows"	hidden="[[!formula('editable')]]" auth-s></sc-button>-->
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="qta_lno" header-text="항번" width="50" text-align="center" editable="false" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_itemcat_lvl_1_nm" header-text="품목분류1 명" width="100" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="disp_itemcat_lvl_2_nm" header-text="품목분류2 명" width="100" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="disp_itemcat_lvl_3_nm" header-text="품목분류3 명" width="100" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="disp_itemcat_lvl_4_nm" header-text="품목분류4 명" width="100" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="item_cd" header-text="품목 코드" width="100" mergeable="true" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="200" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="uom_ccd" header-text="UOM" width="100" editable="false" mergeable="true" merge-based-field="item_cd"></sc-data-column>
+					<sc-data-column data-field="tot_qtarate" header-text="쿼터율 합계" width="150" editable="false" mergeable="true" merge-based-field="item_cd" data-type="number" max-value="100" validator-function="gridValidatorFn"></sc-data-column>
+					<sc-data-column data-field="vd_cd" header-text="협력사 코드" width="100" editable="false"></sc-data-column>
+					<sc-data-column data-field="disp_vd_nm" header-text="협력사 명" width="120" text-align="left" editable="false"></sc-data-column>
+					<sc-data-column data-field="qtarate" header-text="쿼터율(%)" width="150" editable="true" required="true" data-type="number" max-value="100" validator-function="gridValidatorFn"></sc-data-column>
+					<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" text-align="center" editable="false" display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="moq" header-text="최소 주문 수량(MOQ)" width="150" text-align="right" data-type="number" format-type="number" editable="false" required="true" validator-function="gridValidatorFn"></sc-data-column>
+					<sc-data-column data-field="ctq" header-text="포장 수량 단위(CTQ)" width="150" text-align="right" data-type="number" format-type="number" editable="false" required="true" validator-function="gridValidatorFn"></sc-data-column>
+					<sc-data-column data-field="dlvy_ldtm" header-text="리드타임(LT)" width="150" text-align="right" data-type="number" format-type="integer" editable="true"></sc-data-column>
+					<sc-data-column data-field="cntr_no" header-text="계약 번호" width="120" editable="false"></sc-data-column>
+					<sc-data-column data-field="cntr_revno" header-text="차수" width="120" editable="false"></sc-data-column>
+					<sc-data-column data-field="uprccntr_uprc" header-text="단가계약 단가" width="100" text-align="right" data-type="number" format-type="price" editable="false"></sc-data-column>
+					<sc-date-column data-field="uprc_efct_st_dt" header-text="단가계약 시작 일자" width="80" editable="false"></sc-date-column>
+					<sc-date-column data-field="uprc_efct_exp_dt" header-text="단가계약 만료 일자" width="80" editable="false"></sc-date-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+					<sc-grid-field data-field="qta_uuid"></sc-grid-field>
+					<sc-grid-field data-field="qta_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="cntr_uuid"></sc-grid-field>
+					<sc-grid-field data-field="cntr_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_info_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_item_lno"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_uuid"></sc-grid-field>
+					<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+					<sc-grid-field data-field="vd_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_oorg_cd"></sc-grid-field>
+					<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+				</sc-grid-fields>
+				</sc-grid-paging>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-qta-detail',
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							curCcd: [],
+						}
+					},
+					reset: false
+				},
+				qtaData: {
+					type: Object,
+					value: function() {
+						var currentUser = SCSessionManager.currentUser;
+						return {
+							qta_sts_ccd: "CRNG",
+							saveType: "",
+							qta_crtr_id: currentUser.usr_id,
+							qta_crtr_nm: currentUser.disp_usr_nm,
+							qta_crtr_dept_nm: currentUser.disp_dept_nm,
+							qta_crtr_dept_cd: currentUser.dept_cd,
+							qta_crtr_tel: currentUser.phone_no
+						};
+					}
+				}
+			},
+			formulas: {
+				editable: function() {
+					return (["CRNG", "APVL_RET", "APVL_CNCL"].indexOf(this.qtaData.qta_sts_ccd) > -1);
+				},
+				deleteEditable: function() {
+					return UT.isNotEmpty(this.qtaData.qta_uuid) && this.formula("editable");
+				}
+			},
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+			},
+			load: function(param) {
+				var me = this;
+				if(UT.isNotEmpty(param.qta_uuid)) {
+					me.set("qtaData", param);
+					me.findQtaDetail();
+				} else {
+					var firstRow = param[0];
+					me.set("qtaData.oorg_cd", firstRow.oorg_cd);
+					me.onFindDefaultDataByQtaItems(param);
+				}
+			},
+			findQtaDetail: function() {
+				var me = this;
+				UT.request(me.$.findQta);
+			},
+			completeFindQta: function(e, res) {
+				var me = this, result = res.response;
+				me.set("qtaData", result.qtaData);
+				me.$.gridPanel.setDataProvider(result.qtaItems);
+				me.applyFormula();
+			},
+			onFindDefaultDataByQtaItems: function(param) {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				// 품목
+				var items = param;
+				if(UT.isNotEmpty(items)) {
+					var title = items[0].disp_item_nm;
+					if(items.length > 1) {
+						title = me.translate("STD.N3100", null, title, items.length - 1);
+					}
+					for(var i = 0, len = items.length; i < len; i++) {
+						var lno = (10 * (i + 1));
+						items[i]['qta_lno'] = lno;
+					}
+					me.set("qtaData.qta_tit", title);
+					provider.addItems(items);
+				}
+				me.applyFormula();
+			},
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item edit end 이벤트
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+				
+				me.rowIndex = item.rowIndex;
+				
+				if(item.dataField === 'qtarate') {
+					me.totQtaCalculate(data);
+				}
+			},
+			totQtaCalculate: function(rowData) {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var totQta = new BigNumber(0);
+				var itemCd = rowData["item_cd"];
+				var uuid = rowData["uprccntr_item_uuid"];
+				var items = provider.getItems();
+				var validateIndexs = [];
+				
+				for(var i = 0, len = items.length; i < len; i++) {
+					if(itemCd === items[i]["item_cd"]) {
+						var qtarate = new BigNumber(items[i]["qtarate"] || 0);
+						totQta = totQta.plus(qtarate);
+					}
+				}
+				
+				provider.setItemAtBatch(true, function(index, data) {
+					if(itemCd === data["item_cd"]) {
+						validateIndexs.push(index);
+						return {tot_qtarate: totQta};
+					}
+				});
+				me.$.gridPanel.validateRows(validateIndexs);
+			},
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me = this, value = data[dataField];
+				
+				if(dataField === "tot_qtarate") {				// 쿼터율 합계
+					if(UT.isEmpty(value) || 100 != value) {
+						return me.translate("STD.QTAR0001");		// 쿼터율 합계는 100이여야합니다.
+					}
+				} else if(dataField === "moq") {
+					if(UT.isEmpty(value) || value < data["moq"] || 0 >= data["moq"]) {
+						return me.translate("STD.E1001", null, me.translate(headerText), me.translate("최소주문수량(MOQ)"));
+					}
+				} else if(dataField === "ctq") {
+					if(UT.isEmpty(value) || value < data["ctq"] || 0 >= data["ctq"]) {
+						return me.translate("STD.E1001", null, me.translate(headerText), me.translate("포장수량단위(CTQ)"));
+					}
+				} else if(dataField === "qtarate") {
+					if(UT.isEmpty(value) || value < data["qtarate"] || 0 >= data["qtarate"]) {
+						return me.translate("STD.E1001", null, me.translate(headerText), me.translate("쿼터율"));
+					}
+				}
+				return true;
+			},
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			isValid: function() {
+				var me = this;
+				if(!me.validate('qtaData')) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				//그리드 유효성검사
+				if(!me.$.gridPanel.validate()) {	//실패
+					UT.alert("STD.N1102");
+					return false;
+				}
+				
+				if(!me.validApplyDt()) {
+					UT.alert("STD.QTA1032"); //적용 일자는 최소 단가계약 만료일자가 넘어갈 수 없습니다.
+					return false;
+				}
+				return true;
+			},
+			validApplyDt: function() {
+				var me                                          = this, provider                         = me.$.gridPanel.getDataProvider(),
+					applDt = me.get("qtaData.appl_dt"), isValid = true;
+				var allItems = provider.getItems();
+				for(var i = 0, len = allItems.length; i < len; i++) {
+					if(allItems[i]["uprc_efct_exp_dt"] < applDt) {
+						isValid = false;
+						break;
+					}
+				}
+				return isValid;
+			},
+			onTempSave: function() {
+				var me = this;
+				
+				//유효성검사
+				if(!me.isValid()) {
+					return;
+				}
+				me.set("qtaData.saveType", "template");
+				me.onSave();
+			},
+			onSaveDirect: function() {
+				var me = this;
+				
+				//유효성검사
+				if(!me.isValid()) {
+					return;
+				}
+				me.set("qtaData.saveType", "directQta");
+				me.onSave();
+			},
+			onSaveApproval: function() {
+				var me = this;
+				//유효성검사
+				if(!me.isValid()) {
+					return;
+				}
+				me.set("qtaData.saveType", "approval");
+				me.onSave(
+						me.$.saveDraft,
+						"STD.N2300", // 결재 상신하시겠습니까?
+						function() {
+							me.set("qtaData.openedApproval", false);
+						}
+				);
+				UT.confirm("STD.N2300", function() { // 결재 상신하시겠습니까?
+					// 결재 팝업
+					UT.popupApproval(me, {
+								task_uuid: me.get("qtaData.qta_uuid"), apvl_typ_ccd: "QTA", apvl_tit: me.get("qtaData.qta_tit"),
+								qtaData: me.get("qtaData")
+							},
+							function(aprvSts) {
+								if(aprvSts === "PRGSG" || aprvSts === "APVD") {	// 결재상신 시
+									me.onClose();
+								} else {				// 결재 임시저장 시
+									me.onFindInfo();
+								}
+							});
+				});
+			},
+			onSave: function() {
+				var me = this;
+				
+				me.$.upload.upload().then(function() {
+					var qtaData = me.get("qtaData");
+					var provider = me.$.gridPanel.getDataProvider();
+					
+					me.$.saveDraftQta.body = {
+						qtaData: qtaData,
+						insertItems: provider.getNewItems(),
+						updateItems: provider.getUpdateItems(),
+						deleteItems: provider.getRemoveItems()
+					};
+					UT.request(me.$.saveDraftQta);
+				});
+			},
+			completeSaveQta: function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					var uuId = lastResponse.resultData.qta_uuid;
+					me.set("searchParam.qta_uuid", uuId);
+					me.set("qtaData.qta_uuid", uuId);
+					
+					var saveType = me.qtaData.saveType;
+					if(saveType === 'approval') {
+						me.findQtaDetail();				//상세조회
+						me.onShowPopupApproval(qtaId);	//결재요청 팝업 호출
+					} else if(saveType === 'directQta') {
+						me.directQta();				//즉시 요청
+					} else {
+						UT.completeAlert();			//"요청을 완료 하였습니다"
+						me.findQtaDetail();				//상세조회
+					}
+				} else if(lastResponse.resultStatus === "INVALID") {
+				} else {
+					me.failureMessageHandler(lastResponse);
+				}
+			},
+			directQta: function() {
+				var me = this;
+				UT.request(me.$.directQta);
+			},
+			// 즉시 요청 후 handler
+			completeDirectQta: function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					UT.completeAlert();
+					me.findQtaDetail();	//상세조회
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			onDeleteRows: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+						
+						me.calcurateQtarate();
+					});
+				}
+			},
+			calcurateQtarate: function() {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				
+				var items = provider.getItems();
+				var len = items.length;
+				
+				var lno = 0;
+				provider.setItemAtBatch(true, function(index, data) {
+					lno += 10;
+					var totQtarate = 0;
+					for(var j = 0; j < len; j++) {
+						if(items[j].item_cd === data.item_cd && items[j].oorg_cd === data.oorg_cd && items[j].item_oorg_cd === data.item_oorg_cd) {
+							totQtarate = (totQtarate + items[j].qtarate);
+						}
+					}
+					
+					return {
+						"qta_lno": lno,
+						"tot_qtarate": totQtarate
+					}
+				});
+			},
+			onDelete: function() {
+				var me = this;
+				UT.confirm("STD.N1300", function() {
+					me.$.deleteQta.body = {
+						deleteQta: me.get("qtaData")
+					}
+					UT.request(me.$.deleteQta);
+				});
+			},
+			completeDeleteQta: function(e, res) {
+				var me = this;
+				var response = res.response;
+				if(response.success) {
+					UT.completeAlert();
+					me.onClose();
+				}
+			},
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+		});
+	</script>
+</dom-module>

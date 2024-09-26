@@ -1,0 +1,441 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="gr-eval-setup">
+	<select id="findListGemt" resultType="map">
+		SELECT GEMT_UUID
+		     , OORG_CD
+		     , GEMT_CD
+		     , USE_YN
+		     , RMK
+		  FROM GEMT
+		 WHERE TEN_ID = #{g.tenant}
+		   <if test="p.oorg_cd != null">
+		       AND GEMT.OORG_CD = #{p.oorg_cd}
+		   </if>
+		   <if test="p.gemt_cd != null">
+		       AND GEMT.GEMT_CD = #{p.gemt_cd}
+		   </if>
+		   <if test="p.use_yn != null">
+		       AND GEMT.USE_YN = #{p.use_yn}
+		   </if>
+	</select>
+	<insert id="insertGemt">
+		INSERT INTO GEMT (
+			TEN_ID
+			, GEMT_UUID
+			, OORG_CD
+			, GEMT_CD
+			, USE_YN
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gemt_uuid}
+			, #{p.oorg_cd}
+			, #{p.gemt_cd}
+			, #{p.use_yn}
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGemt">
+		UPDATE GEMT
+		   SET USE_YN = #{p.use_yn}
+		     , RMK = #{p.rmk}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMT_UUID = #{p.gemt_uuid}
+	</update>
+	<delete id="deleteGemt">
+		DELETE
+		  FROM GEMT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMT_UUID = #{p.gemt_uuid}
+	</delete>
+	<select id="isExistsGemtByOorgAndCode" resultType="boolean">
+		SELECT CASE WHEN COUNT(GEMT_CD) = 0 THEN 0
+		            ELSE 1
+		        END
+		  FROM GEMT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND OORG_CD = #{p.oorg_cd}
+		   AND GEMT_CD = #{p.gemt_cd}
+	</select>
+	<select id="isExistGemtAtGeg" resultType="boolean">
+		SELECT CASE WHEN COUNT(GEMT_UUID) = 0 THEN 0
+		            ELSE 1
+		        END
+		  FROM GEG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMT_UUID IN
+		   <foreach close=")" collection="p.deleteList" item="gemt" open="(" separator=",">
+		       #{gemt.gemt_uuid}
+		   </foreach>
+	</select>
+	<select id="isExistGemtAtGemg" resultType="boolean">
+		SELECT CASE WHEN COUNT(GEMT_UUID) = 0 THEN 0
+		            ELSE 1
+		        END
+		  FROM GEMG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMT_UUID IN
+		   <foreach close=")" collection="p.deleteList" item="gemt" open="(" separator=",">
+		       #{gemt.gemt_uuid}
+		   </foreach>
+	</select>
+	<select id="findListOorgGemt" resultType="map">
+		SELECT GEMT.GEMT_UUID
+		     , GEMT.OORG_CD
+		     , GEMT.GEMT_CD
+		     , DTLCD_MULTLANG.DTLCD_NM AS GEMT_NM
+		  FROM GEMT
+		 INNER JOIN DTLCD
+		    ON DTLCD.TEN_ID = GEMT.TEN_ID
+		   AND DTLCD.DTLCD = GEMT.GEMT_CD
+		 INNER JOIN DTLCD_MULTLANG
+		    ON DTLCD_MULTLANG.TEN_ID = DTLCD.TEN_ID
+		   AND DTLCD_MULTLANG.CCD    = DTLCD.CCD
+		   AND DTLCD_MULTLANG.DTLCD  = DTLCD.DTLCD
+		 WHERE GEMT.TEN_ID = #{g.tenant}
+		   AND GEMT.USE_YN = 'Y'
+		   AND DTLCD.CCD = 'P239'
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		   <if test="p.oorg_cd != null">
+		       AND GEMT.OORG_CD = #{p.oorg_cd}
+		   </if>
+		 ORDER BY DTLCD.DTLCD_SORT
+	</select>
+	<select id="findListGemg" resultType="map">
+		SELECT GEMG.GEMG_UUID
+		     , GEMG.OORG_CD
+		     , GEMG.GEMT_UUID
+		     , GEMT.GEMT_CD
+		     , GEMG.GEMG_CD
+		     , GEMG.GEMG_NM
+		     , GEMG.GEMG_NM_EN
+		     , CASE WHEN 'en_US' = #{g.locale} THEN GEMG.GEMG_NM_EN
+		            ELSE GEMG.GEMG_NM
+		        END AS DISP_GEMG_NM
+		     , GEMG.RMK
+		  FROM GEMG
+		 INNER JOIN GEMT
+		    ON GEMT.TEN_ID = GEMG.TEN_ID
+		   AND GEMT.GEMT_UUID = GEMG.GEMT_UUID
+		   AND GEMT.OORG_CD = GEMG.OORG_CD
+		 WHERE GEMG.TEN_ID = #{g.tenant}
+		   AND GEMT.USE_YN = 'Y'
+		   AND GEMG.STS != 'D'
+		   <if test="p.oorg_cd != null">
+		       AND GEMG.OORG_CD = #{p.oorg_cd}
+		   </if>
+		   <if test="p.gemt_uuid != null">
+		       AND GEMG.GEMT_UUID = #{p.gemt_uuid}
+		   </if>
+		   <if test="p.gemt_cd != null and p.gemt_cd != ''">
+		       AND GEMT.GEMT_CD = #{p.gemt_cd}
+		   </if>
+		   <if test="p.gemg_cd != null and p.gemg_cd != ''">
+		       <bind name="gemgCdPtn" value="'%' + p.gemg_cd + '%'"/>
+		       AND UPPER(GEMG.GEMG_CD) LIKE UPPER(#{gemgCdPtn})
+		   </if>
+		   <if test="p.gemg_nm != null and p.gemg_nm != ''">
+		       <bind name="gemgNmPtn" value="'%' + p.gemg_nm + '%'"/>
+		       AND UPPER(GEMG.GEMG_NM) LIKE UPPER(#{gemgNmPtn})
+		   </if>
+		 ORDER BY GEMT.GEMT_CD, GEMG.GEMG_CD
+	</select>
+	<insert id="insertGemg">
+		INSERT INTO GEMG (
+			TEN_ID
+			, GEMG_UUID
+			, GEMT_UUID
+			, GEMG_CD
+			, GEMG_NM
+			, GEMG_NM_EN
+			, OORG_CD
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gemg_uuid}
+			, #{p.gemt_uuid}
+			, #{p.gemg_cd}
+			, #{p.gemg_nm}
+			, #{p.gemg_nm_en}
+			, #{p.oorg_cd}
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGemg">
+		UPDATE GEMG
+		   SET GEMT_UUID = #{p.gemt_uuid}
+		     , GEMG_CD = #{p.gemg_cd}
+		     , GEMG_NM = #{p.gemg_nm}
+		     , GEMG_NM_EN = #{p.gemg_nm_en}
+		     , RMK = #{p.rmk}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMG_UUID = #{p.gemg_uuid}
+	</update>
+	<update id="deleteGemg">
+		UPDATE GEMG
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMG_UUID = #{p.gemg_uuid}
+	</update>
+	<select id="findListGeg" resultType="map">
+		<bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+		SELECT GEG.OORG_CD
+		     , GEG.GEG_UUID
+		     , GEG.GEG_CD
+		     , GEG.GEG_NM
+		     , GEG.GEG_EXPLN
+		     , GR_EVALSHT.EVALSHT_CD
+		     , GR_EVALSHT.EVALSHT_NM
+		     , GR_EVALSHT.CNFD_YN
+		     , (
+		        SELECT COUNT(GEG_GEMG.GEMG_UUID)
+		          FROM GEG_GEMG GEG_GEMG
+		         WHERE GEG_GEMG.TEN_ID = GEG.TEN_ID
+		           AND GEG_GEMG.GEG_UUID = GEG.GEG_UUID
+		       ) AS NUM_OF_GEMG
+		  FROM GEG GEG
+		  LEFT OUTER JOIN GR_EVALSHT GR_EVALSHT
+		    ON GR_EVALSHT.TEN_ID = GEG.TEN_ID
+		   AND GR_EVALSHT.GEG_UUID = GEG.GEG_UUID
+		   AND #{nowDate} &gt;= TO_CHAR(GR_EVALSHT.EFCT_ST_DT, 'YYYYMMDD')  AND #{nowDate} <![CDATA[<]]> TO_CHAR(GR_EVALSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND GR_EVALSHT.STS != 'D'
+		 WHERE GEG.TEN_ID = #{g.tenant}
+		   AND GEG.STS != 'D'
+		   <if test="p.oorg_cd != null">
+		      AND GEG.OORG_CD = #{p.oorg_cd}
+		   </if>
+		   <if test="p.geg_nm != null and p.geg_nm != ''">
+		       <bind name="gegNmPtn" value="'%' + p.geg_nm + '%'"/>
+		       AND UPPER(GEG.GEG_NM) LIKE UPPER(#{gegNmPtn})
+		   </if>
+		   <if test="p.geg_cd != null and p.geg_cd != ''">
+		       <bind name="gegCdPtn" value="'%' + p.geg_cd + '%'"/>
+		       AND UPPER(GEG.GEG_CD) LIKE UPPER(#{gegCdPtn})
+		   </if>
+		   <if test="p.cnfd_yn != null">
+			  AND GR_EVALSHT.CNFD_YN = #{p.cnfd_yn}
+		   </if>
+	</select>
+	<select id="findGegMaster" resultType="map">
+		<bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+		SELECT GEG.TEN_ID                  /* 테넌트 아이디 */
+		     , GEG.GEG_UUID                /* 입고평가그룹 UUID */
+		     , GEG.GEMT_UUID               /* 입고평가관리유형 UUID */
+		     , EFCT_SHT.GR_EVALSHT_UUID    /* 입고 평가시트 UUID */
+		     , GEG.OORG_CD                 /* 운영조직 코드 */
+		     , GEG.GEG_CD                  /* 입고평가그룹 코드 */
+		     , GEG.GEG_NM                  /* 입고평가그룹 명 */
+		     , GEG.GEG_EXPLN               /* 입고평가그룹 명 설명 */
+		     , GEG.STS
+		     , GEG.RMK
+		     , GEG.REGR_ID
+		     , GEG.REG_DTTM
+		     , GEG.MODR_ID
+		     , GEG.MOD_DTTM
+		  FROM GEG GEG
+		  LEFT OUTER JOIN (
+		                   SELECT GR_EVALSHT.*
+		                        , ROW_NUMBER() OVER(PARTITION BY GR_EVALSHT.GEG_UUID ORDER BY MOD_DTTM DESC) RK
+		                    FROM GR_EVALSHT GR_EVALSHT
+		                   WHERE GR_EVALSHT.TEN_ID = #{g.tenant}
+		                     AND #{nowDate} &gt;= TO_CHAR(GR_EVALSHT.EFCT_ST_DT, 'YYYYMMDD')  AND #{nowDate} <![CDATA[<]]> TO_CHAR(GR_EVALSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND GR_EVALSHT.CNFD_YN = 'Y'
+		                     AND GR_EVALSHT.STS != 'D'
+		                  ) EFCT_SHT /* 입고평가그룹의 현재 유효한 평가시트 아이디 조회 */
+		            ON GEG.TEN_ID = EFCT_SHT.TEN_ID
+		           AND GEG.GEG_UUID = EFCT_SHT.GEG_UUID
+		           AND EFCT_SHT.RK = 1
+		 WHERE GEG.TEN_ID    = #{g.tenant}
+		   AND GEG.GEG_UUID  = #{p.geg_uuid}
+	</select>
+	<select id="findListGegGemg" resultType="map">
+		SELECT GEG_GEMG.TEN_ID        /* 테넌트 아이디 */
+		     , GEG_GEMG.GEG_UUID      /* 입고평가그룹 UUID */
+		     , GEG_GEMG.GEMG_UUID     /* 입고평가관리그룹 UUID */
+		     , GEMG.GEMG_CD
+		     , GEMG.GEMG_NM
+		     , GEMG.GEMG_NM_EN
+		     , CASE WHEN 'en_US' = #{g.locale} THEN GEMG.GEMG_NM_EN
+		            ELSE GEMG.GEMG_NM
+		        END AS DISP_GEMG_NM
+		     , GEG_GEMG.STS
+		     , GEG_GEMG.RMK
+		     , GEG_GEMG.REGR_ID
+		     , GEG_GEMG.REG_DTTM
+		     , GEG_GEMG.MODR_ID
+		     , GEG_GEMG.MOD_DTTM
+		  FROM GEG_GEMG GEG_GEMG      /* GEG_GEMG : 입고평가그룹 입고평가관리그룹 연결 */
+		  LEFT OUTER JOIN GEMG GEMG   /* GEMG : 입고평가관리그룹 */
+		    ON GEMG.TEN_ID        = GEG_GEMG.TEN_ID
+		   AND GEMG.GEMG_UUID     = GEG_GEMG.GEMG_UUID
+		   AND GEMG.STS          != 'D'
+		 WHERE GEG_GEMG.TEN_ID    = #{g.tenant}
+		   AND GEG_GEMG.GEG_UUID  = #{p.geg_uuid}
+		   AND GEG_GEMG.STS      != 'D'
+	</select>
+	<insert id="insertGegMaster">
+		INSERT INTO GEG (
+			TEN_ID
+			, GEG_UUID
+			, GEMT_UUID
+			, OORG_CD
+			, GEG_CD
+			, GEG_NM
+			, GEG_EXPLN
+			, USE_YN
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.geg_uuid}
+			, #{p.gemt_uuid}
+			, #{p.oorg_cd}
+			, #{p.geg_cd}
+			, #{p.geg_nm}
+			, #{p.geg_expln}
+			, #{p.use_yn}
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGegMaster">
+		UPDATE GEG
+		   SET GEG_NM    = #{p.geg_nm}
+		     , GEG_EXPLN = #{p.geg_expln}
+		     , STS       = 'U'
+		     , MODR_ID   = #{g.username}
+		     , MOD_DTTM  = #{g.now}
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND GEG_UUID = #{p.geg_uuid}
+	</update>
+	<delete id="deleteGegGemg">
+		DELETE
+		  FROM GEG_GEMG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMG_UUID = #{p.gemg_uuid}
+	</delete>
+	<insert id="insertGegGemg">
+		INSERT INTO GEG_GEMG (
+			TEN_ID
+			, GEMG_UUID
+			, GEG_UUID
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gemg_uuid}
+			, #{p.geg_uuid}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<select id="findGegInfoInUsingGemg" resultType="map">
+		SELECT GEG.GEG_CD
+		     , GEG.GEG_NM
+		     , GEMG.GEMG_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN GEMG.GEMG_NM_EN
+		            ELSE GEMG.GEMG_NM
+		        END AS DISP_GEMG_NM
+		  FROM GEG_GEMG GEG_GEMG   /* OVMG : 온보딩평가그룹 협력사 관리 그룹 */
+		 INNER JOIN GEG GEG
+		    ON GEG.TEN_ID   = GEG_GEMG.TEN_ID
+		   AND GEG.GEG_UUID = GEG_GEMG.GEG_UUID
+		   AND GEG.STS     != 'D'
+		 INNER JOIN GEMG GEMG
+		    ON GEMG.TEN_ID   = GEG_GEMG.TEN_ID
+		   AND GEMG.GEMG_UUID = GEG_GEMG.GEMG_UUID
+		   AND GEMG.STS     != 'D'
+		 WHERE GEG_GEMG.TEN_ID     = #{g.tenant}
+		   AND GEG_GEMG.GEMG_UUID  = #{p.gemg_uuid}
+		   AND GEG_GEMG.STS       != 'D'
+	</select>
+	<update id="updateGegByDelete">
+		UPDATE GEG                  /* 입고평가그룹 */
+		   SET STS = 'D'
+		     , MODR_ID  = #{g.username}        /* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}             /* 수정 일시 */
+		 WHERE TEN_ID   = #{g.tenant}          /* 테넌트 아이디 */
+		   AND GEG_UUID = #{p.geg_uuid}        /* 입고평가그룹 UUID */
+	</update>
+	<!-- 온보딩 협력사 관리 그룹 삭제 상태 변경 (sts = 'D')-->
+	<update id="updateGegGemgStsByDelete">
+		UPDATE GEG_GEMG                  /* 입고평가그룹 입고평가관리그룹 */
+		   SET STS = 'D'
+		     , MODR_ID  = #{g.username}        /* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}             /* 수정 일시 */
+		 WHERE TEN_ID   = #{g.tenant}          /* 테넌트 아이디 */
+		   AND GEG_UUID = #{p.geg_uuid}        /* 입고평가그룹 UUID */
+	</update>
+	<select id="findListGemgEvaltr" resultType="map">
+		SELECT GEMG_QLY_PIC.EVALTR_ID
+		     , GEMG_QLY_PIC.GEMG_QLY_PIC_UUID
+		     , GEMG_QLY_PIC.GEMG_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS EVALTR_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS DEPT_NM
+		     , GEMG_QLY_PIC.REG_DTTM
+		     , GEMG_QLY_PIC.MOD_DTTM
+		  FROM GEMG_QLY_PIC
+		 INNER JOIN USR
+		    ON USR.TEN_ID = GEMG_QLY_PIC.TEN_ID
+		   AND USR.USR_ID = GEMG_QLY_PIC.EVALTR_ID
+		  LEFT OUTER JOIN DEPT
+		    ON DEPT.TEN_ID = USR.TEN_ID
+		   AND DEPT.DEPT_CD = USR.DEPT_CD
+		 WHERE GEMG_QLY_PIC.TEN_ID = #{g.tenant}
+		   AND GEMG_QLY_PIC.GEMG_UUID = #{p.gemg_uuid}
+		   AND GEMG_QLY_PIC.STS != 'D'
+	</select>
+	<delete id="deleteGemgEvaltr">
+		DELETE
+		  FROM GEMG_QLY_PIC
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GEMG_QLY_PIC_UUID = #{p.gemg_qly_pic_uuid}
+	</delete>
+	<insert id="insertGemgEvaltr">
+		INSERT INTO GEMG_QLY_PIC (
+			TEN_ID
+			, GEMG_QLY_PIC_UUID
+			, GEMG_UUID
+			, EVALTR_ID
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gemg_qly_pic_uuid}
+			, #{p.gemg_uuid}
+			, #{p.evaltr_id}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+</mapper>

@@ -1,0 +1,689 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="obd-evalsht-setup">
+	<select id="findListObdEvalsht" resultType="map">
+        /* obd-evalsht-setup.findListObdEvalsht: 온보딩 평가시트 목록 조회 */
+        SELECT OE.TEN_ID                  /* 테넌트 아이디 */
+             , OE.OBD_EVALSHT_UUID        /* 온보딩 평가시트 UUID */
+             , OE.EVALSHT_CD              /* 평가시트 코드 */
+             , OE.EVALSHT_NM              /* 평가시트 명 */
+             , OE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , OE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , OE.OEG_UUID                /* 심사 그룹 아이디 */
+             , O.OEG_NM
+             , OE.CNFD_YN                 /* 확정 여부 */
+             , OE.RMK
+             , OE.STS
+             , OE.REGR_ID
+             , OE.REG_DTTM
+             , OE.MODR_ID
+             , U.USR_NM AS MOD_NM
+             , OE.MOD_DTTM
+          FROM OBD_EVALSHT OE  /* OE : 온보딩 평가시트 */
+         INNER JOIN OEG O
+            ON O.TEN_ID = OE.TEN_ID
+           AND O.OEG_UUID = OE.OEG_UUID
+          LEFT OUTER JOIN USR U
+            ON U.TEN_ID = OE.TEN_ID
+           AND U.USR_ID = OE.MODR_ID
+         WHERE OE.TEN_ID    = #{g.tenant}
+           AND OE.STS      != 'D'
+           AND O.OORG_CD    = #{p.oorg_cd}
+         <if test="p.evalsht_nm != null and p.evalsht_nm != ''">
+           <bind name="evalshtNm" value="'%' + p.evalsht_nm+ '%'"/>
+           AND UPPER(OE.EVALSHT_NM) LIKE UPPER(#{evalshtNm})
+         </if>
+        ORDER BY OE.MOD_DTTM DESC
+    </select>
+    <!-- 온보딩 평가시트 조회 -->
+    <select id="findObdEvalshtInfo" resultType="map">
+        /* obd-evalsht-setup.findObdEvalshtInfo: 온보딩 평가시트 조회 */
+        SELECT OE.TEN_ID                  /* 테넌트 아이디 */
+             , OE.OBD_EVALSHT_UUID        /* 온보딩 평가시트 UUID */
+             , OE.EVALSHT_CD              /* 평가시트 코드 */
+             , OE.EVALSHT_NM              /* 평가시트 명 */
+             , OE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , OE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , OE.OEG_UUID                /* 심사 그룹 아이디 */
+             , OE.PRCS_APPL_SUBJ_YN       /* 프로세스 적용 대상 여부 */
+             , OE.CNFD_YN                 /* 확정 여부 */
+             , OE.RMK
+             , OE.STS
+             , OE.REGR_ID
+             , OE.REG_DTTM
+             , OE.MODR_ID
+             , OE.MOD_DTTM
+             , CASE WHEN OE.OBD_EVALSHT_UUID = CRNT_SHT.OBD_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT    /* 최신 평가시트 */
+             , CASE WHEN OE.OBD_EVALSHT_UUID = EFCT_SHT.OBD_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS EFFECTIVE_EVALSHT  /* 유효한 평가시트 */
+          FROM OBD_EVALSHT OE  /* OE : 온보딩 평가시트 */
+          LEFT OUTER JOIN (
+                     SELECT TEN_ID, OEG_UUID, OBD_EVALSHT_UUID, CURRENT_EVALSHT_RANK
+                       FROM (
+                               SELECT  TEN_ID, OEG_UUID, OBD_EVALSHT_UUID, RANK() OVER (ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC) AS CURRENT_EVALSHT_RANK
+                                 FROM OBD_EVALSHT
+                                WHERE TEN_ID   = #{g.tenant}
+                                  AND STS     != 'D'
+                                  AND OEG_UUID = #{p.oeg_uuid}
+                                ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC
+                            ) x
+                      WHERE CURRENT_EVALSHT_RANK = 1
+                    ) CRNT_SHT
+            ON CRNT_SHT.TEN_ID   = OE.TEN_ID
+           AND CRNT_SHT.OEG_UUID = OE.OEG_UUID
+          LEFT OUTER JOIN (
+                  SELECT OES.*
+                       , ROW_NUMBER() OVER(PARTITION BY OES.OEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC) RK
+                   FROM OBD_EVALSHT OES
+                  WHERE OES.TEN_ID  = #{g.tenant}
+                  		AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(OES.EFCT_ST_DT, 'YYYYMMDD') 
+                  		AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(OES.EFCT_EXP_DT, 'YYYYMMDD')  AND OES.CNFD_YN = 'Y'
+                    AND OES.STS    != 'D'
+             ) EFCT_SHT  /* 온보딩 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+            ON OE.TEN_ID   = EFCT_SHT.TEN_ID
+           AND OE.OEG_UUID = EFCT_SHT.OEG_UUID
+           AND EFCT_SHT.RK = 1
+         WHERE OE.TEN_ID            = #{g.tenant}
+           AND OE.OBD_EVALSHT_UUID  = #{p.obd_evalsht_uuid}
+           AND OE.STS              != 'D'
+    </select>
+    <!-- 온보딩 평가시트 프로세스 조회 -->
+    <select id="findObdEvalshtInfoPrcs" resultType="map">
+        /* obd-evalsht-setup.findObdEvalshtInfoPrcs: 온보딩 평가시트 프로세스 조회 */
+        SELECT DTL.TEN_ID                        /* 시스템 아이디 */
+             , DTL.CCD                           /* 그룹 코드 */
+             , DTL.DTLCD         AS PRCS_CCD     /* 프로세스 공통코드 */
+             , DTLML.DTLCD_NM    AS PRCS_CCD_NM  /* 상세 코드 명 */
+             , CCCV.CSTR_CND_VAL AS USR_TYP      /* 상세 코드 조건 값 (사용자 유형) */
+             , OEP.OBD_EVALSHT_PRCS_UUID         /* 온보딩 평가시트 프로세스 UUID */
+             , OEP.OBD_EVALSHT_UUID              /* 온보딩 평가시트 UUID */
+             , OEP.EVALTMPL_UUID
+             , OEP.PRE_EVALTMPL_UUID             /* 이전 평가템플릿 UUID */
+             , OEP.EVALDOC_LYT_TYP_CCD           /* 평가문서 레이아웃 유형 공통코드 */
+             , OEP.EVALTR_TYP_CCD                /* 평가자 유형 */
+             , OEP.PRCS_SORT                     /* 절차 순서 */
+             , OEP.AUTO_PRCSG_YN                 /* 자동 진행 여부 */
+             , OEP.PRE_OE_TCAPPL_YN              /* 자동 패스 여부 */
+             , OEP.PRCS_EFCTPD_MNTHS             /* 프로세스 합격 인정 유효기간(개월) */
+             , OEP.PRE_OE_FCD_PASS_TCAPPL_YN     /* 이전 강제 패스 인정 여부 */
+             , OEP.PRCS_PASS_SC                  /* 승인 점수 */
+             , OEP.PRCS_WGT                      /* 가중치 */
+             , OEP.PRE_OE_EFCTPD_MNTHS           /* 재 평가 D MN */
+             , CASE WHEN OEP.PTNL_VD_SLCTN_CRTRA_YN IS NULL OR OEP.PTNL_VD_SLCTN_CRTRA_YN = '' THEN 'N' ELSE OEP.PTNL_VD_SLCTN_CRTRA_YN END AS PTNL_VD_SLCTN_CRTRA_YN  /* 잠재 협력사 기준 여부 */
+             , CASE WHEN OEP.PRCS_CCD IS NULL OR OEP.PRCS_CCD = '' THEN 'N' ELSE 'Y' END AS APPLICATION_YN  /* 적용 여부 */
+             , OE.CNFD_YN                        /* 온보딩 평가시트 확정 여부 */
+             , OE.OEG_UUID
+          FROM DTLCD DTL
+          LEFT OUTER JOIN DTLCD_MULTLANG DTLML
+            ON DTL.TEN_ID     = DTLML.TEN_ID
+           AND DTL.CCD        = DTLML.CCD
+           AND DTL.DTLCD      = DTLML.DTLCD
+           AND DTLML.LANG_CCD = #{g.locale}
+          LEFT JOIN CCD_CSTR_CND_VAL CCCV
+            ON CCCV.TEN_ID      = DTL.TEN_ID
+           AND CCCV.CCD         = DTL.CCD
+           AND CCCV.CSTR_CND_CD = 'C016'
+           AND CCCV.DTLCD       = DTLML.DTLCD
+          LEFT OUTER JOIN OBD_EVALSHT_PRCS OEP  /* OEP : 온보딩 평가시트 프로세스 */
+            ON OEP.TEN_ID           = DTL.TEN_ID
+           AND OEP.PRCS_CCD         = DTL.DTLCD
+           AND OEP.OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}
+           AND OEP.STS             != 'D'
+          LEFT OUTER JOIN OBD_EVALSHT OE  /* OE : 온보딩 평가시트 */
+            ON OE.TEN_ID           = OEP.TEN_ID
+           AND OE.OBD_EVALSHT_UUID = OEP.OBD_EVALSHT_UUID
+           AND OE.STS              != 'D'
+         WHERE DTL.TEN_ID = #{g.tenant}
+           AND DTL.CCD    = 'E916'
+           AND DTL.USE_YN = 'Y'
+           AND DTL.STS   != 'D'
+         ORDER BY DTL.DTLCD_SORT
+                , DTL.DTLCD
+    </select>
+    <select id="findListEvaltmplUuidOfObdEvalshtPrcses" resultType="string">
+        /* obd-evalsht-setup.findListEvaltmplUuidOfObdEvalshtPrcses: 온보딩 평가시트 프로세스 조회 */
+        SELECT OEP.EVALTMPL_UUID
+          FROM OBD_EVALSHT_PRCS OEP  /* OEP : 온보딩 평가시트 프로세스 */
+         WHERE OEP.TEN_ID           = #{g.tenant}
+           AND OEP.OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}
+           AND OEP.STS             != 'D'
+    </select>
+    <!-- 온보딩 평가시트 저장 (Insert) -->
+    <insert id="insertObdEvalsht">
+        /* obd-evalsht-setup.insertObdEvalsht : 온보딩 평가시트 저장 */
+        INSERT INTO OBD_EVALSHT  /* 온보딩 평가시트  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                   /* 테넌트 아이디 */
+            , OBD_EVALSHT_UUID         /* 온보딩 평가시트 UUID */
+            , EVALSHT_CD               /* 평가시트 코드 */
+            , EVALSHT_NM               /* 평가시트 명 */
+            , EFCT_ST_DT               /* 유효 시작 일자 */
+            , EFCT_EXP_DT              /* 유효 만료 일자 */
+            , OEG_UUID                 /* 심사 그룹 아이디 */
+            , PRCS_APPL_SUBJ_YN        /* 프로세스 적용 대상 여부 */
+            , CNFD_YN                  /* 확정 여부 */
+            , STS
+            , RMK
+            , REGR_ID
+	        , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.obd_evalsht_uuid}           /* 온보딩 평가시트 UUID */
+            , #{p.evalsht_cd}                 /* 평가시트 코드 */
+            , #{p.evalsht_nm}                 /* 평가시트 명 */
+            , CAST(#{p.efct_st_dt} AS DATE)   /* 유효 시작 일자 */
+            , CAST(#{p.efct_exp_dt} AS DATE)  /* 유효 만료 일자 */
+            , #{p.oeg_uuid}                   /* 심사 그룹 아이디 */
+            , #{p.prcs_appl_subj_yn}          /* 프로세스 적용 대상 여부 */
+            , #{p.cnfd_yn}                    /* 확정 여부 */
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+	        , #{g.now}
+            , #{g.username}
+	        , #{g.now}
+        </trim>
+    </insert>
+    <!-- 온보딩 평가시트 수정 -->
+    <update id="updateObdEvalsht">
+        /* obd-evalsht-setup.updateObdEvalsht : 온보딩 평가시트 수정 */
+        UPDATE OBD_EVALSHT  /* 온보딩 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID           = #{g.username}                   /* 수정자 아이디 */
+            , MOD_DTTM          = #{g.now}                        /* 수정 일시 */
+            , STS               = 'U'                             /* 상태 */
+            , EVALSHT_NM        = #{p.evalsht_nm}                 /* 평가시트 명 */
+            , EFCT_ST_DT        = CAST(#{p.efct_st_dt} AS DATE)   /* 유효 시작 일자 */
+            , EFCT_EXP_DT       = CAST(#{p.efct_exp_dt} AS DATE)  /* 유효 만료 일자 */
+            , CNFD_YN           = #{p.cnfd_yn}                    /* 확정 여부 */
+            , PRCS_APPL_SUBJ_YN = #{p.prcs_appl_subj_yn}          /* 프로세스 적용 대상 여부 */
+        </trim>
+        WHERE TEN_ID         = #{g.tenant}                        /* 시스템 아이디 */
+        AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}              /* 온보딩 평가시트 UUID */
+    </update>
+    <update id="updatePrevObdEvalsht">
+        /* obd-evalsht-setup.updatePrevObdEvalsht : 이전 온보딩 평가시트 확정 */
+        UPDATE OBD_EVALSHT  /* 온보딩 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID     = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM    = #{g.now}                     /* 수정 일시 */
+            , STS         = 'U'                          /* 상태 */
+            , EFCT_EXP_DT = CASE WHEN #{p.cnfd_yn} = 'Y' THEN CAST(#{p.efct_st_dt} AS DATE) ELSE CAST(#{p.efct_exp_dt} AS DATE) END  /* 유효 만료 일자 */
+        </trim>
+        WHERE TEN_ID           = #{g.tenant}                 /* 시스템 아이디 */
+          AND OBD_EVALSHT_UUID = #{p.prev_obd_evalsht_uuid}  /* 이전 온보딩 평가시트 UUID */
+    </update>
+    <update id="updatePrevEvaltmplUuidObdEvalshtPrcs">
+        /* obd-evalsht-setup.updatePrevEvaltmplUuidObdEvalshtPrcs :온보딩 평가시트 프로세스 이전 평가 템플릿 정보 update */
+        UPDATE OBD_EVALSHT_PRCS  /* 온보딩 평가시트 프로세스 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID           = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM          = #{g.now}                     /* 수정 일시 */
+            , STS               = 'U'                          /* 상태 */
+            , PRE_EVALTMPL_UUID = CASE WHEN #{p.cnfd_yn} = 'Y' THEN NULL ELSE PRE_EVALTMPL_UUID END  /* 이전 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID         = #{g.tenant}                         /* 시스템 아이디 */
+        AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}               /* 온보딩 평가시트 UUID */
+	    AND STS             != 'D'
+    </update>
+    <update id="updateCnfdYnObdEvalsht">
+        /* obd-evalsht-setup.updateCnfdYnObdEvalsht : 온보딩 평가시트 확정 */
+        UPDATE OBD_EVALSHT  /* 온보딩 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID  = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}                     /* 수정 일시 */
+            , STS      = 'U'                          /* 상태 */
+            , CNFD_YN  = #{p.cnfd_yn}                 /* 확정 여부 */
+        </trim>
+        WHERE TEN_ID         = #{g.tenant}            /* 시스템 아이디 */
+        AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}  /* 온보딩 평가시트 UUID */
+    </update>
+    <!-- 온보딩 시트 - 온보딩 프로세스 저장 (Insert) -->
+    <insert id="insertObdEvalshtPrcs">
+        /* obd-evalsht-setup.insertObdEvalshtPrcs : 온보딩 시트 - 온보딩 프로세스 저장 */
+        INSERT INTO OBD_EVALSHT_PRCS  /* 온보딩 평가시트 프로세스 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+	              TEN_ID                      /* 테넌트 아이디 */
+	            , OBD_EVALSHT_PRCS_UUID       /* 온보딩 평가시트 프로세스 UUID */
+	            , OBD_EVALSHT_UUID            /* 온보딩 평가시트 UUID */
+	            , PRCS_CCD                    /* 프로세스 공통코드 */
+	            , PRCS_SORT                   /* 절차 순서 */
+	            , EVALDOC_LYT_TYP_CCD         /* 평가 레이아웃 유형 */
+	            , AUTO_PRCSG_YN               /* 자동 진행 여부 */
+	            , EVALTR_TYP_CCD              /* 평가자 유형 */
+	            , PRCS_EFCTPD_MNTHS           /* 프로세스 합격 인정 유효기간(개월) */
+	            , PRE_OE_FCD_PASS_TCAPPL_YN   /* 이전 온보딩평가 강제 패스 인정 여부 */
+	            , PRE_OE_EFCTPD_MNTHS         /* 이전 온보딩평가 유효기간(개월) */
+	            , PTNL_VD_SLCTN_CRTRA_YN      /* 잠재 협력사 선정 기준 여부 */
+	            , STS
+	            , RMK
+	            , REGR_ID
+	            , REG_DTTM
+	            , MODR_ID
+	            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+	              #{g.tenant}
+	            , #{p.obd_evalsht_prcs_uuid}    /* 온보딩 평가시트 프로세스 UUID */
+	            , #{p.obd_evalsht_uuid}         /* 온보딩 평가시트 UUID */
+	            , #{p.prcs_ccd}                 /* 프로세스 공통코드 */
+		        , #{p.prcs_sort}                /* 절차 순서 */  , 'SURV'                        /* 평가 레이아웃 유형: 기본값 서베이 */
+	            , 'Y'                           /* 자동 진행 여부: 기본값 'Y' */
+	            , CASE WHEN (SELECT CSTR_CND_VAL
+	                           FROM CCD_CSTR_CND_VAL
+	                          WHERE TEN_ID      = #{g.tenant}
+	                            AND CCD         = 'E916'
+	                            AND DTLCD       = #{p.prcs_ccd}
+	                            AND CSTR_CND_CD = 'C016'
+	                            AND STS        != 'D') = 'VD'
+	                   THEN 'VD'                   /* 평가자 유형: 고정값 협력사 */
+	                   ELSE 'EVALFACT_AUTHTY_PIC'  /* 평가자 유형: 기본값 평가항목 권한 담당자 */
+	               END
+	            , 24                               /* 프로세스 합격 인정 유효기간(개월): 기본값  */
+	            , 'Y'                              /* 이전 온보딩평가 인정 여부: 기본값 */
+	            , 22                               /* 이전 온보딩평가 유효기간(개월): 기본값  */
+	            , #{p.ptnl_vd_slctn_crtra_yn}      /* 잠재 협력사 선정 기준 여부 */
+	            , 'C'
+	            , #{p.rmk}
+	            , #{g.username}
+	            , #{g.now}
+	            , #{g.username}
+	            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 온보딩 시트 - 온보딩 프로세스 수정 -->
+    <update id="updateObdEvalshtPrcs">
+        /* obd-evalsht-setup.updateObdEvalshtPrcs : 온보딩 시트 - 온보딩 프로세스 수정 */
+        UPDATE OBD_EVALSHT_PRCS  /* 온보딩 평가시트 프로세스 */
+        <trim prefix="SET" prefixOverrides=",">
+                  MODR_ID                   = #{g.username}                    /* 수정자 아이디 */
+	            , MOD_DTTM                  = #{g.now}                         /* 수정 일시 */
+	            , PRCS_SORT                 = #{p.prcs_sort}                   /* 절차 순서 */
+		        , PRCS_EFCTPD_MNTHS         = #{p.prcs_efctpd_mnths}           /* 프로세스 합격 인정 유효기간(개월) */
+		        , PRE_OE_EFCTPD_MNTHS       = #{p.pre_oe_efctpd_mnths}         /* 재 평가 D MN */
+		        , PRCS_PASS_SC              = #{p.prcs_pass_sc}                /* 승인 점수 */
+		        , PRCS_WGT                  = #{p.prcs_wgt}                    /* 가중치 */  , STS                       = #{p.sts}                         /* 상태 */
+	            , AUTO_PRCSG_YN             = #{p.auto_prcsg_yn}               /* 자동 진행 여부 */
+	            , PRE_OE_TCAPPL_YN          = #{p.pre_oe_tcappl_yn}            /* 자동 패스 여부 */
+	            , PRE_OE_FCD_PASS_TCAPPL_YN = #{p.pre_oe_fcd_pass_tcappl_yn}   /* 이전 강제 패스 인정 여부 */
+	            , EVALTR_TYP_CCD            = #{p.evaltr_typ_ccd}              /* 평가자 유형 */
+	            , PTNL_VD_SLCTN_CRTRA_YN    = #{p.ptnl_vd_slctn_crtra_yn}      /* 잠재 협력사 기준 여부 */
+	            , EVALDOC_LYT_TYP_CCD       = #{p.evaldoc_lyt_typ_ccd}         /* 평가문서 레이아웃 유형 공통코드 */
+	            , EVALTMPL_UUID             = #{p.evaltmpl_uuid}               /* 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID              = #{g.tenant}                 /* 시스템 아이디 */
+        AND OBD_EVALSHT_PRCS_UUID = #{p.obd_evalsht_prcs_uuid}  /* 온보딩평가그룹 UUID */
+    </update>
+    <!-- 온보딩 시트 삭제 상태 변경 (sts = 'D')-->
+    <update id="updateObdEvalshtStsByDelete">
+        /* obd-evalsht-setup.updateObdEvalshtStsByDelete : 온보딩 시트 삭제(STS = 'D') */
+        UPDATE OBD_EVALSHT  /* 온보딩 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+	            , STS      = 'D'
+	            , MODR_ID  = #{g.username}                /* 수정자 아이디 */
+	            , MOD_DTTM = #{g.now}                     /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID           = #{g.tenant}            /* 테넌트 아이디 */
+            AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}  /* 온보딩평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 온보딩 시트 - 온보딩 프로세스 삭제 상태 변경 (sts = 'D')-->
+    <update id="updateObdEvalshtPrcsStsByDelete">
+        /* obd-evalsht-setup.updateObdEvalshtPrcsStsByDelete : 온보딩 시트 - 온보딩 프로세스 삭제(STS = 'D') */
+        UPDATE OBD_EVALSHT_PRCS  /* 온보딩 시트 - 온보딩 프로세스 */
+        <trim prefix="SET" prefixOverrides=",">
+	            , STS = 'D'
+	            , MODR_ID  = #{g.username}                /* 수정자 아이디 */
+                , MOD_DTTM = #{g.now}                     /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID           = #{g.tenant}            /* 테넌트 아이디 */
+            AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}  /* 온보딩평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 온보딩 평가시트 조회 -->
+    <select id="findListObdEvalshtHis" resultType="map">
+        /* obd-evalsht-setup.findListObdEvalshtHis: 온보딩 평가시트 조회 */
+        SELECT OE.TEN_ID                  /* 테넌트 아이디 */
+             , OE.OBD_EVALSHT_UUID        /* 온보딩 평가시트 UUID */
+             , OE.EVALSHT_CD              /* 평가시트 코드 */
+             , OE.EVALSHT_NM              /* 평가시트 명 */
+             , OE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , OE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , OE.OEG_UUID                /* 심사 그룹 아이디 */
+             , OE.PRCS_APPL_SUBJ_YN       /* 프로세스 적용 대상 여부 */
+             , OE.CNFD_YN                 /* 확정 여부 */
+             , OE.RMK
+             , OE.STS
+             , OE.REGR_ID
+             , OE.REG_DTTM
+             , OE.MODR_ID
+             , OE.MOD_DTTM
+             , CASE WHEN (RANK() OVER (ORDER BY OE.MOD_DTTM DESC, OE.EFCT_EXP_DT DESC, OE.EFCT_ST_DT DESC)) = '1' THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT  /* 최신 평가시트 */
+        FROM OBD_EVALSHT OE  /* OE : 온보딩 평가시트 */
+        WHERE OE.TEN_ID    = #{g.tenant}
+          AND OE.OEG_UUID  = #{p.oeg_uuid}
+          AND OE.STS      != 'D'
+        ORDER BY OE.REG_DTTM DESC, OE.MOD_DTTM DESC, OE.EFCT_EXP_DT DESC, OE.EFCT_ST_DT DESC
+    </select>
+    <select id="findListFactChrGrpEvaltr" resultType="Map">
+        /* obd-evalsht-setup.findListFactChrGrpEvaltr : 온보딩 평가시트 프로세스 평가자 조회 */
+        SELECT EPE.TEN_ID
+             , EPE.EVALSHT_PRCS_EVALTR_UUID
+             , EPE.OBD_EVALSHT_PRCS_UUID
+             , EPE.EVALFACT_EVALTR_AUTHTY_CCD
+             , EPE.EVALTR_ID
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN U.USR_NM
+                    ELSE U.USR_NM_EN
+               END AS EVALTR_NM
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN D.DEPT_NM
+                    ELSE D.DEPT_NM_EN
+               END AS DEPT_NM
+             , EPE.STS
+             , EPE.REGR_ID
+             , EPE.REG_DTTM
+             , EPE.MODR_ID
+             , EPE.MOD_DTTM
+        FROM EVALSHT_PRCS_EVALTR EPE
+        LEFT OUTER JOIN USR U
+          ON U.TEN_ID = EPE.TEN_ID
+         AND U.USR_ID = EPE.EVALTR_ID
+         AND U.STS   != 'D'
+        LEFT OUTER JOIN DEPT D
+          ON U.TEN_ID   = D.TEN_ID
+         AND U.DEPT_CD  = D.DEPT_CD
+         AND U.STS     != 'D'
+       WHERE EPE.TEN_ID                = #{g.tenant}
+         AND EPE.OBD_EVALSHT_PRCS_UUID = #{p.obd_evalsht_prcs_uuid}
+         AND EPE.STS                  != 'D'
+    </select>
+    <select id="findListOegVmgUuid" resultType="string">
+        /* oeg-evalsht-setup.findListOegVmgUuid: 온보딩평가그룹 - 협력사관리그룹 운영조직 아이디 목록 조회 */
+        SELECT OVMG.VMG_OORG_UUID  /* 협력사관리그룹 운영조직 UUID */
+        FROM OEG_VMG OVMG     /* OVMG : 온보딩평가그룹 협력사관리그룹 */
+       WHERE OVMG.TEN_ID   = #{g.tenant}
+         AND OVMG.OEG_UUID = #{p.oeg_uuid}
+         AND OVMG.STS     != 'D'
+    </select>
+    <!-- 평가시트 프로세스 평가자 삭제 (sts = 'D')-->
+    <update id="updateEvaltrByDelete">
+        /* obd-evalsht-setup.updateEvaltrByDelete : 평가시트 프로세스 평가자 삭제(STS = 'D') */
+        UPDATE EVALSHT_PRCS_EVALTR  /* 평가시트 프로세스 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+	            , STS      = 'D'
+	            , MODR_ID  = #{g.username}                /* 수정자 아이디 */
+	            , MOD_DTTM = #{g.now}                     /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID                = #{g.tenant}                 /* 테넌트 아이디 */
+            AND OBD_EVALSHT_PRCS_UUID = #{p.obd_evalsht_prcs_uuid}  /* 온보딩평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 평가시트 프로세스 평가항목별 평가자 저장 (Insert) -->
+    <insert id="insertFactChrGrpEvaltr">
+        /* obd-evalsht-setup.insertFactChrGrpEvaltr : 평가시트 프로세스 평가항목별 평가자 저장 */
+        INSERT INTO EVALSHT_PRCS_EVALTR  /* 평가시트 프로세스 평가자 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+	              TEN_ID                      /* 테넌트 아이디 */
+	            , EVALSHT_PRCS_EVALTR_UUID    /* 평가시트 프로세스 평가자 UUID */
+	            , OBD_EVALSHT_PRCS_UUID       /* 온보딩 평가시트 프로세스 UUID */
+	            , EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+	            , EVALTR_ID                   /* 평가자 아이디 */
+	            , STS
+	            , RMK
+	            , REGR_ID
+	            , REG_DTTM
+	            , MODR_ID
+	            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+	              #{g.tenant}
+	            , #{g.uuid}                          /* 평가시트 프로세스 평가자 UUID */
+	            , #{p.obd_evalsht_prcs_uuid}         /* 온보딩 평가시트 프로세스 UUID */
+	            , #{p.evalfact_evaltr_authty_ccd}    /* 평가항목 평가자 권한 공통코드 */
+	            , #{p.evaltr_id}                     /* 평가자 아이디 */
+	            , 'C'
+	            , #{p.rmk}
+	            , #{g.username}
+	            , #{g.now}
+	            , #{g.username}
+	            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 평가시트 프로세스 평가항목별 평가자 수정 -->
+    <update id="updateFactChrGrpEvaltr">
+        /* obd-evalsht-setup.updateFactChrGrpEvaltr : 평가시트 프로세스 평가항목별 평가자 수정 */
+        UPDATE EVALSHT_PRCS_EVALTR  /* 평가시트 프로세스 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+		          EVALFACT_EVALTR_AUTHTY_CCD = #{p.evalfact_evaltr_authty_ccd}  /* 평가항목 평가자 권한 공통코드 */
+		        , STS                        = 'U'                              /* 상태 */
+                , MODR_ID                    = #{g.username}                    /* 수정자 아이디 */
+                , MOD_DTTM                   = #{g.now}                         /* 수정 일시 */
+        </trim>
+        WHERE TEN_ID                 = #{g.tenant}                    /* 시스템 아이디 */
+        AND EVALSHT_PRCS_EVALTR_UUID = #{p.evalsht_prcs_evaltr_uuid}  /* 평가시트 프로세스 평가자 UUID */
+    </update>
+    <!-- 평가시트 프로세스 평가항목별 평가자 삭제 (sts = 'D')-->
+    <update id="updateFactChrGrpEvaltrByDelete">
+        /* obd-evalsht-setup.updateFactChrGrpEvaltrByDelete : 평가시트 프로세스 평가항목별 평가자 삭제(STS = 'D') */
+        UPDATE EVALSHT_PRCS_EVALTR  /* 평가시트 프로세스 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+	            , STS      = 'D'
+	            , MODR_ID  = #{g.username}                /* 수정자 아이디 */
+	            , MOD_DTTM = #{g.now}                     /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID                   = #{g.tenant}                    /* 테넌트 아이디 */
+            AND EVALSHT_PRCS_EVALTR_UUID = #{p.evalsht_prcs_evaltr_uuid}  /* 평가시트 프로세스 평가자 UUID */
+        </trim>
+    </update>
+	<select id="findEvalTmplUseYnInObdEvalSht" resultType="String">
+		/* obd-evalsht-setup.findEvalTmplUseYnInObdEvalSht : 평가템플릿 사용여부 조회 - 온보딩 평가시트 */
+		SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END
+		  FROM OBD_EVALSHT_PRCS
+		 WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		   AND OBD_EVALSHT_PRCS_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+	<select id="findEvalTmplStsInObdEvalSht" resultType="String">
+		/* obd-evalsht-setup.findEvalTmplStsInObdEvalSht : 평가템플릿 상태값 조회 - 온보딩 평가시트 */
+		SELECT STS
+		  FROM OBD_EVALSHT_PRCS
+		 WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		   AND OBD_EVALSHT_PRCS_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+	<select id="checkObdEvalShtConfirmYnByEvalTmpl" resultType="String">
+		/* obd-evalsht-setup.checkObdEvalShtConfirmYnByEvalTmpl : 온보딩 평가시트 확정여부 조회 */
+		SELECT CASE WHEN SUM(CASE WHEN OE.CNFD_YN = 'Y' THEN 1 ELSE 0 END) IS NULL THEN 'Y'  /* 평가템플릿이 적용된 평가시트가 존재하지 않음 -&gt; 확정 가능 */
+	            	WHEN SUM(CASE WHEN OE.CNFD_YN = 'Y' THEN 1 ELSE 0 END) = 0 THEN 'N'
+	            	ELSE 'Y' END AS CNFD_YN
+		  FROM OBD_EVALSHT OE
+		  LEFT OUTER JOIN OBD_EVALSHT_PRCS OEP
+		    ON OE.TEN_ID           = OEP.TEN_ID
+		   AND OE.OBD_EVALSHT_UUID = OEP.OBD_EVALSHT_UUID
+		   AND OEP.STS            != 'D'
+		 WHERE OE.TEN_ID         = #{g.tenant}
+		   AND OEP.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		   AND OE.STS           != 'D'
+	</select>
+	<insert id="copyObdEvalsht">
+	    /* obd-evalsht-setup.copyObdEvalsht : 온보딩 평가시트 copy */
+	    INSERT INTO OBD_EVALSHT  /* 온보딩 평가시트 */
+	    (
+	             TEN_ID                   /* 테넌트 아이디 */
+               , OBD_EVALSHT_UUID         /* 온보딩 평가시트 UUID */
+               , EVALSHT_CD               /* 평가시트 코드 */
+		       , EVALSHT_NM               /* 평가시트 명 */
+               , EFCT_ST_DT               /* 유효 시작 일자 */
+		       , EFCT_EXP_DT              /* 유효 만료 일자 */
+               , OEG_UUID                 /* 심사 그룹 아이디 */
+               , PRCS_APPL_SUBJ_YN        /* 프로세스 적용 대상 여부 */
+               , CNFD_YN                  /* 확정 여부 */
+               , STS
+               , RMK
+               , REGR_ID
+		       , REG_DTTM
+               , MODR_ID
+               , MOD_DTTM
+	    ) SELECT #{g.tenant}
+               , #{p.new_obd_evalsht_uuid}                            /* 온보딩 평가시트 UUID */
+               , #{p.evalsht_cd}                                      /* 평가시트 코드 */
+			   , SUBSTR(CONCAT('VersionUp_', EVALSHT_NM), 1, 100)     /* 평가시트 명 */  , EFCT_ST_DT                                           /* 유효 시작 일자 */
+			   , TO_DATE('29991231', 'YYYYMMDD') AS EFCT_EXP_DT       /* 유효 만료 일자 */  , #{p.oeg_uuid}                                        /* 심사 그룹 아이디 */
+	           , #{p.prcs_appl_subj_yn}                               /* 프로세스 적용 대상 여부 */
+               , 'N'                                                  /* 확정 여부 */
+               , 'C'
+               , RMK
+               , #{g.username}
+		       , #{g.now}
+               , #{g.username}
+		       , #{g.now}
+            FROM OBD_EVALSHT
+	       WHERE TEN_ID           = #{g.tenant}
+	         AND OBD_EVALSHT_UUID = #{p.obd_evalsht_uuid}
+    </insert>
+    <insert id="copyObdEvalshtPrcs">
+        /* obd-evalsht-setup.copyObdEvalshtPrcs : 온보딩 시트 - 온보딩 프로세스 copy */
+        INSERT INTO OBD_EVALSHT_PRCS  /* 온보딩 평가시트 프로세스 */
+        (
+                 TEN_ID                   /* 테넌트 아이디 */
+               , OBD_EVALSHT_PRCS_UUID    /* 온보딩 평가시트 프로세스 UUID */
+               , OBD_EVALSHT_UUID         /* 온보딩 평가시트 UUID */
+               , EVALTMPL_UUID            /* 평가템플릿 UUID */
+               , PRCS_CCD                 /* 프로세스 공통코드 */
+               , AUTO_PRCSG_YN            /* 자동 진행 여부 */
+               , PRE_OE_TCAPPL_YN         /* 자동 패스 여부 */
+               , PRE_OE_FCD_PASS_TCAPPL_YN  /* 이전 강제 패스 인정 여부 */
+               , PRCS_EFCTPD_MNTHS        /* 유효 월 수 */
+               , PRCS_PASS_SC             /* 승인 점수 */
+               , PRCS_WGT                 /* 가중치 */
+               , PRE_OE_EFCTPD_MNTHS      /* 재 평가 D MN */
+               , PTNL_VD_SLCTN_CRTRA_YN   /* 잠재 협력사 기준 여부 */
+               , EVALDOC_LYT_TYP_CCD      /* 평가문서 레이아웃 유형 공통코드 */
+               , EVALTR_TYP_CCD           /* 평가자 유형 */
+               , PRCS_SORT                /* 절차 순서 */
+               , STS
+               , RMK
+               , REGR_ID
+	           , REG_DTTM
+               , MODR_ID
+               , MOD_DTTM
+        ) SELECT #{g.tenant}
+               , #{p.new_obd_evalsht_prcs_uuid}    /* 온보딩 평가시트 프로세스 UUID */
+               , #{p.new_obd_evalsht_uuid}         /* 온보딩 평가시트 UUID */
+               , EVALTMPL_UUID                     /* 평가템플릿 UUID */
+               , PRCS_CCD                          /* 프로세스 공통코드 */
+               , AUTO_PRCSG_YN                     /* 자동 진행 여부 */
+               , PRE_OE_TCAPPL_YN                  /* 자동 패스 여부 */
+               , PRE_OE_FCD_PASS_TCAPPL_YN         /* 이전 강제 패스 인정 여부 */
+               , PRCS_EFCTPD_MNTHS                 /* 유효 월 수 */
+               , PRCS_PASS_SC                      /* 승인 점수 */
+               , PRCS_WGT                          /* 가중치 */
+               , PRE_OE_EFCTPD_MNTHS               /* 재 평가 D MN */
+               , PTNL_VD_SLCTN_CRTRA_YN            /* 잠재 협력사 기준 여부 */
+               , EVALDOC_LYT_TYP_CCD               /* 평가문서 레이아웃 유형 공통코드 */
+               , EVALTR_TYP_CCD                    /* 평가자 유형 */
+               , PRCS_SORT                         /* 절차 순서 */
+               , 'C'
+               , RMK
+               , #{g.username}
+	           , #{g.now}
+               , #{g.username}
+	           , #{g.now}
+            FROM OBD_EVALSHT_PRCS
+	       WHERE TEN_ID                = #{g.tenant}
+	         AND OBD_EVALSHT_PRCS_UUID = #{p.obd_evalsht_prcs_uuid}
+             AND STS                  != 'D'
+    </insert>
+	<insert id="copyListObdFactChrGrpEvaltr">
+        /* obd-evalsht-setup.copyListObdFactChrGrpEvaltr : 평가시트 프로세스 평가항목별 평가자 copy */
+        INSERT INTO EVALSHT_PRCS_EVALTR  /* 평가시트 프로세스 평가자 */
+        (
+                 TEN_ID                      /* 테넌트 아이디 */
+		       , EVALSHT_PRCS_EVALTR_UUID    /* 평가시트 프로세스 평가자 UUID */
+               , OBD_EVALSHT_PRCS_UUID       /* 온보딩 평가시트 프로세스 UUID */
+               , EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+               , EVALTR_ID                   /* 평가자 아이디 */
+               , STS
+               , RMK
+               , REGR_ID
+		       , REG_DTTM
+               , MODR_ID
+               , MOD_DTTM
+        ) SELECT #{g.tenant}
+			   , RANDOMUUID()                    /* 평가시트 프로세스 평가자 UUID */  , #{p.new_obd_evalsht_prcs_uuid}  /* 온보딩 평가시트 프로세스 UUID */
+               , EVALFACT_EVALTR_AUTHTY_CCD      /* 평가항목 평가자 권한 공통코드 */
+               , EVALTR_ID                       /* 평가자 아이디 */
+               , 'C'
+               , RMK
+               , #{g.username}
+		       , #{g.now}
+               , #{g.username}
+		       , #{g.now}
+            FROM EVALSHT_PRCS_EVALTR
+	       WHERE TEN_ID                = #{g.tenant}
+	         AND OBD_EVALSHT_PRCS_UUID = #{p.obd_evalsht_prcs_uuid}
+             AND STS                  != 'D'
+    </insert>
+	<update id="saveMappingEvaltmplUuidToObdEvalshtPrcs">
+        /* obd-evalsht-setup.saveMappingEvaltmplUuidToObdEvalshtPrcs : 온보딩 평가시트 프로세스 - 평가템플릿 매핑 */
+        UPDATE OBD_EVALSHT_PRCS  /* 온보딩 평가시트 프로세스 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID           = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM          = #{g.now}                     /* 수정 일시 */
+            , STS               = #{p.sts}                     /* 상태 */
+            , EVALTMPL_UUID     = #{p.evaltmpl_uuid}           /* 평가템플릿 UUID */
+            , PRE_EVALTMPL_UUID = CASE WHEN PRE_EVALTMPL_UUID IS NULL OR PRE_EVALTMPL_UUID = '' THEN EVALTMPL_UUID ELSE PRE_EVALTMPL_UUID END  /* 이전 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID                = #{g.tenant}              /* 시스템 아이디 */
+          AND OBD_EVALSHT_PRCS_UUID = #{p.work_evaltmpl_uuid}  /* 온보딩평가그룹 UUID */
+    </update>
+    <update id="saveMappingOrgnObdEvaltmplUuidToObdEvalsht">
+        /* obd-evalsht-setup.saveMappingOrgnObdEvaltmplUuidToObdEvalsht : 온보딩 평가시트 - 수정 전 원본 평가템플릿 매핑 */
+        UPDATE OBD_EVALSHT_PRCS        /* 온보딩 평가시트 프로세스 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID           = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM          = #{g.now}                     /* 수정 일시 */
+            , STS               = 'U'                          /* 상태 */
+            , PRE_EVALTMPL_UUID = #{p.pre_evaltmpl_uuid}       /* 이전 평가템플릿 UUID */
+            , EVALTMPL_UUID     = PRE_EVALTMPL_UUID            /* 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID                = #{g.tenant}              /* 시스템 아이디 */
+          AND OBD_EVALSHT_PRCS_UUID = #{p.work_evaltmpl_uuid}  /* 온보딩평가그룹 UUID */
+    </update>
+</mapper>

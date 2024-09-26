@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-shared">
+	<select id="findListProStatusForMainProgressBarView" resultType="map">
+		/* rfx-shared.findListProStatusForMainProgressBarView main pro 상태값 조회 */
+		SELECT RFX_PRGS_STS.MAIN_TASK_DTLCD
+		     , RFX_PRGS_STS.SORT AS MAIN_SORT_ORD
+		     , (
+		        SELECT SORT
+		          FROM RFX_PRGS_STS
+		         WHERE TEN_ID = #{g.tenant}
+		           AND TASK_TYP = #{p.task_typ}
+		           AND MAIN_TASK_DTLCD = #{p.main_task_dtlcd}
+		       ) AS CRNT_MAIN_SORT_ORD
+		     , DTLMULT.DTLCD_NM AS MAIN_WORK_NM
+		     , '1'              AS AFTR_SORT_ORD
+		  FROM RFX_PRGS_STS RFX_PRGS_STS
+		 INNER JOIN DTLCD_MULTLANG DTLMULT
+		    ON DTLMULT.TEN_ID = RFX_PRGS_STS.TEN_ID
+		   AND DTLMULT.CCD = RFX_PRGS_STS.MAIN_TASK_CCD
+		   AND DTLMULT.DTLCD = RFX_PRGS_STS.MAIN_TASK_DTLCD
+		 INNER JOIN DTLCD DTL
+		    ON DTL.TEN_ID = DTLMULT.TEN_ID
+		   AND DTL.CCD = DTLMULT.CCD
+		   AND DTL.DTLCD = DTLMULT.DTLCD
+		 WHERE RFX_PRGS_STS.TEN_ID = #{g.tenant}
+		   AND RFX_PRGS_STS.TASK_TYP = #{p.task_typ}
+		   AND DTL.USE_YN = 'Y'
+		   AND DTL.STS != 'D'
+		   AND DTLMULT.LANG_CCD = #{g.locale}
+		 ORDER BY RFX_PRGS_STS.SORT
+	</select>
+	<select id="findListProSubStatusForMainProgressBarView" resultType="map">
+		/* rfx-shared.findListProSubStatusForMainProgressBarView sub pro 상태값 조회 */
+		SELECT RFX_PRGS_STS_DTL.MAIN_TASK_DTLCD
+		     , RFX_PRGS_STS_DTL.SORT AS SUB_SORT_ORD
+		     , (
+		        SELECT SORT
+		          FROM RFX_PRGS_STS_DTL
+		         WHERE TEN_ID = #{g.tenant}
+		           AND TASK_TYP = #{p.task_typ}
+		           AND MAIN_TASK_DTLCD = #{p.main_task_dtlcd}
+		           AND SUB_TASK_DTLCD = #{p.sub_task_dtlcd}
+		       ) AS CRNT_SUB_SORT_ORD
+		     , DTLCD_MULTLANG.DTLCD_NM AS SUB_WORK_NM
+		  FROM RFX_PRGS_STS_DTL RFX_PRGS_STS_DTL
+		 INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD_MULTLANG.TEN_ID = RFX_PRGS_STS_DTL.TEN_ID
+		   AND DTLCD_MULTLANG.CCD = RFX_PRGS_STS_DTL.SUB_TASK_CCD
+		   AND DTLCD_MULTLANG.DTLCD = RFX_PRGS_STS_DTL.SUB_TASK_DTLCD
+		 INNER JOIN DTLCD DTL
+		    ON DTL.TEN_ID = DTLCD_MULTLANG.TEN_ID
+		   AND DTL.CCD = DTLCD_MULTLANG.CCD
+		   AND DTL.DTLCD = DTLCD_MULTLANG.DTLCD
+		 WHERE RFX_PRGS_STS_DTL.TEN_ID = #{g.tenant}
+		   AND RFX_PRGS_STS_DTL.TASK_TYP = #{p.task_typ}
+		   AND RFX_PRGS_STS_DTL.MAIN_TASK_DTLCD = #{p.main_task_dtlcd}
+		   AND DTL.USE_YN = 'Y'
+		   AND DTL.STS != 'D'
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		 ORDER BY RFX_PRGS_STS_DTL.SORT
+	</select>
+	<select id="findVendorBasicInfo" resultType="map">
+		/* pro-shared.findVendorBasicInfo: 협력사 기본정보 조회 */
+		SELECT VD.CTRY_CCD
+		     , VD.VD_CD
+		     , VD.ERP_VD_CD
+		     , CASE WHEN VD.ERP_VD_CD IS NOT NULL  THEN VD.ERP_VD_CD
+		            ELSE VD.VD_CD
+		        END AS DISP_VD_CD
+		     , VD.VD_NM
+		     , VD.VD_NM_EN
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS DISP_VD_NM
+		     , VD.BIZREGNO
+		     , VD.CORPNO
+		     , VD.CEO_NM
+		     , VD.CEO_NM_EN
+		     , VD.IND
+		     , VD.BIZTYP
+		  FROM VD VD
+		 WHERE VD.TEN_ID = #{g.tenant}
+		   AND VD.VD_CD  = #{p.vd_cd}
+	</select>
+	<select id="findListYearlyRfxItemByVendor" resultType="map">
+		/* pro-shared.findListYearlyRfxItemByVendor: 특정 협력사에 대한 연도별 RFx 실적 목록 조회 */
+		SELECT T.RFX_YEAR
+		     , T.OORG_CD
+		     , T.OPER_ORG_NM
+		     , T.REQ_CNT
+		     , T.ATTEND_CNT
+		     , CASE WHEN T.REQ_CNT = 0 THEN 0
+		            ELSE T.ATTEND_CNT / T.REQ_CNT * 100
+		        END AS ATTEND_RATE
+		     , T.STL_CNT
+		     , CASE WHEN T.ATTEND_CNT = 0 THEN 0
+		            ELSE T.STL_CNT / T.ATTEND_CNT * 100
+		        END AS STL_RATE
+		  FROM (
+		        SELECT TO_CHAR(RFX.RFX_CRN_DT, 'YYYY')  AS RFX_YEAR
+		             , RFX.OORG_CD
+		             , (
+		                SELECT LOGIC_ORG.LOGIC_ORG_NM
+		                  FROM OORG OORG
+		                 INNER JOIN LOGIC_ORG LOGIC_ORG
+		                    ON LOGIC_ORG.TEN_ID = OORG.TEN_ID
+		                   AND LOGIC_ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+		                   AND LOGIC_ORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD
+		                   AND LOGIC_ORG.STS != 'D'
+		                 WHERE OORG.TEN_ID  = RFX.TEN_ID
+		                   AND OORG.OORG_CD = RFX.OORG_CD
+		               ) AS OPER_ORG_NM
+		             , COUNT(RFX_VD.VD_CD) AS REQ_CNT
+		             , SUM(CASE WHEN RFX_BID.VD_CD IS NULL OR RFX_BID.VD_CD = '' THEN 0 ELSE 1 END)  AS ATTEND_CNT
+		             , SUM(CASE WHEN RFX_BID.SLCTN_YN = 'Y' THEN 1 ELSE 0 END) AS STL_CNT
+		          FROM RFX RFX
+		         INNER JOIN RFX_VD RFX_VD
+		            ON RFX_VD.TEN_ID = RFX.TEN_ID
+		           AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_VD.VD_CD  = #{p.vd_cd}
+		           AND RFX_VD.STS   != 'D'
+		          LEFT OUTER JOIN RFX_BID RFX_BID
+		            ON RFX_BID.TEN_ID   = RFX.TEN_ID
+		           AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		           AND RFX_BID.RFX_RND  = RFX.RFX_RND
+		           AND RFX_BID.VD_CD    = #{p.vd_cd}
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM' /* S: 제출 */
+		           AND RFX_BID.STS     != 'D'
+		         WHERE RFX.TEN_ID       = #{g.tenant}
+		           <if test="p.oorg_cds != null and p.oorg_cds.size() gt 0">
+		               AND RFX.OORG_CD IN
+		               <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		                   #{oorg_cd}
+		               </foreach>
+		           </if>
+		           AND RFX.RFX_STS_CCD = 'ED'
+		           AND RFX.RFX_RES_STS_CCD  = 'VD_SLCTN'
+		         GROUP BY RFX.TEN_ID, RFX.OORG_CD
+		                , TO_CHAR(RFX.RFX_CRN_DT, 'YYYY')  ) T
+		 ORDER BY T.RFX_YEAR DESC, T.OORG_CD
+	</select>
+	<select id="findItemBasicInfo" resultType="map">
+		/* rfx-shared.findItemBasicInfo: 품목 기본정보 조회 */
+		SELECT ITEM.IMG_ATHG_UUID
+		     , ITEM.ITEMCAT_LVL_1_CD
+		     , (
+		        SELECT MCLS.ITEMCAT_NM
+		          FROM ITEMCAT MCLS
+		         WHERE MCLS.TEN_ID = ITEM.TEN_ID
+		           AND MCLS.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+		       ) AS ITEMCAT_LVL_1_NM
+		     , ITEM.ITEMCAT_LVL_2_CD
+		     , (
+		        SELECT MCLS.ITEMCAT_NM
+		          FROM ITEMCAT MCLS
+		         WHERE MCLS.TEN_ID = ITEM.TEN_ID
+		           AND MCLS.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+		       ) AS ITEMCAT_LVL_2_NM
+		     , ITEM.ITEMCAT_LVL_3_CD
+		     , (
+		        SELECT MCLS.ITEMCAT_NM
+		          FROM ITEMCAT MCLS
+		         WHERE MCLS.TEN_ID  = ITEM.TEN_ID
+		           AND MCLS.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+		       ) AS ITEMCAT_LVL_3_NM
+		     , ITEM.ITEMCAT_LVL_4_CD
+		     , (
+		        SELECT MCLS.ITEMCAT_NM
+		          FROM ITEMCAT MCLS
+		         WHERE MCLS.TEN_ID  = ITEM.TEN_ID
+		           AND MCLS.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+		       ) AS ITEMCAT_LVL_4_NM
+		     , ITEM.ITEM_CD
+		     , ITEM.ITEM_NM
+		     , ITEM.ITEM_NM_EN
+		     , ITEM.UOM_CCD
+		     , ITEM.ITEM_SPEC
+		     , ITEM.RMK
+		  FROM ITEM ITEM
+		 WHERE ITEM.TEN_ID  = #{g.tenant}
+		   AND ITEM.ITEM_CD = #{p.item_cd}
+	</select>
+	<select id="findListPic" resultType="map">
+		/* rfx-shared.findListPic 담당자 목록 조회 */
+		SELECT USR.TEN_ID
+			 , USR.USR_ID
+			 , USR.CO_CD
+			 , VD.VD_CD
+			 , VD.ERP_VD_CD
+			 , VD.VD_NM
+			 , USR.USR_NM
+			 , USR.USR_NM_EN
+			 , USR.EML
+			 , USR.EML_RCPT_YN
+			 , USR.MOB
+			 , USR.SMS_RCPT_YN
+			 , USR.TEL
+			 , USR.USE_YN
+		  FROM USR USR
+	     INNER JOIN VD VD /* 협력사 */
+            ON VD.TEN_ID = USR.TEN_ID
+           AND VD.VD_CD = USR.VD_CD
+		 WHERE USR.TEN_ID = #{g.tenant}
+		   AND USR.USR_TYP_CCD = 'VD'
+		   AND VD.VD_CD = #{g.vd_cd}
+		   AND USR.STS != 'D'
+		 ORDER BY USR.REG_DTTM DESC
+	</select>
+    <select id="findRfxInviteVendor" resultType="map">
+    /* rfx-shared.findRfxInviteVendor: rfx 신규 협력사 조회 (rfx 진행중이고 인증번호 일치) */
+        SELECT RVI.TEN_ID
+             , RVI.RFX_VD_INVI_UUID
+             , RVI.RFX_VD_UUID
+             , RVI.USR_ID
+             , RV.VD_CD
+             , RVI.AUTH_NO
+             , RVI.RMK
+             , RVI.STS
+             , RV.RFX_UUID
+             , VD.CTRY_CCD
+          FROM RFX_VD_INVI RVI
+         INNER JOIN RFX_VD RV
+            ON RV.TEN_ID = RVI.TEN_ID
+           AND RV.RFX_VD_UUID = RVI.RFX_VD_UUID
+           AND RV.STS != 'D'
+         INNER JOIN VD VD
+            ON VD.TEN_ID = RV.TEN_ID
+           AND VD.VD_CD = RV.VD_CD
+         INNER JOIN RFX RFX
+            ON RFX.TEN_ID = RV.TEN_ID
+           AND RFX.RFX_UUID = RV.RFX_UUID
+         WHERE RVI.TEN_ID = #{g.tenant}
+           AND RVI.RFX_VD_UUID = #{p.task_uuid}
+           AND RVI.AUTH_NO = #{p.auth_no}
+           AND RFX.RFX_STS_CCD = 'PRGSG'
+    </select>
+</mapper>

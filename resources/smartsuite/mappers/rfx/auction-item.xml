@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="auction-item">
+	<select id="findListAuctionItem" resultType="map">
+		/* auction-item.findListAuctionItem : 역경매 품목 목록 조회 */
+		SELECT RFX.TEN_ID
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_REQ_RCPT_UUID
+		     , RFX_ITEM.PR_ITEM_UUID
+		     , RFX_ITEM.UPCR_ITEM_UUID
+		     , RFX_ITEM.RFX_UUID
+		     , RFX_ITEM.OORG_CD
+		     , RFX_ITEM.RFX_NO
+		     , RFX_ITEM.RFX_RND
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.PR_NO
+		     , RFX_ITEM.PR_LNO
+		     , RFX_ITEM.UPCR_NO
+		     , RFX_ITEM.UPCR_LNO
+		     , RFX_ITEM.PURC_TYP_CCD
+		     , RFX_ITEM.PLT_CD
+		     , RFX_ITEM.ITEM_OORG_CD
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN RFX_ITEM.ITEM_NM_EN
+		            ELSE RFX_ITEM.ITEM_NM
+		        END AS DISP_ITEM_NM
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.ITEM_NM_EN
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.RFX_QTY
+		     , RFX_ITEM.RFX_REQ_UPRC
+		     ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_REQ_UPRC, RFX.CUR_CCD) AS RFQ_AMT
+		     , RFX_ITEM.RFX_TRG_UPRC
+		     , RFX_ITEM.RFX_LMT_UPRC
+		     , RFX_ITEM.WH_CCD
+		     , RFX_ITEM.REQ_DLVY_DT
+		     , RFX_ITEM.CONST_ST_DT
+		     , RFX_ITEM.CONST_EXP_DT
+		     , RFX_ITEM.DLVY_PLC
+		     , RFX_ITEM.ATHG_UUID
+		     , RFX_ITEM.SLCTN_YN
+		     , RFX_ITEM.SLCTN_QTY
+		     , RFX_ITEM.SG_CD
+		     , RFX_ITEM.CUR_CCD
+		     , RFX_ITEM.PURC_GRP_CD
+		     , RFX_ITEM.ED_YN
+		     , RFX_ITEM.STS
+		     , RFX_ITEM.REGR_ID
+		     , RFX_ITEM.REG_DTTM
+		     , RFX_ITEM.MODR_ID
+		     , RFX_ITEM.MOD_DTTM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN PURC_GRP.PURC_GRP_NM_EN
+		            ELSE PURC_GRP.PURC_GRP_NM
+		        END PURC_GRP_NM
+		     , PR_ITEM.PR_UUID
+		     , UPCR_ITEM.UPCR_UUID
+		  FROM RFX RFX
+		 INNER JOIN RFX_ITEM RFX_ITEM
+		    ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		   AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_ITEM.STS     != 'D'
+		  LEFT OUTER JOIN PURC_GRP PURC_GRP /* 직무(그룹) */
+		    ON PURC_GRP.TEN_ID           = RFX_ITEM.TEN_ID
+		   AND PURC_GRP.PURC_GRP_TYP_CCD = 'PURC'
+		   AND PURC_GRP.PURC_GRP_CD      = RFX_ITEM.PURC_GRP_CD
+		   AND PURC_GRP.CO_CD            = #{g.comp_cd}
+		   AND PURC_GRP.USE_YN           = 'Y'
+		  LEFT OUTER JOIN PR_ITEM PR_ITEM
+		    ON PR_ITEM.TEN_ID = RFX_ITEM.TEN_ID
+		   AND PR_ITEM.PR_ITEM_UUID = RFX_ITEM.PR_ITEM_UUID
+		  LEFT OUTER JOIN UPCR_ITEM UPCR_ITEM
+		    ON UPCR_ITEM.TEN_ID = RFX_ITEM.TEN_ID
+		   AND UPCR_ITEM.UPCR_ITEM_UUID = RFX_ITEM.UPCR_ITEM_UUID
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   <if test="p.ed_yn != null and p.ed_yn != ''">
+		   AND RFX_ITEM.ED_YN = #{p.ed_yn}
+		   </if>
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT) ASC
+	</select>
+	<insert id="insertAuctionItem">
+		/* auction-item.insertAuctionItem : 역경매 품목 신규생성 */
+		INSERT INTO RFX_ITEM (
+			TEN_ID
+			, RFX_ITEM_UUID
+			, RFX_UUID
+			, PR_ITEM_UUID
+			, OORG_CD
+			, RFX_NO
+			, RFX_RND
+			, RFX_LNO
+			, PR_NO
+			, PR_LNO
+			, PURC_TYP_CCD
+			, PLT_CD
+			, ITEM_OORG_CD
+			, ITEM_CD_CRN_TYP_CCD
+			, ITEM_CD
+			, ITEM_NM
+			, ITEM_NM_EN
+			, ITEM_SPEC
+			, ITEM_SPEC_DTL
+			, UOM_CCD
+			, RFX_QTY
+			, RFX_REQ_UPRC
+			, RFX_TRG_UPRC
+			, RFX_LMT_UPRC
+			, WH_CCD
+			, REQ_DLVY_DT
+			, CONST_ST_DT
+			, CONST_EXP_DT
+			, DLVY_PLC
+			, ATHG_UUID
+			, SLCTN_YN
+			, SLCTN_QTY
+			, SG_CD
+			, CUR_CCD
+			, PURC_GRP_CD
+			, ED_YN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+			, UPCR_ITEM_UUID
+			, UPCR_NO
+			, UPCR_LNO
+			, RFX_REQ_RCPT_UUID
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_item_uuid}
+			, #{p.rfx_uuid}
+			, #{p.pr_item_uuid}
+			, #{p.oorg_cd}
+			, #{p.rfx_no}
+			, CAST(#{p.rfx_rnd} AS INT)
+			, TO_CHAR(#{p.rfx_lno})  , #{p.pr_no}
+			, TO_CHAR(#{p.pr_lno})  , #{p.purc_typ_ccd}
+			, #{p.plt_cd}
+			, #{p.item_oorg_cd}
+			, #{p.item_cd_crn_typ_ccd}
+			, #{p.item_cd}
+			, #{p.item_nm}
+			, #{p.item_nm_en}
+			, #{p.item_spec}
+			, #{p.item_spec_dtl}
+			, #{p.uom_ccd}
+			, CAST(#{p.rfx_qty} AS FLOAT  )
+			, CAST(#{p.rfx_req_uprc} AS FLOAT  )
+			, CAST(#{p.rfx_trg_uprc} AS FLOAT  )
+			, CAST(#{p.rfx_lmt_uprc} AS FLOAT  )
+			, #{p.wh_ccd}
+			, #{p.req_dlvy_dt}
+			, #{p.const_st_dt}
+			, #{p.const_exp_dt}
+			, #{p.dlvy_plc}
+			, #{p.athg_uuid}
+			, #{p.slctn_yn}
+			, CAST(#{p.slctn_qty} AS FLOAT  )
+			, #{p.sg_cd}
+			, #{p.cur_ccd}
+			, #{p.purc_grp_cd}
+			<choose>
+			    <when test="g.isNotEmpty(p.ed_yn)">
+			        , #{p.ed_yn}
+			    </when>
+			    <otherwise>
+			        , 'N'
+			    </otherwise>
+			</choose>
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+			, #{p.upcr_item_uuid}
+			, #{p.upcr_no}
+			, TO_CHAR(#{p.upcr_lno})  , #{p.rfx_req_rcpt_uuid}
+		)
+	</insert>
+	<update id="updateAuctionItem">
+		/* auction-item.updateAuctionItem : 역경매 품목 수정 */
+		UPDATE RFX_ITEM
+		   SET RFX_LNO             = TO_CHAR(#{p.rfx_lno})  , PR_NO               = #{p.pr_no}
+		     , PR_LNO              = TO_CHAR(#{p.pr_lno})  , UPCR_NO             = #{p.upcr_no}
+		     , UPCR_LNO            = TO_CHAR(#{p.upcr_lno})  , PURC_TYP_CCD        = #{p.purc_typ_ccd}
+		     , PLT_CD              = #{p.plt_cd}
+		     , ITEM_OORG_CD        = #{p.item_oorg_cd}
+		     , ITEM_CD_CRN_TYP_CCD = #{p.item_cd_crn_typ_ccd}
+		     , ITEM_CD             = #{p.item_cd}
+		     , ITEM_NM             = #{p.item_nm}
+		     , ITEM_NM_EN          = #{p.item_nm_en}
+		     , ITEM_SPEC           = #{p.item_spec}
+		     , ITEM_SPEC_DTL       = #{p.item_spec_dtl}
+		     , UOM_CCD             = #{p.uom_ccd}
+		     , RFX_QTY             = CAST(#{p.rfx_qty} AS FLOAT  )
+		     , RFX_REQ_UPRC        = CAST(#{p.rfx_req_uprc} AS FLOAT  )
+		     , RFX_LMT_UPRC        = CAST(#{p.rfx_lmt_uprc} AS FLOAT  )
+		     , WH_CCD              = #{p.wh_ccd}
+		     , REQ_DLVY_DT         = #{p.req_dlvy_dt}
+		     , CONST_ST_DT         = #{p.const_st_dt}
+		     , CONST_EXP_DT         = #{p.const_exp_dt}
+		     , DLVY_PLC            = #{p.dlvy_plc}
+		     , ATHG_UUID           = #{p.athg_uuid}
+		     , SLCTN_YN            = #{p.slctn_yn}
+		     , SLCTN_QTY           = CAST(#{p.slctn_qty} AS FLOAT  )
+		     , SG_CD               = #{p.sg_cd}
+		     , CUR_CCD             = #{p.cur_ccd}
+		     , PURC_GRP_CD         = #{p.purc_grp_cd}
+		     <choose>
+		         <when test="p.rfx_trg_uprc == null">
+		             , RFX_TRG_UPRC = NULL
+		         </when>
+		         <otherwise>
+		             , RFX_TRG_UPRC = CAST(#{p.rfx_trg_uprc} AS FLOAT  )
+		         </otherwise>
+		     </choose>
+		     , STS      = 'U'
+		     , MODR_ID  = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID        = #{g.tenant}
+		   AND RFX_ITEM_UUID = #{p.rfx_item_uuid}
+	</update>
+	<delete id="deleteAuctionItemsByRfx">
+		/* auction-item.deleteAuctionItems : 역경매 품목 삭제 */
+		DELETE
+		  FROM RFX_ITEM
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</delete>
+	<delete id="deleteAuctionItem">
+		/* auction-item.deleteAuctionItem : 역경매 품목 삭제 */
+		DELETE
+		  FROM RFX_ITEM
+		 WHERE TEN_ID        = #{g.tenant}
+		   AND RFX_UUID      = #{p.rfx_uuid}
+		   AND RFX_ITEM_UUID = #{p.rfx_item_uuid}
+	</delete>
+	<select id="selectAuctionItemStlInfo" resultType="map">
+		/* auction-item.selectAuctionItemStlInfo: RFx 선정품의 승인 시 품목별 선정 여부 및 선정수량 조회 */
+		SELECT RFX_ITEM.TEN_ID
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , CASE WHEN (SUM(CASE WHEN RFX_BID_ITEM.SLCTN_YN = 'Y' THEN 1 ELSE 0 END)) &gt; 0
+		                 THEN 'Y'
+		            ELSE 'N'
+		       END AS SLCTN_YN
+		     , SUM(CASE WHEN RFX_BID_ITEM.SLCTN_YN = 'Y'
+		                     THEN (CASE WHEN RFX_BID_ITEM.SLCTN_QTY IS NULL THEN 0 ELSE RFX_BID_ITEM.SLCTN_QTY END)
+		                ELSE 0
+		           END) AS SLCTN_QTY
+		  FROM RFX_ITEM RFX_ITEM
+		 INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 GROUP BY RFX_ITEM.TEN_ID, RFX_ITEM.RFX_ITEM_UUID
+	</select>
+	<update id="updateAuctionItemStlInfo">
+		/* auction-item.updateAuctionItemStlInfo: 견적품목 선정 여부 및 선정수량 변경 */
+		UPDATE RFX_ITEM
+		   SET SLCTN_YN  = #{p.slctn_yn}
+		     , SLCTN_QTY = #{p.slctn_qty}
+		 WHERE TEN_ID        = #{g.tenant}
+		   AND RFX_ITEM_UUID = #{p.rfx_item_uuid}
+	</update>
+</mapper>

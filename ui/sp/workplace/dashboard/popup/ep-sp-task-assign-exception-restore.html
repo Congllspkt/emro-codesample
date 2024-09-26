@@ -1,0 +1,147 @@
+<dom-module id="ep-sp-task-assign-exception-restore">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+		<!-- 조회 -->
+		<sc-ajax id="findListAssignException" url="findListSpTask.do"></sc-ajax>
+		
+		<!-- 제외복원 -->
+		<sc-ajax id="deleteListAssignException" url="deleteListSpAssignException.do"></sc-ajax>
+
+        <sc-code-group>
+            <sc-code code="C053" value="{{codes.exception}}"></sc-code>
+        </sc-code-group>
+		
+        <sc-grid id="taskGrid" class="flex" data-provider="{{taskList}}" on-item-click="onItemClick">
+            <cc-grid-toolbar title-text="대상 업무">
+				<sc-button text="복원" on-click="onClickRestore"></sc-button>
+			</cc-grid-toolbar>
+            <sc-grid-columns>
+				<sc-data-column data-field="display_main_task_nm" header-text="메인 업무"></sc-data-column>
+                <sc-date-column data-field="clsg_dt" header-text="마감 일자" width="130" display-format="yyyy/MM/dd"></sc-date-column>
+                <sc-data-column data-field="task_tit" header-text="업무 제목" width="300" text-align="left"></sc-data-column>
+                <sc-date-column data-field="snd_dttm" header-text="발신 일시" width="130" display-format="yyyy/MM/dd HH:mm:ss"></sc-date-column>
+                <sc-data-column data-field="sndr_nm" header-text="발신자"></sc-data-column>
+				<sc-combobox-column data-field="xcept_typ_ccd" header-text="제외 유형"	items="{{codes.exception}}" display-field="label" value-field="data" ></sc-combobox-column>
+				<sc-image-column data-field="img_xcept_dtl_rsn" header-text="제외 상세 사유"	image-change-function="onImageChangeFn" ></sc-image-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+				<sc-grid-field data-field="task_uuid"></sc-grid-field>
+				<sc-grid-field data-field="task_authty_uuid"></sc-grid-field>
+				<sc-grid-field data-field="xcept_yn"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+		
+		<sc-dialog id="dialog_xcept_dtl_rsn" title-text="제외 상세 사유" title-align="left" style="width:500px;height:250px" modal="true">
+			<table class="tb-form">
+				<tr>
+					<td>
+						<sc-textarea-field id="xcept_dtl_rsn_text" class="h-150" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+    </template>
+
+    <script>
+        Polymer({
+            is : 'ep-sp-task-assign-exception-restore',
+
+            properties: {
+            	codes: {
+            	    type: Object,
+                    reset: false,
+                    value: function () {
+                        return {};
+					}
+                },
+                titleText: {
+                    type: String,
+                    value: I18N.translate("업무 제외 관리")
+                },
+                taskList: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                exceptionData: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+            
+            load: function () {
+                var me = this;
+				
+				var param = { only_exception: "Y" }; // 제외업무 조회 시 모든 검색조건에 대해 조회함
+				me.$.findListAssignException.body = param;
+				
+				UT.request(me.$.findListAssignException, function(e, res) {
+					var result = res.response;
+					var grid = me.$.taskGrid;
+					grid.setDataProvider(result);
+				});
+            },
+
+            onClickRestore: function () {
+                var me = this;
+				
+				var checkedItems = me.$.taskGrid.getDataProvider().selectionCheckedItems();
+				if(checkedItems.length === 0){
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+
+				UT.confirm("STD.WRK1015", function() { // 선택된 업무를 제외복원하시겠습니까?
+					me.$.deleteListAssignException.body = {
+						taskList: checkedItems
+				    };
+					
+					UT.request(me.$.deleteListAssignException, function(e, res) {
+						var result = res.response;
+						if(result && result.resultStatus === "S") {
+							UT.completeAlert();	// 요청을 완료하였습니다.
+							me.fire("complete-save");
+						} else {
+							UT.alert(result.resultMessage);
+						}
+					});
+				});
+            },
+			// grid image column 데이터에 따른 icon 처리
+			onImageChangeFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "img_xcept_dtl_rsn" && UT.isNotEmpty(data.xcept_dtl_rsn)) {
+					// 제외 상세 사유 내용 있을 경우 link
+					return "link";
+					
+				}
+				return null;
+			},
+			onItemClick : function(e) {
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item;
+				
+				var dataField = item.dataField;
+				if(dataField === "img_xcept_dtl_rsn" && UT.isNotEmpty(data["xcept_dtl_rsn"])) {
+					me.$.xcept_dtl_rsn_text.value = data["xcept_dtl_rsn"];
+					me.$.dialog_xcept_dtl_rsn.show();
+				}
+			}
+        });
+    </script>
+</dom-module>

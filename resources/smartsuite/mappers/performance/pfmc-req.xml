@@ -1,0 +1,2106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="pfmc-req">
+    <select id="findPfmcEvalReq" resultType="map">
+    /* pfmc-req.findPfmcEvalReq : 퍼포먼스평가 조회 */
+    SELECT PE.PE_UUID
+         , PE.OORG_CD
+         , PE.EVAL_CD
+         , PE.EVAL_NM
+         , PE.EVALTR_EVAL_ST_DT
+         , PE.EVALTR_EVAL_CLSG_DT
+         , PE.SLFCK_ST_DT
+         , PE.SLFCK_CLSG_DT
+         , CAST(PE.EVAL_SUBJ_YR AS INT) EVAL_SUBJ_YR
+         , PE.DAT_COLL_ST_YYMM
+         , PE.DAT_COLL_ED_YYMM
+         , PE.SLFCK_SUBJ_YN
+         , PE.VD_APPEAL_POSS_YN
+         , PE.IMPROV_REQ_APPL_YN
+         , PE.DIFF_APPL_YN
+         , PE.PE_ED_YN
+         , PE.PE_ED_DT
+         , PE.PE_STS_CCD
+         , PE.RMK
+         , PE.REGR_ID
+         , PE.REG_DTTM
+         , PE.MODR_ID
+         , PE.MOD_DTTM
+      FROM PE
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PE.PE_UUID = #{p.pe_uuid}
+    </select>
+	<select id="findListPfmcEvalPeg" resultType="map">
+	/* pfmc-req.findListPfmcEvalPeg : 퍼포먼스평가 평가그룹 목록 조회 */
+    SELECT PEG.TEN_ID
+         , PEG.PEG_UUID
+         , PEG.OORG_CD
+         , PEG.PEG_CD
+         , PEG.PEG_NM
+         , PEG.PEG_EXPLN
+         , PEG.RMK
+         , PEG.REGR_ID
+         , PEG.MODR_ID
+         , PEG.MOD_DTTM
+         , CASE WHEN PPEG.TEN_ID IS NOT NULL  THEN 'Y'
+                ELSE 'N'
+            END APPLY_PEG_YN
+         , PPEG.PE_PEG_UUID
+         , PPEG.PE_UUID
+         , PPEG.PFMC_EVALSHT_UUID AS PE_PFMC_EVALSHT_UUID
+         , EFCT_SHT.PFMC_EVALSHT_UUID
+         , (SELECT COUNT(DISTINCT PVMG.VMG_OORG_UUID)
+              FROM PEG_VMG PVMG
+             INNER JOIN VMG_OORG VO
+                ON PVMG.TEN_ID = VO.TEN_ID
+               AND PVMG.VMG_OORG_UUID = VO.VMG_OORG_UUID
+               AND VO.USE_YN = 'Y'
+               AND VO.STS != 'D'
+             INNER JOIN VMG
+                ON VO.TEN_ID = VMG.TEN_ID
+               AND VO.VMG_UUID = VMG.VMG_UUID
+               AND VMG.STS != 'D'
+             WHERE PVMG.TEN_ID = PEG.TEN_ID AND PVMG.PEG_UUID = PEG.PEG_UUID AND PVMG.STS != 'D') AS LINK_VMG_CNT
+    FROM PEG
+    LEFT OUTER JOIN PE_PEG PPEG
+      ON PEG.TEN_ID = PPEG.TEN_ID
+     AND PEG.PEG_UUID = PPEG.PEG_UUID
+     AND PPEG.STS != 'D'
+     <choose>
+       <when test="p.pe_uuid != null and p.pe_uuid != ''">
+     AND PPEG.PE_UUID = #{p.pe_uuid}
+       </when>
+       <otherwise>
+     AND 1 != 1
+       </otherwise>
+     </choose>
+     LEFT OUTER JOIN (
+              SELECT PFMCSHT.*
+                   , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+               FROM PFMC_EVALSHT PFMCSHT
+              WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                AND PFMCSHT.STS != 'D'
+         ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+        ON PEG.TEN_ID = EFCT_SHT.TEN_ID
+       AND PEG.PEG_UUID = EFCT_SHT.PEG_UUID
+       AND EFCT_SHT.RK = 1
+   WHERE PEG.TEN_ID = #{g.tenant}
+     AND PEG.OORG_CD = #{p.oorg_cd}
+     /* 유효한 상태의 평가그룹 확인. 현재 유효한 평가시트를 갖고 있는 평가그룹이거나 현재 퍼포먼스평가그룹으로 쓰이고 있는 평가그룹 */
+     AND CASE WHEN (PPEG.PE_PEG_UUID IS NULL or PPEG.PE_PEG_UUID = '') AND EFCT_SHT.TEN_ID IS NOT NULL  THEN 'Y'
+                    WHEN PPEG.PE_PEG_UUID IS NOT NULL  THEN 'Y'
+              ELSE 'N'
+          END = 'Y'
+      AND PEG.STS != 'D'
+       <if test="p.apply_peg_yn != null and p.apply_peg_yn eq 'Y'.toString()">
+     AND PPEG.PE_UUID = #{p.pe_uuid}
+       </if>
+    ORDER BY PPEG.TEN_ID  , PEG.PEG_CD
+    </select>
+    <insert id="insertPe">
+    /* pfmc-req.insertPe : 퍼포먼스평가 신규 저장 */
+    INSERT INTO PE(
+           TEN_ID                        /*  테넌트 아이디    */
+         , PE_UUID                       /*  협력사 심사 그룹 아이디    */
+         , OORG_CD                       /*  운영조직 코드 */
+         , EVAL_CD                       /*  평가 코드    */
+         , EVAL_NM                       /*  평가 명    */
+         , EVALTR_EVAL_ST_DT             /*  평가자 평가 시작 일자    */
+         , EVALTR_EVAL_CLSG_DT           /*  평가자 평가 마감 일자    */
+         , SLFCK_ST_DT                   /*  자체점검 시작 일자    */
+         , SLFCK_CLSG_DT                 /*  자체점검 마감 일자    */
+         , EVAL_SUBJ_YR                  /*  평가 대상 년도    */
+         , DAT_COLL_ST_YYMM              /*  데이터 수집 시작 년월    */
+         , DAT_COLL_ED_YYMM              /*  데이터 수집 종료 년월    */
+         , SLFCK_SUBJ_YN                 /*  자체점검 대상 여부    */
+         , VD_APPEAL_POSS_YN           /*  협력사 이의제기 가능 여부    */
+         , IMPROV_REQ_APPL_YN            /*  개선 요청 가능 여부    */
+         , DIFF_APPL_YN             /*  차별화 적용 대상 여부    */
+         , PE_ED_YN                  /*  평가 종료 여부    */
+         , PE_ED_DT                  /*  평가 완료 일    */
+         , STS                           /*  상태    */
+         , RMK                           /*  비고    */
+         , REGR_ID                       /*  등록자 아이디    */
+         , REG_DTTM                      /*  등록 일시    */
+         , MODR_ID                       /*  수정자 아이디    */
+         , MOD_DTTM                      /*  수정 일시    */
+    ) VALUES (
+           #{g.tenant}                   /*  테넌트 아이디    */
+         , #{p.pe_uuid}                  /*  협력사 심사 그룹 아이디    */
+         , #{p.oorg_cd}
+         , #{p.eval_cd}                  /*  평가 코드    */
+         , #{p.eval_nm}                  /*  평가 명    */
+         , #{p.evaltr_eval_st_dt}        /*  평가자 평가 시작 일자    */
+         , #{p.evaltr_eval_clsg_dt}      /*  평가자 평가 마감 일자    */
+         , #{p.slfck_st_dt}              /*  자체점검 시작 일자    */
+         , #{p.slfck_clsg_dt}            /*  자체점검 마감 일자    */
+         , #{p.eval_subj_yr}             /*  평가 대상 년도    */
+         , #{p.dat_coll_st_yymm}         /*  데이터 수집 시작 년월    */
+         , #{p.dat_coll_ed_yymm}         /*  데이터 수집 종료 년월    */
+         , #{p.slfck_subj_yn}            /*  자체점검 대상 여부    */
+         , #{p.vd_appeal_poss_yn}      /*  협력사 이의제기 가능 여부    */
+         , #{p.improv_req_appl_yn}       /*  개선 요청 가능 여부    */
+         , #{p.diff_appl_yn}        /*  차별화 적용 대상 여부    */
+         , #{p.pe_ed_dt_yn}             /*  평가 종료 여부    */
+         , #{p.pe_ed_dt}             /*  평가 완료 일    */
+         , 'C'                           /*  상태    */
+         , #{p.rmk}                      /*  비고    */
+         , #{g.username}                 /*  등록자 아이디    */
+         , #{g.now}                      /*  등록 일시    */
+         , #{g.username}                 /*  수정자 아이디    */
+         , #{g.now}                      /*  수정 일시    */
+    )
+    </insert>
+    <insert id="insertPePeg">
+    /* pfmc-req.insertPePeg : 퍼포먼스 평가그룹 퍼포먼스 평가시트 저장 */
+    INSERT INTO PE_PEG(
+           TEN_ID                 /*  테넌트 아이디  */
+         , PE_PEG_UUID            /*  협력사 등록 요청 대상 그룹 아이디  */
+         , PE_UUID                /*  협력사 심사 그룹 아이디  */
+         , PEG_UUID               /*  퍼포먼스평가그룹 UUID  */
+         , PFMC_EVALSHT_UUID      /*  퍼포먼스 평가시트 UUID  */
+         , STS                    /*  상태  */
+         , RMK                    /*  비고  */
+         , REGR_ID                /*  등록자 아이디  */
+         , REG_DTTM               /*  등록 일시  */
+         , MODR_ID                /*  수정자 아이디  */
+         , MOD_DTTM               /*  수정 일시  */
+    ) VALUES(
+           #{g.tenant}            /*  테넌트 아이디  */
+         , #{g.uuid}              /*  협력사 등록 요청 대상 그룹 아이디  */
+         , #{p.pe_uuid}           /*  협력사 심사 그룹 아이디  */
+         , #{p.peg_uuid}          /*  퍼포먼스평가그룹 UUID  */
+         , #{p.pfmc_evalsht_uuid} /*  퍼포먼스 평가시트 UUID  */
+         , 'C'                    /*  상태  */
+         , #{p.rmk}               /*  비고  */
+         , #{g.username}          /*  등록자 아이디  */
+         , #{g.now}               /*  등록 일시  */
+         , #{g.username}          /*  수정자 아이디  */
+         , #{g.now}               /*  수정 일시  */
+    )
+    </insert>
+	<insert id="insertPeEvalGrd">
+    /* pmfc-req.insertPeEvalGrd : 퍼포먼스평가 평가그룹등급을 저장한다. */
+    INSERT INTO PE_EVAL_GRD (
+   	       TEN_ID
+         , PE_EVAL_GRD_UUID
+         , PE_PEG_UUID
+         , EVAL_GRD_CD
+         , EVAL_GRD_NM
+         , ST_VAL
+         , STP_VAL
+         , SORT
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    )
+    SELECT PPEG.TEN_ID
+         , RANDOMUUID  , PPEG.PE_PEG_UUID
+         , PEG_GRD.EVAL_GRD_CD
+         , PEG_GRD.EVAL_GRD_NM
+         , PEG_GRD.ST_VAL
+         , PEG_GRD.STP_VAL
+         , PEG_GRD.SORT
+         , 'C'
+         , PEG_GRD.RMK
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+      FROM PE_PEG PPEG
+     INNER JOIN PEG_EVAL_GRD PEG_GRD
+        ON PPEG.TEN_ID = PEG_GRD.TEN_ID
+       AND PPEG.PEG_UUID = PEG_GRD.PEG_UUID
+       AND PEG_GRD.STS != 'D'
+     WHERE PPEG.TEN_ID = #{g.tenant}
+       AND PPEG.PE_UUID = #{p.pe_uuid}
+        <choose>
+            <when test="p.req_type != null and p.req_type eq 'PE_PEG'.toString()">
+                AND PE_PEG_UUID = #{p.pe_peg_uuid}
+            </when>
+            <when test="p.req_type != null and p.req_type eq 'PE'.toString()">
+                AND 1 = 1
+            </when>
+            <otherwise>
+                AND PE_PEG_UUID = #{p.pe_peg_uuid}
+            </otherwise>
+        </choose>
+       AND PPEG.STS != 'D'
+    </insert>
+    <select id="findPePeg" resultType="map">
+    /* pfmc-req.findPePeg : 퍼포먼스평가 퍼포먼스 평가그룹 조회 */
+    SELECT PE.TEN_ID                   /* 테넌트 아이디 */
+         , PE.PE_UUID                  /* 퍼포먼스평가 UUID */
+         , PPEG.PE_PEG_UUID            /* 퍼포먼스평가 퍼포먼스평가그룹 UUID */
+         , PPEG.PEG_UUID               /* 퍼포먼스평가그룹 UUID */
+         , PPEG.PFMC_EVALSHT_UUID   AS PE_PFMC_EVALSHT_UUID   /* 기존에 저장되어있는 퍼포먼스 평가그룹 평가시트 UUID */
+         , PEG.OORG_CD                 /* 운영조직 코드 */
+         , PEG.PEG_CD                  /* 퍼포먼스평가그룹 코드 */
+         , PEG.PEG_NM                  /* 퍼포먼스평가그룹 명 */
+         , PEG.PEG_EXPLN               /* 퍼포먼스평가그룹 명 설명 */
+         , PPEG.STS
+         , PPEG.RMK
+         , PPEG.REGR_ID
+         , PPEG.REG_DTTM
+         , PPEG.MODR_ID
+         , PPEG.MOD_DTTM
+         , EFCT_SHT.PFMC_EVALSHT_UUID  /* 퍼포먼스 평가시트 UUID  */
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PEG    /* P : 퍼포먼스평가그룹 */
+        ON PPEG.TEN_ID = PEG.TEN_ID
+       AND PPEG.PEG_UUID = PEG.PEG_UUID
+       AND PEG.STS != 'D'
+      LEFT OUTER JOIN (
+               SELECT PFMCSHT.*
+                    , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                 FROM PFMC_EVALSHT PFMCSHT
+                WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                  AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                  AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                  AND PFMCSHT.STS != 'D'
+         ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+        ON PEG.TEN_ID = EFCT_SHT.TEN_ID
+       AND PEG.PEG_UUID = EFCT_SHT.PEG_UUID
+       AND EFCT_SHT.RK = 1
+    WHERE PE.TEN_ID    = #{g.tenant}
+      AND PE.PE_UUID   = #{p.pe_uuid}
+      AND PPEG.PEG_UUID = #{p.peg_uuid}
+    </select>
+    <select id="findListPfmcEvalshtEvalfactAuthty" resultType="map">
+    /* pfmc-req.findListPfmcEvalshtEvalfactAuthty : 퍼포먼스 평가시트 평가템플릿 평가항목별 담당자 권한 목록 조회 */
+    SELECT DISTINCT EVALFACT_EVALTR_AUTHTY_CCD
+      FROM EVALTMPL_EVALFACT TMPLFCT
+     WHERE TMPLFCT.TEN_ID = #{g.tenant}
+       AND TMPLFCT.EVALTMPL_UUID = #{p.evaltmpl_uuid}
+       AND TMPLFCT.EVALFACT_EVALTR_AUTHTY_CCD IS NOT NULL  AND STS != 'D'
+    </select>
+    <update id="updatePe">
+    /* pfmc-req.updatePe : 퍼포먼스평가 수정 저장 */
+    UPDATE PE
+       SET EVAL_NM                = #{p.eval_nm}              /*  평가 명    */
+         , EVALTR_EVAL_ST_DT      = #{p.evaltr_eval_st_dt}    /*  평가자 평가 시작 일자    */
+         , EVALTR_EVAL_CLSG_DT    = #{p.evaltr_eval_clsg_dt}  /*  평가자 평가 마감 일자    */
+         , SLFCK_ST_DT            = #{p.slfck_st_dt}          /*  자체점검 시작 일자    */
+         , SLFCK_CLSG_DT          = #{p.slfck_clsg_dt}        /*  자체점검 마감 일자    */
+         , EVAL_SUBJ_YR           = #{p.eval_subj_yr}         /*  평가 대상 년도    */
+         , DAT_COLL_ST_YYMM       = #{p.dat_coll_st_yymm}     /*  데이터 수집 시작 년월    */
+         , DAT_COLL_ED_YYMM       = #{p.dat_coll_ed_yymm}     /*  데이터 수집 종료 년월    */
+         , SLFCK_SUBJ_YN          = #{p.slfck_subj_yn}        /*  자체점검 대상 여부    */
+         , VD_APPEAL_POSS_YN    = #{p.vd_appeal_poss_yn}  /*  협력사 이의제기 가능 여부    */
+         , IMPROV_REQ_APPL_YN     = #{p.improv_req_appl_yn}   /*  개선 요청 가능 여부    */
+         , DIFF_APPL_YN           = #{p.diff_appl_yn}         /*  차별화 적용 대상 여부    */
+         , PE_ED_YN               = #{p.pe_ed_dt_yn}
+          /*  평가 종료 여부    */
+         , PE_ED_DT               = #{p.pe_ed_dt}             /*  평가 완료 일    */
+         , RMK                    = #{p.rmk}                  /*  비고    */
+         , STS                    = 'U'                       /*   상태   */
+         , MODR_ID                = #{g.username}             /*  수정자 아이디    */
+         , MOD_DTTM               = #{g.now}                  /*  수정 일시    */
+     WHERE TEN_ID = #{g.tenant}
+       AND PE_UUID = #{p.pe_uuid}
+    </update>
+    <delete id="deletePeSubjEvaltr">
+    /* pfmc-req.deletePeSubjEvaltr : 퍼포먼스평가 대상 평가자 삭제 */
+    DELETE FROM PE_SUBJ_EVALTR
+     WHERE TEN_ID = #{g.tenant}
+       AND STS != 'D'
+       <if test="p.del_slfck_evaltr_yn != null and p.del_slfck_evaltr_yn eq 'Y'.toString()">
+       AND SLFCK_EVALTR_YN = 'Y'
+       </if>
+    <choose>
+        <when test="p.del_typ != null and p.del_typ eq 'PE'.toString()">
+       AND EXISTS (
+           SELECT 'X'
+             FROM PE_SUBJ PSUBJ
+            INNER JOIN PE_PEG PPEG
+               ON PSUBJ.TEN_ID = PPEG.TEN_ID
+              AND PSUBJ.PE_PEG_UUID    = PPEG.PE_PEG_UUID
+            WHERE PE_SUBJ_EVALTR.TEN_ID        = PSUBJ.TEN_ID
+              AND PE_SUBJ_EVALTR.PE_SUBJ_UUID  = PSUBJ.PE_SUBJ_UUID
+              AND PPEG.PE_UUID         = #{p.pe_uuid}
+         )
+        </when>
+       <when test="p.del_typ != null and p.del_typ eq 'PE_PEG'.toString()">
+       AND PE_SUBJ_UUID IN (
+           SELECT PSUBJ.PE_SUBJ_UUID
+             FROM PE_SUBJ PSUBJ
+            WHERE PSUBJ.TEN_ID = TEN_ID
+              AND PSUBJ.PE_PEG_UUID = #{p.pe_peg_uuid})
+       </when>
+        <when test="p.del_typ != null and p.del_typ eq 'PE_SUBJ'.toString()">
+            AND PE_SUBJ_UUID  = #{p.pe_subj_uuid}
+        </when>
+       <otherwise>
+       AND PE_SUBJ_EVALTR_UUID = #{p.pe_subj_evaltr_uuid}
+       </otherwise>
+    </choose>
+    </delete>
+    <delete id="deletePeSubj">
+    /* pfmc-req.deletePeSubj : 퍼포먼스평가 대상 삭제 */
+    DELETE FROM PE_SUBJ
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+        <when test="p.del_typ != null and p.del_typ eq 'PE_PEG'.toString()">
+       AND PE_PEG_UUID = #{p.pe_peg_uuid}
+        </when>
+        <otherwise>
+       AND PE_SUBJ_UUID = #{p.pe_subj_uuid}
+        </otherwise>
+     </choose>
+    </delete>
+    <delete id="deletePePeg">
+    /* pfmc-req.deletePePeg : 퍼포먼스평가 퍼포먼스평가그룹 삭제 */
+    DELETE FROM PE_PEG
+     WHERE TEN_ID = #{g.tenant}
+       AND PE_PEG_UUID = #{p.pe_peg_uuid}
+    </delete>
+    <delete id="deletePeEvalGrd">
+    /* pfmc-req.deletePeEvalGrd : 퍼포먼스평가 평가등급 삭제 */
+    DELETE  FROM PE_EVAL_GRD GRD
+     WHERE TEN_ID = #{g.tenant}
+    <choose>
+        <when test="p.req_type != null and p.req_type eq 'PE'.toString()">
+            AND EXISTS (
+                SELECT 'X'
+                 FROM PE_PEG PPEG
+                WHERE GRD.TEN_ID        = PPEG.TEN_ID
+                  AND GRD.PE_PEG_UUID  = PPEG.PE_PEG_UUID
+                  AND PPEG.PE_UUID         = #{p.pe_uuid}
+            )
+        </when>
+        <when test="p.req_type != null and p.req_type eq 'PE_PEG'.toString()">
+            AND PE_PEG_UUID = #{p.pe_peg_uuid}
+        </when>
+        <otherwise>
+            AND PE_PEG_UUID = #{p.pe_peg_uuid}
+        </otherwise>
+    </choose>
+    </delete>
+    <select id="findListPeSubjByPePeg" resultType="map">
+    /* pfmc-req.findListPeSubjByPePeg : 퍼포먼스평가 요청 가능 대상 목록 조회 */
+     SELECT PE.PE_UUID
+          , PPEG.PE_PEG_UUID
+          , PPEG.PEG_UUID
+          , PVMG_VD.VMG_OORG_UUID
+          , VMG.VMG_CD
+          , VMG.VMG_NM
+          , VMG.VMG_NM_EN
+          , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+          , VD.VD_CD
+          , VD.ERP_VD_CD
+          , VD.VD_NM
+          , VD.VD_NM_EN
+          , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+          , '10000000' AS PO_AMT
+          , VD.VD_SIZE_CCD
+          , PPEG.PFMC_EVALSHT_UUID
+          , PSUBJ.PE_SUBJ_UUID
+          , CASE WHEN PSUBJ.TEN_ID IS NULL or PSUBJ.TEN_ID = '' THEN 'N' ELSE 'Y' END AS EVAL_SUBJ_YN  /* 평가대상 여부 */
+          , VMG.VMT_UUID
+          , VMT.VMT_CCD
+       FROM PE                             /* 퍼포먼스평가 */
+      INNER JOIN PE_PEG PPEG               /* 퍼포먼스평가 퍼포먼스평가그룹 */
+         ON PE.TEN_ID = PPEG.TEN_ID
+        AND PE.PE_UUID = PPEG.PE_UUID
+        AND PPEG.STS != 'D'
+       LEFT OUTER JOIN PEG                       /* 퍼포먼스평가그룹 */
+         ON PPEG.TEN_ID = PEG.TEN_ID
+        AND PPEG.PEG_UUID = PEG.PEG_UUID
+        AND PEG.STS != 'D'
+       LEFT OUTER JOIN (
+            SELECT PSUBJ.TEN_ID
+                 , PSUBJ.PEG_UUID
+                 , PSUBJ.VMG_OORG_UUID
+                 , PSUBJ.VD_CD
+              FROM PE_PEG PPEG
+             INNER JOIN PE_SUBJ PSUBJ
+                ON PPEG.TEN_ID = PSUBJ.TEN_ID
+               AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+               AND PSUBJ.STS != 'D'
+             WHERE PPEG.TEN_ID = #{g.tenant}
+               AND PPEG.PE_UUID = #{p.pe_uuid}
+               AND PPEG.PEG_UUID = #{p.peg_uuid}
+               AND PPEG.STS != 'D'
+             UNION
+            SELECT PGVMG.TEN_ID
+                 , PGVMG.PEG_UUID
+                 , PGVMG.VMG_OORG_UUID
+                 , VDVMG.VD_CD
+              FROM PEG_VMG PGVMG             /* 퍼포먼스평가그룹 협력사관리그룹 */
+              INNER JOIN VMG_OORG SVO
+                ON SVO.TEN_ID = PGVMG.TEN_ID
+               AND SVO.VMG_OORG_UUID = PGVMG.VMG_OORG_UUID
+               AND SVO.USE_YN = 'Y'
+               AND SVO.STS != 'D'
+              INNER JOIN VMG
+                ON VMG.TEN_ID = SVO.TEN_ID
+               AND VMG.VMG_UUID = SVO.VMG_UUID
+              INNER JOIN (
+                SELECT OMAP.TEN_ID, OMAP.CONNSRC_OORG_CD, CONNSUBJ_OORG_CD
+                  FROM OORG_MAPG OMAP
+                 WHERE OMAP.TEN_ID = #{g.tenant}
+                   AND OMAP.CONN_TYP_CCD = 'EOSO'
+                   AND OMAP.CONNSUBJ_OORG_CD = #{p.oorg_cd}
+                  AND OMAP.STS != 'D'
+              ) OEO
+                ON OEO.TEN_ID = SVO.TEN_ID
+               AND OEO.CONNSUBJ_OORG_CD = SVO.OORG_CD
+             INNER JOIN (
+                    SELECT OOVD.TEN_ID, OOVD.OORG_CD, EVO.VMG_OORG_UUID, VMG.VMG_UUID, OOVD.VD_CD
+                      FROM VMG_OORG EVO
+                     INNER JOIN VD_OORG_VMG OVVMG
+                        ON EVO.TEN_ID = OVVMG.TEN_ID
+                       AND EVO.VMG_OORG_UUID = OVVMG.VMG_OORG_UUID
+                       AND EVO.USE_YN  = 'Y'
+                     INNER JOIN VD_OORG OOVD
+                        ON OOVD.TEN_ID = OVVMG.TEN_ID
+                        AND OOVD.VD_OORG_UUID = OVVMG.VD_OORG_UUID           -- todo hj.jang eval_vd_cd 로직 추가 예정.
+                        AND OOVD.STS != 'D'
+                      INNER JOIN VMG
+                         ON VMG.TEN_ID  = EVO.TEN_ID
+                        AND VMG.VMG_UUID  = EVO.VMG_UUID
+                     WHERE EVO.USE_YN = 'Y'
+                       AND EVO.STS !='D'
+               ) VDVMG
+               ON VDVMG.TEN_ID = OEO.TEN_ID
+              AND VDVMG.OORG_CD = OEO.CONNSRC_OORG_CD
+              AND VDVMG.TEN_ID = VMG.TEN_ID
+              AND VDVMG.VMG_UUID = VMG.VMG_UUID
+             WHERE PGVMG.TEN_ID = #{g.tenant}
+               AND PGVMG.STS != 'D'
+               AND PGVMG.PEG_UUID = #{p.peg_uuid}
+          ) PVMG_VD
+         ON PEG.TEN_ID = PVMG_VD.TEN_ID
+        AND PEG.PEG_UUID = PVMG_VD.PEG_UUID
+       LEFT OUTER JOIN PE_SUBJ PSUBJ       /* 퍼포먼스평가 대상 */
+         ON PVMG_VD.TEN_ID = PSUBJ.TEN_ID
+        AND PVMG_VD.PEG_UUID = PSUBJ.PEG_UUID
+        AND PVMG_VD.VMG_OORG_UUID = PSUBJ.VMG_OORG_UUID
+        AND PVMG_VD.VD_CD = PSUBJ.VD_CD
+        AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+        AND PSUBJ.STS != 'D'
+      INNER JOIN VMG_OORG VO                        /* 협력사관리그룹 */
+         ON PVMG_VD.TEN_ID = VO.TEN_ID
+        AND PVMG_VD.VMG_OORG_UUID = VO.VMG_OORG_UUID
+        AND VO.USE_YN = 'Y'
+        AND VO.STS != 'D'
+      INNER JOIN VMG                        /* 협력사관리그룹 */
+         ON VO.TEN_ID = VMG.TEN_ID
+        AND VO.VMG_UUID = VMG.VMG_UUID
+        AND VMG.STS != 'D'
+      INNER JOIN VMT
+         ON VMG.TEN_ID = VMT.TEN_ID
+        AND VMG.VMT_UUID = VMT.VMT_UUID
+      INNER JOIN VD                        /* 협력사 마스터 */
+         ON PVMG_VD.TEN_ID = VD.TEN_ID
+        AND PVMG_VD.VD_CD = VD.VD_CD
+        AND VD.STS != 'D'
+      WHERE PE.TEN_ID = #{g.tenant}
+        AND PE.PE_UUID = #{p.pe_uuid}
+        AND PEG.PEG_UUID = #{p.peg_uuid}
+        <if test="p.peg_cd != null and p.peg_cd != ''">
+            AND PEG.PEG_CD = #{p.peg_cd}
+        </if>
+        <if test="p.vmg_cd != null and p.vmg_cd != ''">
+            AND VMG.VMG_CD = #{p.vmg_cd}
+        </if>
+        <if test="p.vmg_nm != null and p.vmg_nm != ''">
+            <bind name="vmgNamePattern" value="'%' + p.vmg_nm + '%'"/>
+            AND    (UPPER(VMG.VMG_NM) LIKE UPPER(#{vmgNamePattern}) OR UPPER(VMG.VMG_NM_EN) LIKE UPPER(#{vmgNamePattern}))      /* 협력사관리그룹 */
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+            <bind name="vdCdPattern" value="'%' + p.vd_cd + '%'"/>
+            AND PVMG_VD.VD_CD LIKE UPPER(#{vdCdPattern})
+        </if>
+        <choose>
+            <when test="p.erp_vd_cds != null and p.erp_vd_cds.size() != 0">
+                AND VD.ERP_VD_CD IN
+                <foreach close=")" collection="p.erp_vd_cds" item="erp_vd_cd" open="(" separator=",">
+                    #{erp_vd_cd}
+                </foreach>
+            </when>
+            <otherwise>
+                <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+                    <bind name="erpCdPattern" value="'%' + p.erp_vd_cd + '%'"/>
+                    AND VD.ERP_VD_CD LIKE UPPER(#{erpCdPattern})
+                </if>
+            </otherwise>
+        </choose>
+        <if test="p.vd_nm != null and p.vd_cd != ''">
+            <bind name="vdNamePattern" value="'%' + p.vd_nm + '%'"/>
+            AND    (UPPER(VD.VD_NM) LIKE UPPER(#{vdNamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNamePattern}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.vd_size_ccd != null and p.vd_size_ccd != ''">
+            AND   VD.VD_SIZE_CCD = #{p.vd_size_ccd}     /* 협력사 규모*/
+        </if>
+        <if test="p.subj_yn != null and p.subj_yn eq 'Y'.toString()">
+            AND   PSUBJ.TEN_ID IS NOT NULL </if>
+        <if test="p.subj_yn != null and p.subj_yn eq 'N'.toString()">
+            AND   (PSUBJ.TEN_ID IS NULL or PSUBJ.TEN_ID = '')
+        </if>
+        <if test="p.vmt_ccd != null and p.vmt_ccd != ''">
+            AND   VMT.VMT_CCD = #{p.vmt_ccd}
+        </if>
+      ORDER BY PSUBJ.TEN_ID  , PEG.PEG_CD, VMG.VMG_CD, VD.ERP_VD_CD
+    </select>
+    <insert id="insertPeSubj">
+    /* pfmc-req.insertPeSubj : 퍼포먼스평가 대상 신규 저장 */
+    INSERT INTO PE_SUBJ (
+           TEN_ID
+         , PE_SUBJ_UUID
+         , PFMC_EVALSHT_UUID
+         , PE_PEG_UUID
+         , PEG_UUID
+         , VMG_OORG_UUID
+         , VD_CD
+         , PO_AMT
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    ) VALUES (
+           #{g.tenant}
+         <choose>
+	         <when test="p.pe_subj_uuid != null and p.pe_subj_uuid != ''">
+		    , #{p.pe_subj_uuid}
+	         </when>
+	         <otherwise>
+            , #{g.uuid}
+	         </otherwise>
+         </choose>
+         , #{p.pfmc_evalsht_uuid}
+         , #{p.pe_peg_uuid}
+         , #{p.peg_uuid}
+         , #{p.vmg_oorg_uuid}
+         , #{p.vd_cd}
+         , #{p.po_amt}
+         , 'C'
+         , #{p.rmk}
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    )
+    </insert>
+    <select id="getRequestablePeSubjSlfck" resultType="map">
+    /* pfmc-req.getRequestablePeSubjSlfck :*/
+    SELECT CASE WHEN
+     <choose>
+         <when test="p.req_type != null and p.req_type eq 'PE'.toString()">
+             EXISTS (
+              SELECT 'X'
+                FROM PE
+               WHERE PE.TEN_ID = #{g.tenant}
+                 AND PE.PE_UUID = #{p.pe_uuid}
+                 AND PE.SLFCK_SUBJ_YN = 'Y'
+             ) THEN 'Y'
+         </when>
+         <when test="p.req_type != null and p.req_type eq 'PE_PEG'.toString()">
+             EXISTS (
+             SELECT 'X'
+               FROM PE
+              INNER JOIN PE_PEG PPEG
+                 ON PE.TEN_ID = PPEG.TEN_ID
+                AND PE.PE_UUID = PPEG.PE_UUID
+                AND PPEG.STS != 'D'
+              INNER JOIN PFMC_EVALSHT PESHT
+                 ON PPEG.TEN_ID = PESHT.TEN_ID
+                AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+                AND PESHT.SLFCK_SUBJ_YN = 'Y'
+              WHERE PE.TEN_ID = #{g.tenant}
+                AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+                AND PE.SLFCK_SUBJ_YN = 'Y'
+             ) THEN 'Y'
+         </when>
+         <when test="p.req_type != null and p.req_type eq 'PE_SUBJ'.toString()">
+             EXISTS (
+             SELECT 'X'
+               FROM PE
+              INNER JOIN PE_PEG PPEG
+                 ON PE.TEN_ID = PPEG.TEN_ID
+                AND PE.PE_UUID = PPEG.PE_UUID
+                AND PPEG.STS != 'D'
+              INNER JOIN PFMC_EVALSHT PESHT
+                 ON PPEG.TEN_ID = PESHT.TEN_ID
+                AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+                AND PESHT.SLFCK_SUBJ_YN = 'Y'
+              WHERE PE.TEN_ID = #{g.tenant}
+                AND PE.SLFCK_SUBJ_YN = 'Y'
+                AND PPEG.PE_PEG_UUID = (SELECT PE_PEG_UUID FROM PE_SUBJ PSUBJ WHERE PE_SUBJ_UUID = #{p.pe_subj_uuid})
+             ) THEN 'Y'
+         </when>
+         <otherwise>
+             EXISTS (
+             SELECT 'X'
+               FROM PE
+              WHERE PE.TEN_ID = #{g.tenant}
+                AND PE.PE_UUID = #{p.pe_uuid}
+                AND PE.SLFCK_SUBJ_YN = 'Y'
+             ) THEN 'Y'
+         </otherwise>
+     </choose>
+               ELSE 'N'
+          END IS_SLFCK_CREATABLE
+    FROM DUM_TBL
+    </select>
+    <insert id="insertPeSubjEvaltrFact">
+    /* pfmc-req.insertPeSubjEvaltrFact : 평가대상 평가자 생성 : 평가항목 담당자 */
+    INSERT INTO PE_SUBJ_EVALTR(
+           TEN_ID
+         , PE_SUBJ_EVALTR_UUID
+         , PE_SUBJ_UUID
+         , EVALFACT_EVALTR_AUTHTY_CCD
+         , SLFCK_EVALTR_YN
+         , EVALTR_ID
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    )
+    SELECT EVALTR.TEN_ID
+         , RANDOMUUID  , EVALTR.PE_SUBJ_UUID
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , 'N'
+         , EVALTR.EVALTR_ID
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    FROM (
+             SELECT DISTINCT
+                    PE.TEN_ID
+                  , PSUBJ.PE_SUBJ_UUID
+                  , SHTTR.EVALFACT_EVALTR_AUTHTY_CCD
+                  , SHTTR.EVALTR_ID
+               FROM PE                              /* 퍼포먼스평가 요청 */
+              INNER JOIN PE_PEG PPEG                /* 퍼포먼스평가 퍼포먼스평가그룹 */
+                 ON PE.TEN_ID = PPEG.TEN_ID
+                AND PE.PE_UUID = PPEG.PE_UUID
+                AND PPEG.STS != 'D'
+	          INNER JOIN PE_SUBJ PSUBJ              /* 퍼포먼스평가 대상 */
+                 ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                AND PSUBJ.STS != 'D'
+               LEFT OUTER JOIN PFMC_EVALSHT PESHT   /* 퍼포먼스 평가시트 */
+                 ON PPEG.TEN_ID = PESHT.TEN_ID
+                AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+               LEFT OUTER JOIN (
+                         SELECT DISTINCT PESHT.TEN_ID
+                              , PESHT.PFMC_EVALSHT_UUID
+                              , CASE WHEN ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD END AS EVALFACT_EVALTR_AUTHTY_CCD
+                              , SHTTR.EVALTR_ID
+                           FROM PFMC_EVALSHT PESHT
+                          INNER JOIN EVALTMPL_EVALFACT ET_EFACT   /* 평가템플릿 평가항목 */ /* 평가템플릿 평가항목 - 평가시트 평가자 매핑관계 존재하는 경우만 생성 */
+                             ON PESHT.TEN_ID = ET_EFACT.TEN_ID
+                            AND PESHT.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+                            AND ET_EFACT.STS != 'D'
+                          INNER JOIN EVALFACT EFACT               /* 평가항목 */
+                             ON ET_EFACT.TEN_ID = EFACT.TEN_ID
+                            AND ET_EFACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                            AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                           LEFT OUTER JOIN EVALSHT_EVALTR SHTTR /* 평가시트 평가자 */
+                             ON PESHT.TEN_ID = SHTTR.TEN_ID
+                            AND PESHT.PFMC_EVALSHT_UUID = SHTTR.PFMC_EVALSHT_UUID
+                            AND ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = SHTTR.EVALFACT_EVALTR_AUTHTY_CCD
+                            AND SHTTR.STS != 'D'
+                          WHERE PESHT.TEN_ID = ET_EFACT.TEN_ID
+                            AND PESHT.STS != 'D'
+                  ) SHTTR
+                 ON PESHT.TEN_ID = SHTTR.TEN_ID
+                AND PESHT.PFMC_EVALSHT_UUID = SHTTR.PFMC_EVALSHT_UUID
+             WHERE PE.TEN_ID = #{g.tenant}
+	           AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+               <if test="p.req_type != null and p.req_type eq 'PE_SUBJ'.toString()">
+               AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+               </if>
+         ) EVALTR
+    </insert>
+    <insert id="insertPeSubjEvaltrPurc">
+    /* pfmc-req.insertPeSubjEvaltrPurc : 평가대상 평가자 생성 : 운영조직협력사 구매 담당자 */
+    INSERT INTO PE_SUBJ_EVALTR(
+            TEN_ID
+          , PE_SUBJ_EVALTR_UUID
+          , PE_SUBJ_UUID
+          , EVALFACT_EVALTR_AUTHTY_CCD
+          , SLFCK_EVALTR_YN
+          , EVALTR_ID
+          , RMK
+          , STS
+          , REGR_ID
+          , REG_DTTM
+          , MODR_ID
+          , MOD_DTTM
+    )
+    SELECT EVALTR.TEN_ID
+         , RANDOMUUID  , EVALTR.PE_SUBJ_UUID
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , 'N'
+         , EVALTR.EVALTR_ID
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    FROM (
+           SELECT DISTINCT
+                  PE.TEN_ID
+                , PSUBJ.PE_SUBJ_UUID
+                ,  #{p.evalfact_evaltr_authty_ccd} AS EVALFACT_EVALTR_AUTHTY_CCD
+                , OOVD.PURC_PIC_ID AS EVALTR_ID
+             FROM PE                               /* 퍼포먼스평가 요청 */
+            INNER JOIN PE_PEG PPEG                 /* 퍼포먼스평가 퍼포먼스평가그룹 */
+               ON PE.TEN_ID = PPEG.TEN_ID
+              AND PE.PE_UUID = PPEG.PE_UUID
+              AND PPEG.STS != 'D'
+	        INNER JOIN PE_SUBJ PSUBJ               /* 퍼포먼스평가 대상 */
+               ON PPEG.TEN_ID = PSUBJ.TEN_ID
+               AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+               AND PSUBJ.STS != 'D'
+              LEFT OUTER JOIN VD_OORG OOVD          /* 운영조직 협력사 */
+                ON PSUBJ.TEN_ID = OOVD.TEN_ID
+               AND PSUBJ.VD_CD = OOVD.VD_CD
+               AND EXISTS (                         /* 협력사운영조직- 퍼포먼스평가운영조직 연결된 운영조직만 대상. */
+                    SELECT 'X'
+                     FROM OORG_MAPG OOMP            /* 운영조직간 매핑 */
+                    WHERE OOVD.TEN_ID = OOMP.TEN_ID
+                      AND OOMP.CONN_TYP_CCD = 'EOSO'
+                      AND OOMP.CONN_YN = 'Y'
+                      AND OOVD.OORG_CD = OOMP.CONNSRC_OORG_CD
+                      AND OOMP.CONNSUBJ_OORG_CD = PE.OORG_CD
+               )
+           WHERE PE.TEN_ID = #{g.tenant}
+             AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+           <if test="p.req_type != null and p.req_type eq 'PE_SUBJ'.toString()">
+             AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+           </if>
+         ) EVALTR
+    </insert>
+    <insert id="insertPeSubjEvaltrVd">
+    /* pfmc-req.insertPeSubjEvaltrVd : 평가대상 평가자 생성 : 운영조직협력사 구매 담당자 */
+    INSERT INTO PE_SUBJ_EVALTR(
+            TEN_ID
+          , PE_SUBJ_EVALTR_UUID
+          , PE_SUBJ_UUID
+          , EVALFACT_EVALTR_AUTHTY_CCD
+          , SLFCK_EVALTR_YN
+          , EVALTR_ID
+          , RMK
+          , STS
+          , REGR_ID
+          , REG_DTTM
+          , MODR_ID
+          , MOD_DTTM
+    )
+    SELECT EVALTR.TEN_ID
+         , RANDOMUUID  , EVALTR.PE_SUBJ_UUID
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , 'Y'
+         , EVALTR.EVALTR_ID
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    FROM (
+           SELECT DISTINCT
+                  PE.TEN_ID
+                , PSUBJ.PE_SUBJ_UUID
+                ,  #{p.evalfact_evaltr_authty_ccd} AS EVALFACT_EVALTR_AUTHTY_CCD
+                , VD.VD_CD AS EVALTR_ID
+             FROM PE                               /* 퍼포먼스평가 요청 */
+            INNER JOIN PE_PEG PPEG                 /* 퍼포먼스평가 퍼포먼스평가그룹 */
+               ON PE.TEN_ID = PPEG.TEN_ID
+              AND PE.PE_UUID = PPEG.PE_UUID
+              AND PPEG.STS != 'D'
+            INNER JOIN PFMC_EVALSHT PESHT
+               ON PPEG.TEN_ID = PESHT.TEN_ID
+              AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+              AND PESHT.SLFCK_SUBJ_YN = 'Y'
+	        INNER JOIN PE_SUBJ PSUBJ               /* 퍼포먼스평가 대상 */
+               ON PPEG.TEN_ID = PSUBJ.TEN_ID
+              AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+              AND PSUBJ.STS != 'D'
+             LEFT OUTER JOIN VD VD          /* 운영조직 협력사 */
+               ON PSUBJ.TEN_ID = VD.TEN_ID
+              AND PSUBJ.VD_CD = VD.VD_CD
+            WHERE PE.TEN_ID = #{g.tenant}
+              AND PE.STS != 'D'
+              AND PE.SLFCK_SUBJ_YN = 'Y'
+              AND NOT EXISTS (
+                      SELECT 'X'
+                        FROM PE_SUBJ_EVALTR PEVALTR
+                      WHERE PSUBJ.TEN_ID = PEVALTR.TEN_ID
+                        AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+                        AND PEVALTR.STS != 'D'
+                        AND PEVALTR.SLFCK_EVALTR_YN = 'Y')
+              <choose>
+                  <when test="p.req_type != null and p.req_type eq 'PE'.toString()">
+                      AND PE.PE_UUID = #{p.pe_uuid}
+                  </when>
+                  <when test="p.req_type != null and p.req_type eq 'PE_SUBJ'.toString()">
+                      AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+                  </when>
+                  <otherwise>
+                      AND PE.PE_UUID = #{p.pe_uuid}
+                  </otherwise>
+              </choose>
+         ) EVALTR
+    </insert>
+    <insert id="insertPeSubjEvaltrVmg">
+    /* pfmc-req.insertPeSubjEvaltrVmg : 평가대상 평가자 생성 : 협력사관리그룹 담당자 */
+    INSERT INTO PE_SUBJ_EVALTR(
+           TEN_ID
+         , PE_SUBJ_EVALTR_UUID
+         , PE_SUBJ_UUID
+         , EVALFACT_EVALTR_AUTHTY_CCD
+         , SLFCK_EVALTR_YN
+         , EVALTR_ID
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    )
+    SELECT EVALTR.TEN_ID
+         , RANDOMUUID  , EVALTR.PE_SUBJ_UUID
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , 'N'
+         , EVALTR.EVALTR_ID
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+      FROM (SELECT DISTINCT PE.TEN_ID
+                 , PSUBJ.PE_SUBJ_UUID
+                 , #{p.evalfact_evaltr_authty_ccd} AS EVALFACT_EVALTR_AUTHTY_CCD
+                 , VE.EVALTR_ID
+              FROM PE                               /* 퍼포먼스평가 요청 */
+             INNER JOIN PE_PEG PPEG                 /* 퍼포먼스평가 퍼포먼스평가그룹 */
+                ON PE.TEN_ID = PPEG.TEN_ID
+               AND PE.PE_UUID = PPEG.PE_UUID
+               AND PPEG.STS != 'D'
+             INNER JOIN PE_SUBJ PSUBJ               /* 퍼포먼스평가 대상 */
+                ON PPEG.TEN_ID = PSUBJ.TEN_ID
+               AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+               AND PSUBJ.STS != 'D'
+              LEFT OUTER JOIN VMG_OORG_EVALTR VE           /* 협력사관리그룹 담당자  */
+                ON PSUBJ.TEN_ID = VE.TEN_ID
+               AND PSUBJ.VMG_OORG_UUID = VE.VMG_OORG_UUID
+               AND VE.STS != 'D'
+             WHERE PE.TEN_ID = #{g.tenant}
+               AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+               <if test="p.req_type != null and p.req_type eq 'PE_SUBJ'.toString()">
+                   AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+               </if>
+         ) EVALTR
+    </insert>
+    <select id="findListPeSubjEvaltr" resultType="map">
+    /* pfmc-req.findListPeSubjEvaltr : 퍼포먼스평가 평가대상 평가자 목록을 조회한다. */
+    SELECT PE.PE_UUID
+         , PPEG.PE_PEG_UUID
+         , PPEG.PEG_UUID
+         , VO.VMG_OORG_UUID
+         , VMG.VMG_CD
+         , VMG.VMG_NM
+         , VMG.VMG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+         , VD.VD_CD
+         , VD.ERP_VD_CD
+         , VD.VD_NM
+         , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+         , PPEG.PFMC_EVALSHT_UUID
+         , PSUBJ.PE_SUBJ_UUID
+         , PEVALTR.PE_SUBJ_EVALTR_UUID
+         , PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , PEVALTR.EVALTR_ID
+         , PEVALTR.SLFCK_EVALTR_YN
+         , USR.USR_NM
+         , USR.USR_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN USR.USR_NM ELSE CASE WHEN USR.USR_NM_EN IS NULL OR USR.USR_NM_EN = '' THEN USR.USR_NM ELSE USR.USR_NM_EN END END AS DISPLAY_EVALTR_NM
+      FROM PE                             /* 퍼포먼스평가 */
+     INNER JOIN PE_PEG PPEG               /* 퍼포먼스평가 퍼포먼스평가그룹 */
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PE_SUBJ PSUBJ       /* 퍼포먼스평가 대상 */
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PSUBJ.STS != 'D'
+     INNER JOIN PE_SUBJ_EVALTR PEVALTR
+        ON PSUBJ.TEN_ID = PEVALTR.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+       AND PEVALTR.STS != 'D'
+      LEFT OUTER JOIN USR
+        ON PEVALTR.TEN_ID = USR.TEN_ID
+       AND PEVALTR.EVALTR_ID = USR.USR_ID
+      LEFT OUTER JOIN PEG
+        ON PSUBJ.TEN_ID = PEG.TEN_ID
+       AND PSUBJ.PEG_UUID = PEG.PEG_UUID
+      LEFT OUTER JOIN VD                        /* 협력사 마스터 */
+        ON PSUBJ.TEN_ID = VD.TEN_ID
+       AND PSUBJ.VD_CD = VD.VD_CD
+      LEFT OUTER JOIN VMG_OORG VO
+        ON PSUBJ.TEN_ID = VO.TEN_ID
+       AND PSUBJ.VMG_OORG_UUID = VO.VMG_OORG_UUID
+      LEFT OUTER JOIN VMG
+        ON VO.TEN_ID = VMG.TEN_ID
+       AND VO.VMG_UUID = VMG.VMG_UUID
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PE.PE_UUID = #{p.pe_uuid}
+      <if test="p.pe_peg_uuid != null and p.pe_peg_uuid != ''">
+       AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+      </if>
+      <if test="p.search_slfck_evaltr != null and p.search_slfck_evaltr != ''">
+       AND PEVALTR.SLFCK_EVALTR_YN = #{p.search_slfck_evaltr}
+      </if>
+     ORDER BY PEG.PEG_CD, VMG.VMG_CD, VD.ERP_VD_CD
+    </select>
+    <insert id="mergePeSubjEvaltrAdd">
+    /* pfmc-req.mergePeSubjEvaltrAdd : 퍼포먼스평가대상 평가자 추가 저장.  */
+    MERGE INTO PE_SUBJ_EVALTR SRC
+    USING ( SELECT #{g.tenant}             AS TEN_ID
+                 , #{p.pe_subj_uuid}       AS PE_SUBJ_UUID
+                 , #{p.evalfact_evaltr_authty_ccd} AS EVALFACT_EVALTR_AUTHTY_CCD
+                 , #{p.slfck_evaltr_yn}    AS SLFCK_EVALTR_YN
+                 , #{p.evaltr_id}          AS EVALTR_ID
+              FROM DUM_TBL
+        ) TARG
+       ON (     SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.PE_SUBJ_UUID = TARG.PE_SUBJ_UUID
+            AND SRC.EVALFACT_EVALTR_AUTHTY_CCD = TARG.EVALFACT_EVALTR_AUTHTY_CCD
+            AND SRC.SLFCK_EVALTR_YN = TARG.SLFCK_EVALTR_YN
+            AND SRC.EVALTR_ID = TARG.EVALTR_ID
+         )
+     WHEN NOT MATCHED THEN
+           INSERT (
+                  TEN_ID
+                , PE_SUBJ_EVALTR_UUID
+                , PE_SUBJ_UUID
+                , EVALFACT_EVALTR_AUTHTY_CCD
+                , SLFCK_EVALTR_YN
+                , EVALTR_ID
+                , STS
+                , REGR_ID
+                , REG_DTTM
+                , MODR_ID
+                , MOD_DTTM
+         ) VALUES (
+                  TARG.TEN_ID
+                , #{g.uuid}
+                , TARG.PE_SUBJ_UUID
+                , TARG.EVALFACT_EVALTR_AUTHTY_CCD
+                , TARG.SLFCK_EVALTR_YN
+                , TARG.EVALTR_ID
+                , 'C'
+                , #{g.username}
+                , #{g.now}
+                , #{g.username}
+                , #{g.now}
+         ) </insert>
+    <insert id="insertPeSubjEvaltrAdd">
+     /* pfmc-req.insertPeSubjEvaltrAdd : 퍼포먼스평가대상 평가자 추가 저장 */
+     INSERT INTO PE_SUBJ_EVALTR (
+            TEN_ID
+          , PE_SUBJ_EVALTR_UUID
+          , PE_SUBJ_UUID
+          , EVALFACT_EVALTR_AUTHTY_CCD
+          , SLFCK_EVALTR_YN
+          , EVALTR_ID
+          , STS
+          , REGR_ID
+          , REG_DTTM
+          , MODR_ID
+          , MOD_DTTM
+    ) VALUES (
+            #{g.tenant}
+          , #{p.pe_subj_evaltr_uuid}
+          , #{p.pe_subj_uuid}
+          , #{p.evalfact_evaltr_authty_ccd}
+          , #{p.slfck_evaltr_yn}
+          , #{p.evaltr_id}
+          , 'C'
+          , #{g.username}
+          , #{g.now}
+          , #{g.username}
+          , #{g.now}
+    )
+    </insert>
+    <update id="updatePeSubjEvaltr">
+     /* pfmc-req.updatePeSubjEvaltr : 퍼포먼스평가대상 평가자 아이디 수정 */
+     UPDATE PE_SUBJ_EVALTR
+        SET EVALTR_ID = #{p.evaltr_id}
+          , STS = 'U'
+          , MODR_ID = #{g.username}
+          , MOD_DTTM = #{g.now}
+       WHERE TEN_ID = #{g.tenant}
+         AND PE_SUBJ_EVALTR_UUID = #{p.pe_subj_evaltr_uuid}
+    </update>
+    <select id="findListPrgsPeSubjAdd" resultType="map">
+    /* pfmc-req.findListPrgsPeSubjAdd : 퍼포먼스평가 요청 대상 추가 목록을 조회한다. */
+    SELECT PE.PE_UUID
+         , PPEG.PE_PEG_UUID
+         , PPEG.PEG_UUID
+         , PEG.PEG_CD
+         , PEG.PEG_NM
+         , PESHT.EVALTMPL_UUID
+         , PESHT.EVALTR_TYP_CCD
+         , PGVMG.VMG_OORG_UUID
+         , VDVMG.SUPAVL_YN
+         , VMG.VMG_CD
+         , VMG.VMG_NM
+         , VMG.VMG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+         , VD.VD_CD
+         , VD.ERP_VD_CD
+         , VD.VD_NM
+         , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+         , '10000000' AS PO_AMT
+         , VD.VD_SIZE_CCD
+         , PPEG.PFMC_EVALSHT_UUID
+         , PESHT.SLFCK_SUBJ_YN
+      FROM PE                             /* 퍼포먼스평가 */
+     INNER JOIN PE_PEG PPEG               /* 퍼포먼스평가 퍼포먼스평가그룹 */
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PFMC_EVALSHT PESHT
+        ON PPEG.TEN_ID = PESHT.TEN_ID
+       AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+       AND PESHT.STS != 'D'
+     INNER JOIN PEG                       /* 퍼포먼스평가그룹 */
+        ON PPEG.TEN_ID = PEG.TEN_ID
+       AND PPEG.PEG_UUID = PEG.PEG_UUID
+       AND PEG.STS != 'D'
+     INNER JOIN PEG_VMG PGVMG             /* 퍼포먼스평가그룹 협력사관리그룹 */
+        ON PEG.TEN_ID = PGVMG.TEN_ID
+       AND PEG.PEG_UUID = PGVMG.PEG_UUID
+       AND PGVMG.STS != 'D'
+     INNER JOIN VMG_OORG SVO
+        ON SVO.TEN_ID = PGVMG.TEN_ID
+       AND SVO.VMG_OORG_UUID = PGVMG.VMG_OORG_UUID
+       AND SVO.USE_YN = 'Y'
+       AND SVO.STS != 'D'
+     INNER JOIN VMG
+        ON VMG.TEN_ID = SVO.TEN_ID
+       AND VMG.VMG_UUID = SVO.VMG_UUID
+     INNER JOIN (
+        SELECT OOVD.VD_OORG_UUID, OOVD.TEN_ID, OOVD.OORG_CD, OOVD.VD_CD, EVO.VMG_OORG_UUID, VMG.VMG_UUID, VMG.vmg_cd, VMG.vmg_nm, VMG.VMG_NM_EN, OVVMG.supavl_yn
+          FROM VMG_OORG EVO
+         INNER JOIN VD_OORG_VMG OVVMG
+            ON EVO.TEN_ID = OVVMG.TEN_ID
+           AND EVO.VMG_OORG_UUID = OVVMG.VMG_OORG_UUID
+           AND EVO.USE_YN  = 'Y'
+         INNER JOIN VD_OORG OOVD
+            ON OOVD.TEN_ID = OVVMG.TEN_ID
+           AND OOVD.VD_OORG_UUID = OVVMG.VD_OORG_UUID           -- todo hj.jang eval_vd_cd 로직 추가 예정.
+           AND OOVD.STS != 'D'
+         INNER JOIN VMG
+            ON VMG.TEN_ID  = EVO.TEN_ID
+           AND VMG.VMG_UUID  = EVO.VMG_UUID
+         INNER JOIN OORG_MAPG OMAP
+            ON OMAP.TEN_ID = OOVD.TEN_ID
+           AND OMAP.CONN_TYP_CCD = 'EOSO'
+           AND OMAP.CONNSRC_OORG_CD = OOVD.OORG_CD
+           AND OMAP.CONN_YN = 'Y'
+           AND OMAP.STS !='D'
+         WHERE EVO.USE_YN = 'Y'
+           AND EVO.STS !='D'
+         ) VDVMG
+       ON VDVMG.TEN_ID = VMG.TEN_ID
+      AND VDVMG.VMG_UUID = VMG.VMG_UUID
+     INNER JOIN VD                        /* 협력사 마스터 */
+        ON VDVMG.TEN_ID = VD.TEN_ID
+       AND VDVMG.VD_CD = VD.VD_CD           -- todo hj.jang eval_vd_cd 로직 추가 예정.
+       AND VD.STS != 'D'
+      LEFT OUTER JOIN PE_SUBJ PSUBJ       /* 퍼포먼스평가 대상 */
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PGVMG.PEG_UUID = PSUBJ.PEG_UUID
+       AND PGVMG.VMG_OORG_UUID = PSUBJ.VMG_OORG_UUID
+       AND VD.VD_CD = PSUBJ.VD_CD
+       AND PSUBJ.STS != 'D'
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PE.PE_UUID = #{p.pe_uuid}
+       AND NOT EXISTS (
+               SELECT *
+                 FROM PE_SUBJ PSUBJ
+                WHERE PPEG.TEN_ID = PSUBJ.TEN_ID
+                  AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                  AND PGVMG.VMG_OORG_UUID = PSUBJ.VMG_OORG_UUID
+                  AND VD.VD_CD = PSUBJ.VD_CD
+            )
+     <if test="p.vd_size_ccd != null and p.vd_size_cd != ''">
+       AND VD.VD_SIZE_CCD = #{p.vd_size_ccd}
+     </if>
+     <if test="p.peg_cd != null and p.peg_cd != ''">
+       AND PEG.PEG_CD = #{p.peg_cd}
+     </if>
+     <if test="p.peg_nm != null and p.peg_nm != ''">
+       <bind name="p_peg_nm" value="'%' + p.peg_nm + '%'"/>
+       AND PEG.PEG_NM LIKE #{p_peg_nm}
+     </if>
+     <if test="p.vmg_cd != null and p.vmg_cd != ''">
+        AND VMG.VMG_CD = #{p.vmg_cd}
+     </if>
+     <if test="p.vmg_nm != null and p.vmg_nm != ''">
+         <bind name="p_vmg_nm" value="'%' + p.vmg_nm + '%'"/>
+        AND (VMG.VMG_NM LIKE #{p_vmg_nm} OR VMG.VMG_NM_EN LIKE #{p_vmg_nm})
+     </if>
+     <if test="p.vd_cd != null and p.vd_cd != ''">
+         <bind name="vdCdPattern" value="'%' + p.vd_cd + '%'"/>
+        AND PVMG_VD.VD_CD LIKE UPPER(#{vdCdPattern})
+     </if>
+     <choose>
+       <when test="p.erp_vd_cds != null and p.erp_vd_cds.size() != 0">
+        AND VD.ERP_VD_CD IN
+           <foreach close=")" collection="p.erp_vd_cds" item="erp_vd_cd" open="(" separator=",">
+               #{erp_vd_cd}
+           </foreach>
+       </when>
+       <otherwise>
+         <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+           <bind name="erpCdPattern" value="'%' + p.erp_vd_cd + '%'"/>
+         AND VD.ERP_VD_CD LIKE UPPER(#{erpCdPattern})
+         </if>
+       </otherwise>
+     </choose>
+     <if test="p.vd_nm != null and p.vd_cd != ''">
+        <bind name="vdNamePattern" value="'%' + p.vd_nm + '%'"/>
+        AND    (UPPER(VD.VD_NM) LIKE UPPER(#{vdNamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNamePattern}))      /* 협력사명 검색조건*/
+     </if>
+    ORDER BY PEG.PEG_CD, VMG.VMG_CD, VD.ERP_VD_CD
+    </select>
+    <insert id="insertPrgsPeSubjAdd">
+    /* pfmc-req.insertPrgsPeSubjAdd : 퍼포먼스평가 대상 추가 저장*/
+    INSERT INTO PE_SUBJ (
+           TEN_ID
+         , PE_SUBJ_UUID
+         , PFMC_EVALSHT_UUID
+         , PE_PEG_UUID
+         , PEG_UUID
+         , VMG_OORG_UUID
+         , VD_CD
+         , PO_AMT
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    ) VALUES (
+           #{g.tenant}
+         , #{p.pe_subj_uuid}
+         , #{p.pfmc_evalsht_uuid}
+         , #{p.pe_peg_uuid}
+         , #{p.peg_uuid}
+         , #{p.vmg_oorg_uuid}
+         , #{p.vd_cd}
+         , #{p.po_amt}
+         , 'C'
+         , #{p.rmk}
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    )
+    </insert>
+    <select id="findListPfmcEvalPrgs" resultType="map">
+    /* pfmc-req.findListPfmcEvalPrgs : 퍼포먼스 요청 목록을 조회한다. */
+    SELECT PE.TEN_ID
+         , PE.PE_UUID
+         , PE.OORG_CD
+         , PE.EVAL_CD
+         , PE.EVAL_NM
+         , PE.EVAL_SUBJ_YR
+         , PE.PE_STS_CCD
+         , PE.SLFCK_SUBJ_YN
+         , PE.IMPROV_REQ_APPL_YN
+         , PE.DIFF_APPL_YN
+         , CASE WHEN PS.SUBJ_CNT IS NULL THEN 0 ELSE PS.SUBJ_CNT END AS SUBJ_CNT
+         , CASE WHEN PS.SUBJ_COMPLETE_CNT IS NULL THEN 0 ELSE PS.SUBJ_COMPLETE_CNT END AS SUBJ_COMPLETE_CNT
+         , CASE WHEN PS.SUBJ_NOT_COMPLETE_CNT IS NULL THEN 0 ELSE PS.SUBJ_NOT_COMPLETE_CNT END AS SUBJ_NOT_COMPLETE_CNT
+         , CASE WHEN PS.SUBJ_CNT IS NULL OR PS.SUBJ_COMPLETE_CNT IS NULL OR PS.SUBJ_NOT_COMPLETE_CNT IS NULL THEN 0
+                ELSE ROUND(PS.SUBJ_COMPLETE_CNT / PS.SUBJ_CNT * 100, 2) END AS COMPLETE_PER
+         , CASE WHEN UNDEFIEND_EVALTR_CNT IS NULL THEN 0 ELSE UNDEFIEND_EVALTR_CNT END AS UNDEFIEND_EVALTR_CNT
+     FROM PE
+     LEFT OUTER JOIN (
+          SELECT PSUBJ_EVALTR.TEN_ID
+               , PSUBJ_EVALTR.PE_UUID
+               , COUNT(*) AS SUBJ_CNT  -- 평가대상 수
+               , SUM(CASE WHEN EVALTR_CNT = COMPLETE_FULLFILL_CNT THEN 1 ELSE 0 END) AS SUBJ_COMPLETE_CNT     -- 모든 평가자가 수행완료한 평가대상 수
+               , SUM(CASE WHEN EVALTR_CNT = COMPLETE_FULLFILL_CNT THEN 0 ELSE 1 END) AS SUBJ_NOT_COMPLETE_CNT -- 수행미완료한 평가대상 수
+               , SUM(UNDEFINED_EVALTR_CNT) AS UNDEFIEND_EVALTR_CNT   -- 미지정된 평가자 수
+            FROM (
+                   SELECT PPEG.TEN_ID
+                        , PPEG.PE_UUID
+                        , PSUBJ.PE_SUBJ_UUID
+                        , COUNT(DISTINCT PSEVALTR.EVALTR_ID) AS EVALTR_CNT   -- 평가대상별 평가자 수
+                        , SUM(CASE WHEN EVALTR_RES.EVAL_PRGS_STS_CCD = 'SUBM' THEN 1 ELSE 0 END) AS COMPLETE_FULLFILL_CNT -- 평가대상별 평강자 제출 건수
+                        , SUM(CASE WHEN PSEVALTR.EVALTR_ID IS NULL OR PSEVALTR.EVALTR_ID = '' THEN 1 ELSE 0 END) AS UNDEFINED_EVALTR_CNT   -- 평가대상별 평가자 미지정 건수
+                     FROM PE_PEG PPEG
+                    INNER JOIN PE_SUBJ PSUBJ
+                       ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                      AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                      AND PSUBJ.STS != 'D'
+                    INNER JOIN PE_SUBJ_RES PSRES
+                       ON PSUBJ.TEN_ID = PSRES.TEN_ID
+                      AND PSUBJ.PE_SUBJ_UUID = PSRES.PE_SUBJ_UUID
+                      AND PSRES.STS != 'D'
+                     LEFT OUTER JOIN EVAL_SUBJ_RES SUBJ_RES
+                       ON PSRES.TEN_ID = SUBJ_RES.TEN_ID
+                      AND PSRES.EVAL_SUBJ_RES_UUID = SUBJ_RES.EVAL_SUBJ_RES_UUID
+                      AND SUBJ_RES.STS != 'D'
+                     LEFT OUTER JOIN PE_SUBJ_EVALTR PSEVALTR
+                       ON PSUBJ.TEN_ID = PSEVALTR.TEN_ID
+                      AND PSUBJ.PE_SUBJ_UUID = PSEVALTR.PE_SUBJ_UUID
+                      AND PSEVALTR.STS != 'D'
+                     LEFT OUTER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                       ON PSEVALTR.TEN_ID = EVALTR_RES.TEN_ID
+                      AND PSEVALTR.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                      AND PSRES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+                      AND EVALTR_RES.STS != 'D'
+                    GROUP BY PPEG.TEN_ID, PPEG.PE_UUID, PSUBJ.PE_SUBJ_UUID
+               ) PSUBJ_EVALTR
+          GROUP BY PSUBJ_EVALTR.TEN_ID, PSUBJ_EVALTR.PE_UUID
+        ) PS
+       ON PE.TEN_ID = PS.TEN_ID
+      AND PE.PE_UUID = PS.PE_UUID
+    WHERE PE.TEN_ID = #{g.tenant}
+      AND PE.OORG_CD = #{p.oorg_cd}
+      AND PE.STS != 'D'
+    <if test="p.pe_sts_ccd != null and p.pe_sts_ccd.size() != 0">
+      AND PE.PE_STS_CCD IN
+      <foreach close=")" collection="p.pe_sts_ccd" item="pe_sts_ccd" open="(" separator=",">
+            #{pe_sts_ccd}
+      </foreach>
+    </if>
+    <if test="p.eval_nm != null and p.eval_nm != ''">
+      <bind name="evalNamePattern" value="'%' + p.eval_nm + '%'"/>
+      AND UPPER(PE.EVAL_NM) LIKE UPPER(#{evalNamePattern})
+    </if>
+    <if test="p.from_ntc_dt != null">
+      AND PE.MOD_DTTM <![CDATA[>=]]> #{p.from_ntc_dt}
+    </if>
+    <if test="p.to_ntc_dt != null">
+      <bind name="toDatePattern" value="g.getPlusDays(p.to_ntc_dt ,1)"/>
+      AND PE.MOD_DTTM <![CDATA[<=]]> #{toDatePattern}
+    </if>
+    ORDER BY PE.REG_DTTM DESC
+    </select>
+	<select id="findPeInfoBeforeCrngVmg" resultType="map">
+    /* pfmc-req.findPeInfoBeforeCrngVmg : 특정 퍼포먼스평가그룹 협력사관리그룹으로 퍼포먼스평가 통보 전 임시저장 데이터 조회 */
+    SELECT DISTINCT P.OORG_CD
+         , P.EVAL_CD
+         , P.EVAL_NM
+         , #{p.peg_cd} AS PEG_CD
+         , #{p.peg_nm} AS PEG_NM
+         , #{p.vmg_cd} AS VMG_CD
+         , #{p.vmg_nm} AS VMG_NM
+     FROM PE P
+    INNER JOIN PE_PEG PPEG
+       ON PPEG.TEN_ID = P.TEN_ID
+      AND PPEG.PE_UUID = P.PE_UUID
+      AND PPEG.STS != 'D'
+    INNER JOIN PE_SUBJ PSUBJ
+      ON PSUBJ.TEN_ID = PPEG.TEN_ID
+     AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+     AND PSUBJ.STS != 'D'
+    WHERE P.TEN_ID = #{g.tenant}
+      AND P.OORG_CD = #{p.oorg_cd}
+      AND P.STS != 'D'
+      AND P.PE_STS_CCD IN ('CRNG', 'CRN_WTG', 'CRN_ERR')
+      AND PPEG.PEG_UUID = #{p.peg_uuid}
+      AND PSUBJ.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+    </select>
+    <select id="findPfmcEvalPrgsInfo" resultType="map">
+    /* pfmc-req.findPfmcEvalPrgsInfo : 퍼포먼스평가 진행 상세정보 조회 */
+    SELECT PE.TEN_ID
+         , PE.PE_UUID
+         , PE.OORG_CD
+         , PE.EVAL_CD
+         , PE.EVAL_NM
+         , PE.EVAL_SUBJ_YR
+         , PE.PE_STS_CCD
+         , PE.SLFCK_SUBJ_YN
+         , PE.EVALTR_EVAL_ST_DT
+         , PE.EVALTR_EVAL_CLSG_DT
+         , PE.DAT_COLL_ST_YYMM
+         , PE.DAT_COLL_ED_YYMM
+         , PE.VD_APPEAL_POSS_YN
+         , PE.SLFCK_ST_DT
+         , PE.SLFCK_CLSG_DT
+         , CASE WHEN PS.SUBJ_CNT IS NULL THEN 0 ELSE PS.SUBJ_CNT END AS SUBJ_CNT
+         , CASE WHEN PS.SUBJ_COMPLETE_CNT IS NULL THEN 0 ELSE PS.SUBJ_COMPLETE_CNT END AS SUBJ_COMPLETE_CNT
+         , CASE WHEN PS.SUBJ_NOT_COMPLETE_CNT IS NULL THEN 0 ELSE PS.SUBJ_NOT_COMPLETE_CNT END AS SUBJ_NOT_COMPLETE_CNT
+         , CASE WHEN PS.SUBJ_CNT IS NULL OR PS.SUBJ_COMPLETE_CNT IS NULL OR PS.SUBJ_NOT_COMPLETE_CNT IS NULL THEN 0
+                ELSE ROUND(PS.SUBJ_COMPLETE_CNT / PS.SUBJ_CNT * 100, 2) END AS COMPLETE_PER
+         , CASE WHEN UNDEFIEND_EVALTR_CNT IS NULL THEN 0 ELSE UNDEFIEND_EVALTR_CNT END AS UNDEFIEND_EVALTR_CNT
+      FROM PE
+      LEFT OUTER JOIN (
+          SELECT PSUBJ_EVALTR.TEN_ID
+               , PSUBJ_EVALTR.PE_UUID
+               , COUNT(*) AS SUBJ_CNT  -- 평가대상 수
+               , SUM(CASE WHEN EVALTR_CNT = COMPLETE_FULLFILL_CNT THEN 1 ELSE 0 END) AS SUBJ_COMPLETE_CNT     -- 모든 평가자가 수행완료한 평가대상 수
+               , SUM(CASE WHEN EVALTR_CNT = COMPLETE_FULLFILL_CNT THEN 0 ELSE 1 END) AS SUBJ_NOT_COMPLETE_CNT -- 수행미완료한 평가대상 수
+               , SUM(UNDEFINED_EVALTR_CNT) AS UNDEFIEND_EVALTR_CNT   -- 미지정된 평가자 수
+            FROM (
+                  SELECT PPEG.TEN_ID
+                      , PPEG.PE_UUID
+                      , PSUBJ.PE_SUBJ_UUID
+                      , COUNT(DISTINCT PSEVALTR.EVALTR_ID) AS EVALTR_CNT   -- 평가대상별 평가자 수
+                      , SUM(CASE WHEN EVALTR_RES.EVAL_PRGS_STS_CCD = 'SUBM' THEN 1 ELSE 0 END) AS COMPLETE_FULLFILL_CNT -- 평가대상별 평강자 제출 건수
+                      , SUM(CASE WHEN PSEVALTR.EVALTR_ID IS NULL OR PSEVALTR.EVALTR_ID = '' THEN 1 ELSE 0 END) AS UNDEFINED_EVALTR_CNT   -- 평가대상별 평가자 미지정 건수
+                   FROM PE_PEG PPEG
+                  INNER JOIN PE_SUBJ PSUBJ
+                     ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                    AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                    AND PSUBJ.STS != 'D'
+                  INNER JOIN PE_SUBJ_RES PSRES
+                     ON PSUBJ.TEN_ID = PSRES.TEN_ID
+                    AND PSUBJ.PE_SUBJ_UUID = PSRES.PE_SUBJ_UUID
+                    AND PSRES.STS != 'D'
+                   LEFT OUTER JOIN EVAL_SUBJ_RES SUBJ_RES
+                     ON PSRES.TEN_ID = SUBJ_RES.TEN_ID
+                    AND PSRES.EVAL_SUBJ_RES_UUID = SUBJ_RES.EVAL_SUBJ_RES_UUID
+                    AND SUBJ_RES.STS != 'D'
+                   LEFT OUTER JOIN PE_SUBJ_EVALTR PSEVALTR
+                     ON PSUBJ.TEN_ID = PSEVALTR.TEN_ID
+                    AND PSUBJ.PE_SUBJ_UUID = PSEVALTR.PE_SUBJ_UUID
+                    AND PSEVALTR.STS != 'D'
+                   LEFT OUTER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+                     ON PSEVALTR.TEN_ID = EVALTR_RES.TEN_ID
+                    AND PSEVALTR.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+                    AND PSRES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+                    AND PSRES.SLFCK_RES_YN = PSEVALTR.SLFCK_EVALTR_YN
+                    AND EVALTR_RES.STS != 'D'
+                  GROUP BY PPEG.TEN_ID, PPEG.PE_UUID, PSUBJ.PE_SUBJ_UUID
+              ) PSUBJ_EVALTR
+          GROUP BY PSUBJ_EVALTR.TEN_ID, PSUBJ_EVALTR.PE_UUID
+        ) PS
+       ON PE.TEN_ID = PS.TEN_ID
+      AND PE.PE_UUID = PS.PE_UUID
+    WHERE PE.TEN_ID = #{g.tenant}
+      AND PE.PE_UUID = #{p.pe_uuid}
+      <if test="p.oorg_cd != null and p.oorg_cd != ''">
+      AND PE.OORG_CD = #{p.oorg_cd}
+      </if>
+    </select>
+    <select id="findListPfmcEvalSubjPrgs" resultType="map">
+    /* pfmc-req.findListPfmcEvalSubjPrgs : 퍼포먼스평가 진행 대상 목록 조회*/
+    SELECT PE.TEN_ID
+         , PE.PE_UUID
+         , PE.OORG_CD
+         , PE.EVAL_CD
+         , PE.EVAL_NM
+         , PSUBJ.PE_SUBJ_UUID
+         , PSUBJ.PFMC_EVALSHT_UUID
+         , PESHT.EVALTR_TYP_CCD
+         , PESHT.EVALTMPL_UUID
+         , PESHT.EVALSHT_CD
+         , PESHT.EVALSHT_NM
+         , PESHT.EFCT_ST_DT
+         , PESHT.EFCT_EXP_DT
+         , PESHT.EVALTR_TYP_CCD
+         , PESHT.EVALDOC_LYT_TYP_CCD
+         , PESHT.CNFD_YN
+         , PESHT.PEG_UUID
+         , PESHT.SLFCK_SUBJ_YN
+         , PEG.PEG_CD
+         , PEG.PEG_NM
+         , PEG.PEG_EXPLN
+         , VD.VD_CD
+         , VD.ERP_VD_CD
+         , VD.VD_NM
+         , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+         , VMG.VMG_UUID
+         , VMG.VMG_CD
+         , VMG.VMG_NM
+         , VMG.VMG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , EVALTR.EVALTR_CNT
+         , EVALTR.COMPLETE_CNT
+         , EVALTR.EVAL_PRGS_STS_CCD
+         , PSRES.PE_SUBJ_RES_UUID       /* 퍼포먼스 평가대상 결과 중 자체점검 아닌 데이터 UUID */
+         , PSRES.EVAL_SUBJ_RES_UUID     /* 퍼포먼스 평가대상 결과 중 자체점검 아닌 데이터의 평가대상 결과 UUID */
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PE_SUBJ PSUBJ
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PSUBJ.STS != 'D'
+      LEFT OUTER JOIN PEG
+        ON PPEG.TEN_ID = PEG.TEN_ID
+       AND PPEG.PEG_UUID = PEG.PEG_UUID
+       AND PEG.STS != 'D'
+       LEFT OUTER JOIN PEG_VMG PVMG
+        ON PSUBJ.TEN_ID = PVMG.TEN_ID
+       AND PSUBJ.PEG_UUID = PVMG.PEG_UUID
+       AND PSUBJ.VMG_OORG_UUID = PVMG.VMG_OORG_UUID
+       AND PVMG.STS != 'D'
+     INNER JOIN PE_SUBJ_RES PSRES
+        ON PSUBJ.TEN_ID = PSRES.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PSRES.PE_SUBJ_UUID
+       AND PSRES.STS != 'D'
+       AND PSRES.SLFCK_RES_YN = 'N'        /*  퍼포먼스 평가대상 결과 중 자체점검 대상 아닌 데이터 */
+     INNER JOIN PFMC_EVALSHT PESHT
+        ON PPEG.TEN_ID = PESHT.TEN_ID
+       AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+       AND PESHT.STS != 'D'
+     INNER JOIN EVALTMPL TMPL
+        ON PESHT.TEN_ID = TMPL.TEN_ID
+       AND PESHT.EVALTMPL_UUID = TMPL.EVALTMPL_UUID
+      LEFT OUTER JOIN VD
+        ON PSUBJ.TEN_ID = VD.TEN_ID
+       AND PSUBJ.VD_CD = VD.VD_CD
+      LEFT OUTER JOIN VMG_OORG VO
+        ON PSUBJ.TEN_ID = VO.TEN_ID
+       AND PSUBJ.VMG_OORG_UUID= VO.VMG_OORG_UUID
+       AND VO.USE_YN = 'Y'
+       AND VO.STS != 'D'
+      LEFT OUTER JOIN VMG
+        ON VO.TEN_ID = VMG.TEN_ID
+       AND VO.VMG_UUID= VMG.VMG_UUID
+       AND VMG.STS != 'D'
+      LEFT OUTER JOIN (
+          SELECT PSRES.TEN_ID
+               , PSRES.PE_SUBJ_UUID
+               , TMPL_FACT.EVALTMPL_UUID
+	           , CASE WHEN EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD ='' THEN TMPL_FACT.EVALFACT_EVALTR_AUTHTY_CCD ELSE EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD END AS EVALFACT_EVALTR_AUTHTY_CCD
+               , COUNT(DISTINCT EVALTR_RES.EVALTR_ID) AS EVALTR_CNT
+               , COUNT(DISTINCT CASE WHEN EVALTR_RES.EVAL_PRGS_STS_CCD = 'SUBM' THEN EVALTR_RES.EVALTR_ID ELSE NULL END) AS COMPLETE_CNT
+               , CASE WHEN MIN(EVALTR_RES.EVAL_PRGS_STS_CCD) = 'SUBM' THEN 'SUBM'
+                      WHEN MAX(EVALTR_RES.EVAL_PRGS_STS_CCD) = 'WTG' THEN 'WTG'
+                      ELSE 'SAVE'
+                  END AS EVAL_PRGS_STS_CCD
+            FROM PE_SUBJ PSUBJ
+           INNER JOIN PE_SUBJ_RES PSRES
+              ON PSUBJ.TEN_ID = PSRES.TEN_ID
+             AND PSUBJ.PE_SUBJ_UUID = PSRES.PE_SUBJ_UUID
+           INNER JOIN EVAL_SUBJ_RES SUBJ_RES
+              ON PSRES.TEN_ID = SUBJ_RES.TEN_ID
+             AND PSRES.EVAL_SUBJ_RES_UUID = SUBJ_RES.EVAL_SUBJ_RES_UUID
+           INNER JOIN PE_SUBJ_EVALTR PSEVALTR
+              ON PSUBJ.TEN_ID = PSEVALTR.TEN_ID
+             AND PSUBJ.PE_SUBJ_UUID = PSEVALTR.PE_SUBJ_UUID
+             AND PSRES.SLFCK_RES_YN = PSEVALTR.SLFCK_EVALTR_YN
+            LEFT OUTER JOIN (
+                     SELECT DISTINCT TMPL_FACT.TEN_ID, PSHT.PFMC_EVALSHT_UUID, TMPL_FACT.EVALTMPL_UUID, TMPL_FACT.EVALFACT_EVALTR_AUTHTY_CCD
+                       FROM PE
+                      INNER JOIN PE_PEG PPEG
+                         ON PE.TEN_ID = PPEG.TEN_ID
+                        AND PE.PE_UUID = PPEG.PE_UUID
+                      INNER JOIN PFMC_EVALSHT PSHT
+                         ON PPEG.TEN_ID = PSHT.TEN_ID
+                        AND PPEG.PFMC_EVALSHT_UUID = PSHT.PFMC_EVALSHT_UUID
+                      INNER JOIN EVALTMPL_EVALFACT TMPL_FACT
+                         ON PSHT.TEN_ID = TMPL_FACT.TEN_ID
+                        AND PSHT.EVALTMPL_UUID = TMPL_FACT.EVALTMPL_UUID
+                      INNER JOIN EVALFACT EFACT
+                         ON TMPL_FACT.TEN_ID = EFACT.TEN_ID
+                        AND TMPL_FACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                        AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                      WHERE PE.TEN_ID = #{g.tenant}
+                        AND PE.PE_UUID = #{p.pe_uuid}
+               ) TMPL_FACT
+              ON SUBJ_RES.TEN_ID = TMPL_FACT.TEN_ID
+             AND SUBJ_RES.EVALTMPL_UUID = TMPL_FACT.EVALTMPL_UUID
+            LEFT OUTER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+              ON SUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+             AND SUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+             AND PSEVALTR.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+             AND EVALTR_RES.STS != 'D'
+           GROUP BY PSRES.TEN_ID, PSRES.PE_SUBJ_UUID, TMPL_FACT.EVALTMPL_UUID, CASE WHEN EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD ='' THEN TMPL_FACT.EVALFACT_EVALTR_AUTHTY_CCD ELSE EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD END
+         ) EVALTR
+        ON PSUBJ.TEN_ID = EVALTR.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = EVALTR.PE_SUBJ_UUID
+     WHERE PE.TEN_ID = #{g.tenant}
+     <if test="p.oorg_cd != null and p.oorg_cd != ''">
+       AND PE.OORG_CD = #{p.oorg_cd}
+     </if>
+       AND PE.PE_UUID = #{p.pe_uuid}
+       AND PE.STS != 'D'
+     <if test="p.eval_prgs_sts_ccd != null and p.eval_prgs_sts_ccd != ''">
+       AND EVALTR.EVAL_PRGS_STS_CCD    = #{p.eval_prgs_sts_ccd}
+     </if>
+     <if test="p.vd_cd != null and p.vd_cd != ''">
+       <bind name="vdCdPatten" value="'%' + p.vd_cd + '%'"/>
+       AND UPPER(PSUBJ.VD_CD) LIKE UPPER(#{vdCdPatten})
+     </if>
+     <if test="p.peg_cd != null and p.peg_cd != ''">
+         AND PEG.PEG_CD = #{p.peg_cd}
+     </if>
+     <if test="p.vmg_cd != null and p.vmg_cd != ''">
+         AND VMG.VMG_CD = #{p.vmg_cd}
+     </if>
+     <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+       <bind name="erpCdPatten" value="'%' + p.erp_vd_cd + '%'"/>
+       AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpCdPatten})
+     </if>
+     <if test="p.vd_nm != null and p.vd_nm != ''">
+       <bind name="vdNamePattern" value="'%' + p.vd_nm + '%'"/>
+       AND    (UPPER(VD.VD_NM) LIKE UPPER(#{vdNamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNamePattern}))      /* 협력사명 검색조건*/
+     </if>
+     ORDER BY PEG.PEG_NM, VMG.VMG_NM, VD.ERP_VD_CD, EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+    </select>
+    <select id="findListPrgsPeSubjEvaltr" resultType="map">
+    /* pfmc-req.findListPrgsPeSubjEvaltr : 퍼포먼스평가요청 대상 평가항목담당자권한 별 담당자 목록을 조회한다. */
+    SELECT PE.TEN_ID
+         , PE.PE_UUID
+         , PE.OORG_CD
+         , PE.EVAL_CD
+         , PE.EVAL_NM
+         , PSUBJ.PE_SUBJ_UUID
+         , PSUBJ.PFMC_EVALSHT_UUID
+         , SUBJ_RES.EVALTMPL_UUID
+         , PEG.PEG_CD
+         , PEG.PEG_NM
+         , PEG.PEG_EXPLN
+         , VD.VD_CD
+         , VD.ERP_VD_CD
+         , VD.VD_NM
+         , VD.VD_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE CASE WHEN VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '' THEN VD.VD_NM ELSE VD.VD_NM_EN END END AS DISPLAY_VD_NM
+         , VO.VMG_OORG_UUID
+         , VMG.VMG_CD
+         , VMG.VMG_NM
+         , VMG.VMG_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE CASE WHEN VMG.VMG_NM_EN IS NULL OR VMG.VMG_NM_EN = '' THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END END AS DISPLAY_VMG_NM
+         , EVALTR_RES.EVALFACT_EVALTR_AUTHTY_CCD
+         , EVALTR_RES.EVAL_PRGS_STS_CCD
+         , EVALTR_RES.EVAL_SUBJ_RES_UUID
+         , EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+         , PSEVALTR.PE_SUBJ_EVALTR_UUID
+         , PSEVALTR.SLFCK_EVALTR_YN
+         , PSEVALTR.EVALTR_ID
+         , USR.USR_NM
+         , USR.USR_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN USR.USR_NM ELSE CASE WHEN USR.USR_NM_EN IS NULL OR USR.USR_NM_EN = '' THEN USR.USR_NM ELSE USR.USR_NM_EN END END AS DISPLAY_EVALTR_NM
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PEG
+        ON PPEG.TEN_ID = PEG.TEN_ID
+       AND PPEG.PEG_UUID = PEG.PEG_UUID
+       AND PEG.STS != 'D'
+     INNER JOIN PE_SUBJ PSUBJ
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PSUBJ.STS != 'D'
+      LEFT OUTER JOIN PEG_VMG PVMG
+        ON PSUBJ.TEN_ID = PVMG.TEN_ID
+       AND PSUBJ.PEG_UUID = PVMG.PEG_UUID
+       AND PSUBJ.VMG_OORG_UUID = PVMG.VMG_OORG_UUID
+       AND PVMG.STS != 'D'
+      LEFT OUTER JOIN VMG_OORG VO
+        ON PSUBJ.TEN_ID = VO.TEN_ID
+       AND PSUBJ.VMG_OORG_UUID = VO.VMG_OORG_UUID
+      LEFT OUTER JOIN VMG
+        ON VO.TEN_ID = VMG.TEN_ID
+       AND VO.VMG_UUID = VMG.VMG_UUID
+      LEFT OUTER JOIN VD
+        ON PSUBJ.TEN_ID = VD.TEN_ID
+       AND PSUBJ.VD_CD = VD.VD_CD
+     INNER JOIN PE_SUBJ_RES PSRES
+        ON PSUBJ.TEN_ID = PSRES.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PSRES.PE_SUBJ_UUID
+     INNER JOIN EVAL_SUBJ_RES SUBJ_RES
+        ON PSRES.TEN_ID = SUBJ_RES.TEN_ID
+       AND PSRES.EVAL_SUBJ_RES_UUID = SUBJ_RES.EVAL_SUBJ_RES_UUID
+     INNER JOIN PE_SUBJ_EVALTR PSEVALTR
+        ON PSUBJ.TEN_ID = PSEVALTR.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PSEVALTR.PE_SUBJ_UUID
+       AND PSRES.SLFCK_RES_YN = PSEVALTR.SLFCK_EVALTR_YN
+      LEFT OUTER JOIN USR
+        ON PSEVALTR.TEN_ID = USR.TEN_ID
+       AND PSEVALTR.EVALTR_ID = USR.USR_ID
+     INNER JOIN EVAL_SUBJ_EVALTR_RES EVALTR_RES
+        ON SUBJ_RES.TEN_ID = EVALTR_RES.TEN_ID
+       AND SUBJ_RES.EVAL_SUBJ_RES_UUID = EVALTR_RES.EVAL_SUBJ_RES_UUID
+       AND PSEVALTR.EVAL_SUBJ_EVALTR_RES_UUID = EVALTR_RES.EVAL_SUBJ_EVALTR_RES_UUID
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PE.PE_UUID = #{p.pe_uuid}
+       AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+       AND PSEVALTR.EVALFACT_EVALTR_AUTHTY_CCD = #{p.evalfact_evaltr_authty_ccd}
+    </select>
+    <select id="existPeSubjEvaltrYn" resultType="string">
+    /* pfmc-req.existPeSubjEvaltrYn : 평가대상 평가자 존재 여부 */
+    SELECT CASE WHEN COUNT(*) &gt; 0 THEN 'Y' ELSE 'N' END
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+     INNER JOIN PE_SUBJ PSUBJ
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PSUBJ.STS != 'D'
+      LEFT OUTER JOIN PE_SUBJ_EVALTR PS_EVALTR
+        ON PSUBJ.TEN_ID = PS_EVALTR.TEN_ID
+       AND PSUBJ.PE_SUBJ_UUID = PS_EVALTR.PE_SUBJ_UUID
+       AND PS_EVALTR.STS != 'D'
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PSUBJ.PE_SUBJ_UUID = #{p.pe_subj_uuid}
+      <if test="p.pe_subj_evaltr_uuid != null and p.pe_subj_evaltr_uuid != ''">
+       AND PS_EVALTR.PE_SUBJ_EVALTR_UUID = #{p.pe_subj_evaltr_uuid}
+      </if>
+      <if test="p.evaltfact_evaltr_authty_ccd != null and p.evaltfact_evaltr_authty_ccd != ''">
+       AND PS_EVALTR.EVALTFACT_EVALTR_AUTHTY_CCD = #{p.evaltfact_evaltr_authty_ccd}
+      </if>
+      <if test="p.evaltr_id != null and p.evaltr_id != ''">
+       AND PS_EVALTR.EVALTR_ID = #{p.evaltr_id}
+      </if>
+      <if test="p.slfck_evaltr_yn != null and p.slfck_evaltr_yn != ''">
+          AND PS_EVALTR.SLFCK_EVALTR_YN = #{p.slfck_evaltr_yn}
+      </if>
+    </select>
+    <delete id="deletePeSubjEvaltrByPeUuid">
+    /* pfmc-req.deletePeSubjEvaltrByPeUuid : 퍼포먼스평가 오청 아이디로 퍼포먼스 평가그룹 전체 삭제 */
+    DELETE  FROM PE_SUBJ_EVALTR EVALTR
+     WHERE TEN_ID = #{g.tenant}
+       AND EXISTS (
+           SELECT 'X'
+             FROM PE_SUBJ PSUBJ
+            INNER JOIN PE_PEG PPEG
+                ON PSUBJ.TEN_ID = PPEG.TEN_ID
+              AND PSUBJ.PE_PEG_UUID    = PPEG.PE_PEG_UUID
+            WHERE EVALTR.TEN_ID        = PSUBJ.TEN_ID
+              AND EVALTR.PE_SUBJ_UUID  = PSUBJ.PE_SUBJ_UUID
+              AND PPEG.PE_UUID         = #{p.pe_uuid}
+         )
+    </delete>
+    <delete id="deletePeSubjByPeUuid">
+    /* pfmc-req.deletePeSubjByPeUuid : 퍼포먼스평가 오청 아이디로 퍼포먼스 평가대상 전체 삭제 */
+    DELETE  FROM PE_SUBJ PSUBJ
+     WHERE TEN_ID = #{g.tenant}
+       AND EXISTS (
+           SELECT 'X'
+             FROM PE_PEG PPEG
+            WHERE PPEG.TEN_ID       = PSUBJ.TEN_ID
+             AND PPEG.PE_PEG_UUID  = PSUBJ.PE_PEG_UUID
+             AND PPEG.PE_UUID       = #{p.pe_uuid}
+          )
+    </delete>
+    <delete id="deletePePegByPeUuid">
+    /* pfmc-req.deletePePegByPeUuid : 퍼포먼스평가 오청 아이디로 퍼포먼스 평가그룹 전체 삭제 */
+    DELETE FROM PE_PEG
+     WHERE TEN_ID = #{g.tenant}
+       AND PE_UUID = #{p.pe_uuid}
+    </delete>
+    <delete id="deletePe">
+    /* pfmc-req.deletePe : 퍼포먼스 요청 삭제 */
+    DELETE FROM PE
+     WHERE TEN_ID = #{g.tenant}
+       AND PE_UUID = #{p.pe_uuid}
+    </delete>
+    <select id="findListPeEvalGrd" resultType="map">
+    /* pfmc-req.findListPeEvalGrd: 퍼포먼스평가그룹 - 평가등급 조회 */
+    SELECT PPEG.TEN_ID
+         , PE_EVAL_GRD_UUID
+         , PPEG.PE_PEG_UUID
+         , CASE WHEN PE_GRD.EVAL_GRD_CD IS NULL OR PE_GRD.EVAL_GRD_CD = '' THEN PEG_GRD.EVAL_GRD_CD ELSE PE_GRD.EVAL_GRD_CD END  AS EVAL_GRD_CD
+         , CASE WHEN PE_GRD.EVAL_GRD_NM IS NULL OR PE_GRD.EVAL_GRD_NM = '' THEN PEG_GRD.EVAL_GRD_NM ELSE PE_GRD.EVAL_GRD_NM END  AS EVAL_GRD_NM
+         , CASE WHEN PE_GRD.ST_VAL IS NULL THEN PEG_GRD.ST_VAL ELSE PE_GRD.ST_VAL END            AS ST_VAL
+         , CASE WHEN PE_GRD.STP_VAL IS NULL THEN PEG_GRD.STP_VAL ELSE PE_GRD.STP_VAL END          AS STP_VAL
+         , CASE WHEN PE_GRD.SORT IS NULL THEN PEG_GRD.SORT ELSE PE_GRD.SORT END                AS SORT
+         , CASE WHEN PE_GRD.RMK IS NULL OR PE_GRD.RMK = '' THEN PEG_GRD.RMK ELSE PE_GRD.RMK END                  AS RMK
+         , CASE WHEN PE_GRD.REGR_ID IS NULL OR PE_GRD.REGR_ID = '' THEN PEG_GRD.REGR_ID ELSE PE_GRD.REGR_ID END          AS REGR_ID
+         , CASE WHEN PE_GRD.REG_DTTM IS NULL THEN PEG_GRD.REG_DTTM ELSE PE_GRD.REG_DTTM END        AS REG_DTTM
+         , CASE WHEN PE_GRD.MODR_ID IS NULL OR PE_GRD.MODR_ID = '' THEN PEG_GRD.MODR_ID ELSE PE_GRD.MODR_ID END          AS MODR_ID
+         , CASE WHEN PE_GRD.MOD_DTTM IS NULL THEN PEG_GRD.MOD_DTTM ELSE PE_GRD.MOD_DTTM END        AS MOD_DTTM
+      FROM PE_PEG PPEG
+      LEFT OUTER JOIN PEG_EVAL_GRD PEG_GRD     /* 퍼포먼스 평가그룹의 평가등급 */
+        ON PPEG.TEN_ID = PEG_GRD.TEN_ID
+       AND PPEG.PEG_UUID = PEG_GRD.PEG_UUID
+       AND PEG_GRD.STS != 'D'
+       /* 퍼포먼스평가등급 보여주는 기준 : 평가요청시 저장된 평가등급 (PE_EVAL_GRD) 이 있을 경우 퍼포먼스 평가그룹의 평가등급 (PEG_EVAL_GRD) 는 조회되지 않게 한다.*/
+       AND (CASE WHEN EXISTS ( SELECT 'X'
+                                FROM PE_EVAL_GRD PE_GRD
+                               WHERE PEG_GRD.TEN_ID = PE_GRD.TEN_ID
+                                 AND PE_GRD.PE_PEG_UUID = PPEG.PE_PEG_UUID
+                                 AND PE_GRD.STS != 'D') THEN 'N'
+                 ELSE 'Y'
+            END) = 'Y'
+      LEFT OUTER JOIN PE_EVAL_GRD PE_GRD    /* 퍼포먼스 평가 요청 평가그룹의 평가등급 (퍼포먼스평가 요청 시 저장된 평가등급) */
+        ON PPEG.TEN_ID = PE_GRD.TEN_ID
+       AND PPEG.PE_PEG_UUID = PE_GRD.PE_PEG_UUID
+       AND PE_GRD.STS != 'D'
+     WHERE PPEG.TEN_ID = #{g.tenant}
+       AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+       AND PPEG.STS            != 'D'
+     ORDER BY CASE WHEN PE_GRD.SORT IS NULL THEN PEG_GRD.SORT ELSE PE_GRD.SORT END ASC, CASE WHEN PE_GRD.STP_VAL IS NULL THEN PEG_GRD.STP_VAL ELSE PE_GRD.STP_VAL END DESC
+    </select>
+    <select id="checkValidPfmcReqBeforeSave" resultType="map">
+    /* pfmc-req.checkValidPfmcReqBeforeSave : 퍼포먼스 평가요청 저장 전 유효성 검사 */
+    SELECT PE.PE_UUID
+         , PPEG.PEG_UUID
+         , PPEG.PE_PEG_UUID
+         , (SELECT PEG_NM FROM PEG WHERE PEG.PEG_UUID = PPEG.PEG_UUID) AS PEG_NM
+         , PPEG.PFMC_EVALSHT_UUID AS PE_PFMC_EVALSHT_UUID
+         , EFCT_SHT.PFMC_EVALSHT_UUID
+         , CASE WHEN PPEG.PFMC_EVALSHT_UUID = EFCT_SHT.PFMC_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS EFCT_EVALSHT_YN
+         , CASE WHEN EXISTS (
+                     SELECT 'X'
+                       FROM PE_SUBJ PSUBJ
+                      WHERE PSUBJ.TEN_ID = PPEG.TEN_ID
+                        AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+                        AND PSUBJ.STS != 'D'
+                        AND PSUBJ.VMG_OORG_UUID NOT IN (
+                                           SELECT VMG_OORG_UUID
+                                            FROM PEG_VMG PVMG
+                                           WHERE PVMG.TEN_ID = PPEG.TEN_ID
+                                            AND PVMG.PEG_UUID = PPEG.PEG_UUID
+                                            AND PVMG.STS != 'D'
+                            )
+                  ) THEN 'N'
+                    ELSE 'Y'
+           END AS EFCT_VMG_YN           /* 퍼포먼스평가 평가대상의 모든 VMG가 평가그룹에 연결되어있는지 여부 */
+         , CASE WHEN NOT EXISTS (
+                         SELECT 'X'
+                           FROM PE_SUBJ PSUBJ
+                          WHERE PPEG.TEN_ID = PSUBJ.TEN_ID
+                            AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                            AND PSUBJ.STS != 'D') THEN 'N'
+                ELSE 'Y'
+            END EXISTS_PE_SUBJ_YN       /* 평가그룹 별 평가대상이 존재하는지 여부 */
+        , CASE WHEN NOT EXISTS (
+                        SELECT 'X'
+                          FROM PE_SUBJ PSUBJ
+                         INNER JOIN PE_SUBJ_EVALTR PEVALTR
+                            ON PSUBJ.TEN_ID = PEVALTR.TEN_ID
+                           AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+                           AND PEVALTR.STS != 'D'
+                         WHERE PPEG.TEN_ID = PSUBJ.TEN_ID
+                           AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                      ) THEN 'N'
+               ELSE 'Y'
+           END EXISTS_PE_EVALTR_YN     /* 평가대상별 평가자가 모두 존재하는지 여부 */
+        , CASE WHEN EFCT_SHT.EVALTR_TYP_CCD != 'EVALFACT_AUTHTY_PIC' THEN 'Y'
+               WHEN NOT EXISTS(
+                    SELECT 'X'
+                      FROM PE_SUBJ PSUBJ
+                     INNER JOIN PE_SUBJ_EVALTR PEVALTR
+                        ON PSUBJ.TEN_ID = PEVALTR.TEN_ID
+                       AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+                       AND PEVALTR.STS != 'D'
+                     WHERE PSUBJ.TEN_ID = PPEG.TEN_ID
+                       AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+                  ) THEN 'Y'    /* 평가대상의 평가자가 존재하지 않는 경우 권한 문제는 아니므로 y */
+               WHEN EXISTS (    /* 평가대상 평가자의 권한 중 평가템플릿 항목별 권한에 해당하지 않는 데이터 존재하는지 확인 */
+                    SELECT 'X'
+                     FROM PE_SUBJ PSUBJ
+                    INNER JOIN PE_SUBJ_EVALTR PEVALTR
+                       ON PSUBJ.TEN_ID = PEVALTR.TEN_ID
+                      AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+                      AND PEVALTR.STS != 'D'
+                    WHERE PSUBJ.TEN_ID = PPEG.TEN_ID
+                      AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+                      AND CASE WHEN PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD END NOT IN (
+                            SELECT DISTINCT CASE WHEN ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD END
+                              FROM EVALTMPL_EVALFACT ET_EFACT
+                             INNER JOIN EVALFACT EFACT
+                                ON ET_EFACT.TEN_ID = EFACT.TEN_ID
+                               AND ET_EFACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                               AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                             WHERE EFCT_SHT.TEN_ID = ET_EFACT.TEN_ID
+                               AND EFCT_SHT.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+                               AND ET_EFACT.STS != 'D'
+                           )
+                      AND PEVALTR.SLFCK_EVALTR_YN != 'Y'
+                  ) THEN 'N'
+               WHEN EXISTS (    /* 평가템플릿 항목별 권한 중 평가대상 평가자의 권한과 맞지않는 데이터 존재하는지 확인 */
+                    SELECT 'X'
+                      FROM EVALTMPL_EVALFACT ET_EFACT
+                     INNER JOIN EVALFACT EFACT
+                        ON ET_EFACT.TEN_ID = EFACT.TEN_ID
+                       AND ET_EFACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                       AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                     WHERE EFCT_SHT.TEN_ID = ET_EFACT.TEN_ID
+                       AND EFCT_SHT.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+                       AND ET_EFACT.STS != 'D'
+                       AND CASE WHEN ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD END NOT IN (
+                             SELECT DISTINCT CASE WHEN PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE PEVALTR.EVALFACT_EVALTR_AUTHTY_CCD END
+                               FROM PE_SUBJ PSUBJ
+                              INNER JOIN PE_SUBJ_EVALTR PEVALTR
+                                 ON PSUBJ.TEN_ID = PEVALTR.TEN_ID
+                                AND PSUBJ.PE_SUBJ_UUID = PEVALTR.PE_SUBJ_UUID
+                                AND PEVALTR.STS != 'D'
+                              WHERE PSUBJ.TEN_ID = PPEG.TEN_ID
+                                AND PSUBJ.PE_PEG_UUID = PPEG.PE_PEG_UUID
+                                AND PEVALTR.SLFCK_EVALTR_YN != 'Y'
+                         )
+                  ) THEN 'N'
+               ELSE 'Y'
+          END EFCT_AUTHTY_YN         /* 평가자 권한이 평가템플릿 평가항목 권한과 일치하는지 여부 */
+    FROM PE
+   INNER JOIN PE_PEG PPEG
+      ON PE.TEN_ID = PPEG.TEN_ID
+     AND PE.PE_UUID = PPEG.PE_UUID
+     AND PPEG.STS != 'D'
+    LEFT OUTER JOIN (
+             SELECT PFMCSHT.*
+                  , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+               FROM PFMC_EVALSHT PFMCSHT
+              WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                AND PFMCSHT.STS != 'D'
+       ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+      ON PPEG.TEN_ID = EFCT_SHT.TEN_ID
+     AND PPEG.PEG_UUID = EFCT_SHT.PEG_UUID
+     AND EFCT_SHT.RK = 1
+   WHERE PE.TEN_ID = #{g.tenant}
+     AND PE.PE_UUID = #{p.pe_uuid}
+    </select>
+    <select id="findListInvalidPeSubjByPegVmg" resultType="map">
+    /* pfmc-req.findListInvalidPeSubjByPegVmg : 평가그룹의 협력사관리그룹과 맞지 않는 퍼포먼스 평가대상 협력사관리그룹 조회 */
+    SELECT PPEG.TEN_ID
+         , PPEG.PEG_UUID
+         , PPEG.PE_PEG_UUID
+         , PPEG.PFMC_EVALSHT_UUID AS PE_PFMC_EVALSHT_UUID
+         , EFCT_SHT.PFMC_EVALSHT_UUID
+         , PSUBJ.PE_SUBJ_UUID
+         , PSUBJ.VMG_OORG_UUID
+      FROM PE
+     INNER JOIN PE_PEG PPEG
+        ON PE.TEN_ID = PPEG.TEN_ID
+       AND PE.PE_UUID = PPEG.PE_UUID
+       AND PPEG.STS != 'D'
+      LEFT OUTER JOIN PE_SUBJ PSUBJ
+        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+       AND PSUBJ.STS != 'D'
+      LEFT OUTER JOIN (
+               SELECT PFMCSHT.*
+                    , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                 FROM PFMC_EVALSHT PFMCSHT
+                WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                  AND PFMCSHT.STS != 'D'
+         ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+        ON PPEG.TEN_ID = EFCT_SHT.TEN_ID
+       AND PPEG.PEG_UUID = EFCT_SHT.PEG_UUID
+       AND EFCT_SHT.RK = 1
+     WHERE PE.TEN_ID = #{g.tenant}
+       AND PE.PE_UUID = #{p.pe_uuid}
+       AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+       AND PSUBJ.VMG_OORG_UUID NOT IN (
+                   SELECT VMG_OORG_UUID
+                     FROM PEG_VMG PVMG
+                    WHERE PVMG.TEN_ID = PPEG.TEN_ID
+                      AND PVMG.PEG_UUID = PPEG.PEG_UUID
+                      AND PVMG.STS != 'D'
+          )
+    </select>
+    <update id="updatePePegValidPfmcEvalshtByPeg">
+    /* pfmc-req.updatePePegValidPfmcEvalshtByPeg : 퍼포먼스 요청 평가그룹의 펑가시트를 퍼포먼스평가그룹의 현재시점 유효한 평가시트로 업데이트한다.*/
+    UPDATE PE_PEG
+       SET PFMC_EVALSHT_UUID = (SELECT PFMC_EVALSHT_UUID
+                                  FROM (
+                                        SELECT PFMCSHT.*
+                                             , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                                          FROM PFMC_EVALSHT PFMCSHT
+                                         WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                                           AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                                           AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                                           AND PFMCSHT.STS != 'D'
+                                     ) EFCT_SHT
+                                 WHERE EFCT_SHT.RK = 1
+                                   AND EFCT_SHT.PEG_UUID = PE_PEG.PEG_UUID
+                                )
+     WHERE PE_PEG.TEN_ID = #{g.tenant}
+       AND PE_PEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+    </update>
+    <update id="updatePeSubjValidPfmcEvalshtByPeg">
+    /* pfmc-req.updatePeSubjValidPfmcEvalshtByPeg :퍼포먼스 요청 평가대상의 펑가시트를 퍼포먼스평가그룹의 현재시점 유효한 평가시트로 업데이트한다.*/
+    UPDATE PE_SUBJ
+       SET PFMC_EVALSHT_UUID = (SELECT PFMC_EVALSHT_UUID
+                                  FROM (
+                                        SELECT PFMCSHT.*
+                                             , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                                        FROM PFMC_EVALSHT PFMCSHT
+                                        WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                                          AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                                          AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                                          AND PFMCSHT.STS != 'D'
+                                       ) EFCT_SHT
+                                WHERE EFCT_SHT.RK = 1
+                                  AND EFCT_SHT.PEG_UUID = PE_SUBJ.PEG_UUID)
+      WHERE PE_SUBJ.TEN_ID = #{g.tenant}
+       AND PE_SUBJ.PE_PEG_UUID = #{p.pe_peg_uuid}
+    </update>
+    <delete id="deletePeSubjEvaltrInvalidAuthtyByTmpl">
+    /* pfmc-req.deletePeSubjEvaltrInvalidAuthtyByTmpl : 퍼포먼스 평가대상 평가자의 평가항목권한이 평가템플릿에 없는 평가항목권한을 가진 경우 평가자를 삭제한다.*/
+    DELETE
+      FROM PE_SUBJ_EVALTR
+     WHERE TEN_ID = #{g.tenant}
+       AND STS != 'D'
+       AND PE_SUBJ_UUID IN (
+                SELECT PE_SUBJ_UUID
+                  FROM PE_SUBJ PSUBJ
+                 WHERE PSUBJ.TEN_ID = PE_SUBJ_EVALTR.TEN_ID
+                   AND PSUBJ.PE_SUBJ_UUID = PE_SUBJ_EVALTR.PE_SUBJ_UUID
+                   AND PSUBJ.STS != 'D'
+                   AND PSUBJ.PE_PEG_UUID = #{p.pe_peg_uuid})
+                   AND EVALFACT_EVALTR_AUTHTY_CCD NOT IN (
+                                                  SELECT DISTINCT CASE WHEN ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN  'ALL' ELSE ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD END
+                                                    FROM PE_PEG PPEG
+                                                   INNER JOIN PFMC_EVALSHT PESHT
+                                                      ON PPEG.TEN_ID = PESHT.TEN_ID
+                                                     AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+                                                     AND PESHT.STS != 'D'
+                                                   INNER JOIN EVALTMPL_EVALFACT ET_EFACT
+                                                      ON PESHT.TEN_ID = ET_EFACT.TEN_ID
+                                                     AND PESHT.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+                                                     AND ET_EFACT.STS != 'D'
+                                                   INNER JOIN EVALFACT EFACT
+                                                      ON ET_EFACT.TEN_ID = EFACT.TEN_ID
+                                                     AND ET_EFACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                                                     AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                                                   WHERE PPEG.TEN_ID = #{g.tenant}
+                                                     AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+                                                     AND PPEG.STS != 'D'
+                       )
+       AND SLFCK_EVALTR_YN != 'Y'    /* 자체점검 담당자는 평가항목권한 체크에서 제외. */
+    </delete>
+    <insert id="insertPeSubjEvaltrEffectAuthtyByTmpl">
+    /* pfmc-req.insertPeSubjEvaltrEffectAuthtyByTmpl : 퍼포먼스 평가대상 평가자에 평가 템플릿의 평가항목권한자가 누락된 경우 추가로 생성한다. */
+    INSERT INTO PE_SUBJ_EVALTR(
+           TEN_ID
+         , PE_SUBJ_EVALTR_UUID
+         , PE_SUBJ_UUID
+         , EVALFACT_EVALTR_AUTHTY_CCD
+         , SLFCK_EVALTR_YN
+         , EVALTR_ID
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    )
+    SELECT EVALTR.TEN_ID
+         , RANDOMUUID  , EVALTR.PE_SUBJ_UUID
+         , EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+         , 'N'
+         , EVALTR.EVALTR_ID
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+      FROM (SELECT DISTINCT
+                  PE.TEN_ID
+                , PSUBJ.PE_SUBJ_UUID
+                , SHTTR.EVALFACT_EVALTR_AUTHTY_CCD
+                , SHTTR.EVALTR_ID
+             FROM PE                              /* 퍼포먼스평가 요청 */
+            INNER JOIN PE_PEG PPEG                /* 퍼포먼스평가 퍼포먼스평가그룹 */
+               ON PE.TEN_ID = PPEG.TEN_ID
+              AND PE.PE_UUID = PPEG.PE_UUID
+              AND PPEG.STS != 'D'
+	        INNER JOIN PE_SUBJ PSUBJ              /* 퍼포먼스평가 대상 */
+               ON PPEG.TEN_ID = PSUBJ.TEN_ID
+              AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+              AND PSUBJ.STS != 'D'
+             LEFT OUTER JOIN PFMC_EVALSHT PESHT   /* 퍼포먼스 평가시트 */
+              ON PPEG.TEN_ID = PESHT.TEN_ID
+              AND PPEG.PFMC_EVALSHT_UUID = PESHT.PFMC_EVALSHT_UUID
+             LEFT OUTER JOIN (
+                      SELECT DISTINCT PESHT.TEN_ID
+                           , PESHT.PFMC_EVALSHT_UUID
+                           , CASE WHEN ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD IS NULL OR ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = '' THEN 'ALL' ELSE ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD END AS EVALFACT_EVALTR_AUTHTY_CCD
+                           , SHTTR.EVALTR_ID
+                        FROM PFMC_EVALSHT PESHT
+                       INNER JOIN EVALTMPL_EVALFACT ET_EFACT   /* 평가템플릿 평가항목 */ /* 평가템플릿 평가항목 - 평가시트 평가자 매핑관계 존재하는 경우만 생성 */
+                          ON PESHT.TEN_ID = ET_EFACT.TEN_ID
+                         AND PESHT.EVALTMPL_UUID = ET_EFACT.EVALTMPL_UUID
+                         AND ET_EFACT.STS != 'D'
+                       INNER JOIN EVALFACT EFACT
+                          ON ET_EFACT.TEN_ID = EFACT.TEN_ID
+                         AND ET_EFACT.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                         AND EFACT.EVALFACT_TYP_CCD != 'QUANT'
+                        LEFT OUTER JOIN EVALSHT_EVALTR SHTTR /* 평가시트 평가자 */
+                          ON PESHT.TEN_ID = SHTTR.TEN_ID
+                         AND PESHT.PFMC_EVALSHT_UUID = SHTTR.PFMC_EVALSHT_UUID
+                         AND ET_EFACT.EVALFACT_EVALTR_AUTHTY_CCD = SHTTR.EVALFACT_EVALTR_AUTHTY_CCD
+                         AND SHTTR.STS != 'D'
+                       WHERE SHTTR.TEN_ID = ET_EFACT.TEN_ID
+                         AND SHTTR.STS != 'D'
+                     ) SHTTR
+                    ON PESHT.TEN_ID = SHTTR.TEN_ID
+                   AND PESHT.PFMC_EVALSHT_UUID = SHTTR.PFMC_EVALSHT_UUID
+                 WHERE PE.TEN_ID = #{g.tenant}
+                   AND PPEG.PE_PEG_UUID = #{p.pe_peg_uuid}
+                   AND NOT EXISTS (SELECT 'X'
+                                     FROM PE_SUBJ_EVALTR CUR_EVALTR
+                                    WHERE PSUBJ.TEN_ID = CUR_EVALTR.TEN_ID
+                                      AND PSUBJ.PE_SUBJ_UUID = CUR_EVALTR.PE_SUBJ_UUID
+                                      AND SHTTR.EVALFACT_EVALTR_AUTHTY_CCD = CUR_EVALTR.EVALFACT_EVALTR_AUTHTY_CCD)
+          ) EVALTR
+    </insert>
+    <select id="getPfmcEvalStatusRequestedYn" resultType="string">
+    /* pfmc-res.getPfmcEvalStatusRequestedYn : 평가 요청 여부 조회*/
+    SELECT /* [R301] 평가 상태가 작성중, 통보대기, 통보오류이면 요청 전 상태 */
+           CASE WHEN PE_STS_CCD IN ('CRNG', 'CRN_WTG', 'CRN_ERR')
+                THEN 'N'
+           ELSE 'Y'
+           END
+      FROM PE        /* 퍼포먼스평가 요청 */
+     WHERE TEN_ID       = #{g.tenant}
+       AND PE_UUID      = #{p.pe_uuid}
+    </select>
+    <update id="cancelRequestPeSubjEvaltr">
+    /* pfmc-req.cancelRequestPeSubjEvaltr : 퍼포먼스 요청 취소 시 퍼포먼스평가대상 평가자에서 eval 관련 필드를 null로 업데이트 한다. */
+    UPDATE PE_SUBJ_EVALTR
+       SET EVAL_SUBJ_EVALTR_RES_UUID = NULL
+     WHERE TEN_ID = #{g.tenant}
+       AND PE_SUBJ_UUID IN (
+                    SELECT PE_SUBJ_UUID
+                      FROM PE
+                     INNER JOIN PE_PEG PPEG
+                        ON PE.TEN_ID = PPEG.TEN_ID
+                       AND PE.PE_UUID = PPEG.PE_UUID
+                       AND PPEG.STS != 'D'
+                     INNER JOIN PE_SUBJ PSUBJ
+                        ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                       AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                       AND PSUBJ.STS != 'D'
+                     WHERE PE.TEN_ID = #{g.tenant}
+                       AND PE.PE_UUID = #{p.pe_uuid}
+                       AND PE.STS != 'D'
+           )
+    </update>
+</mapper>

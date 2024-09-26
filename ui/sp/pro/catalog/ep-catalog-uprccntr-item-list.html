@@ -1,0 +1,173 @@
+<dom-module id="ep-catalog-uprccntr-item-list">
+    <!--
+    /**
+     *
+     *	@description :
+     *  <pre>
+     * </pre>
+     * @author : user
+     * @FileName :
+     * @Since 2021. 5. 31.
+     * @변경이력 : [2024. 5. 8.] user 최초작성
+     */
+    -->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <sc-ajax id="findListUprccntrItem"
+                 url="findListUprccntrItem.do"
+                 body="{{searchParam}}"
+                 last-response="{{resultList}}">
+        </sc-ajax>
+
+        <sc-ajax id="applyCatalogToUprcItem"
+                 url="applyCatalogToUprcItem.do"
+                 on-response="completeFindVdList">
+        </sc-ajax>
+
+        <!-- 코드 조회 -->
+
+        <sc-request-group id="codes" init>
+            <sc-ajax id="findListOperationOrganizationBySupplier"
+                     url="findListOperationOrganizationBySupplier.do"
+                     body="PO"
+                     content-type="text/plain"
+                     last-response="{{codes.oorgCd}}">
+            </sc-ajax>
+        </sc-request-group>
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <!-- page title toolbar -->
+        <cc-page-title-bar>
+
+        </cc-page-title-bar>
+
+        <cc-search-condition-panel on-search="onFind" validation-group="search" auth-r>
+            <cc-fieldset>
+                <sc-label text="운영조직"></sc-label>
+                <cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cd}}" oper-unit-cd="PO"
+                                                    id="operorgcombobox" placeholder="선택 없음">
+                </cc-sp-operorg-multi-combobox-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="계약 일자"></sc-label>
+                <sc-period-date-field from-value="{{searchParam.uprccntr_from_dt}}" to-value="{{searchParam.uprccntr_to_dt}}"
+                                      default-from-value="-3M" default-to-value="1y" string-date="true">
+                </sc-period-date-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="계약 번호"></sc-label>
+                <sc-text-field value="{{searchParam.cntr_no}}" max-length="50"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="품목 코드"></sc-label>
+                <sc-text-field value="{{searchParam.item_cd}}" max-length="50"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="품목 명"></sc-label>
+                <sc-text-field value="{{searchParam.item_nm}}" max-length="50"></sc-text-field>
+            </cc-fieldset>
+        </cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="false" use-dummy="false" use-selection="true" selection-mode="radio"
+                 use-state="false"
+                 data-provider="{{resultList}}"
+                 on-item-click="onItemClick">
+            <cc-grid-toolbar>
+                <sc-button text="적용" on-click="onApplyCatalog" auth-s ></sc-button>
+            </cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-combobox-column	data-field="oorg_cd"		header-text="운영조직"		width="170"	text-align="center"
+                                       display-field="logic_org_nm"			value-field="oorg_cd"		items="{{codes.oorgCd}}"></sc-combobox-column>
+                <sc-data-column	data-field="item_cd"	header-text="품목 코드"	text-align="center"	width="120"	></sc-data-column>
+                <sc-data-column	data-field="item_nm"	header-text="품목 명"	text-align="left"	width="150"	></sc-data-column>
+                <sc-data-column	data-field="item_spec"	header-text="품목 규격"	text-align="left"	width="200"	></sc-data-column>
+                <sc-data-column	data-field="cntr_no"	header-text="계약 번호"	text-align="center"	width="120"	></sc-data-column>
+                <sc-data-column	data-field="cur_ccd"	header-text="통화"	text-align="center"	width="70"	></sc-data-column>
+                <sc-data-column	data-field="uprccntr_uprc" header-text="계약 단가"	width="100"	text-align="right"
+                                   data-type="number"			format-type="price"				></sc-data-column>
+                <sc-date-column data-field="uprccntr_dt" header-text="단가계약 일자" width="100" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                <sc-date-column data-field="uprc_efct_st_dt" header-text="단가 유효 시작 일자" width="120" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                <sc-date-column data-field="uprc_efct_exp_dt" header-text="단가 유효 만료 일자" width="120" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                <sc-checkbox-column data-field="ctlg_appl_yn" 	header-text="카탈로그 적용 여부"		width="120" checked-value="Y" un-checked-value="N" display-checkbox="false"></sc-checkbox-column>
+            </sc-grid-columns>
+        </sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-catalog-uprccntr-item-list',
+            properties: {
+                searchParam: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                resultList: {
+                    type: Array,
+                    value: function() {
+                        return []
+                    }
+                },
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            oorgCd: []
+                        };
+                    },
+                    reset: false
+                },
+            },
+            /**************************************************
+             * 초기화 설정
+             **************************************************/
+            // 1. 화면 로딩시 최초 호출
+            initialized: function() {
+            },
+            // 팝업 load 및 옵션 설정
+            load: function(param) {
+                var me = this;
+                me.$.operorgcombobox.request();
+                me.onFind();
+            },
+            onFind: function() {
+                var me = this;
+                UT.request(me.$.findListUprccntrItem);
+            },
+            onApplyCatalog: function(){
+                var me = this
+                    , provider = me.$.gridPanel.getDataProvider();
+                var selected = provider.selectionCheckedItems();
+                me.fire("selected-item", selected[0]);
+            },
+            /**************************************************
+             * 그리드 이벤트
+             **************************************************/
+            onItemClick: function(event) {
+                var me   = this,
+                    data = event.detail.data,
+                    item = event.detail.item;
+
+                if(item.dataField === 'rfx_prentc_no') {
+                    me.$.findListBidNotiCompleteVdList.body = data;
+                    UT.request(me.$.findListBidNotiCompleteVdList);
+                }
+            },
+            completeFindVdList: function(e, res) {
+                var me = this;
+                var lastResponse = res.response;
+                me.fire("selected-items", lastResponse);
+            },
+            /**************************************************
+             * 버튼 이벤트
+             **************************************************/
+        });
+    </script>
+</dom-module>

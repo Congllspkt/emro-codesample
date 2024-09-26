@@ -1,0 +1,2227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-bid">
+	<select id="findRfx" resultType="map">
+		/* rfx-bid.findRfx */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_TYP_CCD
+		  FROM RFX RFX
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findListRfxBidBuyer" resultType="map">
+		/* rfx-bid.findListRfxBidBuyer : 견적서 작성 (업체대행) 목록 조회 */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.OORG_CD
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_TIT
+		     , (
+		        SELECT COUNT(RFX_ITEM.RFX_ITEM_UUID)
+		          FROM RFX_ITEM RFX_ITEM
+		         WHERE RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		       ) AS RFX_ITEM_CNT
+		     , RFX.ITEM_SLCTN_TYP_CCD
+		     , RFX.RFX_CRN_DT
+		     , RFX.RFX_CLSG_DTTM
+		     , RFX_VD.VD_CD
+		     , VD.ERP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		     , CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		            WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		            ELSE RFX_BID.SLCTN_YN
+		        END AS SLCTN_YN
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD IS NULL THEN 'RCPT_WTG'
+		            WHEN RFX_BID.SLCTN_YN = 'Y' THEN 'C'
+		            ELSE RFX_BID.RFX_BID_STS_CCD
+		        END AS RFX_BID_STS_CCD
+		     , RFX_BID.RFX_BID_DTTM
+		     , RFX_BID.VD_SUBMR_ID AS VD_SUBMR_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS SBMT_NM
+		     , CASE WHEN USR.USR_TYP_CCD IS NOT NULL  AND USR.USR_TYP_CCD = 'VD' THEN 'Y'
+		            ELSE 'N'
+		        END AS VD_SBMT_YN
+		     , RFX_BID.GUP_RSN
+		     , RFX.CSTM_USE_YN
+		     , RFX_CSTM_VD.RFX_UUID AS CS_RFX_UUID
+		  FROM RFX RFX
+		 INNER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.STS     != 'D'
+		   AND RFX_VD.MULTRND_SUBJ_XCEPT_YN = 'N'
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID   = RFX_VD.TEN_ID
+		   AND RFX_BID.RFX_NO   = RFX_VD.RFX_NO
+		   AND RFX_BID.RFX_RND  = RFX_VD.RFX_RND
+		   AND RFX_BID.VD_CD    = RFX_VD.VD_CD
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.STS      != 'D'
+		  LEFT OUTER JOIN RFX_CSTM_VD RFX_CSTM_VD
+		    ON RFX_CSTM_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_CSTM_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_CSTM_VD.VD_CD    = RFX_VD.VD_CD
+		   AND RFX_CSTM_VD.STS     != 'D'
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = RFX_BID.TEN_ID
+		   AND USR.USR_ID = RFX_BID.VD_SUBMR_ID
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_VD.VD_CD
+		 WHERE RFX.TEN_ID       = #{g.tenant}
+		   AND RFX.RFX_TYP_CCD != 'RAUC'
+		   AND RFX.STS         != 'D'
+		   <if test="p.rfx_tit != null and p.rfx_tit != ''">
+			   <bind name="userNamePattern" value="'%' + p.rfx_tit + '%'"/>
+			   AND UPPER(RFX.RFX_TIT) LIKE UPPER(#{userNamePattern})
+		   </if>
+		   <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND RFX.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorgCd" open="(" separator=",">
+		           #{oorgCd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_rfx_crn_dt != null">
+		       AND RFX.RFX_CRN_DT &gt;= #{p.from_rfx_crn_dt}
+		   </if>
+		   <if test="p.to_rfx_crn_dt != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_crn_dt,1)"/>
+		       AND RFX.RFX_CRN_DT <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.from_rfx_st_dttm != null">
+		       AND RFX.RFX_ST_DTTM &gt;= #{p.from_rfx_st_dttm}
+		   </if>
+		   <if test="p.to_rfx_st_dttm != null">
+		       <bind name="toRfxStartDtPattern" value="g.getPlusDays(p.to_rfx_st_dttm,1)"/>
+		       AND RFX.RFX_ST_DTTM <![CDATA[<]]> #{toRfxStartDtPattern}
+		   </if>
+		   <if test="p.from_rfx_clsg_dttm != null">
+		       AND RFX.RFX_CLSG_DTTM &gt;= #{p.from_rfx_clsg_dttm}
+		   </if>
+		   <if test="p.to_rfx_clsg_dttm != null">
+		       <bind name="toRfxCloseDtPattern" value="g.getPlusDays(p.to_rfx_clsg_dttm,1)"/>
+		       AND RFX.RFX_CLSG_DTTM <![CDATA[<]]> #{toRfxCloseDtPattern}
+		   </if>
+		   <if test="p.rfx_typ_ccd != null and p.rfx_typ_ccd != ''">
+		       AND RFX.RFX_TYP_CCD = #{p.rfx_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_nos != null and p.rfx_nos.size() != 0">
+		           AND UPPER(RFX.RFX_NO) IN
+		           <foreach close=")" collection="p.rfx_nos" item="rfx_no" open="(" separator=",">
+		               #{rfx_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_no != null and p.rfx_no != ''">
+		               <bind name="rfxNoPattern" value="'%' + p.rfx_no + '%'"/>
+		               AND UPPER(RFX.RFX_NO) LIKE UPPER(#{rfxNoPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <choose>
+		       <when test="p.rfx_bid_nos != null and p.rfx_bid_nos.size() != 0">
+		           AND UPPER(RFX_BID.RFX_BID_NO) IN
+		           <foreach close=")" collection="p.rfx_bid_nos" item="rfx_bid_no" open="(" separator=",">
+		               #{rfx_bid_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_bid_no != null and p.rfx_bid_no != ''">
+		               <bind name="rfxBidNoPattern" value="'%' + p.rfx_bid_no + '%'"/>
+		               AND UPPER(RFX_BID.RFX_BID_NO) LIKE UPPER(#{rfxBidNoPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.item_slctn_typ_ccd != null and p.item_slctn_typ_ccd != ''">
+		       AND RFX.ITEM_SLCTN_TYP_CCD = #{p.item_slctn_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_sts_ccd != null and p.rfx_sts_ccd != ''">
+		           AND RFX.RFX_STS_CCD = #{p.rfx_sts_ccd}
+		       </when>
+		       <otherwise>
+		           AND RFX.RFX_STS_CCD IN ('NTC_PRGSG', 'PRGSG')
+		       </otherwise>
+		   </choose>
+		   <if test="p.erp_vd_cd != null and p.erp_vd_cd != &quot;&quot;">
+		       <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+		       AND VD.ERP_VD_CD LIKE UPPER(#{p_erp_vd_cd})
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+		       <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{p_vd_nm}))      /* 협력사 명 검색조건*/
+		   </if>
+		   <if test="p.rfx_bid_sts_ccd != null and p.rfx_bid_sts_ccd != ''">
+		       AND COALESCE(RFX_BID.RFX_BID_STS_CCD,'RCPT_WTG') = #{p.rfx_bid_sts_ccd}
+		   </if>
+		 ORDER BY RFX.RFX_NO DESC
+		        , RFX.RFX_RND DESC
+		        , RFX_VD.VD_CD
+	</select>
+	<resultMap id="resultMap-findRfxBid" type="map">
+		<result column="ENCPT_RFX_BID_AMT" javaType="string" property="encpt_rfx_bid_amt" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findRfxBid" resultMap="resultMap-findRfxBid">
+		/* rfx-bid.findRfxBid : 견적서 작성 (업체대행) 헤더정보 조회 */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_TIT
+		     , RFX.RFX_RND
+		     , RFX.OORG_CD
+		     , RFX.RFX_PURP_CCD
+		     , RFX.RAUC_TYP_CCD
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_CRN_DT
+		     , RFX.RFX_ST_DTTM
+		     , RFX.RFX_CLSG_DTTM
+		     , RFX.RFX_CHG_CLSG_DTTM
+		     , RFX.DFRM_RO
+             , RFX.PYMTMETH_DOM_CCD
+		     , RFX.PYMTMETH_DOM_EXPLN
+		     , RFX.DLVYMETH_DOM_CCD
+		     , RFX.DLVYMETH_DOM_EXPLN
+             , RFX.PYMTMETH_OVS_CCD
+		     , RFX.PYMTMETH_OVS_EXPLN
+		     , RFX.DLVYMETH_OVS_CCD
+		     , RFX.DLVYMETH_OVS_EXPLN
+             , RFX.PYMTMETH_DLVYMETH_CHG_POSS_YN
+		     , RFX.CUR_CCD
+		     , RFX.COMP_TYP_CCD
+		     , RFX.ITEM_SLCTN_TYP_CCD
+		     , RFX.SLCTN_TYP_CCD
+		     , RFX.AUTO_EXT_USE_YN
+		     , RFX.AUTO_EXT_TM
+		     , RFX.AUTO_EXT_POSS_WD
+		     , RFX.CNTR_ST_DT
+		     , RFX.CNTR_EXP_DT
+		     , RFX.PURC_TYP_CCD
+		     , RFX.BFG_YN
+		     , RFX.PRESN_YN
+		     , RFX.PRTL_BID_PERM_YN
+		     , RFX.COSTSTR_USE_YN
+		     , RFX.NPE_RO_VD_PUB_YN
+		     , RFX.CBE_TYP_CCD
+		     , RFX.NPE_RO
+		     , RFX.CBE_RO
+		     , RFX.TRGPRC_USE_YN
+		     , RFX.BFG_DTTM
+		     , RFX.BFG_PLC
+		     , RFX.BFG_PIC_ID
+		     , RFX.PRESN_ST_DT
+		     , RFX.PRESN_CLSG_DT
+		     , RFX.PRESN_PIC_ID
+		     , RFX.RFX_BUYER_RMK
+		     , RFX.RFX_VD_RMK
+		     , RFX.BUYER_ATHG_UUID
+		     , RFX.VD_ATHG_UUID
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_RES_STS_CCD
+		     , RFX.RFX_APVL_USE_YN
+		     , RFX.RFX_APVL_STS_CCD
+		     , RFX.RFX_SLCTN_APVL_USE_YN
+		     , RFX.RFX_SLCTN_APVL_STS_CCD
+		     , RFX.RAUC_SUBM_MIN_UNIT_AMT
+			 , RFX.LONG_TERM_PROD_EFF_USE_YN
+			 , RFX.OPEN_DTTM
+		     , RFX.IMMED_ST_USE_YN
+		     , RFX.IMMED_OPEN_USE_YN
+		     , #{p.vd_cd} AS VD_CD
+		     , RFX.CSTM_USE_YN                              /* 컨소시엄 여부 */
+		     , RFX.CSTM_TYP_CCD                             /* 컨소시엄 유형 */
+		     , (
+		        SELECT ERP_VD_CD
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS ERP_VD_CD
+		     , (
+		        SELECT CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS VD_NM
+		     , (
+		        SELECT VD.CEO_NM
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS CEO_NM
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		     , RFX_BID.RFX_BID_EFCT_YN
+		     , RFX_BID.RFX_BID_EFCT_DT
+		     , RFX.DOMOVRS_DIV_CCD AS RFX_DOMOVRS_DIV_CCD
+		     , CASE WHEN RFX_BID.DOMOVRS_DIV_CCD IS NOT NULL  THEN RFX_BID.DOMOVRS_DIV_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD != 'DOMOVS' THEN RFX.DOMOVRS_DIV_CCD
+		        END AS DOMOVRS_DIV_CCD
+		     , CASE WHEN RFX_BID.PYMTMETH_CCD IS NOT NULL  THEN RFX_BID.PYMTMETH_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOM' AND RFX.PYMTMETH_DOM_CCD IS NOT NULL  THEN RFX.PYMTMETH_DOM_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'OVS' AND  RFX.PYMTMETH_OVS_CCD IS NOT NULL  THEN RFX.PYMTMETH_OVS_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOMOVRS' THEN RFX_BID.PYMTMETH_CCD
+		            ELSE RFX.PYMTMETH_CCD
+		        END AS PYMTMETH_CCD
+		     , CASE WHEN RFX_BID.PYMTMETH_EXPLN IS NOT NULL  THEN RFX_BID.PYMTMETH_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOM' THEN RFX.PYMTMETH_DOM_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'OVS' THEN RFX.PYMTMETH_OVS_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOMOVRS' THEN RFX_BID.PYMTMETH_EXPLN
+		            ELSE RFX.PYMTMETH_EXPLN
+		        END AS PYMTMETH_EXPLN
+		     , CASE WHEN RFX_BID.DLVYMETH_CCD IS NOT NULL  THEN RFX_BID.DLVYMETH_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOM' THEN RFX.DLVYMETH_DOM_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'OVS' THEN RFX.DLVYMETH_OVS_CCD
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOMOVRS' THEN RFX_BID.DLVYMETH_CCD
+		            ELSE RFX.DLVYMETH_CCD
+		        END AS DLVYMETH_CCD
+		     , CASE WHEN RFX_BID.DLVYMETH_EXPLN IS NOT NULL  THEN RFX_BID.DLVYMETH_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOM' THEN RFX.DLVYMETH_DOM_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'OVS' THEN RFX.DLVYMETH_OVS_EXPLN
+		            WHEN RFX.DOMOVRS_DIV_CCD = 'DOMOVRS' THEN RFX_BID.DLVYMETH_EXPLN
+		            ELSE RFX.DLVYMETH_EXPLN
+		        END AS DLVYMETH_EXPLN
+		     , CASE WHEN RFX_BID.CUR_CCD IS NULL OR RFX_BID.CUR_CCD = '' THEN RFX.CUR_CCD
+		            ELSE RFX_BID.CUR_CCD
+		        END AS CUR_CCD
+		     , CASE WHEN RFX_BID.RFX_BID_AMT IS NULL THEN 0
+		            ELSE RFX_BID.RFX_BID_AMT
+		        END AS RFX_BID_AMT
+		     , RFX_BID.ATHG_UUID AS ATHG_UUID
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD IS NULL OR RFX_BID.RFX_BID_STS_CCD = '' THEN 'RCPT_WTG'
+		            ELSE RFX_BID.RFX_BID_STS_CCD
+		        END AS RFX_BID_STS_CCD /* 업체견적진행상태 P024 */
+		     , RFX_BID.RFX_BID_DTTM AS RFX_BID_DTTM /* 제출일자 */
+		     , CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		            WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		            ELSE RFX_BID.SLCTN_YN
+		        END AS SLCTN_YN /* 선정 여부 */
+		     , RFX_BID.PFDBIDER_YN AS PFDBIDER_YN
+		     , RFX_BID.RMK         AS RMK
+		     , (
+		        SELECT USR_NM
+		          FROM USR USR
+		         WHERE USR.TEN_ID  = RFX.TEN_ID
+		           AND USR.USR_ID  = RFX.BFG_PIC_ID
+		           AND USR.STS    != 'D'
+		       ) AS BFG_PIC_NM     /* 현장설명회 담당자 */
+		     , (
+		        SELECT USR_NM
+		          FROM USR USR
+		         WHERE USR.TEN_ID  = RFX.TEN_ID
+		           AND USR.USR_ID  = RFX.PRESN_PIC_ID
+		           AND USR.STS    != 'D'
+		       ) AS PRESN_PIC_NM      /* 제안발표 담당자 */
+		     , (
+		        SELECT COUNT(RFX_ITEM.RFX_ITEM_UUID)
+		          FROM RFX_ITEM RFX_ITEM
+		         WHERE RFX_ITEM.TEN_ID = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS   != 'D'
+		       ) AS RFX_ITEM_CNT
+		     , (
+		        SELECT COUNT(RFX_BID.RFX_BID_UUID)
+		          FROM RFX_BID RFX_BID
+		         WHERE RFX_BID.TEN_ID   = RFX.TEN_ID
+		           AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		           AND RFX_BID.RFX_RND  = RFX.RFX_RND
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		       ) AS VD_SUBM_CNT  /* 제출업체 수 */
+		     , CASE WHEN (
+		                  SELECT COUNT(1)
+		                    FROM RFX_ITEM RFX_ITEM
+		                   WHERE RFX_ITEM.TEN_ID        = RFX.TEN_ID
+		                     AND RFX_ITEM.RFX_UUID        = RFX.RFX_UUID
+		                     AND RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+		                     AND RFX_ITEM.STS          != 'D'
+		                 ) &gt; 0 THEN 'Y'
+		            ELSE 'N'
+		        END AS HAS_NO_CD_ITEM
+			 , RFX_BID.ENCPT_RFX_BID_AMT
+		  FROM RFX RFX
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID     = RFX.TEN_ID
+		   AND RFX_BID.RFX_NO     = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND    = RFX.RFX_RND
+		   AND RFX_BID.VD_CD      = #{p.vd_cd}
+		   AND RFX_BID.RFX_BID_EFCT_YN   = 'Y'
+		   AND RFX_BID.STS       != 'D'
+		  LEFT OUTER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.VD_CD    = #{p.vd_cd}
+		   AND RFX_VD.STS     != 'D'
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   <if test="p.rfx_bid_uuid != null and p.rfx_bid_uuid != ''">
+		       AND RFX_BID.RFX_BID_UUID = #{p.rfx_bid_uuid}
+		   </if>
+	</select>
+	<select id="findRfxBidPrevRev" resultType="map">
+		/* rfx-bid.findRfxBidPrevRev : 견적서 작성 (업체대행) 이전차수 헤더정보 조회 */
+		SELECT RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_TIT
+		     , RFX.RFX_RND
+		     , RFX.OORG_CD
+		     , RFX.RFX_PURP_CCD
+		     , RFX.RAUC_TYP_CCD
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_CRN_DT
+		     , RFX.RFX_ST_DTTM
+		     , RFX.RFX_CLSG_DTTM
+		     , RFX.RFX_CHG_CLSG_DTTM
+		     , RFX.DFRM_RO
+             , RFX.PYMTMETH_DOM_CCD
+		     , RFX.PYMTMETH_DOM_EXPLN
+		     , RFX.DLVYMETH_DOM_CCD
+		     , RFX.DLVYMETH_DOM_EXPLN
+             , RFX.PYMTMETH_OVS_CCD
+		     , RFX.PYMTMETH_OVS_EXPLN
+		     , RFX.DLVYMETH_OVS_CCD
+		     , RFX.DLVYMETH_OVS_EXPLN
+             , RFX.PYMTMETH_DLVYMETH_CHG_POSS_YN
+		     , RFX.CUR_CCD
+		     , RFX.COMP_TYP_CCD
+		     , RFX.ITEM_SLCTN_TYP_CCD
+		     , RFX.SLCTN_TYP_CCD
+		     , RFX.AUTO_EXT_USE_YN
+		     , RFX.AUTO_EXT_TM
+		     , RFX.AUTO_EXT_POSS_WD
+		     , RFX.CNTR_ST_DT
+		     , RFX.CNTR_EXP_DT
+		     , RFX.PURC_TYP_CCD
+		     , RFX.BFG_YN
+		     , RFX.PRESN_YN
+		     , RFX.PRTL_BID_PERM_YN
+		     , RFX.COSTSTR_USE_YN
+		     , RFX.NPE_RO_VD_PUB_YN
+		     , RFX.CBE_TYP_CCD
+		     , RFX.NPE_RO
+		     , RFX.CBE_RO
+		     , RFX.TRGPRC_USE_YN
+		     , RFX.BFG_DTTM
+		     , RFX.BFG_PLC
+		     , RFX.BFG_PIC_ID
+		     , RFX.PRESN_ST_DT
+		     , RFX.PRESN_CLSG_DT
+		     , RFX.PRESN_PIC_ID
+		     , RFX.RFX_BUYER_RMK
+		     , RFX.RFX_VD_RMK
+		     , RFX.BUYER_ATHG_UUID
+		     , RFX.VD_ATHG_UUID
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_RES_STS_CCD
+		     , RFX.RFX_APVL_USE_YN
+		     , RFX.RFX_APVL_STS_CCD
+		     , RFX.RFX_SLCTN_APVL_USE_YN
+		     , RFX.RFX_SLCTN_APVL_STS_CCD
+		     , RFX.RAUC_SUBM_MIN_UNIT_AMT
+		     , RFX.OPEN_DTTM
+		     , RFX.IMMED_ST_USE_YN
+		     , RFX.IMMED_OPEN_USE_YN
+		     , #{p.vd_cd} AS VD_CD
+		     , RFX.CSTM_USE_YN                              /* 컨소시엄 여부 */
+		     , RFX.CSTM_TYP_CCD                             /* 컨소시엄 유형 */
+            , (
+		        SELECT VD.ERP_VD_CD
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS ERP_VD_CD
+		     , (
+		        SELECT CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS VD_NM
+		     , (
+		        SELECT VD.CEO_NM
+		          FROM VD VD
+		         WHERE VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = #{p.vd_cd}
+		       ) AS CEO_NM
+		     , NULL  AS RFX_BID_UUID
+		     , NULL  AS RFX_BID_NO
+		     , 1     AS RFX_BID_REVNO
+		     , NULL  AS RFX_BID_EFCT_DT
+		     , RFX.DOMOVRS_DIV_CCD AS RFX_DOMOVRS_DIV_CCD
+		     , CASE WHEN RFX_BID.DOMOVRS_DIV_CCD IS NULL OR RFX_BID.DOMOVRS_DIV_CCD = '' THEN RFX.DOMOVRS_DIV_CCD
+		            ELSE RFX_BID.DOMOVRS_DIV_CCD
+		        END AS DOMOVRS_DIV_CCD
+		     , CASE WHEN RFX_BID.PYMTMETH_CCD IS NULL OR RFX_BID.PYMTMETH_CCD = '' THEN RFX.PYMTMETH_CCD
+		            ELSE RFX_BID.PYMTMETH_CCD
+				END AS PYMTMETH_CCD
+		     , CASE WHEN RFX_BID.PYMTMETH_EXPLN IS NULL OR RFX_BID.PYMTMETH_EXPLN = '' THEN RFX.PYMTMETH_EXPLN
+		            ELSE RFX_BID.PYMTMETH_EXPLN
+                END AS PYMTMETH_EXPLN
+		     , CASE WHEN RFX_BID.DLVYMETH_CCD IS NULL OR RFX_BID.DLVYMETH_CCD = '' THEN RFX.DLVYMETH_CCD
+		            ELSE RFX_BID.DLVYMETH_CCD
+                END AS DLVYMETH_CCD
+		     , CASE WHEN RFX_BID.DLVYMETH_EXPLN IS NULL OR RFX_BID.DLVYMETH_EXPLN = '' THEN RFX.DLVYMETH_EXPLN
+		            ELSE RFX_BID.DLVYMETH_EXPLN
+                END AS DLVYMETH_EXPLN
+		     , CASE WHEN RFX_BID.CUR_CCD IS NULL OR RFX_BID.CUR_CCD = '' THEN RFX.CUR_CCD
+		            ELSE RFX_BID.CUR_CCD
+		        END AS CUR_CCD
+		     , RFX_BID.RFX_BID_AMT AS RFX_BID_AMT
+		     , RFX_BID.ATHG_UUID   AS ATHG_UUID
+		     , RFX_BID.RMK         AS REM
+		     , NULL             AS RFX_BID_DTTM /* 제출일자 */
+		     , 'RCPT_WTG'              AS RFX_BID_STS_CCD
+		     , 'N'              AS SLCTN_YN
+		     , (
+		        SELECT COUNT(RFX_ITEM.RFX_ITEM_UUID)
+		          FROM RFX_ITEM RFX_ITEM
+		         WHERE RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		       ) AS RFX_ITEM_CNT
+		     , (
+		        SELECT COUNT(RFX_BID.RFX_BID_UUID)
+		          FROM RFX_BID RFX_BID
+		         WHERE RFX_BID.TEN_ID   = RFX.TEN_ID
+		           AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		           AND RFX_BID.RFX_RND  = RFX.RFX_RND
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		       ) AS VD_SUBM_CNT  /* 제출업체 수 */
+		  FROM RFX RFX
+		  LEFT OUTER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.VD_CD    = #{p.vd_cd}
+		   AND RFX_VD.MULTRND_SUBJ_XCEPT_YN = 'N'
+		   AND RFX_VD.STS != 'D'
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID   = RFX.TEN_ID
+		   AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND  = CAST(#{p.rfx_rnd} AS INT)
+		   AND RFX_BID.VD_CD    = #{p.vd_cd}
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.STS     != 'D'
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<insert id="insertRfxBid">
+		/* rfx-bid.insertRfxBid : 견적서 작성 (업체대행) 헤더정보 신규 생성 */
+		INSERT INTO RFX_BID (
+			TEN_ID
+			, RFX_BID_UUID
+			, VD_CD
+			, RFX_BID_NO
+			, RFX_BID_REVNO
+			, RFX_BID_EFCT_YN
+			, RFX_UUID
+			, RFX_NO
+			, RFX_RND
+			, RFX_BID_EFCT_DT
+            , DOMOVRS_DIV_CCD
+			, PYMTMETH_CCD
+			, PYMTMETH_EXPLN
+			, DLVYMETH_CCD
+			, DLVYMETH_EXPLN
+			, ARRPORT_CCD
+			, SHPGPORT_CCD
+			, CUR_CCD
+			, RFX_BID_AMT
+			, ENCPT_RFX_BID_AMT
+			, ATHG_UUID
+			, RFX_BID_STS_CCD
+			<if test="p.rfx_bid_sts_ccd == &quot;SUBM&quot;">
+			    , RFX_BID_DTTM
+			    , VD_SUBMR_ID
+			</if>
+			, GUP_RSN
+			, RFX_BID_ATHG_UUID
+			, SLCTN_YN
+			, PFDBIDER_YN
+			, ARRPORT_EXPLN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_bid_uuid}
+			, #{p.vd_cd}
+			, #{p.rfx_bid_no}
+			, CAST(#{p.rfx_bid_revno} AS INT)
+			, #{p.rfx_bid_efct_yn}
+			, #{p.rfx_uuid}
+			, #{p.rfx_no}
+			, CAST(#{p.rfx_rnd} AS INT)
+			, #{p.rfx_bid_efct_dt}
+            , #{p.domovrs_div_ccd}
+			, #{p.pymtmeth_ccd}
+			, #{p.pymtmeth_expln}
+			, #{p.dlvymeth_ccd}
+			, #{p.dlvymeth_expln}
+			, #{p.arrport_ccd}
+			, #{p.shpgport_ccd}
+			, #{p.cur_ccd}
+			, CAST(#{p.rfx_bid_amt} AS FLOAT  )
+			, #{p.encpt_rfx_bid_amt}
+			, #{p.athg_uuid}
+			, #{p.rfx_bid_sts_ccd}
+			<if test="p.rfx_bid_sts_ccd == &quot;SUBM&quot;">
+			    , #{g.now}
+			    <choose>
+			        <when test="p.vd_pic_uuid != null and p.vd_pic_uuid != ''">
+			            , #{p.vd_pic_uuid}
+			        </when>
+			        <otherwise>
+			            , #{g.username}
+			        </otherwise>
+			    </choose>
+			</if>
+			<choose>
+			    <when test="p.rfx_bid_sts_ccd == &quot;GUP&quot;">
+			        , #{p.gup_rsn}
+			    </when>
+			    <otherwise>
+			        , NULL
+			    </otherwise>
+			</choose>
+			, #{p.rfx_bid_athg_uuid}
+			, #{p.slctn_yn}
+			, #{p.pfdbider_yn}
+			, #{p.arrport_expln}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateRfxBid">
+		/* rfx-bid.updateRfxBid : 견적서 작성 (업체대행) 헤더정보 수정 */
+		UPDATE RFX_BID
+		   SET RFX_BID_EFCT_YN = #{p.rfx_bid_efct_yn}
+		     , RFX_BID_EFCT_DT = #{p.rfx_bid_efct_dt}
+             , DOMOVRS_DIV_CCD = #{p.domovrs_div_ccd}
+		     , PYMTMETH_CCD    = #{p.pymtmeth_ccd}
+		     , PYMTMETH_EXPLN  = #{p.pymtmeth_expln}
+		     , DLVYMETH_CCD    = #{p.dlvymeth_ccd}
+		     , DLVYMETH_EXPLN  = #{p.dlvymeth_expln}
+		     , ARRPORT_CCD     = #{p.arrport_ccd}
+		     , SHPGPORT_CCD    = #{p.shpgport_ccd}
+		     , CUR_CCD         = #{p.cur_ccd}
+		     , RFX_BID_AMT     = CAST(#{p.rfx_bid_amt} AS FLOAT  )
+		     , ENCPT_RFX_BID_AMT = #{p.encpt_rfx_bid_amt}
+		     , ATHG_UUID       = #{p.athg_uuid}
+		     , RFX_BID_STS_CCD = #{p.rfx_bid_sts_ccd}
+		     <if test="p.rfx_bid_sts_ccd == &quot;SUBM&quot;">
+		         , RFX_BID_DTTM = #{g.now}
+		         , VD_SUBMR_ID  = #{g.username}
+		     </if>
+		     , RFX_BID_ATHG_UUID = #{p.rfx_bid_athg_uuid}
+		     , SLCTN_YN          = #{p.slctn_yn}
+		     , PFDBIDER_YN       = #{p.pfdbider_yn}
+		     , ARRPORT_EXPLN     = #{p.arrport_expln}
+		     , RMK               = #{p.rmk}
+		     , STS               = 'U'
+		     , MODR_ID           = #{g.username}
+		     , MOD_DTTM          = #{g.now}
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<update id="updateRfxBidAmt">
+		/* rfx-bid.updateRfxBidAmt */
+		UPDATE RFX_BID
+		   SET RFX_BID_AMT = #{p.rfx_bid_amt}
+		     , STS         = 'U'
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM    = #{g.now}
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<update id="updateRfxBidValidYn">
+		/* rfx-bid.updateRfxBidValidYn */
+		UPDATE RFX_BID
+		   SET RFX_BID_EFCT_YN = #{p.rfx_bid_efct_yn}
+		     , STS             = 'U'
+		     , MODR_ID         = #{g.username}
+		     , MOD_DTTM        = #{g.now}
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<update id="updateRfxBidByAbandon">
+		/* rfx-bid.updateRfxBidByAbandon */
+		UPDATE RFX_BID
+		   SET RFX_BID_STS_CCD = #{p.rfx_bid_sts_ccd}
+		     , GUP_RSN         = #{p.gup_rsn}
+		     , STS             = 'U'
+		     , MODR_ID         = #{g.username}
+		     , MOD_DTTM        = #{g.now}
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<!-- rfx 견적서 리스트 -->
+	<resultMap id="rfxBidMap" type="java.util.HashMap">
+		<id column="RFX_BID_UUID" property="rfx_bid_uuid"/>
+		<result column="RFX_UUID" property="rfx_uuid"/>
+		<result column="RFX_NO" property="rfx_no"/>
+		<result column="RFX_BID_NO" property="rfx_bid_no"/>
+		<result column="VD_CD" property="vd_cd"/>
+		<result column="VD_NM" property="vd_nm"/>
+		<result column="ERP_VD_CD" property="erp_vd_cd"/>
+		<result column="OBD_TYP_CCD" property="obd_typ_ccd"/>
+		<result column="PO_POSS_YN" property="po_poss_yn"/>
+		<result column="PYMTMETH_CCD" property="pymtmeth_ccd"/>
+		<result column="PYMTMETH_EXPLN" property="pymtmeth_expln"/>
+		<result column="DLVYMETH_CCD" property="dlvymeth_ccd"/>
+		<result column="DLVYMETH_EXPLN" property="dlvymeth_expln"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<result column="RFX_BID_AMT" property="rfx_bid_amt"/>
+		<result column="EXCH_RFX_BID_AMT" property="exch_rfx_bid_amt"/>
+		<result column="SLCTN_YN" property="slctn_yn"/>
+		<result column="PFDBIDER_YN" property="pfdbider_yn"/>
+		<result column="RMK" property="rmk"/>
+		<result column="RFX_BID_STS_CCD" property="rfx_bid_sts_ccd"/>
+		<result column="RFX_BID_DTTM" property="rfx_bid_dttm"/>
+		<result column="ATHG_UUID" property="athg_uuid"/>
+		<result column="ATT_CNT" property="athf_cnt"/>
+		<result column="SLCTN_TYP_CCD" property="slctn_typ_ccd"/>
+		<result column="NPE_RO" property="npe_ro"/>
+		<result column="CBE_RO" property="cbe_ro"/>
+		<result column="CBE_TYP_CCD" property="cbe_typ_ccd"/>
+		<result column="NPE_PASS_YN" property="npe_pass_yn"/>
+		<result column="NPE_CONV_SC" property="npe_conv_sc"/>
+		<result column="NPE_AVG_SC" property="npe_avg_sc"/>
+		<result column="CBE_CONV_SC" property="cbe_conv_sc"/>
+		<result column="CBE_SC" property="cbe_sc"/>
+		<result column="EVAL_TTL_SC" property="eval_ttl_sc"/>
+		<result column="SLCTN_RANK" property="slctn_rank"/>
+		<result column="RFX_BID_EFF_DAY" property="rfx_bid_eff_day"/>
+		<result column="RMK" property="rmk"/>
+		<result column="NEGO_AMT" property="nego_amt"/>
+		<result column="EXCH_NEGO_AMT" property="exch_nego_amt"/>
+		<collection javaType="java.util.ArrayList" property="bidItems" resultMap="rfxBidItemMap"/>
+	</resultMap>
+	<!-- rfx 견적서 item Result Map  -->
+	<resultMap id="rfxBidItemMap" type="java.util.HashMap">
+		<id column="RFX_BID_ITEM_UUID" property="rfx_bid_item_uuid"/>
+		<result column="RFX_ITEM_UUID" property="rfx_item_uuid"/>
+		<result column="RFX_LNO" property="rfx_lno"/>
+		<result column="PR_NO" property="pr_no"/>
+		<result column="PR_LNO" property="pr_lno"/>
+		<result column="UPCR_NO" property="upcr_no"/>
+		<result column="UPCR_LNO" property="upcr_lno"/>
+		<result column="VD_CD" property="vd_cd"/>
+		<result column="VD_NM" property="vd_nm"/>
+		<result column="ITEM_CD_CRN_TYP_CCD" property="item_cd_crn_typ_ccd"/>
+		<result column="DISP_ITEM_CD" property="disp_item_cd"/>
+		<result column="ITEM_CD" property="item_cd"/>
+		<result column="ITEM_NM" property="item_nm"/>
+		<result column="DISP_ITEM_NM" property="disp_item_nm"/>
+		<result column="ITEM_SPEC" property="item_spec"/>
+		<result column="ITEM_SPEC_DTL" property="item_spec_dtl"/>
+		<result column="UOM_CCD" property="uom_ccd"/>
+		<result column="RFX_QTY" property="rfx_qty"/>
+		<result column="RFX_BID_AMT" property="rfx_bid_amt"/>
+		<result column="EXCH_RFX_BID_AMT" property="exch_rfx_bid_amt"/>
+		<result column="RFX_TRG_UPRC" property="rfx_trg_uprc"/>
+		<result column="TGT_AMT" property="tgt_amt"/>
+		<result column="RFX_LMT_UPRC" property="rfx_lmt_uprc"/>
+		<result column="LMT_AMT" property="lmt_amt"/>
+		<result column="RFX_ITEM_SUBM_UPRC" property="rfx_item_subm_uprc"/>
+		<result column="EXCH_RFX_ITEM_SUBM_UPRC" property="exch_rfx_item_subm_uprc"/>
+		<result column="RFX_ITEM_SUBM_AMT" property="rfx_item_subm_amt"/>
+		<result column="EXCH_RFX_ITEM_SUBM_AMT" property="exch_rfx_item_subm_amt"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<result column="CONST_ST_DT" property="const_st_dt"/>
+		<result column="CONST_EXP_DT" property="const_exp_dt"/>
+		<result column="REQ_DLVY_DT" property="req_dlvy_dt"/>
+		<result column="DLVY_PLC" property="dlvy_plc"/>
+		<result column="DLVY_LDTM" property="dlvy_ldtm"/>
+		<result column="ED_YN" property="ed_yn"/>
+		<result column="SLCTN_RANK" property="slctn_rank"/>
+		<result column="NEGO_AMT" property="nego_amt"/>
+		<result column="EXCH_NEGO_AMT" property="exch_nego_amt"/>
+		<result column="NEGO_ITEM_UPRC" property="nego_item_uprc"/>
+		<result column="EXCH_NEGO_ITEM_UPRC" property="exch_nego_item_uprc"/>
+		<result column="NEGO_ITEM_AMT" property="nego_item_amt"/>
+		<result column="EXCH_NEGO_ITEM_AMT" property="exch_nego_item_amt"/>
+		<result column="SCN_CCD" property="scn_ccd"/>
+		<result column="FCST_UPRC_RATE" property="fcst_uprc_rate"/>
+		<result column="FCST_TMPT" property="fcst_tmpt"/>
+		<result column="EXCH_FCST_UPRC" property="exch_fcst_uprc"/>
+		<result column="EXCH_MKTPRC" property="exch_mktprc"/>
+		<result column="MKTPRC_RATE" property="mktprc_rate"/>
+		<result column="PUBL_YR" property="publ_yr"/>
+		<result column="PUBL_MN" property="publ_mn"/>
+		<result column="EXCH_LAST_PO_UPRC" property="exch_last_po_uprc"/>
+		<result column="LAST_PO_UPRC_RATE" property="last_po_uprc_rate"/>
+	</resultMap>
+	<select id="findListRfxBidWithBidItems" resultMap="rfxBidMap" resultType="map">
+		/* rfx-bid.findListRfxBidWithBidItems : 견적서(총액) 별 - 견적품목 */
+		SELECT T.*
+		     <if test="g.existModule(&quot;price-doctor&quot;)">
+		         , CASE WHEN T.RFX_STS_CCD = 'CLSG' AND T.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                WHEN T.EXCH_RFX_ITEM_SUBM_UPRC IS NOT NULL AND T.EXCH_RFX_ITEM_SUBM_UPRC != 0 AND T.EXCH_FCST_UPRC IS NOT NULL THEN ROUND((T.EXCH_FCST_UPRC - T.EXCH_RFX_ITEM_SUBM_UPRC) / T.EXCH_RFX_ITEM_SUBM_UPRC * 100, 2)
+		            END AS FCST_UPRC_RATE
+		         , CASE WHEN T.RFX_STS_CCD = 'CLSG' AND T.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                WHEN T.EXCH_RFX_ITEM_SUBM_UPRC IS NOT NULL AND T.EXCH_RFX_ITEM_SUBM_UPRC != 0 AND T.EXCH_MKTPRC IS NOT NULL THEN ROUND((T.EXCH_MKTPRC - T.EXCH_RFX_ITEM_SUBM_UPRC) / T.EXCH_RFX_ITEM_SUBM_UPRC * 100, 2)
+		            END AS MKTPRC_RATE
+		         , CASE WHEN T.RFX_STS_CCD = 'CLSG' AND T.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                WHEN T.EXCH_RFX_ITEM_SUBM_UPRC IS NOT NULL AND T.EXCH_RFX_ITEM_SUBM_UPRC != 0 AND T.EXCH_LAST_PO_UPRC IS NOT NULL THEN ROUND((T.EXCH_LAST_PO_UPRC - T.EXCH_RFX_ITEM_SUBM_UPRC) / T.EXCH_RFX_ITEM_SUBM_UPRC * 100, 2)
+		            END AS LAST_PO_UPRC_RATE
+		     </if>
+		  FROM (
+		        SELECT RFX_BID.RFX_BID_UUID
+		             , RFX.RFX_UUID
+		             , RFX.RFX_NO
+		             , RFX.NPE_RO
+		             , RFX.CBE_RO
+		             , RFX.CBE_TYP_CCD
+		             , RFX.RFX_STS_CCD
+		             , RFX.RFX_RES_STS_CCD
+		             , RFX_BID.RFX_BID_NO
+		             , RFX_BID.VD_CD
+		             , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END AS VD_NM
+		             , VD.ERP_VD_CD
+		             , VD_OORG.OBD_TYP_CCD        /* 거래유형 */
+		             , VD_OORG.PO_POSS_YN        /* 거래상태(Y/N) */
+		             , RFX_BID.PYMTMETH_CCD
+		             , RFX_BID.PYMTMETH_EXPLN
+		             , RFX_BID.DLVYMETH_CCD
+		             , RFX_BID.DLVYMETH_EXPLN
+		             , RFX_BID.CUR_CCD
+		             , RFX_BID.PFDBIDER_YN
+		             , RFX_BID.RMK
+		             , RFX_BID.RFX_BID_STS_CCD
+		             , RFX_BID.RFX_BID_DTTM
+		             , RFX_ITEM.RFX_ITEM_UUID
+		             , RFX_ITEM.RFX_LNO
+		             , RFX_ITEM.RFX_TRG_UPRC
+		             ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_TRG_UPRC, RFX.CUR_CCD)   AS TGT_AMT
+		             , RFX_ITEM.RFX_LMT_UPRC
+		             ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_LMT_UPRC, RFX.CUR_CCD)   AS LMT_AMT
+		             , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		             , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		                    ELSE RFX_ITEM.ITEM_CD
+		                END AS DISP_ITEM_CD
+		             , RFX_ITEM.ITEM_CD
+		             , RFX_ITEM.ITEM_NM
+		             , CASE WHEN 'en_US' = #{g.locale} THEN RFX_ITEM.ITEM_NM_EN
+		                    ELSE RFX_ITEM.ITEM_NM
+		                END AS DISP_ITEM_NM
+		             , RFX_ITEM.ITEM_SPEC
+		             , RFX_ITEM.ITEM_SPEC_DTL
+		             , RFX_ITEM.UOM_CCD
+		             , RFX_ITEM.RFX_QTY
+		             , RFX_ITEM.ED_YN
+		             , RFX_ITEM.PR_NO
+		             , RFX_ITEM.PR_LNO
+		             , RFX_ITEM.UPCR_NO
+		             , RFX_ITEM.UPCR_LNO
+		             , RFX_ITEM.CONST_ST_DT
+		             , RFX_ITEM.CONST_EXP_DT
+		             , RFX_ITEM.REQ_DLVY_DT
+		             , RFX_ITEM.DLVY_PLC
+		             , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL -- 개찰전이면 금액 조회 안함
+		                    WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		                    ELSE RFX_BID.SLCTN_YN
+		                END AS SLCTN_YN
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.RFX_BID_AMT
+		                END AS RFX_BID_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                         THEN  GETEXCHAMOUNT(RFX_BID.TEN_ID, RFX_BID.RFX_BID_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                            TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                    ELSE  GETEXCHAMOUNT(RFX_BID.TEN_ID, RFX_BID.RFX_BID_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                END AS EXCH_RFX_BID_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC
+		                END AS RFX_ITEM_SUBM_UPRC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                         THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                            TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                    ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                END AS EXCH_RFX_ITEM_SUBM_UPRC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_AMT
+		                END AS RFX_ITEM_SUBM_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                         THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                            TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                    ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                END AS EXCH_RFX_ITEM_SUBM_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.DLVY_LDTM
+		                END AS DLVY_LDTM
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX_BID.NPE_PASS_YN IS NULL OR RFX_BID.NPE_PASS_YN = '' THEN 'N'
+		                    ELSE RFX_BID.NPE_PASS_YN
+		                END AS NPE_PASS_YN
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.NPE_CONV_SC
+		                END AS NPE_CONV_SC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.NPE_AVG_SC
+		                END AS NPE_AVG_SC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.CBE_CONV_SC
+		                END AS CBE_CONV_SC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.CBE_SC
+		                END AS CBE_SC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.EVAL_TTL_SC
+		                END AS EVAL_TTL_SC
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.ATHG_UUID
+		                END AS ATHG_UUID
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE (
+		                          SELECT COUNT(1)
+		                            FROM ATHF ATHF
+		                           WHERE ATHF.TEN_ID        = RFX_BID.TEN_ID
+		                             AND ATHF.ATHG_UUID = RFX_BID.ATHG_UUID
+		                         )
+		                END AS ATT_CNT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.SLCTN_RANK
+		                END AS SLCTN_RANK
+		             , TO_DATE(RFX_BID.RFX_BID_EFCT_DT, 'YYYYMMDD') - TRUNC(RFX_BID.RFX_BID_DTTM)  AS RFX_BID_EFF_DAY -- 견적 유효일
+		             <if test="p.nego_cnt gt 0">
+		                 , NEGO.NEGO_AMT  AS NEGO_AMT
+		                 , CASE WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                        THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO.NEGO_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO.NEGO_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_NEGO_AMT
+		                 , NEGO_ITEM.NEGO_ITEM_UPRC AS NEGO_ITEM_UPRC
+		                 , CASE WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                        THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO_ITEM.NEGO_ITEM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO_ITEM.NEGO_ITEM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_NEGO_ITEM_UPRC
+		                 , NEGO_ITEM.NEGO_ITEM_AMT AS NEGO_ITEM_AMT
+		                 , CASE WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                        THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO_ITEM.NEGO_ITEM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, NEGO_ITEM.NEGO_ITEM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                           TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_NEGO_ITEM_AMT
+		             </if>
+		             <if test="g.existModule(&quot;price-doctor&quot;)">
+		                 , PURC_UPRC_ST_FCST.SCN_CCD
+		                 , PURC_UPRC_ST_FCST.FCST_TMPT
+		                 , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'Y' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                     TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'N' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                     TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_FCST_UPRC
+		                 , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'Y' AND ITEM_UPRC.MKTPRC IS NOT NULL THEN  GETEXCHAMOUNT(RFX.TEN_ID, ITEM_UPRC.MKTPRC, 'KRW', RFX.CUR_CCD,
+		                                                                                                             TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'N' AND ITEM_UPRC.MKTPRC IS NOT NULL THEN  GETEXCHAMOUNT(RFX.TEN_ID, ITEM_UPRC.MKTPRC, 'KRW', RFX.CUR_CCD,
+		                                                                                                             TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_MKTPRC
+		                 , ITEM_UPRC.PUBL_YR
+		                 , ITEM_UPRC.PUBL_MN
+		                 , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'Y' AND PO_BYITEM_ANLY.LAST_PO_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(RFX.TEN_ID, PO_BYITEM_ANLY.LAST_PO_UPRC, PO_BYITEM_ANLY.LAST_PO_CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                        TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'N' AND PO_BYITEM_ANLY.LAST_PO_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(RFX.TEN_ID, PO_BYITEM_ANLY.LAST_PO_UPRC, PO_BYITEM_ANLY.LAST_PO_CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                        TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_LAST_PO_UPRC
+		             </if>
+		          FROM RFX_BID RFX_BID
+		         INNER JOIN VD VD
+		            ON VD.TEN_ID = RFX_BID.TEN_ID
+		           AND VD.VD_CD  = RFX_BID.VD_CD
+		           AND VD.STS   != 'D'
+		         INNER JOIN RFX RFX
+		            ON RFX.TEN_ID  = RFX_BID.TEN_ID
+		           AND RFX.RFX_NO  = RFX_BID.RFX_NO
+		           AND RFX.RFX_RND = RFX_BID.RFX_RND
+		           AND RFX.STS    != 'D'
+		         INNER JOIN VD_OORG VD_OORG
+		            ON VD_OORG.TEN_ID      = VD.TEN_ID
+		           AND VD_OORG.VD_CD       = VD.VD_CD
+		           AND VD_OORG.OORG_CD IN (
+		                              SELECT OOLM.CONNSUBJ_OORG_CD
+		                                FROM OORG_MAPG OOLM
+		                               WHERE OOLM.TEN_ID          = RFX.TEN_ID
+		                                 AND OOLM.CONNSRC_OORG_CD = RFX.OORG_CD
+		                                 AND OOLM.CONN_TYP_CCD    = 'POEO'
+		                                 AND OOLM.CONN_YN         = 'Y'
+		                             )
+		           AND VD_OORG.STS != 'D'
+		         INNER JOIN RFX_ITEM RFX_ITEM
+		            ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		          LEFT OUTER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		            ON RFX_BID_ITEM.TEN_ID        = RFX_BID.TEN_ID
+		           AND RFX_BID_ITEM.RFX_BID_UUID  = RFX_BID.RFX_BID_UUID
+		           AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		          LEFT OUTER JOIN RFX_VD RFX_VD
+		            ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		           AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_VD.VD_CD    = RFX_BID.VD_CD
+		           AND RFX_VD.STS     != 'D'
+		           <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		               INNER JOIN RFX_PRESN RFX_PRESN
+		                  ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		                 AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		                 AND RFX_PRESN.STS     !='D'
+		               INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		                  ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		                 AND RFX_PRESN_AFP.RFX_PRESN_UUID  = RFX_PRESN.RFX_PRESN_UUID
+		                 AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		                 AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		                 AND RFX_PRESN_AFP.STS            != 'D'
+		           </if>
+		           <if test="p.nego_cnt gt 0">
+		               LEFT OUTER JOIN NEGO NEGO
+		                 ON NEGO.TEN_ID       = RFX.TEN_ID
+		                AND NEGO.RFX_UUID     = RFX.RFX_UUID
+		                AND NEGO.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		                AND NEGO.RENEGO_YN = 'N'
+		                AND NEGO.NEGO_RES_STS_CCD = 'STLMT'
+		                AND NEGO.NEGO_STS_CCD = 'NEGO_CMPLD'
+		                AND NEGO.STS      != 'D'
+		               LEFT OUTER JOIN NEGO_ITEM NEGO_ITEM
+		                 ON NEGO_ITEM.TEN_ID       = NEGO.TEN_ID
+		                AND NEGO_ITEM.NEGO_UUID    = NEGO.NEGO_UUID
+		                AND NEGO_ITEM.RFX_BID_UUID = RFX_BID_ITEM.RFX_BID_UUID
+		                AND NEGO_ITEM.RFX_BID_ITEM_UUID = RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		                AND NEGO_ITEM.STS != 'D'
+		           </if>
+		           <if test="g.existModule(&quot;price-doctor&quot;)">
+		               LEFT OUTER JOIN PURC_UPRC_ST_FCST /* 구매 단가 예측 테이블 */
+		                 ON PURC_UPRC_ST_FCST.TEN_ID = RFX_ITEM.TEN_ID
+		                AND PURC_UPRC_ST_FCST.FCST_SUBJ_CD = RFX_ITEM.ITEM_CD
+		                AND PURC_UPRC_ST_FCST.FCST_TMPT = CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN '0'
+		                                                  WHEN RFX.IMMED_OPEN_USE_YN = 'Y' THEN CONCAT(
+			                                                                                           TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMM')  , '01')
+		                                                  ELSE CONCAT(
+			                                                          TO_CHAR(RFX.OPEN_DTTM, 'YYYYMM')  , '01')
+		                                              END
+		                AND PURC_UPRC_ST_FCST.STS != 'D'
+		                LEFT OUTER JOIN ITEM_UPRC
+		                  ON ITEM_UPRC.ITEM_CD = RFX_ITEM.ITEM_CD
+		                 AND ITEM_UPRC.PUBL_YR = CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN '0'
+		                                             WHEN RFX.IMMED_OPEN_USE_YN = 'Y' THEN TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYY')  ELSE TO_CHAR(RFX.OPEN_DTTM, 'YYYY')  END
+		                 AND ITEM_UPRC.PUBL_MN = CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN '0'
+		                                             WHEN RFX.IMMED_OPEN_USE_YN = 'Y' THEN TO_CHAR(RFX.RFX_CLSG_DTTM, 'MM')  ELSE TO_CHAR(RFX.OPEN_DTTM, 'MM')  END
+		                LEFT OUTER JOIN PO_BYITEM_ANLY
+		                  ON PO_BYITEM_ANLY.TEN_ID = RFX_ITEM.TEN_ID
+		                 AND PO_BYITEM_ANLY.ITEM_CD = RFX_ITEM.ITEM_CD
+		                 AND PO_BYITEM_ANLY.OORG_CD = RFX_ITEM.OORG_CD
+		                 AND PO_BYITEM_ANLY.STS != 'D'
+		           </if>
+		         WHERE RFX_BID.TEN_ID   = #{g.tenant}
+		           AND RFX_BID.RFX_NO   = #{p.rfx_no}
+		           AND RFX_BID.RFX_RND  = CAST(#{p.rfx_rnd} AS INT)
+		           AND RFX_BID.STS     != 'D'
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		       ) T
+		 ORDER BY T.SLCTN_RANK, T.VD_CD, CAST(T.RFX_LNO AS INT)
+	</select>
+	<update id="updateRfxBidStl">
+		/* rfx-bid.updateRfxBidStl : 총액별 업체선정 */
+		UPDATE RFX_BID
+		   SET SLCTN_YN       = #{p.slctn_yn}
+		     , SLCTN_CNCL_RSN = NULL
+		   <choose>
+	           <when test="p.slctn_yn != null and p.slctn_yn == &quot;Y&quot;">
+	         , SLCTN_AMT = #{p.slctn_amt}
+	           </when>
+	           <otherwise>
+	         , SLCTN_AMT = NULL
+	           </otherwise>
+           </choose>
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+		</update>
+	<select id="selectRfxBidsStl" resultType="map">
+		/* rfx-bid.selectRfxBidsStl : 품목별 업체선정 */
+		SELECT RFX_BID.TEN_ID
+		     , RFX_BID.RFX_BID_UUID
+		     , CASE WHEN SUM(CASE WHEN RFX_BID_ITEM.SLCTN_YN = 'Y' THEN 1 ELSE 0 END) &gt; 0 THEN 'Y'
+		            ELSE 'N'
+		        END AS SLCTN_YN
+		     , SUM(RFX_BID_ITEM.SLCTN_AMT) AS SLCTN_AMT
+		  FROM RFX_BID RFX_BID
+		 INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID       = RFX_BID.TEN_ID
+		   AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		   AND RFX_BID_ITEM.STS         != 'D'
+		 WHERE RFX_BID.TEN_ID   = #{g.tenant}
+		   AND RFX_BID.RFX_NO   = #{p.rfx_no}
+		   AND RFX_BID.RFX_RND  = CAST(#{p.rfx_rnd} AS INT)
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.STS != 'D'
+		 GROUP BY RFX_BID.TEN_ID, RFX_BID.RFX_BID_UUID
+	</select>
+	<select id="findListRfxBid" resultType="map">
+		/* rfx-bid.findListRfxBid : 견적제출업체(공개) 견적서 리스트 */
+		SELECT RFX_BID.TEN_ID
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_NO
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		     , RFX_BID.VD_CD
+		     , RFX.RFX_UUID
+		     , VD_OORG.OBD_TYP_CCD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , VD.ERP_VD_CD
+		     , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN RFX_BID.VD_CD
+		            ELSE VD.ERP_VD_CD
+		        END AS DISP_VD_CD
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.CUR_CCD
+		            ELSE NULL
+		        END AS CUR_CCD
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_AMT
+		            ELSE NULL
+		        END AS RFX_BID_AMT
+		     , CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		            WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		            ELSE RFX_BID.SLCTN_YN
+		        END AS SLCTN_YN    /* 선정 여부 */
+		     , RFX_BID.PFDBIDER_YN
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RMK
+		            ELSE NULL
+		        END AS RMK
+		     , RFX_BID.RFX_BID_STS_CCD
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.RFX_BID_DTTM
+		            ELSE NULL
+		        END AS RFX_BID_DTTM
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN RFX_BID.VD_SUBMR_ID
+		            ELSE NULL
+		        END AS VD_SUBMR_ID
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		                                                            ELSE USR.USR_NM
+		                                                        END
+		            ELSE NULL
+		        END AS SBMT_NM
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.TEL
+		            ELSE NULL
+		        END AS SBMT_PHONE_NO
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'SUBM' THEN USR.EML
+		            ELSE NULL
+		        END AS SBMT_EMAIL
+		     , CASE WHEN RFX_BID.RFX_BID_STS_CCD = 'GUP' THEN RFX_BID.GUP_RSN
+		            ELSE NULL
+		        END AS GUP_RSN
+		     , RFX_BID.EVAL_SUBJ_RES_UUID
+		  FROM RFX_BID RFX_BID
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID     = RFX_BID.TEN_ID
+		   AND RFX_BID.RFX_NO  = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND = RFX.RFX_RND
+		 INNER JOIN VD VD
+		    ON VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.TEN_ID = #{g.tenant}
+		   AND VD.STS   != 'D'
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = #{g.tenant}
+		   AND USR.USR_ID = RFX_BID.VD_SUBMR_ID
+		 INNER JOIN VD_OORG VD_OORG
+		    ON VD_OORG.TEN_ID      = VD.TEN_ID
+		   AND VD_OORG.VD_CD       = VD.VD_CD
+		   AND VD_OORG.OORG_CD IN (
+		                           SELECT OORG_MAPG.CONNSUBJ_OORG_CD
+		                             FROM OORG_MAPG OORG_MAPG
+		                            WHERE OORG_MAPG.TEN_ID          = RFX.TEN_ID
+		                              AND OORG_MAPG.CONNSRC_OORG_CD = RFX.OORG_CD
+		                              AND OORG_MAPG.CONN_TYP_CCD    = 'POEO'
+		                              AND OORG_MAPG.CONN_YN         = 'Y'
+		                          )
+		   AND VD_OORG.STS        != 'D'
+		   <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		       INNER JOIN RFX_PRESN RFX_PRESN
+		          ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		         AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		         AND RFX_PRESN.STS     !='D'
+		       INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		          ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		         AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		         AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		         AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		         AND RFX_PRESN_AFP.STS            != 'D'
+		  </if>
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+		   <choose>
+		       <when test="p.rfx_uuid != null and p.rfx_uuid != ''">
+		           AND RFX.RFX_UUID = #{p.rfx_uuid}
+		       </when>
+		       <otherwise>
+		           AND RFX_BID.RFX_NO  = #{p.rfx_no}
+		           AND RFX_BID.RFX_RND = CAST(#{p.rfx_rnd} AS INT)
+		       </otherwise>
+		   </choose>
+		   AND RFX_BID.STS             != 'D'
+		   AND RFX_BID.RFX_BID_EFCT_YN  = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD != 'CRNG'
+		   <if test="p.rfx_bid_sts_ccd != null and p.rfx_bid_sts_ccd != ''">
+		       AND RFX_BID.RFX_BID_STS_CCD  = #{p.rfx_bid_sts_ccd}
+		   </if>
+		 ORDER BY RFX_BID.RFX_BID_STS_CCD DESC, RFX_BID.VD_CD
+	</select>
+	<resultMap id="resultMap-findListRfxBidHeaderAndList" type="map">
+		<result column="ENCPT_RFX_ITEM_SUBM_UPRC" javaType="string" property="encpt_rfx_item_subm_uprc" typeHandler="stringClob"/>
+		<result column="ENCPT_RFX_ITEM_SUBM_AMT" javaType="string" property="encpt_rfx_item_subm_amt" typeHandler="stringClob"/>
+		<result column="ENCPT_RFX_BID_AMT" javaType="string" property="encpt_rfx_bid_amt" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findListRfxBidHeaderAndList" resultMap="resultMap-findListRfxBidHeaderAndList">
+		/*  rfx-bid.findListRfxBidHeaderAndList : RFXQTA 금액 및 총액 ENC -&gt; DEC */
+		SELECT RFX_BID.RFX_BID_UUID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.NPE_RO
+		     , RFX.CBE_RO
+		     , RFX.CBE_TYP_CCD
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , VD.ERP_VD_CD
+		     , RFX_BID.PYMTMETH_CCD
+		     , RFX_BID.PYMTMETH_EXPLN
+		     , RFX_BID.DLVYMETH_CCD
+		     , RFX_BID.DLVYMETH_EXPLN
+		     , RFX_BID.CUR_CCD
+		     , RFX_BID.PFDBIDER_YN
+		     , RFX_BID.RMK
+		     , RFX_BID.RFX_BID_STS_CCD
+		     , RFX_BID.RFX_BID_DTTM
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.RFX_TRG_UPRC
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.RFX_QTY
+		     , RFX.CUR_CCD
+		     , RFX_ITEM.ED_YN
+		     , RFX_ITEM.PR_NO
+		     , RFX_ITEM.UPCR_NO
+		     , RFX.COSTSTR_USE_YN
+		     , RFX_ITEM.PR_LNO
+		     , RFX_ITEM.UPCR_LNO
+		     , RFX_ITEM.CONST_ST_DT
+		     , RFX_ITEM.CONST_EXP_DT
+		     , RFX_ITEM.REQ_DLVY_DT
+		     , RFX_ITEM.DLVY_PLC
+		     , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		     , RFX_BID_ITEM.ENCPT_RFX_ITEM_SUBM_UPRC
+		     , RFX_BID_ITEM.ENCPT_RFX_ITEM_SUBM_AMT
+		     , RFX_BID_ITEM.RFX_ITEM_SUBM_AMT
+		     , RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC
+		     , RFX_BID.RFX_BID_AMT
+		     , RFX_BID.ENCPT_RFX_BID_AMT
+		  FROM RFX RFX
+		 INNER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID  = RFX.TEN_ID
+		   AND RFX_BID.RFX_NO  = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND = RFX.RFX_RND
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.STS   != 'D'
+		 INNER JOIN RFX_ITEM RFX_ITEM
+		    ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		   AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_ITEM.STS     != 'D'
+		  LEFT OUTER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_BID.TEN_ID
+		   AND RFX_BID_ITEM.RFX_BID_UUID  = RFX_BID.RFX_BID_UUID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		  LEFT OUTER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.VD_CD    = RFX_BID.VD_CD
+		   AND RFX_VD.STS     != 'D'
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX.STS     != 'D'
+		   AND RFX_BID.STS  != 'D'
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+	</select>
+	<update id="updateDecryptBidAmount">
+		/* rfx-bid.updateDecryptBidAmount */
+		UPDATE RFX_BID
+		   SET RFX_BID_AMT  = CAST(#{p.rfx_bid_amt} AS FLOAT  )
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<select id="findListRfxBidScore" resultType="map">
+		<bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+		/* rfx-bid.findListRfxBidScore : 견적서 별 견적 금액 및 비가격평가 점수 조회 (개찰 시 computeDocRanking) */
+		SELECT T.RFX_BID_UUID
+		     , T.RFX_BID_NO
+		     , T.RFX_UUID
+		     , T.RFX_NO
+		     , T.RFX_RND
+		     , T.CUR_CCD
+		     , T.RFX_BID_CUR_CCD
+		     , T.RFX_BID_AMT
+		     , T.EXCH_RFX_BID_AMT
+		     , T.LMT_AMT
+		     <if test="p.rfx_typ_ccd == 'RFP'">
+		         , T.NPE_RO
+		         , T.CBE_RO
+		         , T.NPE_AVG_SC
+		         , T.CBE_TYP_CCD
+		         , T.MIN_VAL
+		         , T.MIN_SC
+		         , T.MAX_VAL
+		         , T.MAX_SC
+		     </if>
+		  FROM (
+		        SELECT RFX_BID.RFX_BID_UUID
+		             , RFX_BID.RFX_BID_NO
+		             , RFX.RFX_UUID
+		             , RFX.RFX_NO
+		             , RFX.RFX_RND
+		             , RFX.CUR_CCD
+		             , RFX_BID.CUR_CCD AS RFX_BID_CUR_CCD
+		             , RFX_BID.RFX_BID_AMT
+		             ,  GETEXCHAMOUNT(RFX_BID.TEN_ID, RFX_BID.RFX_BID_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD, #{getFormatNow}) AS EXCH_RFX_BID_AMT  -- 개찰 시점 기준으로 환산금액 조회
+		             , (
+		                SELECT SUM(  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_LMT_UPRC, RFX_ITEM.CUR_CCD))
+		                  FROM RFX_ITEM RFX_ITEM
+		                 WHERE RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		                   AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		                   AND RFX_ITEM.STS     != 'D'
+		               ) AS LMT_AMT
+		             <if test="p.rfx_typ_ccd == 'RFP'">
+		                 , RFX.NPE_RO
+		                 , RFX.CBE_RO
+		                 , RFX_BID.NPE_AVG_SC
+		                 , RFX.CBE_TYP_CCD
+		                 , CBE_METH_MIN_MAX.MIN_VAL
+		                 , CBE_METH_MIN_MAX.MIN_SC
+		                 , CBE_METH_MIN_MAX.MAX_VAL
+		                 , CBE_METH_MIN_MAX.MAX_SC
+		             </if>
+		          FROM RFX RFX
+		         INNER JOIN RFX_BID RFX_BID
+		            ON RFX_BID.TEN_ID   = RFX.TEN_ID
+		           AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		           AND RFX_BID.RFX_RND  = RFX.RFX_RND
+		           AND RFX_BID.STS     != 'D'
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		         <if test="p.rfx_typ_ccd == 'RFP'">
+		             LEFT OUTER JOIN CBE_METH_MIN_MAX CBE_METH_MIN_MAX    /* Linear */
+		               ON CBE_METH_MIN_MAX.TEN_ID   = RFX.TEN_ID
+		              AND CBE_METH_MIN_MAX.RFX_UUID = RFX.RFX_UUID
+		         </if>
+		         <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		             INNER JOIN RFX_PRESN RFX_PRESN
+		                ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		               AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		               AND RFX_PRESN.STS     !='D'
+		             INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		                ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		               AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		               AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		               AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		               AND RFX_PRESN_AFP.STS            != 'D'
+		         </if>
+		         WHERE RFX.TEN_ID   = #{g.tenant}
+		           AND RFX.RFX_UUID = #{p.rfx_uuid}
+		           AND RFX.STS     != 'D'
+		       ) T
+		 ORDER BY T.EXCH_RFX_BID_AMT ASC
+	</select>
+	<resultMap id="rfxItemMap" type="java.util.HashMap">
+		<id column="RFX_ITEM_UUID" property="rfx_item_uuid"/>
+		<result column="ITEM_CD_CRN_TYP_CCD" property="item_cd_crn_typ_ccd"/>
+		<result column="DISP_ITEM_CD" property="disp_item_cd"/>
+		<result column="ITEM_CD" property="item_cd"/>
+		<result column="RFX_QTY" property="rfx_qty"/>
+		<result column="RFX_REQ_UPRC" property="rfx_req_uprc"/>
+		<result column="RFX_TRG_UPRC" property="rfx_trg_uprc"/>
+		<result column="TGT_AMT" property="tgt_amt"/>
+		<result column="RFX_LMT_UPRC" property="rfx_lmt_uprc"/>
+		<result column="LMT_AMT" property="lmt_amt"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<collection javaType="java.util.ArrayList" property="itemQtas" resultMap="rfxItemQtaMap"/>
+	</resultMap>
+	<!-- rfx 견적서 Result Map  -->
+	<resultMap id="rfxItemQtaMap" type="java.util.HashMap">
+		<id column="RFX_BID_ITEM_UUID" property="rfx_bid_item_uuid"/>
+		<result column="RFX_BID_UUID" property="rfx_bid_uuid"/>
+		<result column="RFX_ITEM_UUID" property="rfx_item_uuid"/>
+		<result column="RFX_LNO" property="rfx_lno"/>
+		<result column="RFX_UUID" property="rfx_uuid"/>
+		<result column="ITEM_CD_CRN_TYP_CCD" property="item_cd_crn_typ_ccd"/>
+		<result column="DISP_ITEM_CD" property="disp_item_cd"/>
+		<result column="ITEM_CD" property="item_cd"/>
+		<result column="RFX_QTY" property="rfx_qty"/>
+		<result column="RFX_REQ_UPRC" property="rfx_req_uprc"/>
+		<result column="RFX_TRG_UPRC" property="rfx_trg_uprc"/>
+		<result column="TGT_AMT" property="tgt_amt"/>
+		<result column="RFX_LMT_UPRC" property="rfx_lmt_uprc"/>
+		<result column="LMT_AMT" property="lmt_amt"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<result column="RFX_BID_NO" property="rfx_bid_no"/>
+		<result column="RFX_BID_REVNO" property="rfx_bid_revno"/>
+		<result column="RFX_BID_LNO" property="rfx_bid_lno"/>
+		<result column="RFX_ITEM_SUBM_UPRC" property="rfx_item_subm_uprc"/>
+		<result column="EXCH_RFX_ITEM_SUBM_UPRC" property="exch_rfx_item_subm_uprc"/>
+		<result column="RFX_ITEM_SUBM_AMT" property="rfx_item_subm_amt"/>
+		<result column="EXCH_RFX_ITEM_SUBM_AMT" property="exch_rfx_item_subm_amt"/>
+		<result column="VD_CD" property="vd_cd"/>
+	</resultMap>
+	<select id="findListRfxBidItemAmt" resultMap="rfxItemMap">
+		/* rfx-bid.findListRfxBidItemAmt : 견적요청 품목 별 견적품목 투찰 금액 조회 (개찰 시 computeItmRanking) */
+		<bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+		SELECT RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.RFX_REQ_UPRC
+		     , RFX_ITEM.RFX_TRG_UPRC
+		     ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_TRG_UPRC, RFX.CUR_CCD) AS TGT_AMT
+		     , RFX_ITEM.RFX_LMT_UPRC
+		     ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_LMT_UPRC, RFX.CUR_CCD) AS LMT_AMT
+		     , RFX_BID.CUR_CCD
+		     , RFX_BID_ITEM.RFX_BID_UUID
+		     , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		     , RFX_BID_ITEM.RFX_BID_NO
+		     , RFX_BID_ITEM.RFX_BID_REVNO
+		     , RFX_BID_ITEM.RFX_BID_LNO
+		     , RFX_BID_ITEM.RFX_QTY /* 품목수량 */
+		     , RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC /* 견적 단가 */
+		     ,  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD, #{getFormatNow}) AS EXCH_RFX_ITEM_SUBM_UPRC  -- 개찰 시점 기준으로 환산금액 조회
+		     , CASE WHEN RFX_BID_ITEM.RFX_ITEM_SUBM_AMT  IS NULL THEN 0
+		            ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_AMT
+		        END AS RFX_ITEM_SUBM_AMT /* 견적 총액 */
+		     ,  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD, #{getFormatNow}) AS EXCH_RFX_ITEM_SUBM_AMT  -- 개찰 시점 기준으로 환산금액 조회
+		     , VD.VD_CD
+		  FROM RFX RFX
+		 INNER JOIN RFX_ITEM RFX_ITEM
+		    ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		   AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_ITEM.STS     != 'D'
+		 INNER JOIN	RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		   AND RFX_BID_ITEM.STS          != 'D'
+		 INNER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.STS            != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.STS   != 'D'
+		 <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		     INNER JOIN RFX_PRESN RFX_PRESN
+		        ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		       AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		       AND RFX_PRESN.STS     !='D'
+		     INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		        ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		       AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		       AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		       AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		       AND RFX_PRESN_AFP.STS            != 'D'
+		 </if>
+		 WHERE RFX.TEN_ID   = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT) ASC
+	</select>
+	<update id="updateRfxBidScoreAndRanking">
+		/* rfx-bid.updateBidQtaRanking */
+		UPDATE RFX_BID
+		   SET NPE_PASS_YN  = #{p.npe_pass_yn}
+		     , NPE_CONV_SC  = CAST(#{p.npe_conv_sc} AS FLOAT  )
+		     , CBE_CONV_SC  = CAST(#{p.cbe_conv_sc} AS FLOAT  )
+		     , CBE_SC       = CAST(#{p.cbe_sc} AS FLOAT  )
+		     , EVAL_TTL_SC  = CAST(#{p.eval_ttl_sc} AS FLOAT  )
+		     , SLCTN_RANK   = CAST(#{p.slctn_rank} AS INT)
+		 WHERE TEN_ID       = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<update id="updateRfxBidItemRanking">
+		/* rfx-bid.updatRfxBidItemRanking */
+		UPDATE RFX_BID_ITEM
+		   SET SLCTN_RANK = CAST(#{p.slctn_rank} AS INT)
+		 WHERE TEN_ID = #{g.tenant}
+		   <choose>
+		       <when test="p.rfx_bid_item_uuid != null">
+		           AND RFX_BID_ITEM_UUID = #{p.rfx_bid_item_uuid}
+		       </when>
+		       <otherwise>
+		           AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+		           AND STS         != 'D'
+		       </otherwise>
+		   </choose>
+	</update>
+	<sql id="sql_findListRfxBidCompare">
+	    SELECT RFX.TEN_ID
+	         , RFX.RFX_UUID
+	         , RFX.RFX_NO
+	         , RFX.RFX_RND
+	         , RFX.PURC_TYP_CCD
+	         , RFX.RFX_PURP_CCD
+	         , RFX.RFX_STS_CCD
+	         , RFX.RFX_RES_STS_CCD
+	         , RFX.IMMED_OPEN_USE_YN
+	         , RFX.RFX_CLSG_DTTM
+	         , RFX.OPEN_DTTM
+	         , RFX_ITEM.RFX_LNO
+	         , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+	         , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+	                ELSE RFX_ITEM.ITEM_CD
+	            END AS DISP_ITEM_CD
+	         , RFX_ITEM.ITEM_CD
+	         , RFX_ITEM.ITEM_NM
+	         , RFX_ITEM.UOM_CCD
+	         , RFX_ITEM.ITEM_SPEC
+	         , RFX_ITEM.ITEM_SPEC_DTL
+	         , RFX_BID.VD_CD
+	         , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+	                ELSE VD.VD_NM
+	            END AS VD_NM
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                WHEN RFX_BID_ITEM.SLCTN_YN IS NULL OR RFX_BID_ITEM.SLCTN_YN = '' THEN 'N'
+	                ELSE RFX_BID_ITEM.SLCTN_YN
+	            END AS SLCTN_YN -- 선정 여부
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC
+	            END AS RFX_ITEM_SUBM_UPRC -- RFX 품목 제출 단가
+	         , RFX_BID_ITEM.RFX_QTY -- RFX 수량
+	         , RFX_BID.CUR_CCD -- 통화
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+	                     THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+	                                        TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+	                ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+	                                        TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+	            END AS EXCH_RFX_ITEM_SUBM_UPRC  -- 환산금액
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+	                     THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+	                                        TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+	                ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+	                                   TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+	            END AS EXCH_RFX_ITEM_SUBM_AMT    /* 견적 환산금액 */
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_AMT
+	            END AS RFX_ITEM_SUBM_AMT -- 견적 총액
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID.RFX_BID_AMT
+	            END AS RFX_BID_AMT -- RFX 투찰 금액 (품목총액)
+	         , RFX_ITEM.RFX_REQ_UPRC -- RFX 요청 단가
+	         , RFX_ITEM.RFX_TRG_UPRC -- RFX 목표 단가
+	         , RFX_ITEM.REQ_DLVY_DT -- 요청 납품 일자
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID_ITEM.DLVY_LDTM
+	            END  AS DLVY_LDTM -- 납품 리드타임
+	         , RFX.ITEM_SLCTN_TYP_CCD -- 업체 선정 유형
+	         , RFX.RFX_TYP_CCD -- RFX 유형
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID.NPE_CONV_SC
+	            END AS NPE_CONV_SC -- 비가격평가 합계 점수
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID.CBE_SC
+	            END AS CBE_SC -- 가격평가 점수
+	         , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+	                ELSE RFX_BID.EVAL_TTL_SC
+	            END AS EVAL_TTL_SC -- 평가 합계 점수
+	      FROM RFX RFX
+	     INNER JOIN RFX_ITEM RFX_ITEM
+	        ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+	       AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+	       AND RFX_ITEM.STS     != 'D'
+	     INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+	        ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+	       AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+	       AND RFX_BID_ITEM.STS          != 'D'
+	     INNER JOIN RFX_BID RFX_BID
+	        ON RFX_BID.TEN_ID          = RFX_BID_ITEM.TEN_ID
+	       AND RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+	       AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+	       AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+	       AND RFX_BID.STS            != 'D'
+	     INNER JOIN VD VD
+	        ON VD.TEN_ID = RFX_BID.TEN_ID
+	       AND VD.VD_CD  = RFX_BID.VD_CD
+	       AND VD.STS   != 'D'
+	     <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+	         INNER JOIN RFX_PRESN RFX_PRESN
+	            ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+	           AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+	           AND RFX_PRESN.STS     != 'D'
+	         INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+	            ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+	           AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+	           AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+	           AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+	           AND RFX_PRESN_AFP.STS            != 'D'
+	     </if>
+	</sql>
+	<select id="findListRfxBidCompareByRfx" resultType="map">
+		/* rfx-bid.findListRfxBidCompareByRfx */
+		SELECT T.*
+		     <if test="g.existModule(&quot;price-doctor&quot;)">
+		         , CASE WHEN T.EXCH_RFX_ITEM_SUBM_UPRC IS NOT NULL AND T.EXCH_RFX_ITEM_SUBM_UPRC != 0 AND T.EXCH_FCST_UPRC IS NOT NULL THEN ROUND((T.EXCH_FCST_UPRC - T.EXCH_RFX_ITEM_SUBM_UPRC) / T.EXCH_RFX_ITEM_SUBM_UPRC * 100, 2)
+		            END AS FCST_UPRC_RATE
+		         , CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(T.ITEM_CD, '|'), T.VD_NM), '|'), T.SCN_CCD), '|'), T.FCST_TMPT) AS IMG_FCST_UPRC
+		     </if>
+		  FROM (
+		        SELECT T.*
+		            <if test="g.existModule(&quot;price-doctor&quot;)">
+		                , PURC_UPRC_ST_FCST.SCN_CCD
+		                , PURC_UPRC_ST_FCST.FCST_TMPT
+		                , CASE WHEN T.IMMED_OPEN_USE_YN = 'Y' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, T.CUR_CCD,
+		                                                                                                                  TO_CHAR(T.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                       WHEN T.IMMED_OPEN_USE_YN = 'N' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, T.CUR_CCD,
+		                                                                                                                  TO_CHAR(T.OPEN_DTTM, 'YYYYMMDD')  )
+		                   END AS EXCH_FCST_UPRC
+		            </if>
+		          FROM (<include refid="sql_findListRfxBidCompare"/>) T
+		        <if test="g.existModule(&quot;price-doctor&quot;)">
+		          LEFT OUTER JOIN PURC_UPRC_ST_FCST /* 구매 단가 예측 테이블 */
+		            ON PURC_UPRC_ST_FCST.TEN_ID = T.TEN_ID
+		           AND PURC_UPRC_ST_FCST.FCST_SUBJ_CD = T.ITEM_CD
+		           AND PURC_UPRC_ST_FCST.FCST_TMPT = CASE WHEN T.IMMED_OPEN_USE_YN = 'Y' THEN CONCAT(
+			                                                                                    TO_CHAR(T.RFX_CLSG_DTTM, 'YYYYMM')  , '01')
+		                                             ELSE CONCAT(
+			                                                     TO_CHAR(T.OPEN_DTTM, 'YYYYMM')  , '01')
+		                                         END
+		           AND PURC_UPRC_ST_FCST.STS != 'D'
+		        </if>
+		         WHERE T.TEN_ID   = #{g.tenant}
+		           AND T.RFX_UUID = #{p.rfx_uuid}
+		           AND T.RFX_STS_CCD NOT IN ('CRNG', 'APVL_PRGSG', 'NTC_PRGSG', 'PRGSG')
+		           AND T.RFX_RES_STS_CCD NOT IN ('OPEN_WTG')
+		       ) T
+		 ORDER BY CAST(T.RFX_LNO AS INT), T.VD_CD
+	</select>
+	<select id="findListRfxBidCompareByRfxNo" resultType="map">
+		/* rfx-bid.findListRfxBidCompareByRfxNo */
+		<include refid="sql_findListRfxBidCompare"/>
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.RFX_NO = #{p.rfx_no}
+		   AND RFX.RFX_STS_CCD NOT IN ('CRNG', 'APVL_PRGSG', 'NTC_PRGSG', 'PRGSG')
+		   AND RFX.RFX_RES_STS_CCD NOT IN ('OPEN_WTG')
+		 ORDER BY RFX.RFX_RND, CAST(RFX_ITEM.RFX_LNO AS INT), RFX_BID.VD_CD
+	</select>
+	<select id="findListRfxBidItemComparePriceDoctor" resultType="map">
+		SELECT T.*
+		     <if test="g.existModule(&quot;price-doctor&quot;)">
+		         , CASE WHEN T.RFX_STS_CCD = 'CLSG' AND T.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                WHEN T.EXCH_RFX_ITEM_SUBM_UPRC IS NOT NULL AND T.EXCH_RFX_ITEM_SUBM_UPRC != 0 AND T.EXCH_FCST_UPRC IS NOT NULL THEN ROUND((T.EXCH_RFX_ITEM_SUBM_UPRC - T.EXCH_FCST_UPRC) / T.EXCH_FCST_UPRC * 100, 2)
+		            END AS FCST_UPRC_RATE
+		     </if>
+		  FROM (
+		        SELECT RFX.RFX_STS_CCD
+		             , RFX.RFX_RES_STS_CCD
+		             , RFX_ITEM.RFX_ITEM_UUID
+		             , RFX_ITEM.RFX_UUID
+		             , RFX_ITEM.OORG_CD
+		             , RFX_ITEM.RFX_NO
+		             , RFX_ITEM.RFX_RND
+		             , RFX_ITEM.RFX_LNO
+		             , RFX_ITEM.PR_NO
+		             , RFX_ITEM.PR_LNO
+		              , RFX_ITEM.UPCR_NO
+		             , RFX_ITEM.UPCR_LNO
+		             , RFX_ITEM.PURC_TYP_CCD
+		             , RFX_ITEM.PLT_CD
+		             , RFX_ITEM.ITEM_OORG_CD
+		             , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		             , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		                    ELSE RFX_ITEM.ITEM_CD
+		                END AS DISP_ITEM_CD
+		             , RFX_ITEM.ITEM_CD
+		             , RFX_ITEM.ITEM_NM
+		             , RFX_ITEM.ITEM_NM_EN
+		             , RFX_ITEM.ITEM_SPEC
+		             , RFX_ITEM.ITEM_SPEC_DTL
+		             , RFX_ITEM.UOM_CCD
+		             , RFX_ITEM.RFX_REQ_UPRC
+		             , RFX_ITEM.RFX_TRG_UPRC
+		             ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_TRG_UPRC, RFX.CUR_CCD)    AS TGT_AMT
+		             , RFX_ITEM.RFX_LMT_UPRC
+		             ,  GETPRECFORMAT(#{g.tenant}, 'amt', RFX_ITEM.RFX_QTY * RFX_ITEM.RFX_LMT_UPRC, RFX.CUR_CCD)    AS LMT_AMT
+		             , RFX_ITEM.WH_CCD
+		             , RFX_ITEM.REQ_DLVY_DT
+		             , RFX_ITEM.CONST_ST_DT
+		             , RFX_ITEM.CONST_EXP_DT
+		             , RFX_ITEM.DLVY_PLC
+		             , RFX_ITEM.SG_CD
+		             , RFX_BID.CUR_CCD
+		             , RFX_ITEM.PURC_GRP_CD
+		             , RFX_ITEM.SLCTN_YN   AS RFX_ITEM_SLCTN_YN
+		             , RFX_ITEM.SLCTN_QTY  AS RFX_ITEM_SLCTN_QTY
+		             , RFX_ITEM.ED_YN      AS ED_YN
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'VD_SLCTN_WTG' AND RFX_ITEM.ED_YN = 'N' THEN 'Y'
+		                    WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'VD_SLCTN_CNCL'
+		                                                  AND RFX_ITEM.ED_YN = 'N'
+		                                                  AND (
+		                                                       SELECT COUNT(1)
+		                                                         FROM RFX_ITEM
+		                                                        WHERE TEN_ID    = #{g.tenant}
+		                                                          AND RFX_UUID    = #{p.rfx_uuid}
+		                                                          AND ED_YN  = 'Y'
+		                                                          AND STS      != 'D'
+		                                                      ) = 0 THEN 'Y'
+		                    ELSE 'N'
+		                END AS SELECTABLE_YN
+		             , RFX_ITEM.STS
+		             , RFX_ITEM.REGR_ID
+		             , RFX_ITEM.REG_DTTM
+		             , RFX_ITEM.MODR_ID
+		             , RFX_ITEM.MOD_DTTM
+		             , RFX_BID_ITEM.RFX_BID_UUID
+		             , RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		             , RFX_BID_ITEM.RFX_BID_NO
+		             , RFX_BID_ITEM.RFX_BID_REVNO
+		             , RFX_BID_ITEM.RFX_BID_LNO
+		             , RFX_BID.RFX_BID_EFCT_YN
+		             , RFX_BID_ITEM.RFX_QTY   /* 품목수량 */
+		             , VD.ERP_VD_CD
+		             , VD.VD_CD
+		             , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END AS VD_NM
+		             , VD_OORG.OBD_TYP_CCD        /* 거래유형 */
+		             , VD_OORG.PO_POSS_YN        /* 거래상태(Y/N) */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL -- 개찰전이면 금액 조회 안함
+		                    ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC
+		                END AS RFX_ITEM_SUBM_UPRC       /* 견적 단가 */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                    THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                    ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_UPRC, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                END AS EXCH_RFX_ITEM_SUBM_UPRC  /* 견적요청통화 환산단가 */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.RFX_ITEM_SUBM_AMT
+		                END AS RFX_ITEM_SUBM_AMT         /* 견적 총액 */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                    THEN  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                    ELSE  GETEXCHAMOUNT(RFX_BID_ITEM.TEN_ID, RFX_BID_ITEM.RFX_ITEM_SUBM_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                       TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                END AS EXCH_RFX_ITEM_SUBM_AMT    /* 견적 환산금액 */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.SLCTN_AMT
+		                END AS SLCTN_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX_BID_ITEM.SLCTN_YN IS NULL OR RFX_BID_ITEM.SLCTN_YN = '' THEN 'N'
+		                    ELSE RFX_BID_ITEM.SLCTN_YN
+		                END AS SLCTN_YN
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    WHEN RFX_BID_ITEM.SLCTN_QTY IS NULL THEN 0
+		                    ELSE RFX_BID_ITEM.SLCTN_QTY
+		                END AS SLCTN_QTY
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.DLVY_LDTM
+		                END AS DLVY_LDTM /* 납품 소요일 */
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.RFX_BID_AMT
+		                END AS RFX_BID_AMT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID.ATHG_UUID
+		                END AS ATHG_UUID
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE (
+		                          SELECT COUNT(1)
+		                            FROM ATHF ATHF
+		                           WHERE ATHF.TEN_ID        = RFX_BID.TEN_ID
+		                             AND ATHF.ATHG_UUID = RFX_BID.ATHG_UUID
+		                         )
+		                END AS ATT_CNT
+		             , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                    ELSE RFX_BID_ITEM.SLCTN_RANK
+		                END AS SLCTN_RANK
+		             , CASE WHEN RFX.RFX_STS_CCD = 'ED' THEN RFX_BID_ITEM.SLCTN_YN
+		                    ELSE CASE WHEN RFX_BID_ITEM.SLCTN_YN IS NULL OR RFX_BID_ITEM.SLCTN_YN = '' THEN 'N'
+		                              ELSE RFX_BID_ITEM.SLCTN_YN
+		                          END
+		                END AS SLCTN_YN_FOR_APRV /* 결재서식에서 사용하는 stl_yn값 : background색을 처리를 위해 사용 */
+		             <if test="g.existModule(&quot;price-doctor&quot;)">
+		                 , PURC_UPRC_ST_FCST.SCN_CCD
+		                 , PURC_UPRC_ST_FCST.FCST_TMPT
+		                 , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'Y' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                     TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		                        WHEN RFX.IMMED_OPEN_USE_YN = 'N' AND PURC_UPRC_ST_FCST.FCST_UPRC IS NOT NULL THEN  GETEXCHAMOUNT(PURC_UPRC_ST_FCST.TEN_ID, PURC_UPRC_ST_FCST.FCST_UPRC, PURC_UPRC_ST_FCST.CUR_CCD, RFX.CUR_CCD,
+		                                                                                                                     TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		                    END AS EXCH_FCST_UPRC
+		             </if>
+		          FROM RFX RFX
+		         INNER JOIN RFX_ITEM RFX_ITEM
+		            ON RFX_ITEM.TEN_ID   = RFX.TEN_ID
+		           AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		           AND RFX_ITEM.STS     != 'D'
+		         INNER JOIN	RFX_BID_ITEM RFX_BID_ITEM
+		            ON RFX_BID_ITEM.TEN_ID        = RFX_ITEM.TEN_ID
+		           AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		           AND RFX_BID_ITEM.STS          != 'D'
+		         INNER JOIN RFX_BID RFX_BID
+		            ON RFX_BID.RFX_BID_UUID    = RFX_BID_ITEM.RFX_BID_UUID
+		           AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		           AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		           AND RFX_BID.STS            != 'D'
+		         INNER JOIN VD VD
+		            ON VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = RFX_BID.VD_CD
+		           AND VD.STS   != 'D'
+		         INNER JOIN VD_OORG VD_OORG
+		            ON VD_OORG.TEN_ID = VD.TEN_ID
+		           AND VD_OORG.VD_CD  = VD.VD_CD
+		           AND VD_OORG.OORG_CD IN (
+		                                   SELECT OORG_MAPG.CONNSUBJ_OORG_CD
+		                                     FROM OORG_MAPG OORG_MAPG
+		                                    WHERE OORG_MAPG.TEN_ID          = RFX.TEN_ID
+		                                      AND OORG_MAPG.CONNSRC_OORG_CD = RFX.OORG_CD
+		                                      AND OORG_MAPG.CONN_TYP_CCD    = 'POEO'
+		                                      AND OORG_MAPG.CONN_YN         = 'Y'
+		                                  )
+		           AND VD_OORG.STS        != 'D'
+		         <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		             INNER JOIN RFX_PRESN RFX_PRESN
+		                ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		               AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		               AND RFX_PRESN.STS     !='D'
+		             INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		                ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		               AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		               AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		               AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		               AND RFX_PRESN_AFP.STS            != 'D'
+		         </if>
+		         <if test="g.existModule(&quot;price-doctor&quot;)">
+		             LEFT OUTER JOIN PURC_UPRC_ST_FCST /* 구매 단가 예측 테이블 */
+		               ON PURC_UPRC_ST_FCST.TEN_ID = RFX_ITEM.TEN_ID
+		              AND PURC_UPRC_ST_FCST.FCST_SUBJ_CD = RFX_ITEM.ITEM_CD
+		              AND PURC_UPRC_ST_FCST.FCST_TMPT = CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN '0'
+		                                                WHEN RFX.IMMED_OPEN_USE_YN = 'Y' THEN CONCAT(
+			                                                                                         TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMM')  , '01')
+		                                                ELSE CONCAT(
+			                                                        TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  , '01')
+		                                            END
+		              AND PURC_UPRC_ST_FCST.STS != 'D'
+		         </if>
+		         WHERE RFX.TEN_ID   = #{g.tenant}
+		           AND RFX.RFX_UUID = #{p.rfx_uuid}
+		       ) T
+		 ORDER BY CAST(T.RFX_LNO AS INT), T.SLCTN_RANK, T.VD_CD
+	</select>
+	<select id="findListCsByBid" resultType="map">
+		/* rfx-bid.findListCsByBid */
+		SELECT T.VD_CD
+		     , T.REP_VD_CD
+		     , T.CSTM_TYP_CCD
+		     , T.INVT_RO
+		     , T.INVT_ALOT_CONT
+		     , T.REP_VD_YN
+		     , T.SORT_ORD
+		  FROM (
+		        SELECT RFX_CSTM_VD.VD_CD
+		             , RFX_CSTM_VD.REP_VD_CD
+		             , RFX_CSTM_VD.CSTM_TYP_CCD
+		             , RFX_CSTM_VD.INVT_RO
+		             , RFX_CSTM_VD.INVT_ALOT_CONT
+		             , RFX_CSTM_VD.REP_VD_YN
+		             , CASE WHEN RFX_CSTM_VD.REP_VD_YN = 'Y' THEN 1
+		                    ELSE 2
+		                END AS SORT_ORD
+		          FROM RFX_CSTM_VD RFX_CSTM_VD
+		         WHERE RFX_CSTM_VD.TEN_ID    = #{g.tenant}
+		           AND RFX_CSTM_VD.RFX_UUID  = #{p.rfx_uuid}
+		           AND RFX_CSTM_VD.REP_VD_CD = #{p.vd_cd}
+		       ) T
+		 ORDER BY T.SORT_ORD
+	</select>
+	<update id="updateRfxStlRsn">
+		UPDATE RFX
+		   SET SLCTN_RSN = #{p.slctn_rsn}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+    <select id="findListNegotiableRfxBid" resultType="map">
+		/* rfx-bid.findListNegotiableRfxBid : 협상가능한 견적서(총액)조회 */
+		SELECT RFX_BID.RFX_BID_UUID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.NPE_RO
+		     , RFX.CBE_RO
+		     , RFX.CBE_TYP_CCD
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , VD.ERP_VD_CD
+		     , VD_OORG.OBD_TYP_CCD        /* 거래유형 */
+		     , VD_OORG.PO_POSS_YN        /* 거래상태(Y/N) */
+		     , RFX_BID.PYMTMETH_CCD
+		     , RFX_BID.PYMTMETH_EXPLN
+		     , RFX_BID.DLVYMETH_CCD
+		     , RFX_BID.DLVYMETH_EXPLN
+		     , RFX_BID.CUR_CCD
+		     , RFX_BID.PFDBIDER_YN
+		     , RFX_BID.RMK
+		     , RFX_BID.RFX_BID_STS_CCD
+		     , RFX_BID.RFX_BID_DTTM
+		     , RFX.CUR_CCD
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL -- 개찰전이면 금액 조회 안함
+		            WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		            ELSE RFX_BID.SLCTN_YN
+		        END AS SLCTN_YN
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.RFX_BID_AMT
+		        END AS RFX_BID_AMT
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            WHEN RFX.IMMED_OPEN_USE_YN = 'Y' -- 즉시개찰이면 마감 일시 기준으로, 즉시개찰이 아니면 개찰일시 기준으로 환산금액 조회
+		                 THEN  GETEXCHAMOUNT(RFX_BID.TEN_ID, RFX_BID.RFX_BID_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                                    TO_CHAR(RFX.RFX_CLSG_DTTM, 'YYYYMMDD')  )
+		            ELSE  GETEXCHAMOUNT(RFX_BID.TEN_ID, RFX_BID.RFX_BID_AMT, RFX_BID.CUR_CCD, RFX.CUR_CCD,
+		                               TO_CHAR(RFX.OPEN_DTTM, 'YYYYMMDD')  )
+		        END AS EXCH_RFX_BID_AMT
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            WHEN RFX_BID.NPE_PASS_YN IS NULL OR RFX_BID.NPE_PASS_YN = '' THEN 'N'
+		            ELSE RFX_BID.NPE_PASS_YN
+		        END AS NPE_PASS_YN
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.NPE_CONV_SC
+		        END AS NPE_CONV_SC
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.NPE_AVG_SC
+		        END AS NPE_AVG_SC
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.CBE_CONV_SC
+		        END AS CBE_CONV_SC
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.CBE_SC
+		        END AS CBE_SC
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.EVAL_TTL_SC
+		        END AS EVAL_TTL_SC
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.ATHG_UUID
+		        END AS ATHG_UUID
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE (
+		                  SELECT COUNT(1)
+		                    FROM ATHF ATHF
+		                   WHERE ATHF.TEN_ID        = RFX_BID.TEN_ID
+		                     AND ATHF.ATHG_UUID = RFX_BID.ATHG_UUID
+		                 )
+		        END AS ATT_CNT
+		     , CASE WHEN RFX.RFX_STS_CCD = 'CLSG' AND RFX.RFX_RES_STS_CCD = 'OPEN_WTG' THEN NULL
+		            ELSE RFX_BID.SLCTN_RANK
+		        END AS SLCTN_RANK
+		     , TO_DATE(RFX_BID.RFX_BID_EFCT_DT, 'YYYYMMDD') - TRUNC(RFX_BID.RFX_BID_DTTM)  AS RFX_BID_EFF_DAY -- 견적 유효일
+		  FROM RFX_BID RFX_BID
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD  = RFX_BID.VD_CD
+		   AND VD.STS   != 'D'
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID  = RFX_BID.TEN_ID
+		   AND RFX.RFX_NO  = RFX_BID.RFX_NO
+		   AND RFX.RFX_RND = RFX_BID.RFX_RND
+		   AND RFX.STS    != 'D'
+		 INNER JOIN VD_OORG VD_OORG
+		    ON VD_OORG.TEN_ID      = VD.TEN_ID
+		   AND VD_OORG.VD_CD       = VD.VD_CD
+		   AND VD_OORG.OORG_CD IN (
+		                      SELECT OOLM.CONNSUBJ_OORG_CD
+		                        FROM OORG_MAPG OOLM
+		                       WHERE OOLM.TEN_ID          = RFX.TEN_ID
+		                         AND OOLM.CONNSRC_OORG_CD = RFX.OORG_CD
+		                         AND OOLM.CONN_TYP_CCD    = 'POEO'
+		                         AND OOLM.CONN_YN         = 'Y'
+		                     )
+		   AND VD_OORG.STS != 'D'
+		  LEFT OUTER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.VD_CD    = RFX_BID.VD_CD
+		   AND RFX_VD.STS     != 'D'
+		   <if test="p.rfx_presn_use_yn == &quot;Y&quot;">
+		       INNER JOIN RFX_PRESN RFX_PRESN
+		          ON RFX_PRESN.TEN_ID   = RFX.TEN_ID
+		         AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		         AND RFX_PRESN.STS     !='D'
+		       INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		          ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		         AND RFX_PRESN_AFP.RFX_PRESN_UUID  = RFX_PRESN.RFX_PRESN_UUID
+		         AND RFX_PRESN_AFP.VD_CD           = RFX_BID.VD_CD
+		         AND RFX_PRESN_AFP.PRESN_RES_CCD   = 'QUAL'
+		         AND RFX_PRESN_AFP.STS            != 'D'
+		   </if>
+		 WHERE RFX_BID.TEN_ID   = #{g.tenant}
+		   AND RFX_BID.RFX_NO   = #{p.rfx_no}
+		   AND RFX_BID.RFX_RND  = CAST(#{p.rfx_rnd} AS INT)
+		   AND RFX_BID.STS     != 'D'
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		   AND RFX_BID.NPE_PASS_YN = 'Y'
+		 ORDER BY RFX_BID.SLCTN_RANK, RFX_BID.VD_CD
+	</select>
+	<select id="findRfxBidForBidEffective" resultType="map">
+		/* rfx-bid.findRfxBidForBidEffective : 견적서 작성 (업체대행) 업체 제출 여부 조회 */
+		SELECT RFX.RFX_UUID
+		, RFX.RFX_NO
+		, RFX.RFX_TIT
+		, RFX.RFX_RND
+		, RFX.OORG_CD
+		, RFX.RFX_PURP_CCD
+		, RFX.RAUC_TYP_CCD
+		, RFX.RFX_TYP_CCD
+		, RFX.RFX_CRN_DT
+		, RFX.RFX_ST_DTTM
+		, RFX.RFX_CLSG_DTTM
+		, RFX.RFX_CHG_CLSG_DTTM
+		, RFX.DOMOVRS_DIV_CCD AS RFX_DOMOVRS_DIV_CCD
+		, RFX.DFRM_RO
+		, RFX.PYMTMETH_DOM_CCD
+        , RFX.PYMTMETH_DOM_EXPLN
+        , RFX.DLVYMETH_DOM_CCD
+        , RFX.DLVYMETH_DOM_EXPLN
+        , RFX.PYMTMETH_OVS_CCD
+        , RFX.PYMTMETH_OVS_EXPLN
+        , RFX.DLVYMETH_OVS_CCD
+        , RFX.DLVYMETH_OVS_EXPLN
+        , RFX.PYMTMETH_DLVYMETH_CHG_POSS_YN
+		, RFX.CUR_CCD
+		, RFX.COMP_TYP_CCD
+		, RFX.ITEM_SLCTN_TYP_CCD
+		, RFX.SLCTN_TYP_CCD
+		, RFX.AUTO_EXT_USE_YN
+		, RFX.AUTO_EXT_TM
+		, RFX.AUTO_EXT_POSS_WD
+		, RFX.CNTR_ST_DT
+		, RFX.CNTR_EXP_DT
+		, RFX.PURC_TYP_CCD
+		, RFX.BFG_YN
+		, RFX.PRESN_YN
+		, RFX.PRTL_BID_PERM_YN
+		, RFX.COSTSTR_USE_YN
+		, RFX.NPE_RO_VD_PUB_YN
+		, RFX.CBE_TYP_CCD
+		, RFX.NPE_RO
+		, RFX.CBE_RO
+		, RFX.TRGPRC_USE_YN
+		, RFX.BFG_DTTM
+		, RFX.BFG_PLC
+		, RFX.BFG_PIC_ID
+		, RFX.PRESN_ST_DT
+		, RFX.PRESN_CLSG_DT
+		, RFX.PRESN_PIC_ID
+		, RFX.RFX_BUYER_RMK
+		, RFX.RFX_VD_RMK
+		, RFX.BUYER_ATHG_UUID
+		, RFX.VD_ATHG_UUID
+		, RFX.RFX_STS_CCD
+		, RFX.RFX_RES_STS_CCD
+		, RFX.RFX_APVL_USE_YN
+		, RFX.RFX_APVL_STS_CCD
+		, RFX.RFX_SLCTN_APVL_USE_YN
+		, RFX.RFX_SLCTN_APVL_STS_CCD
+		, RFX.RAUC_SUBM_MIN_UNIT_AMT
+		, RFX.OPEN_DTTM
+		, RFX.IMMED_ST_USE_YN
+		, RFX.IMMED_OPEN_USE_YN
+		, #{p.vd_cd} AS VD_CD
+		, (
+		SELECT CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		ELSE VD.VD_NM
+		END
+		FROM VD VD
+		WHERE VD.TEN_ID = #{g.tenant}
+		AND VD.VD_CD  = #{p.vd_cd}
+		) AS VD_NM
+		, (
+		SELECT VD.CEO_NM
+		FROM VD VD
+		WHERE VD.TEN_ID = #{g.tenant}
+		AND VD.VD_CD  = #{p.vd_cd}
+		) AS CEO_NM
+		, RFX_BID.RFX_BID_UUID
+		, RFX_BID.RFX_BID_NO
+		, RFX_BID.RFX_BID_REVNO
+		, RFX_BID.RFX_BID_EFCT_YN
+		, RFX_BID.RFX_BID_EFCT_DT
+        , RFX_BID.DOMOVRS_DIV_CCD
+		, RFX_BID.PYMTMETH_CCD
+		, RFX_BID.PYMTMETH_EXPLN
+		, RFX_BID.DLVYMETH_CCD
+		, RFX_BID.DLVYMETH_EXPLN
+		, CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		ELSE USR.USR_NM
+		END AS SBMT_NM
+		, CASE WHEN USR.USR_TYP_CCD = 'VD' THEN 'Y'
+		ELSE 'N'
+		END AS VD_SBMT_YN
+		, CASE WHEN RFX_BID.CUR_CCD IS NULL OR RFX_BID.CUR_CCD = '' THEN RFX.CUR_CCD
+		ELSE RFX_BID.CUR_CCD
+		END AS CUR_CCD
+		, CASE WHEN RFX_BID.RFX_BID_AMT IS NULL THEN 0
+		ELSE RFX_BID.RFX_BID_AMT
+		END AS RFX_BID_AMT
+		, RFX_BID.ATHG_UUID AS ATHG_UUID
+		, CASE WHEN RFX_BID.RFX_BID_STS_CCD IS NULL OR RFX_BID.RFX_BID_STS_CCD = '' THEN 'RCPT_WTG'
+		ELSE RFX_BID.RFX_BID_STS_CCD
+		END AS RFX_BID_STS_CCD /* 업체견적진행상태 P024 */
+		, RFX_BID.RFX_BID_DTTM AS RFX_BID_DTTM /* 제출일자 */
+		, CASE WHEN RFX.RFX_STS_CCD != 'ED' THEN 'N'
+		WHEN RFX_BID.SLCTN_YN IS NULL OR RFX_BID.SLCTN_YN = '' THEN 'N'
+		ELSE RFX_BID.SLCTN_YN
+		END AS SLCTN_YN /* 선정 여부 */
+		, RFX_BID.PFDBIDER_YN AS PFDBIDER_YN
+		, RFX_BID.RMK         AS RMK
+		FROM RFX RFX
+		LEFT OUTER JOIN RFX_BID RFX_BID
+		ON RFX_BID.TEN_ID     = RFX.TEN_ID
+		AND RFX_BID.RFX_NO     = RFX.RFX_NO
+		AND RFX_BID.RFX_RND    = RFX.RFX_RND
+		AND RFX_BID.VD_CD      = #{p.vd_cd}
+		AND RFX_BID.STS       != 'D'
+		LEFT OUTER JOIN USR USR
+		ON USR.TEN_ID = RFX_BID.TEN_ID
+		AND USR.USR_ID = RFX_BID.VD_SUBMR_ID
+		LEFT OUTER JOIN RFX_VD RFX_VD
+		ON RFX_VD.TEN_ID   = RFX.TEN_ID
+		AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		AND RFX_VD.VD_CD    = #{p.vd_cd}
+		AND RFX_VD.STS     != 'D'
+		WHERE RFX.TEN_ID   = #{g.tenant}
+		AND RFX.RFX_UUID = #{p.rfx_uuid}
+		<if test="p.rfx_bid_uuid != null and p.rfx_bid_uuid != ''">
+			AND RFX_BID.RFX_BID_UUID = #{p.rfx_bid_uuid}
+		</if>
+	</select>
+	<select id="findListRfxBidSlctnByRfx" resultType="map">
+		SELECT RFX_BID.VD_CD
+		     , RFX_BID.CUR_CCD
+		     , RFX.OORG_CD
+		     , RFX.RFX_PURP_CCD
+		     , RFX.PURC_GRP_CD
+		     , RFX.PURC_TYP_CCD
+		     , RFX.DFRM_RO
+		     , RFX_BID.DOMOVRS_DIV_CCD
+		     , RFX_BID.PYMTMETH_CCD
+		     , RFX_BID.PYMTMETH_EXPLN
+		     , RFX_BID.DLVYMETH_CCD
+		     , RFX_BID.DLVYMETH_EXPLN
+		     , RFX.CNTR_ST_DT
+		     , RFX.CNTR_EXP_DT
+		  FROM RFX_BID
+		 INNER JOIN RFX
+		    ON RFX.TEN_ID = RFX_BID.TEN_ID
+		   AND RFX.RFX_UUID = RFX_BID.RFX_UUID
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+		   AND RFX_BID.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_BID.SLCTN_YN = 'Y'
+	</select>
+	<select id="findRfxBidSlctnItemByRfxAndVdCd" resultType="map">
+		SELECT RFX_BID_ITEM.RFX_BID_ITEM_UUID
+		     , RFX_BID_ITEM.RFX_BID_UUID
+		     , RFX_BID_ITEM.RFX_BID_NO
+		     , RFX_BID_ITEM.RFX_LNO AS ITEM_LNO
+		     , RFX_BID_ITEM.ITEM_CD
+		     , RFX_BID_ITEM.ITEM_NM
+		     , RFX_BID_ITEM.ITEM_NM_EN
+		     , RFX_BID_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , RFX_ITEM.PLT_CD
+		     , RFX_ITEM.ITEM_OORG_CD
+		     , RFX_BID.CUR_CCD
+		     , RFX_BID_ITEM.UOM_CCD
+		     , RFX_BID_ITEM.SLCTN_QTY AS ITEM_QTY
+		     , RFX_BID_ITEM.SLCTN_UPRC AS ITEM_UPRC
+		     , RFX_BID_ITEM.SLCTN_AMT AS ITEM_AMT
+		     , RFX_BID_ITEM.DLVY_LDTM
+		     , RFX_BID_ITEM.MOQ
+		     , RFX_BID_ITEM.CTQ
+		     , RFX_ITEM.REQ_DLVY_DT
+		     , CASE WHEN RFX_ITEM.CONST_ST_DT IS NOT NULL  THEN RFX_ITEM.CONST_ST_DT
+		            ELSE RFX.CNTR_ST_DT
+		        END AS CNTR_ST_DT
+		     , CASE WHEN RFX_ITEM.CONST_EXP_DT IS NOT NULL  THEN RFX_ITEM.CONST_EXP_DT
+		            ELSE RFX.CNTR_EXP_DT
+		        END AS CNTR_EXP_DT
+		     , RFX_ITEM.DLVY_PLC
+		     , RFX_ITEM.PR_ITEM_UUID
+		     , RFX_ITEM.PR_NO
+		     , RFX_ITEM.PR_LNO
+		     , RFX_ITEM.UPCR_ITEM_UUID
+		     , RFX_ITEM.UPCR_NO
+		     , RFX_ITEM.UPCR_LNO
+		     , RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_NO
+		     , RFX_ITEM.RFX_RND
+		     , RFX_ITEM.RFX_LNO
+		  FROM RFX_BID
+		 INNER JOIN RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID = RFX_BID.TEN_ID
+		   AND RFX_BID_ITEM.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		 INNER JOIN RFX_ITEM
+		    ON RFX_ITEM.TEN_ID = RFX_BID_ITEM.TEN_ID
+		   AND RFX_ITEM.RFX_ITEM_UUID = RFX_BID_ITEM.RFX_ITEM_UUID
+		 INNER JOIN RFX
+		    ON RFX.TEN_ID = RFX_ITEM.TEN_ID
+		   AND RFX.RFX_UUID = RFX_ITEM.RFX_UUID
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+		   AND RFX_BID.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_BID.VD_CD = #{p.vd_cd}
+		   AND RFX_BID.SLCTN_YN = 'Y'
+		   AND RFX_BID_ITEM.SLCTN_YN = 'Y'
+	</select>
+</mapper>

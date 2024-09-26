@@ -1,0 +1,480 @@
+<sc-link rel="import" href="../../vendorMaster/shared/ep-user-by-operorg-list.html"></sc-link>
+<dom-module id="es-onboarding-eval-process-evaltr-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+<!--  
+	************************************************************************************************************
+	* Service Area
+	************************************************************************************************************
+-->	 
+<!--  
+	************************************************************************************************************
+	* UI Area
+	************************************************************************************************************
+-->	 
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 정성평가수행상태 -->
+				<sc-code code="R401" value="{{codes.R401}}"></sc-code>
+				<!-- 평가자유형 -->
+				<sc-code code="R706" value="{{codes.R706}}"></sc-code>
+				<!-- 평가항목담당그룹 -->
+				<sc-code code="R707" value="{{codes.R707}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<sc-ajax id="findOePrcsInfo" url="findOePrcsInfo.do" body="{{searchParam}}"></sc-ajax>
+		<sc-ajax id="findListOePrcsEvaltr" url="findListOePrcsEvaltr.do" body="{{evaltrGrpInfo}}"></sc-ajax>
+		<sc-ajax id="saveOePrcsEvaltr" url="saveOePrcsEvaltr.do" on-response="saveResponseHandler"></sc-ajax>
+		<sc-ajax id="deleteOePrcsEvaltr" url="deleteOePrcsEvaltr.do" on-response="saveResponseHandler"></sc-ajax>
+		<sc-ajax id="closeReqObdEvalPrcs" url="closeReqObdEvalPrcs.do" body="{{oePrcsInfo}}"></sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-sub-title-bar title-text="온보딩 프로세스 온보딩평가 정보">
+			<sc-button text="마감"	on-click="onClickCloseEval"	hidden="[[!formula('isEditable')]]"	auth-s></sc-button>
+		</cc-sub-title-bar>
+		
+		<cc-form-panel column="3">
+            <cc-fieldset>
+                <sc-label text="협력사 명"></sc-label>
+				<sc-text-field value="{{oePrcsInfo.vd_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="온보딩평가그룹"></sc-label>
+                <sc-text-field value="{{oePrcsInfo.oeg_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="프로세스 명"></sc-label>
+                <sc-text-field value="{{oePrcsInfo.prcs_ccd_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+                <sc-label text="프로세스 상태"></sc-label>
+                <sc-text-field value="{{oePrcsInfo.oe_prcs_sts_ccd_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+			<cc-fieldset>
+                <sc-label text="평가 명"></sc-label>
+                <sc-text-field value="{{oePrcsInfo.oe_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+			<cc-fieldset>
+                <sc-label text="평가 진행"></sc-label>
+                <sc-text-field value="[[oePrcsInfo.eval_end_cnt]] / [[oePrcsInfo.eval_tot_cnt]]" readonly="true"></sc-text-field>
+            </cc-fieldset>
+        </cc-form-panel>
+		
+		<div class="vspace-5"></div>
+		
+		<div class="hbox flex">
+			<sc-grid id="gridPanelGroup" class="flex-4" data-provider="{{evaltrGrpList}}"
+					editable="false" use-selection="false" use-state="false"
+					on-item-click="onEvaltrGrpGridItemClick"
+					hidden="[[!formula('evaltrGrpGridVisible')]]">
+				<cc-grid-toolbar title-text="평가항목 평가자 권한 목록"></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="evalfact_evaltr_authty_ccd"		header-text="평가항목 평가자 권한"	width="150"
+										items="{{codes.R707}}"		display-field="label"	value-field="data"	style-name="link"></sc-combobox-column>
+					<sc-data-column		data-field="evaltr_cnt"		header-text="평가자 수"	width="80"			text-align="right"></sc-data-column>
+					<sc-data-column		data-field="submit_cnt"		header-text="제출 수"		width="80"			text-align="right"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="oe_prcs_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="evaltmpl_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="obd_evalsht_prcs_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<div class="hspace-5" hidden="[[!formula('evaltrGrpGridVisible')]]"></div>
+			
+			<sc-grid id="evaltrGridPanel" class="flex-6" editable="false"
+					 use-selection="[[formula('isEditable')]]" use-state="[[formula('isEditable')]]"
+					 data-provider="{{evaltrList}}"
+					 on-item-click="onEvaltrGridItemClick">
+				<cc-grid-toolbar title-text="평가담당자 목록">
+					<sc-button text="추가"	on-click="onClickAdd"		hidden="[[!formula('evaltrBtnVisible')]]"	auth-s></sc-button>
+					<sc-button text="삭제"	on-click="onClickDelete"	hidden="[[!formula('evaltrBtnVisible')]]"	auth-s></sc-button>
+					<sc-button text="저장"	on-click="onClickSave"		hidden="[[!formula('evaltrBtnVisible')]]"	auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="evaltr_nm"			header-text="평가자"		width="100"			style-name="link"
+										mergeable="true"				merge-callback="mergeCallback"></sc-data-column>
+					<sc-combobox-column	data-field="evalfact_evaltr_authty_ccd"		header-text="평가항목 평가자 권한"		width="100"	required="true"	visible="[[formula('isEvaltrTypCcdEfAuth')]]"
+										items="{{codes.R707}}"			display-field="label"	value-field="data"></sc-combobox-column>
+					<sc-combobox-column	data-field="eval_prgs_sts_ccd"	header-text="수행 상태"	width="80"
+										items="{{codes.R401}}"			display-field="label"	value-field="data"></sc-combobox-column>
+					<sc-data-column		data-field="evaltr_sc"			header-text="점수"		text-align="right"	format-type="vsScore"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="ten_id"></sc-grid-field>
+					<sc-grid-field	data-field="oe_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="eval_subj_res_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="oeg_cd"></sc-grid-field>
+					<sc-grid-field	data-field="oe_prcs_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="prcs_ccd"></sc-grid-field>
+					<sc-grid-field	data-field="oe_prcs_evaltr_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="evaltr_id"></sc-grid-field>
+					<sc-grid-field	data-field="eval_subj_evaltr_res_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="eval_subj_res_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="vd_cd"></sc-grid-field>
+					<sc-grid-field	data-field="oorg_cd"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+<!--  
+	************************************************************************************************************
+	* Script Area
+	************************************************************************************************************
+--> 
+	<script>
+	Polymer({
+		is: "es-onboarding-eval-process-evaltr-list",
+		properties:{
+			titleText:{
+				type: String,
+				value: "평가담당자목록"
+			},
+			searchParam : {
+				type: Object,
+				value: function(){
+					return {};
+				}
+			},
+			codes: {
+				type: Object,
+				value: function(){
+					return {
+						R401 : [],
+						R706 : [],
+						R707 : []
+					}; 
+				},
+				reset : false
+			},
+			oePrcsInfo: {
+				type: Object,
+				value: function(){
+					return {};
+				}
+			},
+			evaltrGrpList : {
+				type: Array,
+				value: function(){
+					return [];
+				}
+			},
+			evaltrGrpInfo : {
+				type: Object,
+				 value: function(){
+					 return {};
+				 }
+			},
+			evaltrList : {
+				type: Array,
+				value: function(){
+					return []; 
+				}
+			},
+			editable: {
+				type: Boolean,
+				value: false
+			}
+		},
+		formulas : {
+			isEvaltrTypCcdEfAuth : function(){
+				return this.oePrcsInfo && this.oePrcsInfo.evaltr_typ_ccd == "EVALFACT_AUTHTY_PIC";
+			},
+			isEditable: function(){
+				// EVAL_WTG: 평가 대기, EVAL_PRGSG: 평가 진행중
+				return this.editable && this.oePrcsInfo && (["EVAL_WTG","EVAL_PRGSG"].indexOf(this.oePrcsInfo.oe_prcs_sts_ccd) > -1);
+			},
+			evaltrGrpGridVisible: function(){
+				return this.formula("isEvaltrTypCcdEfAuth") && this.formula("isEditable");
+			},
+			evaltrBtnVisible: function(){
+				var me = this;
+				var evaltrTypCcd = me.get("oePrcsInfo.evaltr_typ_ccd");
+				return me.formula('isEditable') && evaltrTypCcd != 'VD' && UT.isNotEmpty(me.evaltrGrpInfo);
+			}
+		},
+		// load
+		load: function(param){
+			var me = this;
+			var data = param.param || {};
+			me.set("searchParam", data);
+			me.set("editable", !!param.editable);
+			me.onSearch();
+		},
+		
+		/* 온보딩평가 프로세스 정보 조회 */
+		onSearch: function(){
+			var me = this;
+			UT.request(me.$.findOePrcsInfo, function(e, res) {
+				var result = res.response || {};
+				var evaltrGrpList = result.evaltr_grp_list || [];
+				
+				if (evaltrGrpList.length == 1) {
+					me.set("evaltrGrpInfo", evaltrGrpList[0]);
+				}
+				me.set("evaltrGrpList", evaltrGrpList);
+				me.set("oePrcsInfo", result);
+				me.applyFormula();
+				
+				if (!me.formula("isEditable")){
+					me.set("evaltrGrpInfo", result);
+				}
+				if (UT.isNotEmpty(me.get("evaltrGrpInfo"))) {
+					me.onSearchEvaltr();
+				}
+			});
+		},
+		/* 항목담당그룹 그리드 클릭이벤트 */
+		onEvaltrGrpGridItemClick: function(event){
+			var me = this;
+			var data = event.detail.data,
+				item = event.detail.item,
+				provider = event.detail.provider,
+				nodeIndex = item.nodeIndex,
+				fieldName = item.dataField;
+		
+			if (fieldName == "evalfact_evaltr_authty_ccd") {
+				me.set("evaltrGrpInfo", data);
+				me.onSearchEvaltr();
+			}
+		},
+		/* 온보딩평가 프로세스 평가 담당자 목록 조회 */
+		onSearchEvaltr : function(){
+			var me = this;
+			UT.request(me.$.findListOePrcsEvaltr, function(e, res){
+				var result = res.response || [];
+				
+				me.set("evaltrList", result);
+				
+				if (!me.formula("isEditable") && result.length == 1){
+					me.fire("auto-view-detail", result[0]);
+				}else {
+					me.applyFormula("evaltrBtnVisible");
+				}
+			});
+		},
+		
+		mergeCallback : function(data, item){
+			var dataField = item.dataField;
+			
+			if(dataField == "evaltr_nm") {
+				return data["evaltr_id"];
+			}
+		},
+		
+		/* 평가담당자 목록 추가 버튼 클릭 */
+		onClickAdd: function(){
+			var me = this;
+			var data = me.get("evaltrGrpInfo");
+			
+			if (!data.evalfact_evaltr_authty_ccd) {
+				return UT.alert("")
+			}
+			
+			//사용자검색 팝업을 호출한다.
+			var operOrgUserPopup = UT.popup('ep-user-by-operorg-list', me, 1000, 600, {
+				"selected-items" : function(popup, e) {
+					me.setSelectedEvaltr(e.detail);
+					popup.close();
+				}
+			});
+			operOrgUserPopup.show();
+			operOrgUserPopup.getWindowContent().load({
+				operorgDisabled: true,
+				defaultParam: {
+					oorg_cd: me.get("oePrcsInfo.oorg_cd")
+				}
+			});
+		},
+		/* 선택된 담당자 Setting */
+		setSelectedEvaltr : function(selectedItems){
+			var me = this;
+			var grid = me.$.evaltrGridPanel,
+				provider = grid.getDataProvider(),
+				allItems = provider.getItems(),
+				data = me.get("oePrcsInfo"),
+				evalfactEvaltrAuthtyCcd = me.get("evaltrGrpInfo.evalfact_evaltr_authty_ccd") || "ALL";
+			var duplCnt = 0, duplicated;
+			
+			selectedItems.forEach(function(selected){
+				duplicated = false;
+				
+				for (var i = 0, len = allItems.length; i < len; i++) {
+					var item = allItems[i];
+					if (item.evaltr_id == selected.usr_id && item.evalfact_evaltr_authty_ccd == evaltrGrpCd ) {
+						duplicated = true;
+						duplCnt++;
+						break;
+					}
+				}
+				if (!duplicated) {
+					provider.addItem({
+						ten_id                     : data.ten_id,
+						oe_prcs_uuid               : data.oe_prcs_uuid,
+						eval_subj_res_uuid         : data.eval_subj_res_uuid,
+						oe_uuid                    : data.oe_uuid,
+						vd_cd                      : data.vd_cd,
+						oorg_cd                    : data.oorg_cd,
+						oeg_cd                     : data.oeg_cd,
+						prcs_ccd                   : data.prcs_ccd,
+						evalfact_evaltr_authty_ccd : evalfactEvaltrAuthtyCcd,
+						evaltr_id                  : selected.usr_id,
+						evaltr_nm                  : selected.usr_nm
+					});
+				}
+			});
+			
+			if (duplCnt > 0) {
+				return UT.alert(me.translate("STD.N2010", null, duplCnt),null,true); // 중복 데이터 {0}건 제외 후 추가하였습니다
+			}
+		},
+		
+		/* 삭제 버튼 클릭 */
+		onClickDelete: function(){
+			var me = this;
+			var grid = me.$.evaltrGridPanel,
+				provider = grid.getDataProvider(),
+				insertIdx = provider.getNewIndexes(),
+				checkedList = provider.selectionCheckedIndexes();
+			var evaltrGrpList, allItems, message, evaltrGrp, checkGrpEvaltrCnt, data, sts;
+	
+			if(checkedList.length) {
+				allIdx = provider.getAllNodeIndexes();
+				evaltrGrpList = me.get("evaltrGrpList");
+				
+				if ((allIdx.length - insertIdx.length) <= checkedList.legnth) {
+					return UT.alert("STD.SRM1098"); // 평가자는 한 명 이상 존재해야 합니다.
+				}
+				for (var i=0; i<evaltrGrpList.length; i++){
+					evaltrGrp = evaltrGrpList[i];
+					checkGrpEvaltrCnt = 0;
+					
+					checkedList.forEach(function(checked){
+						sts = provider.getItemState(checked);
+						data = provider.getItemAt(checked);
+						if (sts != "created" && data.evalfact_evaltr_authty_ccd == evaltrGrp.evalfact_evaltr_authty_ccd) {
+							checkGrpEvaltrCnt++;
+						}
+					});
+					if (checkGrpEvaltrCnt == evaltrGrp.evaltr_cnt) {
+						return UT.alert("STD.SRM1098"); // 평가자는 한 명 이상 존재해야 합니다.
+					}
+				}
+				
+				// STD.N1300	삭제 하시겠습니까?
+				// STD.N1400	수정중인 데이터가 있습니다.<br/>삭제 하시겠습니까?
+				message = insertIdx.length ? "STD.N1400" : "STD.N1300";
+				UT.confirm(message, function() {
+					var deleted = provider.removeItems(true, true);
+					if(deleted.length > 0){
+						me.$.deleteOePrcsEvaltr.set("body", {
+							deleteList : deleted
+						});
+						UT.request(me.$.deleteOePrcsEvaltr);
+					}
+				});
+			} else {
+				UT.alert("STD.N1600");	//선택된 항목이 없습니다
+			}
+		},
+		
+		/* 저장버튼 클릭 */
+		onClickSave: function(){
+			var me = this;
+			var grid = me.$.evaltrGridPanel,
+				provider = grid.getDataProvider(),
+				inserts = provider.getNewItems();
+			
+			if (!inserts.length) {
+				return UT.alert("STD.N1700"); // STD.N1700	변경된 내용이 없습니다.
+			}
+			
+			me.$.saveOePrcsEvaltr.body = {
+					insertList : inserts
+			};
+			UT.request(me.$.saveOePrcsEvaltr);
+		},
+		
+		/* 마감 버튼 클릭 */
+		onClickCloseEval : function(){
+			var me = this,
+				data = me.get("oePrcsInfo"),
+				evaltrGrpList = me.get("evaltrGrpList"),
+				message = me.translate("STD.N1103");  // 평가를 마감하시겠습니까?
+			
+			/* 제출된 평가가 없을 경우 평가마감을 제한하고 싶으면 아래 주석 해제.
+			if (!data.eval_end_cnt) {
+				return UT.alert("STD.SRM1135"); // 제출된 평가가 존재하지 않습니다. 평가 제출 후 진행해 주세요.
+			}*/
+			
+			/* 평가항목 권한별로 제출된 평가가 없을 경우 평가마감을 제한하고 싶으면 아래 주석 해제.
+			var invalidGrp = null;
+			for (var i=0; i<evaltrGrpList.length; i++) {
+				if (evaltrGrpList[i].submit_cnt < 1) {
+					invalidGrp = evaltrGrpList[i];
+					break;
+				}
+			}
+			if (UT.isNotEmpty(invalidGrp)) {
+				var evaltrGrps = UT.arrayFilterChange(me.codes.R707 || [], {key : "data",value : invalidGrp.evalfact_evaltr_authty_ccd});
+				var evaltrGrpText = me.translate("항목담당그룹") + ": " + evaltrGrps[0].label;
+				return UT.alert(me.translate("STD.SRM1135") + "<br>" + evaltrGrpText, null, true); // 제출된 평가가 존재하지 않습니다. 평가 제출 후 진행해 주세요.
+			}*/
+			
+			/*if (data.eval_end_cnt != data.eval_tot_cnt) {
+				message = me.translate("STD.SRM1134") + "<br>" + message;   //평가 마감 시 미제출 평가 정보는 삭제 됩니다.
+			}*/
+			
+			UT.confirm(message, function(){
+				UT.request(me.$.closeReqObdEvalPrcs, function(e, res){
+					var result = res.response;
+					
+					if(UT.isObject(result) && result.resultStatus === "S"){
+						UT.completeAlert("마감", function(){
+							me.fire("complete-eval");
+						});
+					} else if(UT.isObject(result) && result.resultStatus == "INVALID_STATUS_ERR") {
+						UT.alert("STD.E9400");  // 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			}, null, true);
+		},
+		
+		// 저장 후 처리
+		saveResponseHandler : function(e, res) {
+			var me = this;
+			var result = res.response;
+			
+			if(UT.isObject(result) && result.resultStatus === "S"){
+				//save, delete 에 사용되는 alert msg
+				UT.completeAlert("", function(){
+					me.fire("complete-save");
+					me.onSearch();
+				});
+			} else {
+				UT.alert("STD.E9999");
+			}
+		},
+		
+		/* 담당자 그리드 아이템 클릭 이벤트 */
+		onEvaltrGridItemClick : function(e){
+			var me = this;
+			var data = e.detail.data,
+				item = e.detail.item;
+			
+			if (item.dataField == "evaltr_nm") {
+				me.fire("show-detail", data);
+			}
+		}
+	});
+	</script>
+</dom-module>

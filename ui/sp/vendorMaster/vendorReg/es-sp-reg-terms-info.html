@@ -1,0 +1,172 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사 신규등록(외부) - 약관 동의
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.14
+	******************************************************************************************
+-->
+
+<dom-module id="es-sp-reg-terms-info">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 신규 등록 -->
+        <sc-ajax id="saveBasicVdInfo"
+                 url="saveBasicVdInfo.do"
+                 on-response="completeSaveBasicVdInfo">
+        </sc-ajax>
+		
+        <div class="contWrap_rgvd">
+<!--            <div class="div_header">-->
+<!--                <sc-label text="[[stepTitle]]" i18n-disabled></sc-label>-->
+<!--            </div>-->
+
+            <div class="div_content term_container">
+                <h3 class="terms_tit">
+                    <b>[[translate('약관 및 개인정보 수집 및 이용 동의')]]</b>
+                    <span>[[translate('시스템 사용을 위한 동의 사항 입니다. 개인정보수집 및 이용에 대한 안내를 읽고 동의해 주십시오.')]]</span>
+                </h3>
+
+                <sc-container id="container">
+                    <template is="dom-repeat" items="[[termcndList]]">
+                        <div class="join_agree">
+                            <h4>[[item.ctmpl_nm]]</h4>
+                            <div class="border_box">
+                                <div class="agree_area">
+                                    <p class="checkarea">
+                                        <sc-checkbox-field id="[[item.termcnd_uuid]]" required="[[isRequired(item.mand_cnst_yn)]]" on-checkchange="onChangeCheckEvent"></sc-checkbox-field>
+                                        <span>[[translate('이용약관에 동의합니다.')]]</span>
+                                    </p>
+                                </div>
+                                <div class="term" inner-h-t-m-l="[[item.ctmpl_cont]]"></div>
+                            </div>
+                        </div>
+                    </template>
+                </sc-container>
+            </div>
+
+            <div class="div_footer">
+                <sc-button text="Prev" on-click="onPrev"></sc-button>
+                <div class="hspace-10"></div>
+                <sc-button text="Next" on-click="onNext"></sc-button>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-sp-reg-terms-info",
+			
+            properties: {
+            	// TITLE
+                stepTitle : String,
+                // 신규가입 Info
+                basicInfo : {
+                    type: Object,
+                    value : function(){
+                        return {};
+                    }
+                },
+                // 약관 Info
+                termcndList : {
+                    type: Array,
+                    value : function() {
+                        return [];
+                    }
+                },
+                tenant :{
+                    type: String
+                }
+            },
+
+            // Load Event
+            load : function(param){
+                var me = this;
+
+                if(!UT.isEmpty(param)){
+                    var data = UT.copy(param);
+                    me.set("termcndList", data.termcndList);
+                    me.set("basicInfo", data.basicInfo);
+                    me.set("tenant",data.tenant);
+                }
+            },
+
+            // 체크 박스 필수 여부 Binding Function
+            isRequired : function(data){
+                return (data === 'Y' ? true : false);
+            },
+
+            // 체크박스 Change Event
+            onChangeCheckEvent : function(event){
+                var me = this;
+                var checkedYn = event.detail ? "Y" : "N";
+                var targetId  = event.currentTarget.id;
+                var list = me.get('termcndList');
+                // 해당 termcnd_uuid 찾아 약관 동의 여부 Set
+                for(idx in list){
+                	if(list[idx].termcnd_uuid === targetId){
+                		list[idx].termcnd_cnst_yn = checkedYn;
+                	}
+                }
+            },
+
+            // Prev Button Click Event
+            onPrev : function() {
+                var me = this;
+                // 이전 단계로 이동하시겠습니까?
+                UT.confirm("STD.VS1095", function() {
+                    var param = {
+                        basicInfo : me.basicInfo,
+                        termcndList : me.termcndList,
+                    };
+                    me.fire('terms-prev', param);
+                });
+            },
+
+            // Next Button Click Event
+            onNext : function() {
+                var me = this;
+                if(!me.validate()){
+                	// 필수항목 입력여부를 확인해야 합니다.
+                    UT.alert("STD.E9000"); 
+                    return;
+                }
+                var param = UT.copy(me.basicInfo);
+                param.termsList = me.termcndList;
+                me.$.saveBasicVdInfo.body = param;
+                // STD.VS1060 : 등록하신 이메일 주소로 아이디/비밀번호가 전송됩니다.
+        		UT.alert(me.translate("STD.VS1060"),function(){
+                    UT.request(me.$.saveBasicVdInfo);
+                }, true);
+            },
+
+            // 저장완료 Callback Function
+            completeSaveBasicVdInfo: function(e, res){
+                var me = this;
+                var result = res.response;
+
+                if (UT.isObject(result) && result.resultStatus === "S") {
+					var resultData = result.resultData;
+                    // 등록하신 이메일 주소로 아이디/비밀번호가 전송되었습니다.<br>아이디 : '{0}'
+                    UT.alert(me.translate("STD.VS1061",null,resultData.vd_cd),(function(){
+                        var param = {
+                            vdInfo : resultData,
+                            ctry_ccd : me.basicInfo.ctry_ccd,
+                        };
+                        me.fire("terms-next", param);
+                    }).bind(me),true);
+                }else if(UT.isObject(result) && result.resultStatus === "D"){
+                    // 등록된 사업자번호이므로 신규 등록이 불가능 합니다.
+                    UT.alert("STD.VS1029");
+                }else{
+                    // 저장실패 : 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+                    UT.alert("STD.E9999");
+                }
+            },
+        });
+    </script>
+</dom-module>

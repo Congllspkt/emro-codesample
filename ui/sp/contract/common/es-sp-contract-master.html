@@ -1,0 +1,158 @@
+<dom-module id="es-sp-contract-master">
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		
+		<!-- 공통코드 조회 -->
+		<sc-request-group init>
+			<sc-code-group>
+				<sc-code code="D003" value="{{codes.cntrdocTyp}}"></sc-code><!-- 계약서 유형 코드 -->
+				<sc-code code="D022" value="{{codes.cntrTmplTyp}}"></sc-code><!-- 템플릿 유형 코드 -->
+			</sc-code-group>
+			<!-- 서명방법 코드 -->
+			<sc-ajax id="findListCommonCodeCntrSgnMeth"
+					 url="/bp/contract/findListCommonCodeCntrSgnMeth.do"
+					 body="{{codes.cntrSgnMethParam}}"
+					 last-response="{{codes.cntrSgnMeth}}">
+			</sc-ajax>
+		</sc-request-group>
+
+		<!-- 화면 -->
+		<cc-form-panel label-width="120" column="1" validation-group="save">
+			<cc-fieldset>
+				<sc-label text="계약 번호/차수"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{cntrInfo.cntr_no}}" class="w-150" readonly="true"></sc-text-field>
+					<span style="margin:0 5px">&#47;</span>
+					<sc-text-field value="{{cntrInfo.cntr_revno}}" class="w-50" readonly="true"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 명"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntr_nm}}" max-length="200" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 기간"></sc-label>
+				<sc-period-date-field from-value="{{cntrInfo.cntr_st_dt}}" to-value="{{cntrInfo.cntr_exp_dt}}"
+									string-date="true" readonly="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약서 유형"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntrdoc_typ_ccd}}" readonly="true"
+								items="{{codes.cntrdocTyp}}" display-field="label" value-field="data"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 서명방법"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntr_sgnmeth_ccd}}" readonly="true"
+								items="{{codes.cntrSgnMeth}}" display-field="label" value-field="data"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 템플릿 유형"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntr_tmpl_typ_ccd}}"  readonly="true"
+								items="{{codes.cntrTmplTyp}}" display-field="label" value-field="data"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isUserFileUse')]]">
+				<sc-label text="계약서"></sc-label>
+				<sc-upload id="uploadCntrdoc" value="{{cntrInfo.tmpl_unud_cntrdoc_athg_uuid}}" class="h-200" readonly="true"
+						   sort-data-field="name" sort-direction="asc"
+						   max-total-file-count="1" max-total-file-size="10MB"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleCntrrInfo')]]">
+				<sc-label text="이메일"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntrr_eml}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleCntrrInfo')]]">
+				<sc-label text="모바일"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntrr_mob}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleTrmnInfo')]]">
+				<sc-label text="해지 일자"></sc-label>
+				<sc-date-field value="{{cntrInfo.cntr_trmn_dt}}" string-date="true" class="date" readonly="true"></sc-date-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleTrmnInfo')]]">
+				<sc-label text="해지 사유"></sc-label>
+				<sc-textarea-field value="{{cntrInfo.cntr_trmn_rsn}}" class="h-150" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleReason')]]">
+				<sc-label text="{{reasonTitle}}"></sc-label>
+				<sc-textarea-field value="{{cntrInfo.cntr_ret_rsn}}" class="h-150" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+	</template>
+
+	<!-- 스크립트  -->
+	<script>
+		Polymer({
+			is: 'es-sp-contract-master',
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							cntrdocTyp: [],
+							cntrSgnMethParam: {
+								ccd: "D020",
+								cstr_cnd_cd: "MODL_NM",
+								cstr_cnd_val: "CONTRACT"
+							},
+							cntrSgnMeth: [],
+							cntrTmplTyp: []
+						};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				reasonTitle: {
+					type: String,
+					value: ""
+				}
+			},
+			
+			formulas: {
+				isUserFileUse: function() {
+					return this.get("cntrInfo.cntr_sgnmeth_ccd") === "OFFLINE" && this.get("cntrInfo.cntr_tmpl_typ_ccd") === "USR_FILE";
+				},
+				visibleCntrrInfo: function() {
+					return this.get("cntrInfo.cntr_sgnmeth_ccd") === "EFORM";
+				},
+				visibleTrmnInfo: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return (this.get("cntrInfo.cntr_typ_ccd") === "TRMN" && cntrStsCcd === "CNTR_CMPLD") || cntrStsCcd === "CNTR_TRMN";
+				},
+				visibleReason: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return cntrStsCcd === "APPX_REQ" || cntrStsCcd === "APPX_RET" || cntrStsCcd === "VD_RET";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("cntrInfo", data);
+				
+				var reasonTitle = "";
+				if(data.cntr_sts_ccd === "APPX_REQ") {
+					reasonTitle = "부속서류 요청 내용";
+				} else if(data.cntr_sts_ccd === "APPX_RET") {
+					reasonTitle = "부속서류 거부 사유";
+				} else if(data.cntr_sts_ccd === "VD_RET") {
+					reasonTitle = "계약 반려 사유";
+				}
+				me.set("reasonTitle", reasonTitle);
+				
+				me.applyFormula();
+				if(me.formula("isUserFileUse")) {
+					me.$.uploadCntrdoc.doContentElementResize();
+				}
+			}
+		});
+	</script>
+</dom-module>

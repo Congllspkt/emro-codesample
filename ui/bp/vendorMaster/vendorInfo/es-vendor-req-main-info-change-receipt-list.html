@@ -1,0 +1,252 @@
+<sc-link rel="import" href="ep-vendor-req-main-info-change-receipt.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-main-info-change-req-apvl.html"></sc-link>
+<!--
+    ******************************************************************************************
+    ** @Program-name    : 정보변경요청 접수
+    ** @Description     : 담당자가 정보변경요청을 접수하고 품의/반려 하는 관리를 합니다.
+    ** @Author          : yjpark
+    ** @Create Date     : 2023.07.21
+    ******************************************************************************************
+-->
+<dom-module id="es-vendor-req-main-info-change-receipt-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!--
+    ************************************************************************************************************
+    * Service Area
+    ************************************************************************************************************
+ -->
+        <!-- 협력사 정보변경요청 접수 목록 조회 -->
+        <sc-ajax
+            id="findListVendorReqMainInfoChangeReceipt"
+            url="findListVendorReqMainInfoChangeReceipt.do"
+            body="{{searchParam}}"
+			on-response="completeFindList">
+        </sc-ajax>
+        
+        <sc-request-group init>
+            <sc-code-group>
+                <sc-code code="G002" value="{{codes.modSts}}" ></sc-code>
+            </sc-code-group>
+			<!-- 정보변경요청상태-->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+                     url="findListCommonCodeAttributeCode.do"
+                     body ="{{codes.chgReqStsCcdParam}}"
+                     last-response="{{codes.chgReqStsCcd}}">
+            </sc-ajax>
+        </sc-request-group>
+<!--
+    ************************************************************************************************************
+    * UI Area
+    ************************************************************************************************************
+-->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+        <!-- 조회 조건 -->
+		<cc-search-condition-panel on-search="onSearch" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" placeholder="코드" on-enter="onSearch"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" on-enter="onSearch"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="변경 요청 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.chgReqStsCcd}}" value="{{searchParam.chg_req_sts_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="결재 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.modSts}}" value="{{searchParam.chg_aprl_req_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="변경 요청 일자"></sc-label>
+				<sc-period-date-field default-from-value="-1M" default-to-value="0d" from-value="{{searchParam.chg_req_from_dt}}" to-value="{{searchParam.chg_req_to_dt}}" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="변경 요청 사유"></sc-label>
+				<sc-text-field value="{{searchParam.chg_req_rsn}}" on-enter="onSearch"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="변경 요청 반려 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.chg_req_ret_from_dt}}" to-value="{{searchParam.chg_req_ret_to_dt}}" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="true" on-item-click="onDataCellClicked" use-state="false" use-selection="false"
+                 data-provider="{{vendorReqMainInfoChangeReceiptList}}">
+            <cc-grid-toolbar></cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-data-column		data-field="chg_req_revno"		header-text="차수"				width="70"></sc-data-column>
+                <sc-date-column		data-field="chg_req_dt"			header-text="변경 요청 일자"		width="100"></sc-date-column>
+                <sc-date-column		data-field="chg_req_ret_dt"		header-text="변경 요청 반려 일자"	width="150"></sc-date-column>
+                <sc-data-column		data-field="erp_vd_cd"			header-text="협력사 코드"			width="100"></sc-data-column>
+					<sc-data-column	data-field="vd_nm"				header-text="협력사 명"			width="250"	text-align="left"></sc-data-column>
+                <sc-combobox-column	data-field="chg_req_sts_ccd"	header-text="변경 요청 상태"		width="120"
+                					items="{{codes.chgReqStsCcd}}"	display-field="label"			value-field="data"></sc-combobox-column>
+				<sc-combobox-column	data-field="chg_aprl_req_sts_ccd"	header-text="결재 상태"	width="120"
+                					items="{{codes.modSts}}"	display-field="label"			value-field="data"></sc-combobox-column>
+                <sc-data-column		data-field="chg_req_rsn"		header-text="변경 요청 사유"		width="400"	text-align="left"	style-name="link"></sc-data-column>
+                <sc-data-column		data-field="chg_req_ret_rsn"	header-text="변경 요청 반려 사유"	width="400"	text-align="left"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field	data-field="vd_cd"></sc-grid-field>
+                <sc-grid-field	data-field="vd_info_chg_req_uuid"></sc-grid-field>
+				<sc-grid-field	data-field="vd_mst_chg_histrec_uuid"></sc-grid-field>
+				<sc-grid-field	data-field="mod_seqno"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+<!--
+    ************************************************************************************************************
+    * Script Area
+    ************************************************************************************************************
+-->
+    <script>
+        Polymer({
+            is: "es-vendor-req-main-info-change-receipt-list",
+            
+            properties: {
+                /*공통코드 데이터 binding*/
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return{
+							chgReqStsCcdParam : {
+                                ccd         : "E066",
+                                cstr_cnd_cd : "C016",
+								cstr_cnd_val: "BUYER"
+                            },
+							chgReqStsCcd: []
+                        };
+                    }
+                },
+                /* 조회조건 */
+                searchParam:{
+                    type: Object,
+                    value:function(){
+                        return {};
+                    }
+                },
+                /*조회 데이터 binding*/
+				vendorReqMainInfoChangeReceiptList: {
+                    type: Array,
+                    value:function(){
+                        return [];
+                    }
+                },
+ 				rejectInfo : {
+ 					type: Object,
+                    value:function(){
+                        return {};
+                    }
+ 				},
+				receiptCompleteInfo: {
+					type: Object,
+                    value:function(){
+                        return {};
+                    }
+				}
+            },
+            
+            initialized : function(){
+				var me = this;
+			},
+			
+            load: function(param){
+                var me = this;
+                
+                // 조회
+                me.onSearch();
+            },
+			
+            /* 협력사 목록 조회 */
+            onSearch: function(){
+                var me = this;
+				
+				if(!me.validate("search")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+                UT.request(me.$.findListVendorReqMainInfoChangeReceipt);
+            },
+			
+			/* 협력사 목록 조회 후 callback */
+			completeFindList: function(e, res){
+            	var me = this;
+				var result = res.response;
+				
+				me.set("vendorReqMainInfoChangeReceiptList", result);
+				
+				var receiptCompleteInfo = me.get("receiptCompleteInfo");
+				if(!UT.isEmpty(receiptCompleteInfo)){
+					var provider = me.$.gridPanel.getDataProvider();
+					var receiptedInfo = provider.filterItem({vd_info_chg_req_uuid: receiptCompleteInfo.vd_info_chg_req_uuid});
+					
+					if(!UT.isEmpty(receiptedInfo)){  // 접수 저장 후처리 조회인 경우,
+						me.set("receiptCompleteInfo", {});
+						me.onShowReqPopup(receiptedInfo);  // 품의 팝업 조회 연결
+					}
+				}
+			},
+            
+            onDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+                
+                if(item.dataField === "chg_req_rsn"){
+                	me.onShowReqPopup(data);
+                }
+            },
+			
+            //변경내용 정보팝업
+            onShowReqPopup: function(data){
+            	var me = this;
+            	
+            	if(!UT.isEmpty(data.vd_mst_chg_histrec_uuid)){  // 접수완료
+					if(data.chg_aprl_req_sts_ccd == "APVD"){  // 결재승인 상태
+						data.view = true;
+					}
+					
+            		// 품의팝업 조회모드
+					var aprvVendorMainInfoChangePopup = UT.popup("ep-vendor-main-info-change-req-apvl",me, 1000, 900, {
+						"complete-save" : function(popup, e){
+							me.onSearch();
+						},
+						"close-popup" : function(popup, e){
+							me.onSearch();
+							popup.close();
+						}
+					}, {titleText:"주요 정보 변경 요청"});
+					aprvVendorMainInfoChangePopup.show();
+					aprvVendorMainInfoChangePopup.getWindowContent().load(data);
+            	}else{  // 미접수(변경요청/반려)
+					// 협력사요청정보팝업 조회모드
+            		var changeReqReceiptPopup = UT.popup("ep-vendor-req-main-info-change-receipt",me, 1000, 900, {
+						"complete-save" : function(popup, e){
+							me.set("receiptCompleteInfo", data);
+							me.onSearch();
+							popup.close();
+						},
+						"close-popup" : function(popup, e){
+							me.onSearch();
+							popup.close();
+						}
+					});
+					changeReqReceiptPopup.show();
+					changeReqReceiptPopup.getWindowContent().load(data);
+            	}
+            }
+        });
+    </script>
+
+</dom-module>

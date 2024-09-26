@@ -1,0 +1,203 @@
+<sc-link rel="import" href="../popup/ep-stamp-detail.html"></sc-link>
+
+<dom-module id="es-stamp-list"> 
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		html, body, div, span, p {margin:0; padding:0; border:0; font-size:100%; font-family: Malgun Gothic, 맑은 고딕, 돋움, dotum, Arial, sans-serif; color:#111;}
+		a {text-decoration:none; cursor:pointer}
+		.hbox {flex-direction: row;overflow: auto;background: #f4f9ff;}
+		.fit > div {width: 100%; height: 100%;}
+		.tesk_stamp {font-size: 23px; color: #427cac; text-align: center; margin: 50px 0 50px; letter-spacing: -0.5px;}
+		.con_wrap {display: flex; justify-content: left; width: 90%; margin: 0 auto; flex-direction: row;flex-wrap: wrap;}
+		.stamp {flex: 0 0 18%; height: 200px; margin: 0 1%; box-sizing: border-box; margin-bottom: 50px;}
+		.card {min-height: 200px; background: #fff; border: 1px solid #c7d1e0; border-radius: 3px; text-align: center;cursor: pointer; display: table; position: relative;}
+		.card_add {background: #dce6f3; border: 1px solid #c7d1e0; border-radius: 3px; text-align: center; padding: 44px; cursor: pointer;display: table; position: relative;}
+		.stamp .ico {display: table-cell; height: 100%; vertical-align: middle; width: 100%;}
+		.stamp .add {display: inline-block; width: 110px; height: 110px; border-radius: 100px; background: #fff url(/img/add.png) no-repeat center center;}
+		.stamp p {font-size: 18px; color: #111; line-height: 22px; font-weight: bold; position: absolute;bottom: -35px; left: 0; width: 100%;}
+		.card_add .add:hover {display: inline-block; width: 110px; height: 110px; border-radius: 100px; background: #00aada url(/img/add_hover.png) no-repeat center center;}
+	</style>
+	
+	<template>
+		<!-- 회사 인장 목록 -->
+		<sc-ajax id="findStampList"
+				url="findListSeal.do"
+				body="{{formData.param}}"
+				on-response="completeFindStampList"></sc-ajax> 
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		<cc-page-title-bar></cc-page-title-bar>
+
+		<div class="hbox fit">
+			<div>
+				<p class="tesk_stamp">[[translate('서명 시 사용할 인장 이미지를 선택하세요.')]]</p>
+				<div class="con_wrap" id="stamp_list"></div>
+			</div>
+		</div>
+	</template>
+
+	<script src="/bower_components/template-designer/js/pdf_form/fabric.js"></script>
+	<script>
+		Polymer({
+			is: "es-stamp-list",
+
+			properties: {
+				// list 조회
+				formData: {
+					type: Object,
+					value: function () {
+						return {
+							param: {
+								dgtlsgn_seal_uuid:"",
+								seal_nm:"",
+								dept_cd:"",
+								dept_nm:"",
+								co_seal_yn:"Y",
+								seal_cowd_comm_use_yn:"",
+								seal_img_enc_dat:""
+							},
+							result: {}
+						}
+					}
+				},
+				signCanvas: {
+					type: Object
+				},
+				stampPopup: {
+					type: Object
+				},
+				stampDetailPopup: {
+					type: Object
+				},
+			},
+
+			// 화면 생성 완료
+			initialized: function () {
+				var me = this;
+				
+				me.signCanvas = null;
+				me.onSearch();
+			},
+			
+			onSearch : function(){
+				var me = this;
+				UT.request(me.$.findStampList);
+			},
+
+			init: function() {
+				var me = this;
+				var doc1 = me.getDocument();
+			},
+			
+			completeFindStampList: function (e, res) {
+				var me = this;
+				var list = res.response;
+				me.formData.result = list;
+				
+				var doc1 = me.getDocument();
+				let stampList = doc1.getElementById("stamp_list");
+				var i = 0;
+
+				while ( stampList.hasChildNodes() ) { 
+					stampList.removeChild( stampList.firstChild ); 
+				}
+			  
+				for (i = 0; i< list.length; i++) {
+					var row = list[i];
+					//div 객체 생성
+					let tdiv = doc1.getElementById("DIV_" + i);
+					if(!tdiv){
+						var div = doc1.createElement("div");
+						div.classList.add("stamp");
+						div.classList.add("card");
+						div.setAttribute("id","DIV_"+i);
+						div.setAttribute('img_id',row.dgtlsgn_seal_uuid);
+						div.addEventListener('click', function (event) {
+							var img_id = event.target.id;
+							
+							if(!img_id)
+							{
+								if(event.target.children.length != 0){
+									img_id = event.target.children[0].id;
+								} else if(event.currentTarget.children[0].children.length != 0){
+									img_id = event.currentTarget.children[0].children[0].id;
+								}
+							}
+							
+							//기존 stamp 조회팝업 호출
+							me.goPopUp(img_id);
+						});
+						//** 바디의 마지막 자식으로 div 객체 추가
+
+						var div2 = doc1.createElement("div");
+						div2.classList.add("ico");
+						div.appendChild(div2);
+						
+						var img = doc1.createElement("img");
+						img.setAttribute("id",row.dgtlsgn_seal_uuid);
+						img.setAttribute("width", "150");
+						img.setAttribute("height", "150");
+						div2.appendChild(img);
+						var p_text = doc1.createElement("p");
+						p_text.innerHTML = row.seal_nm;
+						div2.appendChild(p_text);
+					}
+					Polymer.dom(me.$.stamp_list).appendChild(div);
+					Polymer.dom.flush();
+					
+					let img_input = doc1.getElementById(row.dgtlsgn_seal_uuid);
+					if(row.seal_img_typ === "SVG"){
+						let blob = new Blob([row.seal_img_enc_dat], { type: 'image/svg+xml' });
+						let url = URL.createObjectURL(blob);
+						img_input.src = url;
+					}else{
+						img_input.src = row.seal_img_enc_dat;
+					}
+			 	}
+				
+				let mdiv = doc1.getElementById("div_insert");
+				if(!mdiv){
+					var div = doc1.createElement("div");
+					div.setAttribute("id","div_insert");
+					div.classList.add("stamp");
+				   	div.classList.add("card_add");
+					div.onclick= function () { //익명 메서드
+						me.set("formData.param.dgtlsgn_seal_uuid", "");
+					
+						//신규 stamp 저장팝업 호출
+						me.goPopUp(me.formData.param.dgtlsgn_seal_uuid);
+					}
+					//** 바디의 마지막 자식으로 div 객체 추가
+					
+					var div2 = doc1.createElement("div");
+					div2.classList.add("add");
+					div.appendChild(div2);
+					var p_text = doc1.createElement("p");
+					p_text.innerHTML = "인장추가하기";
+					div2.appendChild(p_text);
+					
+					Polymer.dom(me.$.stamp_list).appendChild(div);
+					Polymer.dom.flush();
+				}
+			},
+			
+			goPopUp : function(data){
+				var me = this;
+				
+				me.stampPopup = UT.popup("ep-stamp-detail", me, "100%", "100%", {
+					"close-save": function (popup, e) {
+						popup.close();
+						me.onSearch();
+					},"close1": function (popup, e) {
+						popup.close();
+					}
+				});
+				
+				me.stampPopup.show();
+				me.stampPopup.getWindowContent().load(data);  
+			}
+		});
+	</script>
+</dom-module>

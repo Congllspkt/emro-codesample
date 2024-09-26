@@ -1,0 +1,364 @@
+<sc-link rel="import" href="/ui/bp/pricedoctor/priceforecasting/popup/ep-price-forecasting-report.html"></sc-link>
+
+<dom-module id="ep-rfx-compare-case1">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<div class="vspace-10"></div>
+		
+		<table class="tb-form">
+			<tr>
+				<th style="width:150px">
+					<sc-label text="RFX 번호/진행차수"></sc-label>
+				</th>
+				<td>
+					<div class="field-box" style="width:100%">
+						<sc-text-field class="w-150" value="[[rfxInfo.rfx_no]]" readonly></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field class="w-50 align-right" value="[[rfxInfo.rfx_rnd]]" readonly></sc-text-field>
+						<span style="margin-left:5px"></span>
+					</div>
+				</td>
+			</tr>
+		</table>
+		
+		<sc-grid id="gridPanel" collapsible="false" class="flex" use-dummy="false"
+				 editable="false"
+				 use-state="false"
+				 header-height="80"
+				 row-style-function="onRowStyleFn"
+				 use-selection="false"
+				 on-item-click="onItemClick">
+			<cc-grid-toolbar></cc-grid-toolbar>
+			<sc-grid-columns>
+				<!-- 동적컬럼 생성 -->
+			</sc-grid-columns>
+		</sc-grid>
+		
+		<template id="case1">
+			<sc-grid-columns id="case1Columns">
+				<sc-data-column data-field="desc" header-text="내역" width="160" text-align="left" item-style-function="onItemStyleFn"></sc-data-column>
+			</sc-grid-columns>
+		</template>
+	</template>
+	
+	
+	<script>
+		Polymer({
+			is: 'ep-rfx-compare-case1',
+			
+			behaviors: [
+				Polymer.Templatizer
+			],
+			
+			properties: {
+				rfxInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [
+							{name: "I.   " + this.translate("선정 여부"), key: "slctn_yn", level: 1},
+							{name: "II.  " + this.translate("RFX 통화"), key: "rfx_cur_ccd", level: 2},
+							{name: "II.  " + this.translate("RFX 품목 제출 단가"), key: "rfx_item_subm_uprc", level: 2},
+							{name: "II.  " + this.translate("RFX 수량"), key: "rfx_qty", level: 2},
+							{name: "II.  " + this.translate("통화"), key: "cur_ccd", level: 2},
+							{name: "II.  " + this.translate("RFX 품목 제출 금액"), key: "rfx_item_subm_amt", level: 2},
+							{name: "II.  " + this.translate("RFX 투찰 금액"), key: "rfx_bid_amt", level: 2},
+							{name: "II.  " + this.translate("환산 단가"), key: "exch_item_price", level: 2},
+							{name: "II.  " + this.translate("환산 금액"), key: "exch_item_amt", level: 2},
+							{name: "III. " + this.translate("RFX 요청 단가"), key: "rfx_req_uprc", level: 3},
+							{name: "III. " + this.translate("RFX 요청 단가 대비(%)"), key: "rfx_req_uprc_rate", level: 3},
+							{name: "III. " + this.translate("RFX 목표 단가"), key: "rfx_trg_uprc", level: 3},
+							{name: "III. " + this.translate("RFX 목표 단가 대비(%)"), key: "rfx_trg_uprc_rate", level: 3},
+							{name: "III. " + this.translate("요청 납품 일자"), key: "req_dlvy_dt", level: 3},
+							{name: "III. " + this.translate("납품 리드타임"), key: "dlvy_ldtm", level: 3},
+							{name: "IV.  " + this.translate("STD.RFX1218"), key: "eval_ttl_sc", level: 4},
+							{name: "IV.  " + this.translate("가격평가 점수"), key: "cbe_sc", level: 4},
+							{name: "IV.  " + this.translate("비가격평가 합계 점수"), key: "npe_conv_sc", level: 4}
+						];
+					}
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				if(SCModuleManager.exist("price-doctor")) {
+					me.get("resultList").push({name: "V.   " + this.translate("AI 추정 단가"), key: "exch_fcst_uprc", level: 5});
+					me.get("resultList").push({name: "V.   " + this.translate("AI 추정 단가 대비 비율"), key: "fcst_uprc_rate", level: 5});
+					me.get("resultList").push({name: "V.   " + this.translate("AI 추정 단가 리포트"), key: "img_fcst_uprc", level: 5});
+				}
+			},
+			
+			load: function(result) {
+				var me = this, data = result[0];
+				me.set("rfxInfo.rfx_no", data.rfx_no);
+				me.set("rfxInfo.rfx_rnd", data.rfx_rnd);
+				if(data.rfx_typ_ccd === "RFP" && data.eval_close_yn === "Y") {
+					me.set("rfxInfo.isRfxEval", true);
+				}
+				me.buildDynamicColumns(result);
+			},
+			
+			buildDynamicColumns: function(result) {
+				var me             = this,
+					defaultColumns = UT.templateColumns(me, '#case1', '#case1Columns');
+				
+				// 2. 기준컬럼으로 group by
+				var groupByResultList = me.groupBy(result, "rfx_lno");
+				
+				// 3. 컬럼 생성
+				for(var i = 0, len = groupByResultList.length; i < len; i++) {
+					var vendorsByItem = groupByResultList[i],
+						data          = vendorsByItem[0];
+					
+					// 3-1. 그룹컬럼
+					var dispItemCd = UT.isEmpty(data.disp_item_cd) ? "" : ('\n' + '[' + data.disp_item_cd + ']');
+					var groupColumn = me.createGroupColumn(data.item_nm + dispItemCd);
+					// 3-2. 그룹컬럼 내 컬럼 생성
+					for(var j = 0, lenJ = vendorsByItem.length; j < lenJ; j++) {
+						var vendor       = vendorsByItem[j],
+							vendorColumn = me.createDataColumn(vendor.vd_nm + '\n' + '[' + vendor.vd_cd + ']', vendor.rfx_lno + '_' + vendor.vd_cd, 150, "right");
+						groupColumn.appendChild(vendorColumn);
+						// 로우 생성
+						me.createRowData(vendor);
+					}
+					// 그룹컬럼 너비 설정
+					me.setGroupColumnWidth(groupColumn);
+					defaultColumns.push(groupColumn);
+				}
+				
+				// 비가격평가가 아닐경우 비가격 항목 제외
+				var filtered = me.resultList.filter(function(item) {
+					if(me.rfxInfo.isRfxEval) {
+						return item;
+					} else {
+						if(item.level !== 4) {
+							return item;
+						}
+					}
+				});
+				
+				me.$.gridPanel.setColumns(defaultColumns);
+				me.$.gridPanel.setDataProvider(filtered);
+				
+			},
+			
+			onRowStyleFn: function(data) {
+				if(data.level === "1") {
+					return {
+						"background": "#ccddf5"
+					}
+				} else if(data.level === "2") {
+					return {
+						"background": '#f5dfd5'
+					}
+				} else if(data.level === "3") {
+					return {
+						"background": '#E6E6E6'
+					}
+				} else if(data.level === "4") {
+					return {
+						"background": '#f5e5ae'
+					}
+				} else if(data.level === "5") {
+					return {
+						"background": "#E0F8E0"
+					}
+				}
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var styleObj = {};
+				
+				if(item.dataField === "desc") {
+					styleObj.fontWeight = "bold";
+				} else if(data.key === "slctn_yn") {
+					styleObj.iconUrl = "ui/assets/img/grid/" + ((data[item.dataField] === "Y") ? "ico_choice.png" : "ico_nonchoice.png");
+					styleObj.iconLocation = "center";
+				} else if(data.key === "cur_ccd" || data.key === "req_dlvy_dt" || data.key === "cur_ccd") {
+					styleObj.align = "center";
+				} else if(data.key === "img_fcst_uprc") {
+					styleObj.iconUrl = "ui/assets/img/grid/" + ((UT.isNotEmpty(data[item.dataField])) ? "icon_link.png" : "");
+					styleObj.iconLocation = "center";
+				}
+				
+				return styleObj;
+			},
+			
+			createRowData: function(vendor) {
+				var me = this, list = me.resultList;
+				for(var i = 0, len = list.length; i < len; i++) {
+					var rowData    = list[i],
+						key        = rowData.key,
+						columnData = vendor[key];
+					
+					rowData['desc'] = rowData.name;
+					
+					switch(key) {
+						case "rfx_item_subm_uprc":
+							columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd));
+							break;
+						case "rfx_item_subm_amt":
+							columnData = SCFormatter.format("amt", CCPrecManager.format("amt", columnData, rowData.cur_ccd));
+							break;
+						case "rfx_bid_amt":
+							columnData = SCFormatter.format("amt", CCPrecManager.format("amt", columnData, rowData.cur_ccd));
+							break;
+						case "exch_item_price":
+							columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd));
+							break;
+						case "rfx_trg_uprc":
+							columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd));
+							break;
+						case "rfx_req_uprc":
+							columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd));
+							break;
+						case "exch_item_amt":
+							columnData = SCFormatter.format("amt", CCPrecManager.format("amt", columnData, vendor.cur_ccd));
+							break;
+						case "rfx_qty":
+							columnData = SCFormatter.format("qty", CCPrecManager.format("qty", columnData, rowData.uom_ccd));
+							break;
+						case "eval_ttl_sc":
+						case "cbe_sc":
+						case "npe_conv_sc":
+							columnData = SCFormatter.format("proScore", CCPrecManager.format("proScore", columnData));
+							break;
+						case "req_dlvy_dt":
+							if(!UT.isEmpty(columnData)) {
+								columnData = SCFormatter.format("date", columnData);
+							}
+							break;
+						case "rfx_req_uprc_rate":
+							var itemPrice = new BigNumber(vendor.rfx_item_subm_uprc || 0),
+								rfqPrice  = new BigNumber(vendor.rfx_req_uprc || 0);
+							columnData = rfqPrice.toFixed() === "0" ? null : new BigNumber(100).mul(itemPrice).div(rfqPrice).toFixed(2) + " %";
+							break;
+						case "rfx_trg_uprc_rate":
+							var itemPrice = new BigNumber(vendor.rfx_item_subm_uprc || 0),
+								tgtPrice  = new BigNumber(vendor.rfx_trg_uprc || 0);
+							columnData = tgtPrice.toFixed() === "0" ? null : new BigNumber(100).mul(itemPrice).div(tgtPrice).toFixed(2) + " %";
+							break;
+						case "exch_fcst_uprc":
+							columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd));
+							break;
+						case "fcst_uprc_rate":
+							if(UT.isNotEmpty(columnData)) {
+								columnData = SCFormatter.format("price", CCPrecManager.format("price", columnData, rowData.cur_ccd)) + " %";
+							}
+							break;
+						default :
+							break;
+						
+					}
+					rowData[vendor.rfx_lno + '_' + vendor.vd_cd] = columnData;
+				}
+			},
+			
+			setGroupColumnWidth: function(groupColumn) {
+				var width = 0;
+				for(var i = 0; i < groupColumn.children.length; i++) {
+					width += groupColumn.children[i].width;
+				}
+				groupColumn.width = Math.max(width, groupColumn.width || 0);
+			},
+			
+			createGroupColumn: function(headerText) {
+				var grpCol = document.createElement("sc-group-column");
+				grpCol.headerText = headerText;
+				grpCol.i18nDisabled = true;
+				return grpCol;
+			},
+			
+			createDataColumn: function(headerText, dataField, width, textAlign) {
+				var col = document.createElement("sc-data-column");
+				col.headerText = headerText;
+				col.dataField = dataField;
+				col.width = width;
+				col.textAlign = textAlign;
+				col.i18nDisabled = true;
+				col.itemStyleFunction = "onItemStyleFn";
+				return col;
+			},
+			
+			groupBy: function(array, group) {
+				var hash   = Object.create(null),
+					result = [];
+				
+				array.forEach(function(a) {
+					if(!hash[a[group]]) {
+						hash[a[group]] = [];
+						result.push(hash[a[group]]);
+					}
+					hash[a[group]].push(a);
+				});
+				return result;
+			},
+			
+			onItemClick: function(event) {
+				var me       = this,
+					data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(data.key === "img_fcst_uprc" && UT.isNotEmpty(data[item.dataField])) {
+					var itemCd = data[item.dataField].split('|')[0];
+					var vdNm = data[item.dataField].split('|')[1];
+					var fcstTmpt = data[item.dataField].split('|')[3];
+					var curCcd = me.findDataFromProvider(provider.getItems(), "cur_ccd", item.dataField);
+					var vdCd = item.dataField.split('_')[1];
+					var exchFcstUprcStr = me.findDataFromProvider(provider.getItems(), "exch_fcst_uprc", item.dataField);
+					var exchItemPriceStr = me.findDataFromProvider(provider.getItems(), "exch_item_price", item.dataField);
+					
+					if(UT.isEmpty(exchItemPriceStr) || UT.isEmpty(exchFcstUprcStr)) {
+						return;
+					}
+					
+					var exchFcstUprc = Number(exchFcstUprcStr.replaceAll(',', ''));
+					var exchItemPrice = Number(exchItemPriceStr.replaceAll(',', ''));
+					
+					me.showPriceForecastingReport({
+						item_cd: itemCd,
+						fcst_tmpt: fcstTmpt,
+						cur_ccd: curCcd,
+						rfxItemData: {
+							vd_cd: vdCd,
+							vd_nm: vdNm,
+							fcst_uprc: exchFcstUprc,
+							item_uprc: exchItemPrice
+						}
+					});
+				}
+			},
+			
+			findDataFromProvider: function(items, key, dataField) {
+				var filterItem = items.filter(function(data) {
+					if(data.key === key) {
+						return true;
+					}
+				});
+				return filterItem[0][dataField];
+			},
+			
+			// DX그룹 price-doctor 구매단가 예측 리포트 팝업
+			showPriceForecastingReport: function(data) {
+				var me = this;
+				
+				var popup = UT.popup("ep-price-forecasting-report", me, "90%", "90%", {}, {
+					titleText: "AI 추정 단가 리포트"
+				});
+				popup.show();
+				popup.getWindowContent().load(data, "RFX");
+			},
+		});
+	</script>
+</dom-module>

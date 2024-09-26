@@ -1,0 +1,1753 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="eval">
+    <!-- 협력사 VDGL 조회 -->
+    <select id="findListVendorBasic" resultType="map">
+        /*shared.findListVendorBasic */
+        SELECT VDGL.SYS_ID,
+            VDGL.VD_CD,
+            CASE WHEN 'ko_KR' = #{g.locale} THEN VDGL.VD_NM ELSE VDGL.VD_EN_NM END AS VD_NM,
+            VDGL.ERP_VD_CD,
+            VDGL.ERP_VD_CD,
+            VDGL.EVAL_VD_CD,
+            VDGL.CORP_REG_NO,
+            VDGL.CORP_BIZ_REG_NO,
+            VDGL.NAT_CD,
+            CASE
+                WHEN VDGL.NAT_CD = 'KR' THEN VDGL.BIZ_REG_NO
+                WHEN VDGL.NAT_CD = 'CN' THEN VDGL.TAX_NO
+                WHEN (SELECT COUNT(*)
+                        FROM ESACDDT
+                       WHERE SYS_ID = VDGL.SYS_ID
+                         AND GRP_CD = 'C008'
+                         AND DTL_CD = VDGL.NAT_CD) &gt; 0 THEN VDGL.EU_VAT_REG_NO
+                ELSE VDGL.TAX_NO
+            END BIZ_REG_NO,
+            VDGL.EMAIL, 
+            VDGL.PHONE_NO,
+            CASE WHEN 'ko_KR' = #{g.locale} THEN VDGL.REP_NM ELSE VDGL.REP_EN_NM END REP_NM,
+            VDGL.LOC_CD,
+            CASE WHEN 'ko_KR' = #{g.locale} THEN VDGL.DTL_ADDR_1 ELSE VDGL.DTL_ADDR_EN_1 END DTL_ADDR_1
+        FROM ESMVDGL VDGL
+        WHERE VDGL.SYS_ID = #{g.tenant}
+            <if test="p.erp_vd_cd != null and p.erp_vd_cd != &quot;&quot;">
+            <bind name="cdPattern" value="&quot;%&quot; + p.erp_vd_cd + &quot;%&quot;"/>
+              AND VDGL.ERP_VD_CD LIKE UPPER(#{cdPattern})
+            </if>
+            <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+            <bind name="namePattern" value="&quot;%&quot; + p.vd_nm + &quot;%&quot;"/>
+              AND    (UPPER(VDGL.VD_NM) LIKE UPPER(#{namePattern}) OR UPPER(VDGL.VD_EN_NM) LIKE UPPER(#{namePattern}))      /* 협력사명 검색조건*/
+            </if>
+         ORDER BY VDGL.VD_CD
+    </select>
+    <!-- 등록평가 요청 목록 조회 -->
+    <select id="findListEvalRgst" resultType="map">
+        SELECT A.SYS_ID
+             , A.VD_CD
+             , A.VD_INSP_GRP_ID 
+             , A.INSP_GRP_CD 
+             , CONCAT(B.INSP_GRP_NM, CONCAT(' [', CONCAT(CAST(A.INSP_REV AS NVARCHAR2(18)), '] '))) AS INSP_GRP_NM  
+             , A.HNDL_STS_CD
+             , C.ERP_VD_CD 
+             , CASE WHEN C.NAT_CD =  'KR' THEN C.VD_NM ELSE C.VD_EN_NM END AS VD_NM
+             , A.INSP_REV 
+             , A.EVAL_END_YN 
+             , A.EVAL_REQ_DATE 
+             , A.EVAL_COMP_DATE
+             , CASE WHEN C.NAT_CD =  'KR' THEN E.VD_TYP_NM ELSE E.VD_TYP_EN_NM END AS TYP_NM
+             , D.OPER_ORG_CD 
+             , D.TYP_CD
+             , E.EVAL_BAS_CD AS TARG_GRP_TYP_CD
+             , (
+                SELECT TRADSTS
+                  FROM ESMVDOG
+                 WHERE SYS_ID = A.SYS_ID
+                   AND VD_CD = A.VD_CD
+                   AND OPER_ORG_CD = D.OPER_ORG_CD
+               ) AS TRADSTS
+          FROM ESSVDIG A
+                INNER JOIN ESSINGP B ON A.SYS_ID = B.SYS_ID AND A.INSP_GRP_ID = B.INSP_GRP_ID
+                INNER JOIN ESMVDGL C ON A.SYS_ID = C.SYS_ID AND A.VD_CD = C.VD_CD
+                INNER JOIN ESSIPMP D ON B.SYS_ID = D.SYS_ID AND B.INSP_GRP_ID = D.INSP_GRP_ID AND  B.OPER_ORG_CD = D.OPER_ORG_CD
+                INNER JOIN ESSVDTP E ON D.SYS_ID = E.SYS_ID AND D.TYP_CD = E.TYP_CD
+                INNER JOIN (
+                            SELECT DISTINCT SYS_ID
+                                 , VD_INSP_GRP_ID
+                                 , VD_CD
+                                 , OPER_ORG_CD
+                                 , TYP_CD 
+                              FROM ESSVRRG
+                             WHERE SYS_ID = #{g.tenant}
+                            <if test="p.vd_cd != null and p.vd_cd != ''">
+                                <bind name="vdCodePattern" value="'%' + p.vd_cd + '%'"/>
+                               AND UPPER(VD_CD) LIKE UPPER(#{vdCodePattern})
+                            </if>
+                           ) F ON F.SYS_ID = A.SYS_ID AND F.VD_INSP_GRP_ID = A.VD_INSP_GRP_ID AND F.VD_CD = A.VD_CD AND F.OPER_ORG_CD = D.OPER_ORG_CD AND F.TYP_CD = D.TYP_CD
+         WHERE A.SYS_ID = #{g.tenant}
+           AND A.EVAL_END_YN = 'N'  -- 운영중 삭제
+           AND B.STS    != 'D'
+           AND B.USE_YN = 'Y'
+           AND A.HNDL_STS_CD IN ('W','A')
+        <if test="p.hndl_sts_cd != null and p.hndl_sts_cd != ''">
+           AND A.HNDL_STS_CD = #{p.hndl_sts_cd}
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+            <bind name="vdCodePattern" value="'%' + p.vd_cd + '%'"/>
+           AND UPPER(A.VD_CD) LIKE UPPER(#{vdCodePattern})
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(C.ERP_VD_CD) LIKE UPPER(#{p_erp_vd_cd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+            <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+           AND    (UPPER(C.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(C.VD_EN_NM) LIKE UPPER(#{p_vd_nm}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.from_date != null and p.from_date != ''">
+           AND A.EVAL_REQ_DATE &gt;= #{p.from_date}
+        </if>
+        <if test="p.to_date != null and p.to_date != ''">
+           AND A.EVAL_REQ_DATE <![CDATA[<=]]> #{p.to_date}
+        </if>
+        <choose>
+        <when test="p.oper_org_cd != null and p.oper_org_cd.size() != 0">
+           AND D.OPER_ORG_CD IN 
+            <foreach close=")" collection="p.oper_org_cd" item="oper_org_cd" open="(" separator=",">
+               #{oper_org_cd}
+            </foreach>
+        </when>
+        <otherwise>
+           AND D.OPER_ORG_CD IN (
+                                SELECT A.OPER_ORG_CD
+                                  FROM ESAOOPM A
+                                       INNER JOIN ESAOOMG B ON A.SYS_ID = B.SYS_ID AND A.OPER_ORG_CD = B.OPER_ORG_CD
+                                       INNER JOIN ESAOGMG C ON C.SYS_ID = B.SYS_ID AND C.ORG_TYP_CD = B.ORG_TYP_CD AND C.ORG_CD = B.ORG_CD
+                                 WHERE A.SYS_ID = #{g.tenant}
+                                   AND A.USR_ID = #{g.username}
+                                   AND B.OPER_UNIT_CD = 'EO'
+                                   AND B.STS != 'D'
+                                )
+        </otherwise>
+        </choose>
+         ORDER BY A.EVAL_REQ_DATE DESC
+    </select>
+    <!--  등록심사진행관리/완료심사 이력 조회 상세조회 -->
+    <select id="findListDetailEvalRgst" resultType="map">
+    /* eval.findListDetailEvalRgst */
+        /* Vendor &gt; 등록심사관리 &gt; 등록심사진행관리 &gt; 상세조회*/
+        /* Vendor &gt; 등록심사관리 &gt; 완료심사 이력 조회 &gt; 상세조회*/
+        SELECT A.VD_INSP_GRP_ID
+             , CONCAT(A.UP_INSP_STP_CD, CONCAT(A.VD_CD, CONCAT(A.INSP_GRP_CD, CAST(A.INSP_REV AS NVARCHAR2(18)))))    AS UP_CD
+             , CONCAT(A.INSP_STP_CD, CONCAT(A.VD_CD, CONCAT(A.INSP_GRP_CD, CAST(A.INSP_REV AS NVARCHAR2(18)))))       AS CD
+             , A.INSP_GRP_EVAL_STP_ID
+             , A.VD_INSP_GRP_EVAL_STP_ID
+             , B.VD_CD
+             , CONCAT(B.ERP_VD_CD, CONCAT('/', CASE WHEN B.NAT_CD = 'KR'
+                                               THEN B.VD_NM
+                                          ELSE B.VD_EN_NM
+                                     END))                                     AS VD_NM
+             , A.INSP_GRP_CD
+             , A.INSP_REV
+             , CONCAT(C.INSP_GRP_NM, CONCAT('/', CONCAT(CAST(A.INSP_REV AS NVARCHAR2(18)), '차')))                    AS INSP_GRP_NM
+             , A.INSP_STP_CD
+             , ( SELECT INSP_STP_NM 
+                   FROM ESSINST 
+                  WHERE SYS_ID = A.SYS_ID 
+                    AND OPER_ORG_CD = A.OPER_ORG_CD 
+                    AND INSP_STP_CD = A.INSP_STP_CD 
+               ) AS INSP_STP_NM
+             , A.STP_STS
+             , F.DTL_CD_NM                                                   AS STP_STS_NM
+             , A.AUTO_PS_YN
+             , A.AUTO_PROG_YN
+             , A.PRE_CRC_PS_RCN_YN
+             , A.POT_VD_BAS_YN
+             , A.WGT
+             , CONCAT(CASE WHEN A.EVAL_SCO IS NULL
+                         THEN CAST('0' AS NVARCHAR2(18))
+                    ELSE CAST(A.EVAL_SCO AS NVARCHAR2(18))
+               END , CONCAT('/', CASE WHEN A.APRV_SCO IS NULL
+                                       THEN CAST('0' AS NVARCHAR2(18))
+                                  ELSE CAST(A.APRV_SCO AS NVARCHAR2(18))
+                             END))                                             AS EVAL_SCO 
+             , CASE WHEN A.EVAL_FAIL_YN = '' OR A.EVAL_FAIL_YN IS NULL
+                         THEN 'N'
+                    ELSE A.EVAL_FAIL_YN
+               END                                                           AS EVAL_FAIL_YN
+             , A.INSP_COMP_DT
+             , A.EVALTR_TYP
+             , A.PROG_REV
+             , A.UP_INSP_STP_CD
+             , A.RE_EVAL_D_MN
+             , A.EFF_MN_CNT
+             , A.DP_INSP_GRP_EVAL_STP_ID
+             , A.EVAL_SHT_ID
+             , E.EVAL_REQ_DATE
+             , A.EFF_START_DATE
+             , A.EVAL_ID
+             , A.SYS_ID
+             , A.CRC_CAUSE
+             , G.ES_ID
+             , (SELECT SUM(CASE WHEN EXC_STS = '30' THEN 1 ELSE 0 END) FROM ESREVQS QS WHERE QS.SYS_ID = A.SYS_ID AND QS.EVAL_ID = A.EVAL_ID) AS EVAL_END_CNT
+             , (SELECT SUM(CASE WHEN QS.SRV_EVAL_PROG_MGT_ID IS NOT NULL THEN 1 ELSE 0 END) FROM ESREVQS QS WHERE QS.SYS_ID = A.SYS_ID AND QS.EVAL_ID = A.EVAL_ID) AS EVAL_TOT_CNT
+             , A.EVAL_CHR_ID
+             , CASE WHEN EXISTS(
+                         SELECT 1 
+                           FROM ESSVIEC VIEC 
+                           WHERE VIEC.SYS_ID = A.SYS_ID 
+                             AND VIEC.VD_INSP_GRP_EVAL_STP_ID = A.VD_INSP_GRP_EVAL_STP_ID 
+                             AND VIEC.EVALTR_ID IS NULL
+                             AND VIEC.STS != 'D'
+                        ) THEN 'Y' ELSE 'N' 
+                  END NO_EVALTR_YN   /* 평가 담당자 미존재 여부 */
+           FROM ESSVIES A
+                INNER JOIN ESMVDGL B ON A.SYS_ID = B.SYS_ID AND A.VD_CD = B.VD_CD
+                INNER JOIN ESSINGP C ON A.SYS_ID = C.SYS_ID AND A.INSP_GRP_CD = C.INSP_GRP_CD
+                INNER JOIN ESSVDIG E ON A.SYS_ID = E.SYS_ID AND A.VD_INSP_GRP_ID = E.VD_INSP_GRP_ID AND A.OPER_ORG_CD = C.OPER_ORG_CD
+                LEFT OUTER JOIN ESACDDL F ON A.SYS_ID = F.SYS_ID AND A.STP_STS = F.DTL_CD AND F.GRP_CD = 'E007' AND F.LANG_CD = #{g.locale}
+                /* 심사그룹 평가절차 평가시트 */
+                LEFT OUTER JOIN ESSIESS G ON A.SYS_ID = G.SYS_ID AND A.INSP_GRP_EVAL_STP_ID = G.INSP_GRP_EVAL_STP_ID
+          WHERE A.SYS_ID         = #{g.tenant}
+            AND E.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+            AND E.HNDL_STS_CD = #{p.hndl_sts_cd}
+          ORDER BY CAST(A.PROG_REV AS INT)
+    </select>
+    <!-- 요청정보 조회 -->
+    <select id="findListReqInfo" resultType="map">
+        SELECT DISTINCT OPER_ORG_CD AS CD ,
+               (
+                SELECT CASE WHEN 'ko_KR' = #{g.locale} THEN OD.ORG_NM ELSE OD.ORG_EN_NM END AS ORG_NE
+                  FROM ESAOOMG OH, ESAOGMG OD
+                 WHERE OH.SYS_ID = A.SYS_ID
+                   AND OH.OPER_ORG_CD  = A.OPER_ORG_CD
+                   AND OH.USE_YN = 'Y'
+                   AND OH.STS != 'D'
+                   AND OD.SYS_ID = OH.SYS_ID
+                   AND OD.ORG_TYP_CD  = OH.ORG_TYP_CD
+                   AND OD.ORG_CD = OH.ORG_CD
+                   AND OD.USE_YN = 'Y'
+                   AND OD.STS != 'D'
+                ) AS CD_NM,
+               'ROOT'  AS   UP_CD ,
+               '' AS APRV_TARG_YN,
+               '' AS RE_EVAL_YN 
+        FROM   ESSVRRG A
+        WHERE  A.SYS_ID         = #{g.tenant}
+        AND    A.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+        AND    A.STS           != 'D'
+        UNION ALL
+        SELECT A.TARG_GRP_CD           AS CD , 
+               B.TARG_GRP_NM           AS CD_NM, 
+               A.OPER_ORG_CD           AS UP_CD,
+               CASE WHEN A.APRV_TARG_YN IS NULL
+                         THEN 'N'
+                    ELSE A.APRV_TARG_YN
+               END AS APRV_TARG_YN,
+               CASE WHEN A.RE_EVAL_YN IS NULL
+                         THEN 'N'
+                    ELSE A.RE_EVAL_YN
+               END AS RE_EVAL_YN 
+          FROM ESSVRRG A, V_ESSTGGP B
+         WHERE A.SYS_ID          = #{g.tenant}
+           AND A.SYS_ID          = B.SYS_ID
+           AND A.TARG_GRP_CD     = B.TARG_GRP_CD
+           AND A.OPER_ORG_CD     = B.OPER_ORG_CD
+           AND A.TARG_GRP_TYP_CD = #{p.targ_grp_typ_cd}
+           AND A.VD_INSP_GRP_ID  = #{p.vd_insp_grp_id}
+           AND A.STS            != 'D'
+           AND B.STS            != 'D'
+    </select>
+    <!-- 평가결과상세 목록 조회 -->
+    <select id="findListEvalDetailInfo" resultType="map">
+    /* eval.findListEvalDetailInfo */
+        SELECT EF.SYS_ID                 /* 시스템아이디 */
+             , EF.EF_ID                  /* 평가항목아이디 */
+             , EF.OPER_ORG_CD            /* 운영조직코드 */
+             , EF.EF_CD                  /* 평가항목코드 */
+             , EF.EF_NM                  /* 평가항목명 */
+             , EF.EF_GRP_ID              /* 평가항목그룹아이디 */
+             , EF.EF_GRP_CD              /* 평가항목그룹코드 */
+             , EF.ORGN_EF_ID             /* 원본평가항목아이디 */
+             , EF.ORGN_EF_CD             /* 원본평가항목코드 */
+             , EF.QTT_SRV_CLS            /* 공통코드(R001) 정량정성구분 */
+             , EF.SORT_ORD               /* 정렬순서 */
+             , EF.DESCR                  /* 평가항목설명 */
+             , EF.UNIT                   /* 단위 */
+             , EF.REG_ID                 /* 등록자아이디 */
+             , EF.REG_DT                 /* 등록일시 */
+             , FS.EVAL_ID                /* 평가아이디 */
+             , FS.ES_HD_CD               /* 평가시트헤더코드 */
+             , FS.EF_SCO   AS TOT_EF_SCO /* 평가항목 점수 */
+             , FS.ORGN_EF_SCO            /* 원본평가항목점수 */
+             , FS.CMPL_SCO               /* 이의제기 점수 */
+             , FS.APPLY_YN               /* 적용여부 */
+             , FS.EF_GRP_WGT /* 상위 항목군 가중치 */
+             , CASE WHEN EF.QTT_SRV_CLS = '' THEN CAST(FS.CALC_VAL AS NUMERIC(20,5))
+                    ELSE NULLIF(1,1)
+                 END AS CALC_VAL         /* 계산식 값 */  
+             , CASE WHEN EF.QTT_SRV_CLS = 'R' THEN FS.ND_YN
+                    ELSE NULL
+                END AS ND_YN             /* 무실적여부 */
+             , CASE WHEN EF.QTT_SRV_CLS = 'R' THEN EF.ND_HNDL
+                    ELSE NULL
+                END AS ND_HNDL           /* 무실적처리구분 */
+             , CASE WHEN EF.EF_GRP_CD != 'ROOT' THEN NULLIF(1,1)
+                    ELSE FS.GRP_WGT 
+                END AS GRP_WGT           /* 그룹가중치 */    
+             , CASE WHEN EF.EF_GRP_CD != 'ROOT' THEN NULLIF(1,1)
+                    ELSE FS.EF_SCO
+                END AS EF_GRP_SCO        /* 항목군 점수 */      
+             , CASE WHEN EF.EF_GRP_CD = 'ROOT' THEN NULLIF(1,1)
+                    ELSE FS.WGT
+                END AS WGT               /* 가중치 */
+             , CASE WHEN EF.EF_GRP_CD = 'ROOT' THEN NULLIF(1,1)
+                    ELSE FS.EF_SCO
+                END AS EF_SCO            /* 항목점수 */ 
+             , CASE WHEN EF.EF_GRP_CD = 'ROOT' THEN NULLIF(1,1)
+                    ELSE FS.SCAL_SCO 
+                END AS SCAL_SCO          /* 스케일점수 */  
+             , CASE WHEN EF.EF_GRP_CD = 'ROOT' THEN NULL 
+                    ELSE EF.EF_KIND_CD
+                END AS EF_KIND_CD        /* 평가항목종류코드(가감점) */
+             , CASE WHEN EF.EF_GRP_CD = 'ROOT' THEN NULL 
+                    ELSE EF.REM_INPUT_YN
+                END AS REM_INPUT_YN      /* 항목의견입력여부 */
+          FROM ESREFMA EF  /* 평가항목마스터 */ 
+         INNER JOIN 
+               ( SELECT FS.SYS_ID                /* 시스템아이디 */
+                      , FS.EVAL_ID               /* 평가아이디 */
+                      , FS.EF_ID                 /* 평가항목아이디 */
+                      , FS.OPER_ORG_CD           /* 운영조직코드 */
+                      , FS.EF_CD                 /* 평가항목코드 */
+                      , FS.ES_HD_CD              /* 평가시트헤더 코드 */
+                      , FS.CALC_VAL              /* 계산식 값 */
+                      , FS.SCAL_SCO              /* 스케일 점수 */
+                      , FS.WGT                   /* 가중치 */
+                      , FS.GRP_WGT               /* 그룹가중치 */
+                      , SF.GRP_WGT AS EF_GRP_WGT /* 상위 항목군 가중치 */
+                      , FS.EF_SCO                /* 평가항목 점수 */
+                      , FS.ORGN_EF_SCO           /* 원본평가항목점수 */
+                      , FS.CMPL_SCO              /* 이의제기 점수 */
+                      , FS.ND_YN                 /* 무실적여부 */
+                      , CASE WHEN FS.APPLY_YN IS NULL OR FS.APPLY_YN = '' THEN 'Y'
+                             ELSE FS.APPLY_YN
+                         END AS APPLY_YN         /* 적용여부 */
+                   FROM ESSVIES VS
+                  INNER JOIN
+                        ESREVMA EV
+                     ON (    EV.SYS_ID          = VS.SYS_ID 
+                         AND EV.EVAL_ID         = VS.EVAL_ID 
+                         AND EV.TARG_TYP_VAL    = VS.VD_INSP_GRP_EVAL_STP_ID 
+                        )
+                  INNER JOIN
+                        ESREVFS  FS /* FS : 평가항목 평가결과 */
+                     ON (    FS.SYS_ID          = EV.SYS_ID
+                         AND FS.OPER_ORG_CD     = EV.OPER_ORG_CD
+                         AND FS.EVAL_TYP_CD     = EV.EVAL_TYP_CD
+                         AND FS.EVAL_KIND_CD    = EV.EVAL_KIND_CD
+                         AND FS.EVAL_ID         = EV.EVAL_ID
+                         AND FS.SIM_REV         = EV.APPLY_SIM_REV
+                        )
+                   LEFT OUTER JOIN
+                        ESRESEF SF
+                     ON (    SF.SYS_ID       = FS.SYS_ID
+                         AND SF.OPER_ORG_CD  = FS.OPER_ORG_CD
+                         AND SF.EVAL_TYP_CD  = FS.EVAL_TYP_CD
+                         AND SF.EVAL_KIND_CD = FS.EVAL_KIND_CD
+                         AND SF.EF_CD        = FS.EF_GRP_CD
+                         AND SF.ES_CD        = FS.ES_CD
+                         AND SF.ORGN_ES_CD   = FS.ORGN_ES_CD
+                         AND SF.ES_HD_CD     = FS.ES_HD_CD
+                         AND SF.EF_CD        != 'ROOT'
+                        )
+                  WHERE VS.SYS_ID                   = #{g.tenant}       /* 시스템아이디 */
+                    AND VS.VD_INSP_GRP_EVAL_STP_ID  = #{p.vd_insp_grp_eval_stp_id} /* 대상유형값 */
+               ) FS /* FS : 평가항목 결과 */
+            ON (    EF.SYS_ID      = FS.SYS_ID
+                AND EF.OPER_ORG_CD = FS.OPER_ORG_CD
+                AND EF.EF_ID       = FS.EF_ID
+               )
+         WHERE EF.SYS_ID          = #{g.tenant}       /* 시스템아이디 */
+           AND EF.USE_YN          = 'Y'      /* 사용여부 */
+         ORDER BY EF.SORT_ORD, EF.EF_NM
+    </select>
+    <!-- 협력사 거래요청관리>등록평가완료처리대기 목록 조회 -->
+    <select id="findListCompleteEvalProc" resultType="map">
+    /* eval.findListCompleteEvalProc */
+        SELECT A.SYS_ID
+             , A.VD_CD
+             , A.VD_INSP_GRP_ID 
+             , A.INSP_GRP_CD 
+             , CONCAT(B.INSP_GRP_NM, CONCAT(' [', CONCAT(CAST(A.INSP_REV AS NVARCHAR2(18)), '] '))) AS INSP_GRP_NM
+             , A.HNDL_STS_CD
+             , CDDL.DTL_CD_NM AS HNDL_STS_NM
+             , C.ERP_VD_CD 
+             , CASE WHEN C.NAT_CD =  'KR' THEN C.VD_NM ELSE C.VD_EN_NM END AS VD_NM
+             , A.INSP_REV 
+             , A.EVAL_END_YN 
+             , A.EVAL_REQ_DATE 
+             , A.EVAL_COMP_DATE
+             , CASE WHEN C.NAT_CD =  'KR' THEN E.VD_TYP_NM ELSE E.VD_TYP_EN_NM END AS TYP_NM
+             , D.OPER_ORG_CD 
+             , D.TYP_CD
+             , E.EVAL_BAS_CD AS TARG_GRP_TYP_CD
+             , (
+                SELECT CASE WHEN REG_YN IS NULL THEN 'N' ELSE REG_YN END
+                  FROM ESMVDOG  VDOG
+                       INNER JOIN ESSVTPM VTPM
+                       ON  VDOG.SYS_ID      = VTPM.SYS_ID
+                       AND VDOG.OPER_ORG_CD = VTPM.OPER_ORG_CD
+                       AND VTPM.VD_CD       = VDOG.VD_CD
+                 WHERE VDOG.SYS_ID      = A.SYS_ID
+                   AND VDOG.OPER_ORG_CD = D.OPER_ORG_CD
+                   AND VTPM.VD_CD       = C.VD_CD
+                   AND VTPM.TYP_CD      = A.TYP_CD
+               ) AS TRADSTS
+               ,VDGL1.MOD_STS
+               ,VDGL1.MOD_CLS
+               ,C.VALID_YN
+               , G.OPER_ORG_VD_TYP_ID
+               , H.VD_TYP_MAP_ID
+          FROM ESSVDIG A
+                INNER JOIN ESSINGP B ON A.SYS_ID = B.SYS_ID AND A.INSP_GRP_ID = B.INSP_GRP_ID
+                INNER JOIN ESMVDGL C ON A.SYS_ID = C.SYS_ID AND A.VD_CD = C.VD_CD
+                INNER JOIN ESSIPMP D ON B.SYS_ID = D.SYS_ID AND B.INSP_GRP_ID = D.INSP_GRP_ID AND  B.OPER_ORG_CD = D.OPER_ORG_CD
+                INNER JOIN ESSVDTP E ON D.SYS_ID = E.SYS_ID AND D.TYP_CD = E.TYP_CD
+                INNER JOIN (
+                            SELECT DISTINCT SYS_ID
+                                 , VD_INSP_GRP_ID
+                                 , VD_CD
+                                 , OPER_ORG_CD
+                                 , TYP_CD 
+                              FROM ESSVRRG
+                             WHERE SYS_ID = #{g.tenant}
+                            <if test="p.vd_cd != null and p.vd_cd != ''">
+                                <bind name="vdCodePattern" value="'%'+ p.vd_cd +'%'"/>
+                               AND UPPER(VD_CD) LIKE UPPER(#{vdCodePattern})
+                            </if>
+                           ) F ON F.SYS_ID = A.SYS_ID AND F.VD_INSP_GRP_ID = A.VD_INSP_GRP_ID AND F.VD_CD = A.VD_CD AND F.OPER_ORG_CD = D.OPER_ORG_CD AND F.TYP_CD = D.TYP_CD
+                INNER JOIN ESSOGVT G ON G.SYS_ID = E.SYS_ID AND G.TYP_CD = D.TYP_CD AND G.OPER_ORG_CD = D.OPER_ORG_CD
+                INNER JOIN ESSVTPM H ON H.SYS_ID = G.SYS_ID AND H.OPER_ORG_VD_TYP_ID = G.OPER_ORG_VD_TYP_ID AND H.VD_CD = A.VD_CD
+                LEFT OUTER JOIN ESACDDL CDDL ON CDDL.SYS_ID = A.SYS_ID AND CDDL.GRP_CD = 'E030' AND CDDL.DTL_CD = A.HNDL_STS_CD AND CDDL.LANG_CD = #{g.locale} 
+                LEFT OUTER JOIN (
+                          SELECT SUBVDGL1.SYS_ID,SUBVDGL1.VD_CD,SUBVDGL1.MOD_CLS,SUBVDGL1.MOD_STS
+                            FROM(
+                                SELECT MAX(SUBVDGL1M.MOD_REV) as MOD_REV, SUBVDGL1M.SYS_ID, SUBVDGL1M.VD_CD
+                                FROM ESMVDGL1 SUBVDGL1M
+                                WHERE SUBVDGL1M.MOD_CLS IN ('F','E')
+                                GROUP BY SUBVDGL1M.SYS_ID , SUBVDGL1M.VD_CD
+                                ) x INNER JOIN ESMVDGL1 SUBVDGL1 ON x.VD_CD = SUBVDGL1.VD_CD AND SUBVDGL1.MOD_REV = x.MOD_REV AND SUBVDGL1.MOD_CLS IN ('F','E')
+                            ) VDGL1 
+                            ON VDGL1.SYS_ID = C.SYS_ID
+                                AND VDGL1.VD_CD = C.VD_CD
+         WHERE A.SYS_ID = #{g.tenant}
+           AND B.STS != 'D'
+           AND B.USE_YN = 'Y'
+           AND A.EVAL_END_YN = 'Y' 
+           AND A.HNDL_END_YN = 'N' 
+        <if test="p.hndl_sts_cd != null and p.hndl_sts_cd != ''">
+           AND A.HNDL_STS_CD = #{p.hndl_sts_cd}
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+           <bind name="vdCodePattern" value="'%'+ p.vd_cd +'%'"/>
+           AND UPPER(A.VD_CD) LIKE UPPER(#{vdCodePattern})
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(C.ERP_VD_CD) LIKE UPPER(#{p_erp_vd_cd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+            <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+           AND    (UPPER(C.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(C.VD_EN_NM) LIKE UPPER(#{p_vd_nm}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.from_date != null and p.from_date != ''">
+           AND A.EVAL_REQ_DATE &gt;= #{p.from_date}
+        </if>
+        <if test="p.to_date != null and p.to_date != ''">
+           AND A.EVAL_REQ_DATE &lt;= #{p.to_date}
+        </if>
+        <choose>
+        <when test="p.oper_org_cd != null and p.oper_org_cd.size() != 0">
+           AND D.OPER_ORG_CD IN 
+            <foreach close=")" collection="p.oper_org_cd" item="oper_org_cd" open="(" separator=",">
+               #{oper_org_cd}
+            </foreach>
+        </when>
+        <otherwise>
+           AND D.OPER_ORG_CD IN (
+                                SELECT A.OPER_ORG_CD
+                                  FROM ESAOOPM A
+                                       INNER JOIN ESAOOMG B ON A.SYS_ID = B.SYS_ID AND A.OPER_ORG_CD = B.OPER_ORG_CD
+                                       INNER JOIN ESAOGMG C ON C.SYS_ID = B.SYS_ID AND C.ORG_TYP_CD = B.ORG_TYP_CD AND C.ORG_CD = B.ORG_CD
+                                 WHERE A.SYS_ID = #{g.tenant}
+                                   AND A.USR_ID = #{g.username}
+                                   AND B.OPER_UNIT_CD = 'EO'
+                                   AND B.STS != 'D'
+                                )
+        </otherwise>
+        </choose>
+         ORDER BY A.EVAL_REQ_DATE DESC, CAST(INSP_REV AS INT) DESC
+    </select>
+    <select id="findListCompleteProc" resultType="map">
+        /*등록평가 완료 처리 목록 조회 */
+        SELECT A.SYS_ID
+             , A.VD_CD
+             , A.VD_INSP_GRP_ID 
+             , A.INSP_GRP_CD
+             , CONCAT(B.INSP_GRP_NM, CONCAT(' [', CONCAT(CAST(A.INSP_REV AS NVARCHAR2(18)), '] '))) AS INSP_GRP_NM
+             , A.HNDL_STS_CD
+             , CDDL.DTL_CD_NM AS HNDL_STS_NM
+             , C.ERP_VD_CD 
+             , CASE WHEN C.NAT_CD =  'KR' THEN C.VD_NM ELSE C.VD_EN_NM END AS VD_NM
+             , A.INSP_REV 
+             , A.EVAL_END_YN 
+             , A.EVAL_REQ_DATE 
+             , A.EVAL_COMP_DATE
+             , CASE WHEN C.NAT_CD =  'KR' THEN E.VD_TYP_NM ELSE E.VD_TYP_EN_NM END AS TYP_NM
+             , D.OPER_ORG_CD 
+             , D.TYP_CD
+             , E.EVAL_BAS_CD AS TARG_GRP_TYP_CD
+             , (
+                SELECT TRADSTS
+                  FROM ESMVDOG
+                 WHERE SYS_ID = A.SYS_ID
+                   AND VD_CD = A.VD_CD
+                   AND OPER_ORG_CD = D.OPER_ORG_CD
+               ) AS TRADSTS
+          FROM ESSVDIG A
+                INNER JOIN ESSINGP B ON A.SYS_ID = B.SYS_ID AND A.INSP_GRP_ID = B.INSP_GRP_ID
+                INNER JOIN ESMVDGL C ON A.SYS_ID = C.SYS_ID AND A.VD_CD = C.VD_CD
+                INNER JOIN ESSIPMP D ON B.SYS_ID = D.SYS_ID AND B.INSP_GRP_ID = D.INSP_GRP_ID AND  B.OPER_ORG_CD = D.OPER_ORG_CD
+                INNER JOIN ESSVDTP E ON D.SYS_ID = E.SYS_ID AND D.TYP_CD = E.TYP_CD
+                INNER JOIN (
+                            SELECT DISTINCT SYS_ID
+                                 , VD_INSP_GRP_ID
+                                 , VD_CD
+                                 , OPER_ORG_CD
+                                 , TYP_CD 
+                              FROM ESSVRRG
+                             WHERE SYS_ID = #{g.tenant}
+                            <if test="p.vd_cd != null and p.vd_cd != ''">
+                                <bind name="vdCodePattern" value="'%'+ p.vd_cd +'%'"/>
+                               AND UPPER(VD_CD) LIKE UPPER(#{vdCodePattern})
+                            </if>
+                           ) F ON F.SYS_ID = A.SYS_ID AND F.VD_INSP_GRP_ID = A.VD_INSP_GRP_ID AND F.VD_CD = A.VD_CD AND F.OPER_ORG_CD = D.OPER_ORG_CD AND F.TYP_CD = D.TYP_CD
+                LEFT OUTER JOIN ESACDDL CDDL ON CDDL.SYS_ID = A.SYS_ID AND CDDL.GRP_CD = 'E030' AND CDDL.DTL_CD = A.HNDL_STS_CD AND CDDL.LANG_CD = #{g.locale} 
+         WHERE A.SYS_ID = #{g.tenant}
+           AND B.STS != 'D'
+           /* AND B.USE_YN = 'Y' 이력조회인 경우 사용여부와 관계없이 조회 */
+           AND A.EVAL_END_YN = 'Y' 
+           AND A.HNDL_END_YN = 'Y' 
+        <if test="p.hndl_sts_cd != null and p.hndl_sts_cd != ''">
+           AND A.HNDL_STS_CD = #{p.hndl_sts_cd}
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd != ''">
+            <bind name="vdCodePattern" value="'%'+ p.vd_cd +'%'"/>
+           AND UPPER(A.VD_CD) LIKE UPPER(#{vdCodePattern})
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(C.ERP_VD_CD) LIKE UPPER(#{p_erp_vd_cd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+            <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+           AND    (UPPER(C.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(C.VD_EN_NM) LIKE UPPER(#{p_vd_nm}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.from_date != null and p.from_date != ''">
+           AND A.EVAL_REQ_DATE &gt;= #{p.from_date}
+        </if>
+        <if test="p.to_date != null and p.to_date != ''">
+           AND A.EVAL_REQ_DATE &lt;= #{p.to_date}
+        </if>
+        <choose>
+        <when test="p.oper_org_cd != null and p.oper_org_cd.size() != 0">
+           AND D.OPER_ORG_CD IN 
+            <foreach close=")" collection="p.oper_org_cd" item="oper_org_cd" open="(" separator=",">
+               #{oper_org_cd}
+            </foreach>
+        </when>
+        <otherwise>
+           AND D.OPER_ORG_CD IN (
+                                SELECT A.OPER_ORG_CD
+                                  FROM ESAOOPM A
+                                       INNER JOIN ESAOOMG B ON A.SYS_ID = B.SYS_ID AND A.OPER_ORG_CD = B.OPER_ORG_CD
+                                       INNER JOIN ESAOGMG C ON C.SYS_ID = B.SYS_ID AND C.ORG_TYP_CD = B.ORG_TYP_CD AND C.ORG_CD = B.ORG_CD
+                                 WHERE A.SYS_ID = #{g.tenant}
+                                   AND A.USR_ID = #{g.username}
+                                   AND B.OPER_UNIT_CD = 'EO'
+                                   AND B.STS != 'D'
+                                )
+        </otherwise>
+        </choose>
+         ORDER BY A.EVAL_REQ_DATE DESC, CAST(INSP_REV AS INT) DESC  
+    </select>
+    <!-- 진행 상태 콤보박스 조회 -->
+    <select id="getCompleteProcSts" parameterType="String" resultType="map">
+            SELECT A.DTL_CD , B.DTL_CD_NM 
+              FROM ESACDDT A,
+                     ESACDDL B,
+                     ESADTAT C
+             WHERE A.SYS_ID =  #{g.tenant}
+               AND A.STS != 'D'
+               AND A.USE_YN = 'Y'
+               AND A.SYS_ID = B.SYS_ID
+               AND A.SYS_ID = C.SYS_ID
+               AND A.GRP_CD = B.GRP_CD
+               AND A.GRP_CD = C.GRP_CD
+               AND A.DTL_CD = B.DTL_CD
+               AND A.DTL_CD = C.DTL_CD
+               AND A.GRP_CD = 'E030'
+               AND B.LANG_CD = #{g.locale}
+               AND C.DTL_CD_ATTR_VAL= #{p}
+             ORDER BY SORT_ORD
+    </select>
+    <!-- 등록심사 진행관리 - 평가마감 저장(ESSVDIG) -->
+    <update id="saveListEvalCompleteVDIG">
+        /* eval.saveListEvalCompleteVDIG 등록심사 진행관리 - 평가마감 저장(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET EVAL_END_YN = 'Y',
+               EVAL_COMP_DATE = #{p.eval_comp_date},
+               HNDL_STS_CD = 'F',
+               HNDL_END_YN = 'N',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 등록심사 진행관리 - 평가마감 저장(VDIG) -->
+    <update id="saveListEvalCompleteVRRG">
+        /* eval.saveListEvalCompleteVRRG 등록심사 진행관리 - 평가마감 저장(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'F',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 등록심사 진행관리 - 평가마감 저장(ESSVIES) -->
+    <update id="saveListEvalCompleteVIES">
+        /* eval.saveListEvalCompleteVIES 등록심사 진행관리 - 평가마감 저장(ESSVIES) */
+        UPDATE ESSVIES
+           SET STP_STS = 'CO',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+           AND VD_CD = #{p.vd_cd}
+           AND INSP_REV = #{p.insp_rev}
+           AND STP_STS IN ('AR', 'RP')
+    </update>
+    <!-- 등록심사 진행관리 - 평가자 변경 -->
+    <update id="updateChangedEvaltr">
+    /* eval.updateChangedEvaltr : 등록심사 평가자 변경 */
+        UPDATE ESREVQS
+           SET EVALTR_ID    = #{p.chg_evaltr_id}
+             , STS          = 'U'
+             , MOD_ID       = #{g.username}
+             , MOD_DT       = #{g.now}
+         WHERE SYS_ID       = #{g.tenant}
+           AND EVAL_ID      = #{p.eval_id}
+           AND VD_CD        = #{p.vd_cd}
+           AND EVALTR_ID    = #{p.evaltr_id}
+           AND EVAL_TYP_CD  = 'VE'
+    </update>
+    <!-- 등록심사 진행관리 - 강제 Pass, 강제 Fail 저장(ESSVIES) -->
+    <update id="saveListStopCompleteVIES">
+        /* eval.saveListStopCompleteVIES 등록심사 진행관리 - 강제 Pass, 강제 Fail 저장(ESSVIES) */
+        UPDATE ESSVIES
+           SET STP_STS      = #{p.stp_sts}
+             , CRC_CAUSE    = #{p.crc_cause}
+        <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+             , INSP_COMP_DT = #{getFormatNow}
+             , STS          = 'U'
+             , MOD_ID       = #{g.username}
+             , MOD_DT       = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_EVAL_STP_ID = #{p.vd_insp_grp_eval_stp_id}
+    </update>
+    <!-- 협력사 평가완료 거래요청 저장(ESSVDIG) -->
+    <update id="saveVendorEeveAprvInfoVDIG">
+        /* eval.saveVendorEeveAprvInfoVDIG 협력사 평가완료 거래요청 저장(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'S1',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 평가완료 거래요청 저장(ESSVRRG) -->
+    <update id="saveVendorEeveAprvInfoVRRG">
+        /* eval.saveVendorEeveAprvInfoVRRG 협력사 평가완료 거래요청 저장(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'S1', /*평가등록요청상태*/
+               APRV_TARG_YN = #{p.aprv_targ_yn},
+               APRV_DOCNO = #{p.vd_log_id},
+               <bind name="getNowFormtat" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+               APRV_DATE  =  #{getNowFormtat},
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_REG_REQ_TARG_GRP_ID = #{p.vd_reg_req_targ_grp_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트 -->
+    <update id="approveApprovalVendorEeveVDGLHistory">
+        /* 협력사 평가결과 거래요청 결재 승인 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '00',
+            MOD_CLS         = 'F',
+            MOD_REQ         = CASE WHEN MOD_REQ = '' OR MOD_REQ IS NULL THEN #{g.username} ELSE MOD_REQ END,
+            MOD_REQ_DEPT_CD = CASE WHEN MOD_REQ_DEPT_CD = '' OR MOD_REQ_DEPT_CD IS NULL THEN #{g.dept_cd} ELSE MOD_REQ_DEPT_CD END,
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <update id="approveApprovalVendorEeveVDIFHistory">
+    /* eval.approveApprovalVendorEeveVDIFHistory : 협력사 평가결과 거래요청 결재 승인 상태 업데이트 */
+        UPDATE ESMVDIF1
+           SET MOD_ID = #{g.username}
+             , MOD_DT = #{g.now}
+            <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+             , FST_TRAD_FR_DT = CASE WHEN FST_TRAD_FR_DT IS NULL THEN #{getFormatNow} ELSE FST_TRAD_FR_DT END
+         WHERE SYS_ID       = #{g.tenant}
+           AND VD_LOG_ID    = #{p.vd_log_id}
+    </update>
+    <update id="approveApprovalVendorEeveVDOGHistory">
+        /* 협력사 평가결과 거래요청 결재 승인 상태 업데이트 */
+        UPDATE ESMVDOG1
+        SET
+            TRADSTS         = 'Y',
+            FST_TRAD_FR_DT  = CASE WHEN FST_TRAD_FR_DT IS NULL THEN #{p.now_date} ELSE FST_TRAD_FR_DT END,
+            TRAD_FR_DT      = CASE WHEN TRADSTS = 'Y' AND TRAD_FR_DT IS NOT NULL THEN TRAD_FR_DT ELSE #{p.now_date} END,
+            TRAD_TO_DT      = NULL,
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <update id="approveApprovalVendorEeveVTPMHistory">
+        /* 협력사 평가결과 거래요청 결재 승인 상태 업데이트 */
+        UPDATE ESSVTPM1
+           SET REG_YN           = 'Y'
+             , FST_TRAD_FR_DT   = CASE WHEN FST_TRAD_FR_DT IS NULL THEN #{p.now_date} ELSE FST_TRAD_FR_DT END
+             , TRAD_FR_DT       = CASE WHEN REG_YN = 'Y' AND TRAD_FR_DT IS NOT NULL THEN TRAD_FR_DT ELSE #{p.now_date} END
+             , TRAD_TO_DT       = NULL
+             , MOD_ID           = #{g.username}
+             , MOD_DT           = #{g.now}
+         WHERE SYS_ID       = #{g.tenant}
+           AND VD_LOG_ID    = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVRRG) -->
+    <update id="approveApprovalVendorEeveVRRG">
+    /* eval.approveApprovalVendorEeveVRRG : 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVRRG) */
+    /* 결재대상(APRV_TARG_YN = 'Y'): 평가등록완료(SZ) , 비대상: 미등록완료(NZ)*/
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD  = CASE WHEN APRV_TARG_YN = 'Y' THEN 'SZ' ELSE 'NZ' END
+             , APRV_DATE    = #{p.now_date}
+             , MOD_DT       = #{g.now}
+             , MOD_ID       = #{g.username}
+         WHERE APRV_DOCNO   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVDIG) -->
+    <update id="approveApprovalVendorEeveVDIG">
+        /*협력업체 요청심사그룹 UPDATE */
+        UPDATE ESSVDIG
+        SET    HNDL_END_YN = 'Y' , 
+               HNDL_COMP_DATE = #{p.now_date},
+               HNDL_STS_CD = 'SZ',
+               EXCH_EVAL_APPLY_DATE = (CASE WHEN EXCH_EVAL_APPLY_DATE = '' OR EXCH_EVAL_APPLY_DATE IS NULL THEN #{p.now_date} ELSE EXCH_EVAL_APPLY_DATE END),
+               MOD_DT       = #{g.now},
+               MOD_ID       = #{g.username}
+        WHERE  VD_INSP_GRP_ID IN (
+                SELECT VD_INSP_GRP_ID
+                FROM   ESSVRRG
+                WHERE  APRV_DOCNO  = #{p.vd_log_id}
+                AND    APRV_TARG_YN = 'Y'
+        )
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVIES) -->
+    <update id="approveApprovalVendorEeveVIES">
+        /*협력업체 요청심사절차 UPDATE  */
+        UPDATE ESSVIES SET
+               EXCH_EVAL_APPLY_DATE = (CASE WHEN EXCH_EVAL_APPLY_DATE = '' OR EXCH_EVAL_APPLY_DATE IS NULL THEN #{p.now_date} ELSE EXCH_EVAL_APPLY_DATE END),
+               MOD_DT       = #{g.now},
+               MOD_ID       = #{g.username}
+        WHERE  VD_INSP_GRP_ID IN (
+                SELECT VD_INSP_GRP_ID
+                FROM   ESSVRRG
+                WHERE  APRV_DOCNO  = #{p.vd_log_id}
+                AND    APRV_TARG_YN = 'Y'
+        )
+    </update>
+    <select id="selectApproveApprovalVendorEeveVDTGUpdate" resultType="map">
+    	SELECT A.OPER_ORG_CD
+    	     , A.TARG_GRP_ID
+    	     , A.VD_CD
+    	     , B.VD_REG_REQ_TARG_GRP_ID
+    	     , B.APRV_DATE
+    	     , B.REG_CLS
+    	  FROM ESSVDTG A
+    	 INNER JOIN ESSVRRG B
+    	    ON B.SYS_ID       = A.SYS_ID 
+	       AND B.OPER_ORG_CD  = A.OPER_ORG_CD 
+	       AND B.TARG_GRP_ID  = A.TARG_GRP_ID
+	       AND B.VD_CD        = A.VD_CD
+	     WHERE B.SYS_ID       = #{g.tenant}
+	       AND B.APRV_DOCNO   = #{p.vd_log_id}
+	       AND B.APRV_TARG_YN = 'Y' 
+	       AND B.HNDL_STS_CD  = 'SZ'
+    </select>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVDTG) -->
+    <update id="approveApprovalVendorEeveVDTGUpdate">
+        /* 이전에 등록된 SG가 있는경우 (SG 갱신)*/
+        UPDATE ESSVDTG
+           SET VD_REG_REQ_TARG_GRP_ID = #{p.vd_reg_req_targ_grp_id}
+             , TRAD_FR_DT             = #{p.aprv_date}
+             , TRAD_TO_DT             = NULL
+             , REG_CLS                = #{p.reg_cls} 
+             , TRAD_YN                = 'Y'
+         WHERE SYS_ID      = #{g.tenant}
+           AND OPER_ORG_CD = #{p.oper_org_cd}
+           AND TARG_GRP_ID = #{p.targ_grp_id}
+           AND VD_CD       = #{p.vd_cd}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVDTG) -->
+    <insert id="approveApprovalVendorEeveVDTGInsert">
+        /* 이전에 등록된 SG가 없는경우 (SG 등록)*/
+        INSERT INTO ESSVDTG(
+            SYS_ID,
+            VD_TARG_GRP_ID,
+            TARG_GRP_ID,
+            VD_REG_REQ_TARG_GRP_ID,
+            OPER_ORG_CD,
+            VD_CD,
+            TARG_GRP_CD, 
+            TARG_GRP_TYP_CD, 
+            TRAD_YN,
+            FST_TRAD_FR_DT,
+            TRAD_TO_DT,
+            TRAD_FR_DT,
+            REG_CLS,
+            STS,
+            REM,
+            REG_ID,
+            REG_DT,
+            MOD_ID,
+            MOD_DT
+        ) 
+        SELECT 
+            SYS_ID,
+            RANDOMUUID            AS VD_TARG_GRP_ID,
+            TARG_GRP_ID,
+            VD_REG_REQ_TARG_GRP_ID,
+            OPER_ORG_CD,
+            VD_CD,
+            TARG_GRP_CD, 
+            TARG_GRP_TYP_CD, 
+            'Y' AS TRAD_YN,
+            APRV_DATE AS FST_TRAD_FR_DT,
+            '' AS TRAD_TO_DT,
+            APRV_DATE AS TRAD_FR_DT,
+            REG_CLS,
+            'C' AS STS,
+            #{p.rem} AS REM,
+            #{g.username} AS REG_ID,
+            #{g.now} AS REG_DT,
+            #{g.username} AS MOD_ID,
+            #{g.now} AS MOD_DT
+        FROM ESSVRRG B
+        WHERE  B.SYS_ID  = #{g.tenant}
+        AND    B.APRV_DOCNO  = #{p.vd_log_id}
+        AND    B.APRV_TARG_YN = 'Y'
+        AND    B.HNDL_STS_CD = 'SZ'
+        AND    NOT EXISTS (SELECT 'Y' 
+                           FROM   ESSVDTG A
+                           WHERE  A.VD_CD    = B.VD_CD
+                           AND    A.SYS_ID   = B.SYS_ID
+                           AND    A.OPER_ORG_CD = B.OPER_ORG_CD
+                           AND    A.TARG_GRP_ID = B.TARG_GRP_ID
+                           )
+    </insert>
+    <!-- 협력사 평가결과 거래요청 결재 반려 상태 업데이트 -->
+    <update id="rejectApprovalVendorEeveVDGLHistory">
+        /* 협력사 평가결과 거래요청 결재 반려 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '40',
+            MOD_CLS         = 'F',
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 반려 상태 업데이트(ESSVDIG) -->
+    <update id="rejectApprovalVendorEeveVDIG">
+        /* eval.rejectApprovalVendorEeveVDIG 협력사 평가결과 거래요청 결재 반려 상태 업데이트(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'S3' , 
+               HNDL_END_YN = 'N' ,
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID IN (
+                                    SELECT VD_INSP_GRP_ID
+                                      FROM ESSVRRG
+                                     WHERE APRV_DOCNO  = #{p.vd_log_id}
+                                 )
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 반려 상태 업데이트(ESSVRRG) -->
+    <update id="rejectApprovalVendorEeveVRRG">
+        /* eval.rejectApprovalVendorEeveVRRG 협력사 평가결과 거래요청 결재 반려 상태 업데이트(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = CONCAT(SUBSTR(HNDL_STS_CD,0,1), '3'),
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE APRV_DOCNO  = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 취소 상태 업데이트 -->
+    <update id="cancelApprovalVendorEeveVDGLHistory">
+        /* 협력사 평가결과 거래요청 결재 취소 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '11',
+            MOD_CLS         = 'F',
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 취소 상태 업데이트(ESSVDIG) -->
+    <update id="cancelApprovalVendorEeveVDIG">
+        /* eval.cancelApprovalVendorEeveVDIG 협력사 평가결과 거래요청 결재 취소 상태 업데이트(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'F' , 
+               HNDL_END_YN = 'N' ,
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID IN (
+                                    SELECT VD_INSP_GRP_ID
+                                      FROM ESSVRRG
+                                     WHERE APRV_DOCNO  = #{p.vd_log_id}
+                                 )
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 취소 상태 업데이트(ESSVRRG) -->
+    <update id="cancelApprovalVendorEeveVRRG">
+        /* eval.cancelApprovalVendorEeveVRRG 협력사 평가결과 거래요청 결재 취소 상태 업데이트(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'F',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE APRV_DOCNO  = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 삭제 업데이트(ESSVRRG) -->
+    <update id="deleteApprovalVendorEeveVRRG">
+        /* eval.deleteApprovalVendorEeveVRRG 협력사 평가결과 거래요청 결재 삭제 업데이트(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'F',
+               APRV_TARG_YN = 'N',
+               APRV_DOCNO = NULL,
+               APRV_DATE = NULL,
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE APRV_DOCNO  = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 상신 상태 업데이트 -->
+    <update id="submitApprovalVendorEeveVDGLHistory">
+        /* 협력사 평가결과 거래요청 결재 상신 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '10',
+            MOD_CLS         = 'F',
+            MOD_REQ         = #{g.username},
+            MOD_REQ_DEPT_CD = #{g.dept_cd},
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 저장(ESSVDIG) -->
+    <update id="saveVendorEreAprvInfoVDIG">
+        /* eval.saveVendorEreAprvInfoVDIG 협력사 평가결과 갱신요청 저장(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'S1',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 저장(ESSVRRG) -->
+    <update id="saveVendorEreAprvInfoVRRG">
+        /* eval.saveVendorEreAprvInfoVRRG 협력사 평가결과 갱신요청 저장(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'S1', /*평가등록요청상태*/
+               APRV_TARG_YN = #{p.aprv_targ_yn},
+               APRV_DOCNO = #{p.vd_log_id},
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_REG_REQ_TARG_GRP_ID = #{p.vd_reg_req_targ_grp_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 승인 상태 업데이트 -->
+    <update id="approveApprovalVendorEreVDGLHistory">
+        /* 협력사 평가결과 갱신요청 결재 승인 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '30',
+            MOD_CLS         = 'E',
+            MOD_REQ         = CASE WHEN MOD_REQ = '' OR MOD_REQ IS NULL THEN #{g.username} ELSE MOD_REQ END,
+            MOD_REQ_DEPT_CD = CASE WHEN MOD_REQ_DEPT_CD = '' OR MOD_REQ_DEPT_CD IS NULL THEN #{g.dept_cd} ELSE MOD_REQ_DEPT_CD END,
+            MOD_ID          = #{g.username},
+            <bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+            MOD_DATE		= #{getFormatNow},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVRRG) -->
+    <update id="approveApprovalVendorEreVRRG">
+    /* eval.approveApprovalVendorEreVRRG : 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVRRG) */
+    /* 결재대상(APRV_TARG_YN='Y') : 평가등록완료(SZ) , 비대상 : 미등록완료(NZ) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD  = CASE WHEN APRV_TARG_YN = 'Y' THEN 'SZ' ELSE 'NZ' END
+             , APRV_DATE    = #{p.now_date}
+             , MOD_DT       = #{g.now}
+             , MOD_ID       = #{g.username}
+         WHERE SYS_ID       = #{g.tenant}
+           AND APRV_DOCNO   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDIG) -->
+    <update id="approveApprovalVendorEreVDIG">
+        /* 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDIG) */
+        /*협력업체 요청심사그룹 UPDATE */
+        UPDATE ESSVDIG
+        SET    HNDL_END_YN = 'Y' , 
+               HNDL_COMP_DATE = #{p.now_date},
+               HNDL_STS_CD = 'SZ',
+               MOD_DT       = #{g.now},
+               MOD_ID       = #{g.username} ,
+               EXCH_EVAL_APPLY_DATE = (CASE WHEN EXCH_EVAL_APPLY_DATE = '' OR EXCH_EVAL_APPLY_DATE IS NULL THEN #{p.now_date} ELSE EXCH_EVAL_APPLY_DATE END)
+        WHERE  SYS_ID = #{g.tenant}
+          AND  VD_INSP_GRP_ID IN (
+                                    SELECT VD_INSP_GRP_ID
+                                    FROM   ESSVRRG
+                                    WHERE  SYS_ID = #{g.tenant}
+                                    AND    APRV_DOCNO  = #{p.vd_log_id}
+                                    AND    APRV_TARG_YN = 'Y'
+                                )
+    </update>
+    <!-- 협력사 평가결과 거래요청 결재 승인 상태 업데이트(ESSVIES) -->
+    <update id="approveApprovalVendorEreVIES">
+        /*협력업체 요청심사절차 UPDATE */
+        UPDATE ESSVIES SET
+               EXCH_EVAL_APPLY_DATE = (CASE WHEN EXCH_EVAL_APPLY_DATE = '' OR EXCH_EVAL_APPLY_DATE IS NULL THEN #{p.now_date} ELSE EXCH_EVAL_APPLY_DATE END),
+               MOD_DT       = #{g.now},
+               MOD_ID       = #{g.username}
+        WHERE  SYS_ID = #{g.tenant}
+          AND  VD_INSP_GRP_ID IN (
+                SELECT VD_INSP_GRP_ID
+                FROM   ESSVRRG
+                WHERE  SYS_ID = #{g.tenant}
+                AND    APRV_DOCNO  = #{p.vd_log_id}
+                AND    APRV_TARG_YN = 'Y'
+        )
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDTG) -->
+    <update id="approveApprovalVendorEreVDTGUpdate">
+        /* 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDTG) */
+        /* 이전에 등록된 SG가 있는경우 (SG 갱신)*/
+        MERGE INTO ESSVDTG A
+        USING      ESSVRRG B
+        ON    (    B.SYS_ID = A.SYS_ID 
+               AND B.OPER_ORG_CD = A.OPER_ORG_CD 
+               AND B.TARG_GRP_ID = A.TARG_GRP_ID 
+               AND B.VD_CD        = A.VD_CD
+               AND B.APRV_DOCNO = #{p.vd_log_id}
+               AND B.APRV_TARG_YN = 'Y' 
+               AND B.HNDL_STS_CD = 'SZ'
+               AND B.SYS_ID      = #{g.tenant} )
+        WHEN MATCHED THEN        
+            UPDATE SET A.VD_REG_REQ_TARG_GRP_ID = B.VD_REG_REQ_TARG_GRP_ID
+                      ,A.TRAD_FR_DT               = B.APRV_DATE
+                      ,A.TRAD_TO_DT               = NULL
+                      ,A.REG_CLS                = B.REG_CLS 
+                      ,A.TRAD_YN                = 'Y'
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDTG) -->
+    <insert id="approveApprovalVendorEreVDTGInsert">
+        /* 협력사 평가결과 갱신요청 결재 승인 상태 업데이트(ESSVDTG) */
+        /* 이전에 등록된 SG가 없는경우 (SG 등록)*/
+        INSERT INTO ESSVDTG(
+            SYS_ID,
+            VD_TARG_GRP_ID,
+            TARG_GRP_ID,
+            VD_REG_REQ_TARG_GRP_ID,
+            OPER_ORG_CD,
+            VD_CD,
+            TARG_GRP_CD, 
+            TARG_GRP_TYP_CD, 
+            TRAD_YN,
+            FST_TRAD_FR_DT,
+            TRAD_TO_DT,
+            TRAD_FR_DT,
+            REG_CLS,
+            STS,
+            REM,
+            REG_ID,
+            REG_DT,
+            MOD_ID,
+            MOD_DT
+        ) 
+        SELECT 
+            SYS_ID,
+            RANDOMUUID            AS VD_TARG_GRP_ID,
+            TARG_GRP_ID,
+            VD_REG_REQ_TARG_GRP_ID,
+            OPER_ORG_CD,
+            VD_CD,
+            TARG_GRP_CD, 
+            TARG_GRP_TYP_CD, 
+            'Y' AS TRAD_YN,
+            APRV_DATE AS FST_TRAD_FR_DT,
+            '' AS TRAD_TO_DT,
+            APRV_DATE AS TRAD_FR_DT,
+            REG_CLS,
+            'C' AS STS,
+            #{p.rem} AS REM,
+            #{g.username} AS REG_ID,
+            #{g.now} AS REG_DT,
+            #{g.username} AS MOD_ID,
+            #{g.now} AS MOD_DT
+        FROM ESSVRRG B
+        WHERE  B.SYS_ID  = #{g.tenant}
+        AND    B.APRV_DOCNO  = #{p.vd_log_id}
+        AND    B.APRV_TARG_YN = 'Y'
+        AND    B.HNDL_STS_CD = 'SZ'
+        AND    NOT EXISTS (SELECT 'Y' 
+                           FROM   ESSVDTG A
+                           WHERE  A.VD_CD    = B.VD_CD
+                           AND    A.SYS_ID   = B.SYS_ID
+                           AND    A.OPER_ORG_CD = B.OPER_ORG_CD
+                           AND    A.TARG_GRP_ID = B.TARG_GRP_ID
+                           )
+    </insert>
+    <update id="approveApprovalVendorEreVDOGHistory">
+        /* 협력사 평가결과 갱신요청 결재 승인 상태 업데이트 */
+        UPDATE ESMVDOG1
+        SET
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 반려 상태 업데이트 -->
+    <update id="rejectApprovalVendorEreVDGLHistory">
+        /* 협력사 평가결과 갱신요청 결재 반려 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '40',
+            MOD_CLS         = 'E',
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 반려 상태 업데이트(ESSVDIG) -->
+    <update id="rejectApprovalVendorEreVDIG">
+        /* eval.rejectApprovalVendorEreVDIG 협력사 평가결과 갱신요청 결재 반려 상태 업데이트(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'S3' , /* 반려처리*/
+               HNDL_END_YN = 'N' ,
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID IN (
+                                    SELECT VD_INSP_GRP_ID
+                                      FROM ESSVRRG
+                                     WHERE APRV_DOCNO  = #{p.vd_log_id}
+                                 )
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 반려 상태 업데이트(ESSVRRG) -->
+    <update id="rejectApprovalVendorEreVRRG">
+        /* eval.rejectApprovalVendorEreVRRG 협력사 평가결과 갱신요청 결재 반려 상태 업데이트(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = CONCAT(SUBSTR(HNDL_STS_CD,0,1), '3'),
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE APRV_DOCNO  = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 취소 상태 업데이트 -->
+    <update id="cancelApprovalVendorEreVDGLHistory">
+        /* 협력사 평가결과 갱신요청 결재 취소 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '11',
+            MOD_CLS         = 'E',
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 취소 상태 업데이트(ESSVDIG) -->
+    <update id="cancelApprovalVendorEreVDIG">
+        /* eval.cancelApprovalVendorEreVDIG 협력사 평가결과 갱신요청 결재 취소 상태 업데이트(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = 'F' , 
+               HNDL_END_YN = 'N' ,
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID IN (
+                                    SELECT VD_INSP_GRP_ID
+                                      FROM ESSVRRG
+                                     WHERE APRV_DOCNO  = #{p.vd_log_id}
+                                 )
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 취소 상태 업데이트(ESSVRRG) -->
+    <update id="cancelApprovalVendorEreVRRG">
+        /* eval.cancelApprovalVendorEreVRRG 협력사 평가결과 갱신요청 결재 취소 상태 업데이트(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = 'F',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE APRV_DOCNO  = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 평가결과 갱신요청 결재 상신 상태 업데이트 -->
+    <update id="submitApprovalVendorEreVDGLHistory">
+        /* 협력사 평가결과 갱신요청 결재 상신 상태 업데이트 */
+        UPDATE ESMVDGL1
+        SET
+            MOD_STS         = '10',
+            MOD_CLS         = 'E',
+            MOD_REQ         = #{g.username},
+            MOD_REQ_DEPT_CD = #{g.dept_cd},
+            MOD_ID          = #{g.username},
+            MOD_DT          = #{g.now}
+        WHERE SYS_ID        = #{g.tenant}
+            AND VD_LOG_ID   = #{p.vd_log_id}
+    </update>
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVDIG) -->
+    <update id="saveListUnRegCompleteVDIG">
+        /* eval.saveListUnRegCompleteVDIG 등록심사 진행관리 - 미등록완료 저장(ESSVDIG) */
+        UPDATE ESSVDIG
+           SET HNDL_STS_CD = #{p.hndl_sts_cd}, 
+               HNDL_END_YN = 'Y',
+               HNDL_COMP_DATE = #{p.hndl_comp_date},
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVRRG) -->
+    <update id="saveListUnRegCompleteVRRG">
+        /* eval.saveListUnRegCompleteVRRG 등록심사 진행관리 - 미등록완료 저장(ESSVRRG) */
+        UPDATE ESSVRRG
+           SET HNDL_STS_CD = #{p.hndl_sts_cd},
+               APRV_TARG_YN = 'N',
+               MOD_ID = #{g.username},
+               MOD_DT = #{g.now}
+         WHERE SYS_ID = #{g.tenant}
+           AND VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+    </update>
+    <!-- 협력사 거래요청관리 - 미등록완료 저장(ESSVRRG) -->
+    <update id="saveListUnRegCompleteEVMA">
+        /* eval.saveListUnRegCompleteEVMA 등록심사 진행관리 - 미등록완료 저장(ESREVMA) */
+        UPDATE ESREVMA
+		   SET STS = 'D'
+		 WHERE SYS_ID       = #{g.tenant}
+		   AND TARG_TYP_VAL IN (
+		                        SELECT VD_INSP_GRP_EVAL_STP_ID
+		                          FROM ESSVIES VIES
+		                             , ESSVDIG VDIG
+		                         WHERE VDIG.SYS_ID         =  VIES.SYS_ID
+		                           AND VDIG.VD_INSP_GRP_ID =  VIES.VD_INSP_GRP_ID
+		                           AND VDIG.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+		                      )
+    </update>
+    <select id="findListEvalYear" resultType="map">
+    	 SELECT DISTINCT CAST( EVAL_YR AS INTEGER ) AS EVAL_YR
+      FROM   ESREVMA EVMA
+             INNER JOIN ESREVRS EVRS
+             ON  EVMA.SYS_ID    = EVRS.SYS_ID
+             AND EVMA.EVAL_ID   = EVRS.EVAL_ID
+             AND EVMA.EXC_STS   = (CASE WHEN EVMA.EVAL_TYP_CD = 'RE' OR EVMA.EVAL_TYP_CD = 'SE' THEN '80' ELSE '60' END)    /* 평가 마감 대상 기준 */
+             AND EVMA.STS != 'D'
+             AND EVRS.STS != 'D'
+             <choose>
+             	<when test="g.usr_cls eq &quot;S&quot;">
+             		AND EVRS.VD_CD     = #{g.vd_cd}
+             	</when>
+             	<otherwise>
+             		AND EVRS.VD_CD     = #{p.vd_cd}
+             	</otherwise>
+             </choose>
+      ORDER BY CAST( EVAL_YR AS INTEGER ) DESC
+    </select>
+    <select id="findListEvalList" resultType="map">
+	/* eval.findListEvalList : 평가 리스트 */
+	SELECT * FROM (
+		SELECT EVMA.EVAL_CD,
+		    EVMA.REG_DT,
+			EVMA.EVAL_YR,	/* 평가 년도*/
+			CDDL.DTL_CD_NM AS EVAL_TYP_NM ,
+			EVAL_KIND_NM ,
+			EVAL_NM ,
+			EVAL_SCO ,
+			EVAL_CLS
+		FROM ESREVMA EVMA
+		INNER JOIN ESREVRS EVRS
+			ON EVMA.EVAL_ID = EVRS.EVAL_ID
+			AND EVMA.SYS_ID = EVRS.SYS_ID
+			AND EVMA.OPER_ORG_CD = EVRS.OPER_ORG_CD
+            AND EVMA.EVAL_TYP_CD = EVRS.EVAL_TYP_CD
+            AND EVMA.EVAL_KIND_CD = EVRS.EVAL_KIND_CD
+            AND EVMA.EVAL_CD = EVRS.EVAL_CD
+			<choose>
+             	<when test="g.usr_cls eq &quot;S&quot;">
+             		AND EVRS.VD_CD     = #{g.vd_cd}
+             	</when>
+             	<otherwise>
+             		AND EVRS.VD_CD     = #{p.vd_cd}
+             	</otherwise>
+             </choose>
+			AND EVMA.SYS_ID = #{g.tenant}
+			AND EVMA.APPLY_SIM_REV = EVRS.SIM_REV
+			AND EVMA.STS != 'D'
+		INNER JOIN ESREVTP EVTP
+			ON EVMA.EVAL_TYP_CD = EVTP.EVAL_TYP_CD
+			AND EVMA.EVAL_KIND_CD = EVTP.EVAL_KIND_CD
+			AND EVMA.OPER_ORG_CD = EVTP.OPER_ORG_CD
+			AND EVTP.SYS_ID = EVMA.SYS_ID
+			AND EVTP.STS != 'D'
+		INNER JOIN ESACDDL CDDL
+			ON CDDL.DTL_CD = EVMA.EVAL_TYP_CD
+			AND CDDL.SYS_ID = #{g.tenant}
+			AND CDDL.STS != 'D'
+			AND CDDL.LANG_CD = #{g.locale}
+			AND CDDL.GRP_CD = 'R704'
+		WHERE EVMA.SYS_ID = #{g.tenant}
+			AND EVMA.OPER_ORG_CD = #{p.oper_org_cd}
+			AND EVMA.EXC_STS = (CASE WHEN EVMA.EVAL_TYP_CD = 'RE' OR EVMA.EVAL_TYP_CD = 'SE' THEN '80' ELSE '60' END)    /* 평가 마감 대상 기준 */
+			<if test="p.eval_typ_cd != null and p.eval_typ_cd !=''">
+				AND EVMA.EVAL_TYP_CD = #{p.eval_typ_cd}
+			</if>
+		) A
+		<where>
+		    1=1
+			<if test="p.eval_start_yr != null">
+				AND A.EVAL_YR = CAST(#{p.eval_start_yr} AS VARCHAR2(18))
+			</if>
+		</where>
+		ORDER BY CAST(A.EVAL_YR AS INTEGER), A.REG_DT DESC
+    </select>
+    <select id="selectVdInspGrpAprvProgYn" resultType="String">
+    /* eval.selectVdInspGrpAprvProgYn : 심사그룹의 결재 진행 여부 조회 */
+    SELECT CASE WHEN EXISTS ( SELECT 1
+                                FROM ESSVRRG VRRG
+                               INNER JOIN
+                                     ESMVDGL1 VDGL_H
+                                  ON VDGL_H.SYS_ID     = VRRG.SYS_ID
+                                 AND VDGL_H.VD_LOG_ID  = VRRG.APRV_DOCNO
+                               WHERE VRRG.SYS_ID    = #{g.tenant}
+                                 AND VDGL_H.MOD_REV = (SELECT MAX(MOD_REV) FROM ESMVDGL1 WHERE SYS_ID = VDGL_H.SYS_ID AND VD_CD = VDGL_H.VD_CD)
+                                 AND VDGL_H.MOD_CLS IN ('F', 'E')
+                            <choose>
+                                <when test="p.checkList != null and p.checkList.size() &gt; 0">
+                                 AND VRRG.VD_INSP_GRP_ID IN
+                                    <foreach close=")" collection="p.checkList" item="item" open="(" separator=",">
+                                        #{item.vd_insp_grp_id}
+                                    </foreach>
+                                </when>
+                                <when test="p.vd_insp_grp_id != null and p.vd_insp_grp_id != ''">
+                                 AND VRRG.VD_INSP_GRP_ID = #{p.vd_insp_grp_id}
+                                </when>
+                                <otherwise>
+                                 AND 1=0
+                                </otherwise>
+                            </choose>
+                            ) THEN 'Y' 
+                ELSE 'N' 
+           END AS APRV_PROG_YN 
+      FROM ESMBLNK
+    </select>
+    <select id="selectVdInspEvalStpInfo" resultType="map">
+    /* eval.selectVdInspEvalStpInfo: 협력사 등록심사 평가 절차 정보 조회 */
+        SELECT VS.VD_INSP_GRP_EVAL_STP_ID
+             , VS.INSP_GRP_EVAL_STP_ID
+             , VS.TYP_CD
+             , VS.OPER_ORG_CD
+             , VS.VD_CD
+             , VS.INSP_GRP_CD
+             , VS.UP_INSP_STP_CD
+             , VS.INSP_STP_CD
+             , VS.INSP_REV
+             , VS.EVALTR_TYP
+             , VS.STP_STS
+             , EV.EVAL_ID
+             , EV.OPER_ORG_CD AS SO_OPER_ORG_CD
+             , EV.EVAL_TYP_CD
+             , EV.EVAL_KIND_CD
+             , EV.EVAL_CD
+             , EV.TARG_TYP_VAL
+             , EV.TARG_TYP_REV
+             , EV.EVAL_NM
+             , EV.EXC_STS AS EVAL_STS
+             , ET.EVAL_TYP_ID
+             , ET.CHR_MGT_CLS
+             , ( SELECT INSP_GRP_NM
+                   FROM ESSINGP C 
+                  WHERE C.SYS_ID = VS.SYS_ID 
+                    AND C.INSP_GRP_CD = VS.INSP_GRP_CD
+               ) AS INSP_GRP_NM
+             , ( SELECT VD.VD_NM 
+                   FROM ESMVDGL VD 
+                  WHERE VD.SYS_ID = VS.SYS_ID 
+                    AND VD.VD_CD = VS.VD_CD
+               ) AS VD_NM
+             , ( SELECT ST.INSP_STP_NM 
+                   FROM ESSINST ST 
+                  WHERE ST.SYS_ID = VS.SYS_ID 
+                    AND ST.OPER_ORG_CD = VS.OPER_ORG_CD 
+                    AND ST.INSP_STP_CD = VS.INSP_STP_CD 
+               ) AS INSP_STP_NM
+             , ( SELECT DTL_CD_NM
+                   FROM ESACDDL F 
+                  WHERE F.SYS_ID = VS.SYS_ID 
+                    AND F.DTL_CD = VS.STP_STS 
+                    AND F.GRP_CD = 'E007' 
+                    AND F.LANG_CD = #{g.locale}
+                 ) AS STP_STS_NM
+             , ( SELECT COUNT(1) 
+                   FROM ESREVQS QS
+                  WHERE QS.SYS_ID = EV.SYS_ID
+                    AND QS.EVAL_ID = EV.EVAL_ID
+                    AND QS.EXC_STS = '30') AS EVAL_END_CNT
+             , ( SELECT COUNT(1) 
+                   FROM ESREVQS QS
+                  WHERE QS.SYS_ID = EV.SYS_ID
+                    AND QS.EVAL_ID = EV.EVAL_ID ) AS TOT_CNT
+          FROM ESSVIES VS
+         INNER JOIN ESREVMA  EV  /* EV : 평가 마스터 */
+            ON (    EV.SYS_ID  = VS.SYS_ID
+                AND EV.EVAL_ID = VS.EVAL_ID
+               )
+         INNER JOIN
+               ESREVTP  ET  /* ET : 평가종류 */
+            ON (    ET.SYS_ID        = EV.SYS_ID
+                AND ET.EVAL_TYP_ID   = EV.EVAL_TYP_ID
+               )
+         WHERE VS.SYS_ID                        = #{g.tenant}
+           AND VS.VD_INSP_GRP_EVAL_STP_ID       = #{p.vd_insp_grp_eval_stp_id}
+    </select>
+    <select id="selectListVdInspStpEvaltrGrp" resultType="map">
+    /* eval.selectListVdInspStpEvaltrGrp : 협력사 등록심사 절차 평가자 그룹 조회 */
+        SELECT VS.VD_INSP_GRP_EVAL_STP_ID
+             , SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+             , SS.INSP_GRP_EVAL_STP_ID
+             , SF.EVALTR_GRP_CD
+             , ( SELECT COUNT(CASE WHEN VC.EVALTR_ID IS NULL THEN NULL ELSE 1 END) 
+                   FROM ESSVIEC VC
+                  WHERE VC.SYS_ID = VS.SYS_ID
+                    AND VC.VD_INSP_GRP_EVAL_STP_ID = VS.VD_INSP_GRP_EVAL_STP_ID
+                    AND VC.EVALTR_GRP_CD = SF.EVALTR_GRP_CD
+               ) AS CHR_CNT
+             , ( SELECT COUNT(1)
+                   FROM ESREVQS QS
+                  WHERE QS.SYS_ID = VS.SYS_ID
+                    AND QS.EVAL_ID = VS.EVAL_ID
+                    AND QS.EVALTR_GRP_CD = SF.EVALTR_GRP_CD
+                    AND QS.EXC_STS = '30'
+               ) AS SUBMIT_CNT
+          FROM ESSVIES VS
+         INNER JOIN
+               ESSIESS SS
+            ON (    VS.SYS_ID = SS.SYS_ID
+                AND VS.INSP_GRP_EVAL_STP_ID = SS.INSP_GRP_EVAL_STP_ID
+               )
+         INNER JOIN
+               ESRESMA ES
+            ON (    ES.SYS_ID   = SS.SYS_ID
+                AND ES.ES_ID    = SS.ES_ID
+                AND ES.ES_HD_ID = SS.ES_HD_ID
+               )
+         INNER JOIN
+               ESRESEF SF
+            ON (    SF.SYS_ID   = ES.SYS_ID
+                AND SF.ES_ID    = ES.ES_ID
+                AND SF.ES_HD_ID = ES.ES_HD_ID
+               )
+        WHERE VS.SYS_ID = #{g.tenant}
+          AND VS.VD_INSP_GRP_EVAL_STP_ID = #{p.vd_insp_grp_eval_stp_id} 
+          AND EXISTS ( SELECT 1
+                         FROM ESREFMA EF
+                        WHERE EF.SYS_ID = SF.SYS_ID
+                          AND EF.EF_ID = SF.EF_ID
+                          AND EF.EF_GRP_CD != 'ROOT' )
+        GROUP BY VS.SYS_ID, VS.VD_INSP_GRP_EVAL_STP_ID, VS.EVAL_ID, SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID, SS.INSP_GRP_EVAL_STP_ID, SF.EVALTR_GRP_CD
+        ORDER BY SF.EVALTR_GRP_CD
+    </select>
+    <select id="selectListInspEvalChr" resultType="map">
+    /* eval.selectListInspEvalChr : 등록심사 평가자 목록 조회 */
+        SELECT VC.VD_INSP_GRP_EVAL_STP_ID
+             , VC.VD_EVAL_STP_CHR_ID
+             , VC.TYP_CD
+             , VC.OPER_ORG_CD
+             , VC.INSP_GRP_CD
+             , VC.INSP_STP_CD
+             , VC.INSP_REV
+             , QS.SRV_EVAL_PROG_MGT_ID          /* 정성 평가 진행 관리 아이디 */
+             , QS.EVAL_ID                       /* 평가 아이디 */
+             , QS.EVAL_RES_ID                   /* 평가결과 아이디 */
+             , QS.OPER_ORG_CD AS SO_OPER_ORG_CD /* 운영 조직 코드 */
+             , QS.EVAL_TYP_CD                   /* 평가업무구분 코드 */
+             , QS.EVAL_KIND_CD                  /* 평가 종류 코드 */
+             , QS.EVAL_CD                       /* 평가 코드 */
+             , QS.ES_CD                         /* 평가시트 코드 */
+             , QS.ES_HD_CD                      /* 평가시트 헤더 코드 */
+             , QS.ORGN_ES_CD                    /* 원본 평가시트 코드 */
+             , QS.EG_CD                         /* 평가그룹 코드 */
+             , QS.SG_ID                         /* 소싱그룹 아이디 */
+             , QS.SG_CD                         /* 소싱그룹 코드 */
+             , QS.VD_CD                         /* 협력사 코드 */
+             , QS.TARG_TYP_VAL                  /* 대상 유형 값 */
+             , QS.TARG_TYP_REV                  /* 대상 유형 차수 */
+             , QS.EVALTR_ID                     /* 평가자 수 */
+             , QS.EXC_STS                       /* 진행상태 */
+             , QS.REM                           /* 종합의견 */
+             , QS.ATT_GRP_CD                    /* 첨부파일 */
+             , QS.EVALTR_GRP_CD                 /* 평가자그룹코드 */
+             , QS.EVALTR_SCO                    /* 평가자 점수 */
+             , EV.EVAL_NM                       /* 평가 명 */
+             , EV.EVAL_YR                       /* 평가 연도 */
+             , EV.CHR_CLOSE_YN                  /* 담당자마감여부 */
+             , ET.CHR_MGT_CLS                   /* 평가자유형  */
+             , ( SELECT USR_NM 
+                   FROM ESAUSER 
+                  WHERE SYS_ID = QS.SYS_ID
+                    AND USR_ID = QS.EVALTR_ID
+               ) AS EVALTR_NM          /* 평가자 명 */
+          FROM ESSVIES VS
+         INNER JOIN
+               ESSVIEC VC
+            ON (    VC.SYS_ID = VS.SYS_ID
+                AND VC.VD_INSP_GRP_EVAL_STP_ID = VS.VD_INSP_GRP_EVAL_STP_ID
+               )
+         INNER JOIN 
+               ESREVMA  EV  /* EV : 평가 마스터 */
+            ON (    EV.SYS_ID  = VS.SYS_ID
+                AND EV.EVAL_ID = VS.EVAL_ID)
+         INNER JOIN
+               ESREVQS  QS  /* QS : 정성평가진행관리 */
+            ON (    QS.SYS_ID        = EV.SYS_ID
+                AND QS.EVAL_ID       = EV.EVAL_ID
+                AND QS.OPER_ORG_CD   = EV.OPER_ORG_CD
+                AND QS.EVAL_TYP_CD   = EV.EVAL_TYP_CD
+                AND QS.EVAL_KIND_CD  = EV.EVAL_KIND_CD
+                AND QS.EVAL_CD       = EV.EVAL_CD
+                AND QS.EVALTR_GRP_Cd = VC.EVALTR_GRP_CD
+                AND QS.EVALTR_ID     = VC.EVALTR_ID
+                AND QS.VD_CD         = VC.VD_CD
+               )
+         INNER JOIN
+               ESREVTP  ET  /* ET : 평가종류 */
+            ON (    EV.SYS_ID        = ET.SYS_ID
+                AND EV.OPER_ORG_CD   = ET.OPER_ORG_CD
+                AND EV.EVAL_TYP_CD   = ET.EVAL_TYP_CD
+                AND EV.EVAL_KIND_CD  = ET.EVAL_KIND_CD
+                AND ET.STS  !=  'D'
+               )
+          LEFT OUTER JOIN
+               ESMVDGL VD
+            ON (    VD.SYS_ID   = QS.SYS_ID
+                AND VD.VD_CD    = QS.VD_CD
+               )
+         WHERE VS.SYS_ID                        = #{g.tenant}
+           AND VS.VD_INSP_GRP_EVAL_STP_ID       = #{p.vd_insp_grp_eval_stp_id}
+        <if test="p.evaltr_grp_cd != null and p.evaltr_grp_cd != ''">
+           AND QS.EVALTR_GRP_CD = #{p.evaltr_grp_cd}
+        </if>
+         ORDER BY QS.EVALTR_ID, QS.EVALTR_GRP_CD ASC
+    </select>
+    <insert id="insertESREVQSByVdInspEvalStpChr">
+    /* eval.insertESREVQSByVdInspEvalStpChr : 협력사 심사 절차 담당자 별 정성평가 진행관리 생성 */
+        MERGE INTO ESREVQS A
+        USING ( SELECT SYS_ID
+                     , EVAL_ID
+                     , EVAL_RES_ID
+                     , OPER_ORG_CD
+                     , EVAL_TYP_CD
+                     , EVAL_KIND_CD
+                     , EVAL_CD
+                     , VD_CD
+                     , ES_CD
+                     , ES_HD_CD
+                     , ORGN_ES_CD
+                     , EG_CD
+                     , SG_ID
+                     , SG_CD
+                     , TARG_TYP_VAL
+                     , TARG_TYP_REV
+                     , #{p.evaltr_id} AS EVALTR_ID
+                     , #{p.evaltr_grp_cd} AS EVALTR_GRP_CD
+                  FROM ESREVRS
+                 WHERE SYS_ID  = #{g.tenant}
+                   AND EVAL_ID = #{p.eval_id}
+                   AND TARG_TYP_VAL = #{p.vd_insp_grp_eval_stp_id}
+                   AND VD_CD = #{p.vd_cd} ) B
+        ON (    A.SYS_ID = B.SYS_ID
+            AND A.EVAL_RES_ID = B.EVAL_RES_ID
+            AND A.EVALTR_ID = B.EVALTR_ID
+            AND A.EVALTR_GRP_CD = B.EVALTR_GRP_CD
+        )
+        WHEN MATCHED THEN
+            UPDATE 
+               SET STS = 'U'
+                 , MOD_ID = #{g.username}
+                 , MOD_DT = #{g.now}
+        WHEN NOT MATCHED THEN
+            INSERT
+            (
+                    SYS_ID
+                  , SRV_EVAL_PROG_MGT_ID
+                  , EVAL_ID
+                  , EVAL_RES_ID
+                  , OPER_ORG_CD
+                  , EVAL_TYP_CD
+                  , EVAL_KIND_CD
+                  , EVAL_CD
+                  , VD_CD
+                  , ES_CD
+                  , ES_HD_CD
+                  , ORGN_ES_CD
+                  , EG_CD
+                  , SG_CD
+                  , EVALTR_ID
+                  , TARG_TYP_VAL
+                  , TARG_TYP_REV
+                  , EXC_STS
+                  , ATT_GRP_CD
+                  , REM
+                  , STS
+                  , REG_ID
+                  , REG_DT
+                  , MOD_ID
+                  , MOD_DT
+                  , SG_ID
+                  , EVALTR_SCO
+                  , EVALTR_GRP_CD
+            ) 
+            VALUES 
+            (
+                    B.SYS_ID
+                  , #{g.uuid}
+                  , B.EVAL_ID
+                  , B.EVAL_RES_ID
+                  , B.OPER_ORG_CD
+                  , B.EVAL_TYP_CD
+                  , B.EVAL_KIND_CD
+                  , B.EVAL_CD
+                  , B.VD_CD
+                  , B.ES_CD
+                  , B.ES_HD_CD
+                  , B.ORGN_ES_CD
+                  , B.EG_CD
+                  , B.SG_CD
+                  , B.EVALTR_ID
+                  , B.TARG_TYP_VAL
+                  , B.TARG_TYP_REV
+                  , '10'            /* EXC_STS */
+                  , NULL            /* ATT_GRP_CD */
+                  , NULL            /* REM */
+                  , 'C'
+                  , #{g.username}
+                  , #{g.now}
+                  , #{g.username}
+                  , #{g.now}
+                  , B.SG_ID
+                  , NULL            /* EVALTR_SCO */
+                  , B.EVALTR_GRP_CD
+            ) 
+    </insert>
+    <insert id="insertVdInspEvalStpChr">
+    /* eval.insertVdInspEvalStpChr : 협력사 심사그룹 절차 담당자 저장 */
+    INSERT INTO ESSVIEC 
+    (      SYS_ID
+         , VD_EVAL_STP_CHR_ID
+         , VD_INSP_GRP_EVAL_STP_ID
+         , TYP_CD
+         , OPER_ORG_CD
+         , UP_INSP_STP_CD
+         , INSP_GRP_CD
+         , INSP_STP_CD
+         , VD_CD
+         , INSP_REV
+         , EVALTR_GRP_CD
+         , EVALTR_ID
+         , REM
+         , STS
+         , REG_ID
+         , REG_DT
+         , MOD_ID
+         , MOD_DT
+    ) 
+    VALUES 
+    (      #{g.tenant}
+         , #{g.uuid}
+         , #{p.vd_insp_grp_eval_stp_id}
+         , #{p.typ_cd}
+         , #{p.oper_org_cd}
+         , #{p.up_insp_stp_cd}
+         , #{p.insp_grp_cd}
+         , #{p.insp_stp_cd}
+         , #{p.vd_cd}
+         , #{p.insp_rev}
+         , #{p.evaltr_grp_cd}
+         , #{p.evaltr_id}
+         , #{p.rem}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    )
+    </insert>
+    <delete id="deleteESRSVQRByVdInspEvalStpChr">
+    /* eval.deleteESRSVQRByVdInspEvalStpChr : 협력사 심사 절차 담당자 정성평가 결과 삭제 */
+    DELETE FROM ESRSVQR 
+     WHERE SYS_ID = #{g.tenant}
+       AND SRV_EVAL_PROG_MGT_ID = #{p.srv_eval_prog_mgt_id}
+    </delete>
+    <delete id="deleteESREVQSByVdInspEvalStpChr">
+    /* eval.deleteESREVQSByVdInspEvalStpChr : 협력사 심사 절차 담당자 정성평가 진행관리 삭제 */
+    DELETE FROM ESREVQS 
+     WHERE SYS_ID = #{g.tenant}
+       AND SRV_EVAL_PROG_MGT_ID = #{p.srv_eval_prog_mgt_id}
+    </delete>
+    <delete id="deleteVdInspEvalStpChr">
+    /* eval.deleteVdInspEvalStpChr : 협력사 심사 절차 담당자 정성평가 진행관리 삭제 */
+    DELETE FROM ESSVIEC
+     WHERE SYS_ID = #{g.tenant}
+       AND VD_EVAL_STP_CHR_ID = #{p.vd_eval_stp_chr_id}
+    </delete>
+    <select id="selectChrOfIncompleteVdInspEvalStp" resultType="map">
+    /* eval.selectChrOfIncompleteVdInspEvalStp : 미완료 협력사 심사평가 담당자 조회 */
+        SELECT VC.VD_EVAL_STP_CHR_ID
+             , VC.EVALTR_GRP_CD
+             , VC.EVALTR_ID
+             , QS.SRV_EVAL_PROG_MGT_ID
+          FROM ESSVIEC VC
+         INNER JOIN
+               ESREVQS QS
+            ON (    QS.SYS_ID = VC.SYS_ID
+                AND QS.EVALTR_GRP_CD = VC.EVALTR_GRP_CD
+                AND QS.EVALTR_ID = VC.EVALTR_ID
+                AND QS.TARG_TYP_VAL = VC.VD_INSP_GRP_EVAL_STP_ID
+               ) 
+         WHERE VC.SYS_ID = #{g.tenant}
+           AND VC.VD_INSP_GRP_EVAL_STP_ID = #{p.vd_insp_grp_eval_stp_id}
+           AND QS.EVAL_ID = #{p.eval_id}
+           AND QS.EXC_STS != '30'
+    </select>
+</mapper>

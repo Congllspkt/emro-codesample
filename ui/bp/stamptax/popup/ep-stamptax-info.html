@@ -1,0 +1,222 @@
+<sc-link rel="import" href="ep-stamptax-history-info.html"></sc-link>
+<dom-module id="ep-stamptax-info">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+	<template>
+ 		<!-- 오프라인 인지세 정보 가져오기 -->
+        <sc-ajax id="findOfflStampTaxInfo"
+				 url="findOfflStampTaxInfo.do"
+				 body="{{paramData}}"
+				 on-response="completeLoadInfo">
+		</sc-ajax>
+            
+        <!-- 인지세 파일 저장하기 -->
+        <sc-ajax id="saveStampTaxFile"
+				 url="saveStampTaxFile.do"
+				 on-response="completeSaveStampTaxFile">
+		</sc-ajax>
+ 		
+ 		<!-- 코드 -->
+       	<sc-code-group>
+			<sc-code code="D015" value="{{codes.stamptaxIssueRateTyp}}"></sc-code>		<!-- 인지세 납부 비율 유형 -->
+        </sc-code-group>
+        
+ 		<!-- 툴바 -->
+ 		<cc-page-title-bar>
+	 		<sc-button text="저장" on-click="onSave" hidden="[[!formula('saveState')]]"></sc-button>
+			<sc-button text="이력보기" on-click="onStampHistory"></sc-button>
+ 		</cc-page-title-bar>
+ 		
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="계약 번호 / 차수"></sc-label>
+				<sc-text-field value="{{stampTaxInfo.cntr_no}}" class="w-150" readonly="true"></sc-text-field> /
+                <sc-text-field value="{{stampTaxInfo.cntr_revno}}" class="w-50" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 금액" ></sc-label>
+				<sc-number-field value="{{stampTaxInfo.cntr_amt}}"  format-type="amt" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인지세 금액" ></sc-label>
+				<sc-number-field value="{{stampTaxInfo.stax_amt}}"  format-type="amt" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<cc-form-panel title-text="[[formula('getTaxPymtTitleText')]]" i18n-disabled>
+			<cc-fieldset>
+				<sc-label text="납부관리번호" ></sc-label>
+				<sc-text-field value="{{stampTaxInfo.sttpymt_no}}"
+							   mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" required="[[formula('isBuyer')]]" max-length="25" disabled="[[!formula('saveState')]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납부 금액" ></sc-label>
+				<sc-number-field value="{{stampTaxInfo.sttpymt_amt}}" format-type="integer" class="align-right" hide-trigger="true"
+						mask-re="/[0-9]/" required="[[formula('isBuyer')]]" max-length="15" disabled="[[!formula('saveState')]]"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="환급 금액"></sc-label>
+				<sc-number-field value="{{stampTaxInfo.stax_refund_amt}}"  format-type="integer" hide-trigger="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset column-span="2">
+				<sc-label text="인지세 문서"></sc-label>
+				<sc-upload id="uploadFile" class="h-200" value="{{stampTaxInfo.sttpymt_athg_uuid}}" required="[[formula('isBuyer')]]" editable="[[formula('saveState')]]"></sc-upload>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+	
+	<!-- 스크립트 -->
+	<script>
+		Polymer({
+			is: "ep-stamptax-info",
+
+			properties: {
+				titleText:{
+                    type: String,
+					value: "오프라인 인지세"
+				},
+				// param
+				paramData: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				// 구매사 인지세 정보
+				stampTaxInfoBP: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				// 협력사 인지세 정보
+				stampTaxInfoSP: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				stampTaxInfo:{
+					type: Object,
+					value : function(){
+						return {};
+					}
+				},
+				// bp(B) or sp(S)
+				usr_typ_ccd: {
+					type: String,
+					value: SCSessionManager.currentUser.usr_typ_ccd
+				},
+				stampTaxLabel: String,
+				codes : {
+					type : Object,
+					value : function(){
+						return {
+							stamptaxIssueRateTyp:[]
+						};
+					}
+				}
+			},
+			
+			formulas: {
+				//구매원 여부
+				isBuyer: function () {
+					return this.usr_typ_ccd === "BUYER";
+				},
+				// 인지세 정보 타이틀
+				getTaxPymtTitleText: function() {
+					var me = this;
+					return me.paramData.cntrr_typ_ccd === "BUYER" ? "구매사 인지세 정보" : "협력사 인지세 정보";
+				},
+				//저장 가능 상태 (외부/내부 등록 가능 할 경우)
+				saveState: function() {
+					var me = this;
+					return me.formula('isBuyer') && me.get("paramData.cntrr_typ_ccd") === "BUYER";
+				},
+				//내부 등록 가능
+				/*bpRegistrableState: function () {
+					var stamptaxIssueRateTyp = this.get("stampTaxInfo").sttpymt_ro_typ_ccd;
+					return this.formula('isBuyer') && (stamptaxIssueRateTyp === "BUYER" || stamptaxIssueRateTyp === "BUYER_VD") ;
+				},*/
+				contractChange : function(){
+					var cntrCnt = this.get("stampTaxInfo").cntr_cnt;
+					return cntrCnt != 1;
+				},
+			},
+
+			// 초기 데이터
+			load: function (data) {
+				var me = this;
+				me.set("paramData", data);
+				me.findOfflStampTaxInfo();
+			},
+
+			completeLoadInfo: function (e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus == "S"){
+					me.set("stampTaxInfo", result.resultData);
+					me.applyFormula();
+				}else{
+					var msg = UT.isNotEmpty(result.result_message) ? result.result_message : "STD.E9999";
+					UT.alert(msg);
+					me.fire("close");
+				}
+			},
+
+			// 인지세 정보 요청
+			findOfflStampTaxInfo: function () {
+				var me = this;
+				UT.request(me.$.findOfflStampTaxInfo);
+			},
+
+			// 저장
+			onSave: function () {
+				var me = this;
+					
+				if(!me.validate()){
+                    UT.alert("STD.E9000"); //필수항목 입력여부를 확인하세요.
+                    return;
+                }
+				
+				me.$.saveStampTaxFile.body = me.stampTaxInfo;
+				
+				me.$.uploadFile.upload().then(function () {
+					UT.request(me.$.saveStampTaxFile);
+				});
+			},
+			
+			// 저장 후 콜백
+			completeSaveStampTaxFile: function (e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+					me.findOfflStampTaxInfo();
+					me.fire("saved");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onStampHistory: function(){
+				var me = this;
+				var data = {
+					cntr_uuid : me.stampTaxInfo.cntr_uuid,
+					cntrr_typ_ccd: me.stampTaxInfo.cntrr_typ_ccd
+				}
+				var stampHistoryPopup = UT.popup("ep-stamptax-history-info", me, "1200", "300", {});
+				stampHistoryPopup.show();
+				stampHistoryPopup.getWindowContent().load(data);
+			}
+		});
+	</script>
+</dom-module>

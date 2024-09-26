@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="eval-subj-res">
+	<select id="findEvalSubjRes" resultType="map">
+    /* eval-subj-res.findEvalSubjRes : 평가대상결과 조회 */
+    SELECT TEN_ID
+         , EVAL_SUBJ_RES_UUID
+         , OORG_CD
+         , VD_CD
+         , VMG_OORG_UUID
+         , EVALTMPL_UUID
+         , EVAL_TASK_TYP_CCD
+         , EVAL_CMPLD_DT
+         , EVAL_SC
+         , STS
+         , RMK
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+      FROM EVAL_SUBJ_RES SUBJ_RES
+     WHERE SUBJ_RES.TEN_ID = #{p.ten_id}
+       AND SUBJ_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+    </select>
+    <insert id="insertEvalSubjRes">
+    /* eval-subj-res.insertEvalSubjRes : 평가대상결과 생성 */
+    INSERT INTO EVAL_SUBJ_RES(
+           TEN_ID
+         , EVAL_REQ_UUID
+         , EVAL_SUBJ_RES_UUID
+         , OORG_CD
+         , VD_CD
+         , VMG_OORG_UUID
+         , EVALTMPL_UUID
+         , EVAL_TASK_TYP_CCD
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    ) VALUES (
+           #{p.ten_id}
+         , #{p.eval_req_uuid}
+         , #{p.eval_subj_res_uuid}
+         , #{p.oorg_cd}
+         , #{p.vd_cd}
+         , #{p.vmg_oorg_uuid}
+         , #{p.evaltmpl_uuid}
+         , #{p.eval_task_typ_ccd}
+         , 'C'
+         <choose>
+            <when test="p.dfn_regr_id != null and p.dfn_regr_id != ''">
+                , #{p.dfn_regr_id}
+            </when>
+            <otherwise>
+                , #{g.username}
+            </otherwise>
+        </choose>
+        , #{g.now}
+        <choose>
+            <when test="p.dfn_regr_id != null and p.dfn_regr_id != ''">
+                , #{p.dfn_regr_id}
+            </when>
+            <otherwise>
+                , #{g.username}
+            </otherwise>
+        </choose>
+        , #{g.now}
+    )
+    </insert>
+	<delete id="deleteEvalSubjRes">
+	/* eval-subj-res.deleteEvalSubjRes : 평가대상결과를 삭제한다. */
+    DELETE FROM EVAL_SUBJ_RES
+     WHERE TEN_ID = #{p.ten_id}
+       <choose>
+           <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+               AND EVAL_REQ_UUID = #{p.eval_req_uuid}
+           </when>
+           <otherwise>
+               AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+           </otherwise>
+       </choose>
+	</delete>
+    <update id="calculateEvalSubjResSc">
+    /* eval-subj-res.calcualteEvalSubjResSc : 평가대상 점수 계산 */
+    MERGE INTO EVAL_SUBJ_RES SRC
+    USING ( SELECT ESUBJ_RES.TEN_ID
+                 , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                 , CASE WHEN SUM(EFACTG_RES.EFACTG_SC) &gt; 100 THEN 100
+                        WHEN SUM(EFACTG_RES.EFACTG_SC) <![CDATA[<]]> 0 THEN 0
+                        ELSE ROUND(SUM(EFACTG_RES.EFACTG_SC), 2)
+                    END AS EVAL_SC
+              FROM EVAL_SUBJ_RES ESUBJ_RES
+             INNER JOIN EVAL_SUBJ_EFACTG_RES EFACTG_RES
+                ON ESUBJ_RES.TEN_ID = EFACTG_RES.TEN_ID
+               AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACTG_RES.EVAL_SUBJ_RES_UUID
+               AND EFACTG_RES.STS != 'D'
+             WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+             <choose>
+                 <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+                     AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+                 </when>
+                 <otherwise>
+                     AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                 </otherwise>
+             </choose>
+             GROUP BY ESUBJ_RES.TEN_ID, ESUBJ_RES.EVAL_SUBJ_RES_UUID
+         ) TARG
+        ON (    SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_RES_UUID = TARG.EVAL_SUBJ_RES_UUID
+         )
+      WHEN MATCHED THEN
+           UPDATE
+              SET EVAL_SC = TARG.EVAL_SC
+                , MODR_ID = #{g.username}
+                , MOD_DTTM = #{g.now} </update>
+    <select id="findListEvalSubjRes" resultType="map">
+    /* eval-subj-res.findListEvalSubjRes : 평가대상 결과 목록을 조회한다. */
+    SELECT ESUBJ_RES.TEN_ID
+         , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+         , ESUBJ_RES.OORG_CD
+         , ESUBJ_RES.EVALTMPL_UUID
+         , ESUBJ_RES.EVAL_TASK_TYP_CCD
+         , ESUBJ_RES.EVAL_CMPLD_DT
+         , ESUBJ_RES.EVAL_SC
+         , ESUBJ_RES.STS
+         , ESUBJ_RES.RMK
+         , ESUBJ_RES.REGR_ID
+         , ESUBJ_RES.REG_DTTM
+         , ESUBJ_RES.MODR_ID
+         , ESUBJ_RES.MOD_DTTM
+         , ESUBJ_RES.EVAL_REQ_UUID
+      FROM EVAL_SUBJ_RES ESUBJ_RES
+     WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+       AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+    </select>
+</mapper>

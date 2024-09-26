@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 
+PO_CSTM_VD: 발주 컨소시엄
+ -->
+
+<mapper namespace="po-consortium-vd">
+	<insert id="insertPoConsortium">
+    /* po-consortium.insertPoConsortium */
+    INSERT INTO PO_CSTM_VD
+    (
+        TEN_ID
+      , PO_UUID
+      , VD_CD
+      , REP_VD_CD
+      , PO_NO
+      , PO_REVNO
+      , CSTM_TYP_CCD
+      , INVT_RO
+      , INVT_ALOT_CONT
+      , AMT
+      , REP_VD_YN
+      , STS
+      , REGR_ID
+      , REG_DTTM
+      , MODR_ID
+      , MOD_DTTM
+    )
+    VALUES
+    (
+        #{g.tenant}
+      , #{p.po_uuid}
+      , #{p.vd_cd}
+      , #{p.rep_vd_cd}
+      , #{p.po_no}
+      , #{p.po_revno}
+      , #{p.cstm_typ_ccd}
+      , #{p.invt_ro}
+      , #{p.invt_alot_cont}
+      , #{p.amt}
+      , #{p.rep_vd_yn}
+      , 'C'
+      , #{g.username}
+      , #{g.now}
+      , #{g.username}
+      , #{g.now}
+    )
+    </insert>
+    <select id="findPoCs" resultType="map">
+	/* po-consortium.findPoCs */
+	SELECT POCS.PO_UUID
+	     , POCS.VD_CD
+	     , POCS.REP_VD_CD
+	     , POCS.REP_VD_YN
+	     , POCS.CSTM_TYP_CCD
+	  FROM PO_CSTM_VD POCS
+	 WHERE POCS.TEN_ID    = #{g.tenant}
+	   AND POCS.PO_UUID     = #{p.po_uuid}
+	   AND POCS.VD_CD     = #{p.rep_vd_cd}
+	   AND POCS.REP_VD_CD = #{p.rep_vd_cd}
+	</select>
+	<select id="findConsortiumListByPoId" resultType="map">
+    /* po-consortium.findConsortiumListByPoId 컨소시엄 정보 조회 */
+    SELECT POCS.PO_UUID
+          ,POCS.VD_CD
+          ,POCS.REP_VD_CD
+          ,POCS.PO_NO
+          ,POCS.PO_REVNO
+          ,POCS.CSTM_TYP_CCD
+          ,POCS.INVT_RO
+          ,POCS.INVT_ALOT_CONT
+          ,POCS.AMT
+          ,POCS.REP_VD_YN
+      FROM PO_CSTM_VD POCS
+     WHERE POCS.TEN_ID = #{g.tenant}
+       AND POCS.PO_UUID = #{p.po_uuid}
+    </select>
+	<update id="deletePoConsortiumByPoId">
+    /* po-consortium.deletePoConsortiumByPoId: 발주 컨소시엄 삭제 */
+    UPDATE PO_CSTM_VD
+       SET STS = 'D'
+     WHERE TEN_ID = #{g.tenant}
+       AND PO_UUID  = #{p.po_uuid}
+    </update>
+    <update id="updatePoConsortium">
+    /* po-consortium.updatePoConsortium */
+    UPDATE PO_CSTM_VD
+       SET AMT    = #{p.amt}
+         , STS    = 'U'
+         , MODR_ID = #{g.username}
+         , MOD_DTTM = #{g.now}
+     WHERE TEN_ID    = #{g.tenant}
+       AND PO_UUID     = #{p.po_uuid}
+       AND VD_CD     = #{p.vd_cd}
+       AND REP_VD_CD = #{p.rep_vd_cd}
+    </update>
+    <select id="findListPoCsVd" resultType="map">
+	/* po-consortium.findListPoCsVd */
+	SELECT T.PO_UUID
+         , T.PO_NO
+         , T.PO_REVNO
+         , T.VD_CD
+         , T.VD_NM
+         , T.BIZREGNO
+         , T.REP_VD_CD
+         , T.CSTM_TYP_CCD
+         , T.INVT_RO
+         , T.INVT_ALOT_CONT
+         , T.AMT
+         , T.REP_VD_YN
+         , T.SORT_ORD
+      FROM ( SELECT POCS.PO_UUID
+                  , POCS.PO_NO
+                  , POCS.PO_REVNO
+                  , POCS.VD_CD
+                  , VDGL.VD_NM
+                  , VDGL.BIZREGNO
+                  , POCS.REP_VD_CD
+                  , POCS.CSTM_TYP_CCD
+                  , POCS.INVT_RO
+                  , POCS.INVT_ALOT_CONT
+                  , POCS.AMT
+                  , POCS.REP_VD_YN
+                  , CASE WHEN POCS.REP_VD_YN = 'Y'
+                              THEN 1
+                         ELSE 2
+                    END  AS SORT_ORD
+               FROM PO_CSTM_VD POCS
+              INNER JOIN VD VDGL
+                 ON VDGL.TEN_ID = POCS.TEN_ID
+                AND VDGL.VD_CD  = POCS.VD_CD
+              WHERE POCS.TEN_ID    = #{g.tenant}
+              <choose>
+                <when test="p.po_uuid != null and p.po_uuid != ''">
+                AND POCS.PO_UUID     = #{p.po_uuid}
+                </when>
+                <otherwise>
+                AND POCS.PO_NO     = #{p.po_no}
+                AND POCS.PO_REVNO    = CAST(#{p.po_revno} AS INT)
+                </otherwise>
+              </choose>
+                AND POCS.REP_VD_CD = #{p.rep_vd_cd}
+                AND POCS.STS      != 'D'
+           ) T
+     ORDER BY T.SORT_ORD, T.VD_CD
+	</select>
+</mapper>

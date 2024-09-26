@@ -1,0 +1,796 @@
+<sc-link rel="import" href="../../../bower_components/smartsuite/calendar/resources/lib/smartsuite-notice/smartsuite-notice.html" lazy></sc-link>
+<dom-module id="sc-mdi-header">
+	<style>
+		.shoppingcart_cnt {
+			position: absolute;
+			z-index: 2;
+			pointer-events: none;
+			display: flex;
+			justify-content: center;
+			width : 15px;
+			height: 16px;
+			font-size : 8px;
+			background-color: #f54343;
+			color: white;
+			border-radius: 30px;
+			top: -5px;
+			left : 50%;
+			font-weight: bold;
+			align-items: center;
+			text-align: center;
+		}
+		.button-with-overlay {
+			position: relative;
+			display: inline-block;
+		}
+	</style>
+	<template>
+		<!-- 즐겨찾기 메뉴 추가/해제 전환 -->
+		<sc-ajax id="toggleAppendOrDeleteMyFavoriteMenu"
+				 url="../toggleAppendOrDeleteMyFavoriteMenu.do"
+				 on-response="_completeSaveMyFavorite">
+		</sc-ajax>
+
+		<!-- 즐겨찾기 폴더 삭제 -->
+		<sc-ajax id="deleteListMyFavoriteFolderByUserId"
+				 url="../deleteListMyFavoriteFolderByUserId.do"
+				 on-response="_completeSaveMyFavorite">
+		</sc-ajax>
+
+		<!-- 즐겨찾기 폴더 저장 -->
+		<sc-ajax id="saveMyFavoriteFolder"
+				 url="../saveMyFavoriteFolder.do"
+				 body={{favoriteData}}
+				 on-response="_completeSaveMyFavorite">
+		</sc-ajax>
+
+		<!-- 즐겨찾기 순서 변경 -->
+		<sc-ajax id="updateMyFavoriteSortOrd"
+				 url="../updateMyFavoriteSortOrd.do"
+				 body={{favoriteData}}
+				 on-response="_completeSaveMyFavorite">
+		</sc-ajax>
+
+		<!-- 즐겨찾기 메뉴 추가/해제 전환 -->
+		<sc-ajax id="toggleMyFavoriteMenu"
+				 url="../toggleMyFavoriteMenu.do"
+				 on-response="_completeSaveMyFavorite">
+		</sc-ajax>
+
+		<sc-ajax id="countShoppingCart"
+				 url="../countShoppingCart.do">
+		</sc-ajax>
+
+		<div id="headWrap" class="header-wrap flex--sb">
+			<!-- Go to Menu in Header -->
+	       	<div class="header_nav flex--left">
+	       		<div class="nav">
+					<button id="sideMenuButton" title="Menu" class="nav_menu" on-click="onSideMenuClick">menu</button>
+				</div>
+				<div class="logo">
+	                <template is="dom-if" if="[[formula('showEmroLogo')]]">
+						<img src="../../assets/img/logo.svg" alt="system logo">
+					</template>
+	                <template is="dom-if" if="[[formula('showSdsLogo')]]">
+						<img src="../../assets/img/logo_sds.svg" alt="system logo">
+					</template>
+	            </div>
+	            <!-- 메뉴검색 -->
+	            <sc-mdi-searchbar id="searchBar" mdi-manager="[[mdiManager]]"></sc-mdi-searchbar>
+	       	</div>
+			<div class="header_function flex--left">
+				<div class="user">
+	                <span class="sc-text">[[currentUserInfo(currentUser, currentLocale)]]</span>
+	            </div>
+	            <div class="time">
+	                <span id="sessionTimer" class="sc-text--number session-timer" on-click="onSessionTimerClick"></span>
+	            </div>
+	            <div class="mdi_lan">
+					<a>[[selectLocaleName(avaiableLocales, currentLocale)]]</a>
+					<div class="lan_list">
+						<ul>
+							<template id="localeList" is="dom-repeat" items="{{avaiableLocales}}" as="locale" filter="onLocaleFilter">
+								<li><a on-click="onChangeLocaleClick">[[locale.displayName]]</a></li>
+							</template>
+						</ul>
+					</div>
+				</div>
+	            <div class="function_button flex--left">
+	                <button title="Calendar" class="calendar_icon sc-text--hidden" on-click="onCalendarClick">calendar</button>
+					<!--<button title="[[translate('즐겨찾기')]]" class="favorite_icon sc-text&#45;&#45;hidden" on-click="onFavoriteClick">favorite</button>-->
+					<div hidden="[[!formula('showShoppingCart')]]" class="button-with-overlay">
+						<button title="ShoppingCart" class="shopping_cart_icon sc-text--hidden" on-click="onShoppingCartClick"></button>
+						<span id="noticeNum" class="shoppingcart_cnt">[[shoppingCartCount]]</span>
+					</div>
+
+					<button title="Memo" class="memo_icon sc-text--hidden" on-click="onMemoClick">memo</button>
+	                <!--<button title="Link" class="link_icon sc-text&#45;&#45;hidden">link</button>-->
+	                <button title="[[translate('즐겨찾기')]]" class="favorite_icon sc-text--hidden" on-click="onFavoriteClick">favorite</button>
+					<button title="Alarm" class="alarm_icon sc-text--hidden" on-click="onAlarmNoticeClick">
+						<smartsuite-notice id="alarmNotice" title="Alert"></smartsuite-notice>
+					</button>
+<!--	                <button title="Alarm" class="alarm_icon sc-text&#45;&#45;hidden" on-click="onAlarmNoticeClick"></button>-->
+	                <!--<button title="설정" class="setting_icon sc-text--hidden">setting</button>-->
+	                <button title="[[translate('로그인 정보')]]" class="personal_icon sc-text--hidden" on-click="onUserInfoClick">personal</button>
+	            </div>
+
+	            <!-- Favorite Popup -->
+            <div id="favoriteList" class="favorite-list flex-wrap" hidden>
+                <div class="header">
+                    <h4>Favorite</h4>
+                    <button title="[[translate('폴더 추가')]]" class="folder-add" on-click="_onShowDialogFavoriteFolder"></button>
+                </div>
+				<div id="favTree"></div>
+            </div>
+            <!--// Favorite Popup -->
+	            <!-- 개인정보 팝업 -->
+	            <div id="userInfo" class="user-option flex-wrap" hidden>
+	                <div class="user-info">
+	                    <div class="profile">[[currentUserProfile(currentUser)]]</div>
+	                    <div class="name">[[currentUserNm(currentUser, currentLocale)]] <span class="sc-text--sub">[[currentUserDept(currentUser, currentLocale)]]</span></div>
+	                </div>
+	                <div class="option_link"> 
+	                    <button title="[[translate('사용자 정보 변경')]]" on-click="onClickUserInfoSetting">[[translate('사용자 정보 변경')]]</button>
+	                   <!-- <button title="환경설정">환경설정</button>-->
+	                </div>
+	                <div class="logout">
+	                    <button title="[[translate('로그아웃')]]" on-click="onLogoutClick">[[translate('로그아웃')]]</button>
+	                </div>
+	            </div>
+			</div>
+		</div>
+
+		<sc-dialog id="dialogFavoriteFolder" title-text="즐겨찾기 폴더 추가" title-align="left" style="width:400px;height:200px" modal="true">
+			<sc-toolbar>
+				<sc-spacer></sc-spacer>
+				<sc-button text="저장" on-click="_onAddFavoriteFolder"></sc-button>
+			</sc-toolbar>
+			<ul class="folder-add">
+			  <li><sc-label text="폴더 명"></sc-label></li>
+			  <li><sc-text-field id="favFolderName" value="{{favoriteData.fold_nm}}" max-length="60" required="true" validator-type="nospace"></sc-text-field></li>
+			</ul>
+		</sc-dialog>
+	</template>
+	<script>
+
+	SCPreloader.onInitialize(function() {
+		
+		Polymer({
+
+            is: 'sc-mdi-header',
+
+            behaviors: [
+                Polymer.SCResizableBehavior
+            ],
+            
+            get mdiHeaderWrapHeight() {
+                if(!this.validCacheSizeRect(this._mdiHeaderWrapRect)) {
+                    this._mdiHeaderWrapRect = this.$.headWrap.getBoundingClientRect();
+                }
+                return this._mdiHeaderWrapRect.height;
+            },
+            
+            get logoutEl(){
+            	return this.querySelector(".logout > button");
+            },
+            
+            get logoutFormEl(){
+            	return document.querySelector("#logoutForm");
+            },
+
+            properties: {
+            	
+             	// 타임 아웃 설정
+                sessionTimeout :{
+                    type: Number,
+                    value : (("number" === typeof window.SESSIONTIMEOUT && window.SESSIONTIMEOUT > 0) ? window.SESSIONTIMEOUT  : (1000 * 60 * 30)) //30분
+                },
+                
+            	currentUser: {
+            		type: Object,
+            		value: function(){
+            			return this.mdiManager.onReady(function(){
+            				this.currentUser = this.mdiManager.currentUser;
+            			}.bind(this));
+            		}
+        		},
+
+        		currentLocale: {
+        			type: Object,
+            		value: function(){
+            			return this.mdiManager.onReady(function(){
+            				this.currentLocale = this.mdiManager.currentLocale;	
+            			}.bind(this));
+            		}
+        		},
+
+        		avaiableLocales: {
+        			type: Object,
+            		value: function(){
+            			return this.mdiManager.onReady(function(){
+            				this.avaiableLocales = this.mdiManager.avaiableLocales; 
+            			}.bind(this));
+            			 	
+            		}
+                },
+                
+                sessionTimeFormat: {
+                	type: String,
+                	value: "HH:mm:ss" 
+                },
+                
+                mdiManager: {
+                	type: Object
+                },
+				favoriteList: {
+					type: Array,
+					observer: '_favoritListChanged',
+					notify: true
+				},
+
+				favoriteData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				shoppingCartCount: {
+					type: Number,
+					value: 0
+				}
+            },
+
+			formulas: {
+				showEmroLogo: function() {
+					return SCLocaleManager.getLocale() === "ko_KR";
+				},
+				showSdsLogo: function() {
+					return SCLocaleManager.getLocale() !== "ko_KR";
+				},
+				showShoppingCart: function(){
+					if(SCSessionManager.getCurrentUser().usr_typ_ccd === 'SUPPLIER'){
+						return false;
+					}
+					if(this.shoppingCartCount < 1){
+						return false;
+					}
+					return true;
+				}
+			},
+
+            ready: function(){
+            	SCPreloader.onApplicationComplete(function() {
+            		this.$.searchBar.menuList = SCMenuManager.menuData;
+					this.favoritList = SCFavoriteManager.getFavoritList();
+            		this.doSessionTimer();
+					this.countShoppingCartList();
+            	}.bind(this));
+
+				this.applyFormula();
+            },
+            
+            /** [Event Handler] Menu Click */
+            onSideMenuClick: function(event){
+            	this.fire("side-menu-click", event);
+            },
+            
+            /** [Event Handler] Session Timer */
+            onSessionTimerClick: function(event){
+            	$.ajax('sessionTimeUpdate.do', $.extend(false, SCPreloader.ajaxSettings(), {
+                	data : JSON.stringify({})
+                })).then(this.doSessionTimer.bind(this));
+            },
+            
+            /** [Event Handler] 로케일 변경 */
+            onChangeLocaleClick: function(e){
+            	var me = this,
+            	locale = e.model.locale.locale;
+
+            	if(locale != SCLocaleManager.getLocale()) {
+                    UT.confirm("STD.MDI1004", function() { // "언어를 변경하시겠습니까? 페이지가 새로고침 됩니다."
+                        var localeAjax = new SCAjax();
+                        localeAjax.url = 'i18n/saveI18nLocale.do';
+                        localeAjax.params = {locale : locale};
+                        localeAjax.addEventListener('response', function(event) {
+                        	localeAjax.removeEventListener('response', arguments.callee);
+                            var usrAjax = new SCAjax();
+                            usrAjax.url = 'afterChangeLocale.do';
+                            usrAjax.addEventListener('response', function(event) {
+                            	usrAjax.removeEventListener('response', arguments.callee);
+	                            me.reload();
+                            });
+                            usrAjax.request();
+                        });
+                        localeAjax.request();
+                    });
+                }
+            },
+            
+            /** [Filter] 언어 필터 */
+            onLocaleFilter: function(item){
+            	return (item.locale != SCLocaleManager.getLocale());
+            },
+            
+            /** [Event Handler] Calendar */
+            onCalendarClick: function(event){
+            	MDIUT.showMdiCalendar();
+            },
+
+			/** [Event Handler] Shopping Cart */
+			onShoppingCartClick: function(event){
+				var me = this;
+				UT.popupShoppingCart({
+					"save-close" : function(popup, e) {
+						popup.close();
+						me.countShoppingCartList();
+					}
+				});
+			},
+            /** [Event Handler] 메모 */
+            onMemoClick: function(event){
+            	UT.popupMemo();
+            },
+			/**
+			 * [Evet Handler] 즐겨찾기
+			 */
+			onFavoriteClick: function(){
+				var me = this;
+	    		me.set("favoriteData", {});
+				me.set("favoriteList", SCFavoriteManager.getFavoritList());
+				this.$.favoriteList.hidden = !this.$.favoriteList.hidden;
+				if(!this.fromBodyClick){
+            		this.fromBodyClick = true;
+            		document.body.addEventListener("click", function(e){
+            			if(e.target.classList.contains("favorite_icon") || e.target.classList.contains("fav-edit-btn") || e.target.classList.contains("fav-del-btn")){
+            				return;
+            			}
+						 if(!!UT.closest(e.target,".wrap_sb_content") || !!UT.closest(e.target, "sc-dialog") || !!UT.closest(e.target, "sc-messagebox")){
+							return;
+						}
+                		if(!this.$.favoriteList.hidden && UT.isNotParentElement(e.target, this.$.favoriteList)){
+                			this.$.favoriteList.hidden = !this.$.favoriteList.hidden;
+                		}
+                	}.bind(this));
+            	}
+			},
+            
+            /** [Event Handler] 알람 버튼 클릭 */
+            onAlarmNoticeClick: function(event){
+            	this.fire("alarm-notice-click", event);
+            },
+            
+            /** [Event Handler] 사용자정보 버튼 클릭 */
+            onUserInfoClick: function(event){
+            	this.visibleUserInfo();
+            	if(!this.fromBodyClick){
+            		this.fromBodyClick = true;
+            		document.body.addEventListener("click", function(e){
+            			if(e.target.classList.contains("personal_icon")){
+            				return;
+            			}
+                		if(!this.$.userInfo.hidden && UT.isNotParentElement(e.target, this.$.userInfo)){
+                			this.userInfoOutsideClick();
+                		}
+                	}.bind(this));
+            	}
+            },
+            
+            /** [Event Handler] 로그아웃 버튼 클릭 */
+            onLogoutClick: function(event){
+            	this.visibleUserInfo();
+            	this.onLogout();
+            },
+            
+            /** [Event Handler] 사용자 정보 변경 클릭 */
+            onClickUserInfoSetting: function(){
+            	this.popupChangeUserInfo();
+            },
+            
+            /** [Event Handler] 알람 버튼 클릭 */
+            onAlarmNoticeClick: function(event){
+            	this.$.alarmNotice.onClickAlertList(event);
+            },
+            
+            /** [Popup] 사용자정보 팝업 */ 
+            popupChangeUserInfo: function() {
+            	SCMdiPopupManager.changeUserInfoPopup();
+            },
+            
+            /** 로그아웃 */
+            onLogout : function() {
+                UT.confirm("STD.MDI1001", function() { // "로그아웃 하시겠습니까?"
+                    this.logout();
+                }.bind(this), function () {
+                    this.logoutEl.focus();
+                    setTimeout(function(){
+                    	this.visibleUserInfo();
+                    }.bind(this), 10);
+                }.bind(this));
+            },
+
+            logout : function() {
+            	if(this._invalidSession) {
+            		location.href = getWebRootPath();
+            	}else{
+	                this.logoutFormEl.submit();
+            	}
+            },
+            
+            /** 사용자 정보 팝업 Outside 클릭 */
+            userInfoOutsideClick: function(){
+            	this.visibleUserInfo();
+            },
+            
+            /** 사용자 정보 팝업 Hidden 처리 */
+            visibleUserInfo: function(){
+            	this.$.userInfo.hidden = !this.$.userInfo.hidden;
+            },
+            
+            currentUserInfo: function(user, locale) {
+				var result = "";
+               var key = '';
+                if(locale !== 'ko_KR'){
+                    key = '_en';
+				}
+				if(user.usr_typ_ccd === 'BUYER'){
+					if(UT.isNotEmpty(user['comp_nm'+key])){
+						result += user['comp_nm'+key] + " | ";
+					}else if(UT.isNotEmpty(user['comp_nm'])){
+						result += user['comp_nm'] + " | ";
+					}
+					if(UT.isNotEmpty(user['dept_nm'+key])){
+						result += user['dept_nm'+key] + " | ";
+					}else if(UT.isNotEmpty(user['dept_nm'])){
+						result += user['dept_nm'] + " | ";
+					}
+				}
+				if(UT.isNotEmpty(user['usr_nm'+key])){
+						result += user['usr_nm'+key];
+				}else if(UT.isNotEmpty(user['usr_nm'])){
+					result += user['usr_nm'];
+				}
+                return result;
+			},
+			
+			selectLocaleName : function(locales, locale) {
+            	var me = this, selectLocale = {};
+        		for(var i = 0,len = locales.length ; i<len ; i++){
+        			if(locales[i]["locale"] === locale){
+        				selectLocale = locales[i];
+        				break;
+        			}
+        		}
+        		return selectLocale.displayName;
+            },
+
+			currentUserProfile: function(user){
+				var inputString = user["usr_id"];
+				return inputString.match(/.{1,3}/g)[0];
+			},
+         	// 현재 laguage 에 해당 하는 유저명
+            currentUserNm : function(user, locale) {
+                var key = 'usr_nm';
+                if(locale !== 'ko_KR'){
+                    key = 'usr_en_nm';
+				}
+                return user[key];
+			},
+
+			// 현재 laguage 에 해당 하는 유저명
+            currentUserDept : function(user, locale) {
+				var result = "";
+				var key = '';
+                if(locale !== 'ko_KR'){
+                    key = '_en';
+				}
+				if(UT.isNotEmpty(user['dept_nm'+key])){
+					result = user['dept_nm'+key] ;
+				}else if(UT.isNotEmpty(user['dept_nm'])){
+					result = user['dept_nm'];
+				}
+                return result;
+			},
+			
+			doSessionTimer : function() {
+                var me = this;
+                if(this.sessionTimeoutInterval) {
+                    clearInterval(this.sessionTimeoutInterval);
+                }
+                this._timeout = this.sessionTimeout;
+                this.updateSessionTimer();
+				var initDt = new Date();
+				var isHidden = true;
+				
+                this.sessionTimeoutInterval = setInterval(function() {
+                	this._timeout -= 1000;
+					
+					if(!UT.isEmpty(document.visibilityState) && document.visibilityState === 'visible') {
+						if(isHidden) {
+							var nowDt = new Date();
+							var calTime =  Math.floor((nowDt.getTime() - initDt.getTime()) / 1000);
+							var diffTime = calTime - ((this.sessionTimeout - this._timeout) / 1000);
+							if(diffTime > 0) {
+								this._timeout -= diffTime * 1000;
+							}
+							isHidden = false;
+						}
+					} else {
+						isHidden = true;
+					}
+					
+                	if(this._timeout <= 0) {
+                		this.logoutSession();
+                	}
+                    this.updateSessionTimer();
+                }.bind(this), 1000);
+            },
+			
+			countShoppingCartList: function(){
+				var me = this;
+				// 카탈로그 롤 권한 체크
+				if(!Polymer.$Array.find(SCSessionManager.userDetails.authorities, (role) => ['P100', 'P200', 'D007'].indexOf(role.authority) > -1)) {
+					return;
+				}
+				
+				UT.request(me.$.countShoppingCart, function(e, res){
+					var result = res.response;
+					me.set("shoppingCartCount", result.cnt);
+					me.applyFormula('showShoppingCart');
+				});
+			},
+
+			logoutSession : function() {
+				clearInterval(this.sessionTimeoutInterval);
+				UT.alert([this.translate("STD.MDI1002",null, (this.sessionTimeout / 1000 / 60) ) ], function() { // "{0} 분동안 사용하지 않아 로그아웃 됩니다."
+					this._invalidSession = true;
+					this.logout();
+				}.bind(this), true);
+			},
+
+            updateSessionTimer : function() {
+            	this.$.sessionTimer.textContent = moment.utc(this._timeout).format(this.sessionTimeFormat);
+            },
+            
+            /** 특정 엘리먼트가 생성되기전의 사이즈(width:0, height:0)가 Cache에 담기면 계산 오류 발생 */
+            validCacheSizeRect: function(clientRect){
+                if(!clientRect || (!this.validCacheSize(clientRect.width) &&
+                        		   !this.validCacheSize(clientRect.height))){
+                    return false;
+                }else{
+                	return true;
+                }
+            },
+            validCacheSize: function(size){
+                if(!size){
+                    return false;
+                }else{
+                	return true;
+                }
+            },
+            /******************************
+	    	 *	즐겨찾기
+	    	 ******************************/
+	    	// favorite 메뉴 추가/해제 전환
+	    	toggleFavoriteMenu: function(menuCd) {
+	    		var me = this;
+	    		me.$.toggleAppendOrDeleteMyFavoriteMenu.body = {"menu_cd": menuCd};
+            	UT.request(me.$.toggleAppendOrDeleteMyFavoriteMenu);
+	    	},
+
+	    	// favoritList 변경 시
+	    	_favoritListChanged: function(newValue, oldValue) {
+	    		var me = this;
+    			newValue = newValue || [];
+	    		var list = newValue.map(function(item) {
+					var cItem = {
+						"id"    : item.fav_id,
+						"text"  : item.fav_nm,
+						"parent": item.up_fav_id || '#',
+						"type"  : item.fav_cls
+					}
+					cItem.data = item;
+					//cItem.text += '&nbsp;<i class="fa fa-trash"></i>';
+					if(cItem.type === "FOLDER") {
+						cItem.text += '<i class="fav-edit-btn"></i>';
+					}
+					cItem.text += '<button title="휴지통" class="fav-del-btn">삭제</button>';
+					//cItem.text += '<i class="fav-del-btn"></i>';
+					cItem.state = {selected: false}
+					return cItem;
+				});
+
+	    		if(!oldValue) {
+	                me._generateFavoriteTree(list);
+	    		} else {
+	    			$(me.$.favTree).jstree(true).settings.core.data = list;
+	    			$(me.$.favTree).jstree(true).refresh();
+	    		}
+	    	},
+
+	    	_generateFavoriteTree: function(list) {
+	    		var me = this;
+
+    			$(me.$.favTree).jstree({
+    				core: {
+    					data: list,
+    					check_callback: true,
+    					expand_selected_onload: true,
+    					themes: {
+    						dots: true,
+    						responsive: false
+    					}
+    				},
+    				types: {
+    					"#" : {
+    						max_depth : 2,
+    						valid_children : ["FOLDER", "MENU"]
+    					},
+    					"FOLDER": {
+    						icon: 'fa fa-folder-o fa-lg',
+    						valid_children : ["MENU"]
+    					},
+    					"MENU": {
+    						icon: 'fa fa-file-o',
+    						valid_children: []
+    					},
+    					default: {
+    						icon: 'fa fa-leaf'
+    					},
+    				},
+    				//checkbox: {cascade: "", three_state: false},
+    				dnd: {
+    					drag_check: function(data) {
+    						return {
+    							after: true,
+    							before: true,
+    							inside: (data.type === "MENU")
+    						};
+    					}
+    				},
+    				plugins: [
+    					"dnd",// drag and drop
+    					//"state",
+    					"types",
+    					//"checkbox",
+    					"changed"
+    				]
+    			}).bind('loaded.jstree', function(e) {
+					// loaded 시 전체 펼치기
+					$(this).jstree('open_all');
+
+				}).bind("refresh.jstree", function (e, data) {
+					// refresh 시 전체 펼치기
+					$(this).jstree("open_all");
+
+				}).bind("move_node.jstree", function(e, dp) {
+					// 노드 이동 시 - 순서 업데이트
+					var node = dp.node;
+					var favData = {
+						fav_cls      : node.type,
+						src_sort_ord : dp.old_position +1,
+						targ_sort_ord: dp.position +1,
+						src_fold_id  : (dp.old_parent == '#') ? null : dp.old_parent,
+						targ_fold_id : (dp.parent == '#') ? null : dp.parent
+					};
+					if(node.type === "FOLDER") {
+						favData.fav_flr_uuid = node.id;
+					} else {
+						favData.menu_cd = node.id;
+					}
+					me.set("favoriteData", favData);
+
+					me._onUpdateFavoriteOrder();
+
+				}).on("click", ".jstree-anchor", function(e) {
+					var target = e.target,
+						node = $(me.$.favTree).jstree(true).get_node($(this));
+
+					// 삭제 클릭 시
+					if(target.classList.contains("fav-del-btn")) {
+						// 폴더인 경우
+						if(node.type === "FOLDER") {
+							// 하위에 메뉴가 존재하는 경우
+							if(node.children.length > 0) {
+								// 해당 폴더에 포함된 메뉴들도 함께 삭제됩니다.<br/>계속 진행하시겠습니까?
+								UT.confirm("STD.MDI1015", function() {
+									me._onDeleteFavoriteFolder(node.id);
+								});
+							} else {
+								me._onDeleteFavoriteFolder(node.id);
+							}
+						} else {
+							me._onDeleteFavoriteMenu(node.id);
+						}
+					// 수정 클릭 시
+					} else if(target.classList.contains("fav-edit-btn")) {
+
+						// 텍스트 수정
+						$(me.$.favTree).jstree('edit', node, node.text.split('<i class="fav-edit-btn"></i><button title="휴지통" class="fav-del-btn">삭제</button>')[0],
+							// callback
+							function(node, status) {
+								if(status) {
+									me.set("favoriteData", {"fav_flr_uuid": node.id, "fold_nm": node.text});
+									me._onSaveFavoriteFolder();
+								}
+							}
+						);
+
+					// 메뉴 명 클릭 시
+					} else if(node.type === "MENU") {
+						me._onSelectFavoritMenu(node.id);
+					}
+				});
+	    	},
+
+	    	//즐겨찾기 화면이동
+	    	_onSelectFavoritMenu: function(menuCd){
+	    		var me = this;
+	    		//top menu select
+				var menuInfo = SCMenuManager.getMenuNode(menuCd);
+				me.fire("menu-click",menuInfo);
+	    		me._toggleListeners(false);
+	    		me._closeWrapSbContent();
+	    	},
+
+	    	// 즐겨찾기 메뉴 삭제
+	    	_onDeleteFavoriteMenu: function(menuCd) {
+	    		this.toggleFavoriteMenu(menuCd);
+	    	},
+
+	    	// 즐겨찾기 폴더 삭제
+	    	_onDeleteFavoriteFolder: function(foldId) {
+	    		var me = this;
+	    		me.$.deleteListMyFavoriteFolderByUserId.body = {"fav_cls": "FOLDER", "fav_flr_uuid": foldId};
+	    		UT.request(me.$.deleteListMyFavoriteFolderByUserId);
+	    	},
+
+	    	// 즐겨찾기 폴더 추가 다이얼로그 호출
+	    	_onShowDialogFavoriteFolder: function() {
+	    		var me = this;
+	    		me.set("favoriteData", {});
+	    		me.$.dialogFavoriteFolder.show();
+	    		me.$.favFolderName.focus();
+	    	},
+
+	    	// 즐겨찾기 폴더 추가
+	    	_onAddFavoriteFolder: function() {
+	    		var me = this;
+	    		if(!me.$.favFolderName.validate()) {
+	    			UT.alert("STD.E0000");
+                    return;
+	    		}
+	    		me.$.dialogFavoriteFolder.close();
+	    		me._onSaveFavoriteFolder();
+	    	},
+
+	    	// 즐겨찾기 폴더 저장
+	    	_onSaveFavoriteFolder: function() {
+	    		var me = this;
+	    		UT.request(me.$.saveMyFavoriteFolder);
+	    	},
+
+	    	// 즐겨찾기 순서변경
+	    	_onUpdateFavoriteOrder: function() {
+	    		var me = this;
+	    		UT.request(me.$.updateMyFavoriteSortOrd);
+	    	},
+
+	    	_completeSaveMyFavorite: function(e,res) {
+	    		var me = this,
+	    			mdi = document.querySelector("sc-mdi");
+	    		mdi.reloadFavoriteList(res.response || []);
+				me.set("favoriteList",SCFavoriteManager.getFavoritList());
+	    	},
+			 /******************************
+	    	 *	즐겨찾기 end
+	    	 ******************************/
+            _destroy: function(){
+                clearInterval(this.sessionTimeoutInterval);
+            }
+            
+        });
+		
+	});        
+	</script>
+</dom-module>

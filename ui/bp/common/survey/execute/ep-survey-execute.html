@@ -1,0 +1,244 @@
+<sc-link rel="import" href="/ui/bp/common/survey/execute/es-survey-cover.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/execute/es-survey-section.html"></sc-link>
+
+<dom-module id="ep-survey-execute">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findSurveyExecute"
+				 url="findSurveyExecute.do"
+				 on-response="completeFindSurveyExecute">
+		</sc-ajax>
+		
+		<sc-ajax id="submitSurveyExecute"
+				 url="submitSurveyExecute.do"
+				 on-response="completeSubmitSurveyExecute">
+		</sc-ajax>
+		
+		<sc-pages id="pages" selected="0" class="fit page"></sc-pages>
+		<div style="align-self: center;">
+			<sc-button text="이전" on-click="onPreviousPage" hidden="[[!formula('visiblePreviousBtn')]]"></sc-button>
+			<sc-button text="다음" on-click="onNextPage" hidden="[[!formula('visibleNextBtn')]]"></sc-button>
+			<sc-button text="제출" on-click="onSubmit" hidden="[[!formula('visibleSubmitBtn')]]"></sc-button>
+		</div>
+		
+		<es-survey-cover hidden></es-survey-cover>
+		<es-survey-section hidden></es-survey-section>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-survey-execute",
+			
+			properties: {
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			formulas: {
+				isScrollLayout: function() {
+					return this.survey.lyt_ccd === "SCROLL";
+				},
+				editable: function() {
+					return this.survey.surv_prgs_sts_ccd === "PRGSG" && UT.isEmpty(this.survey.surv_subj_subm_dttm);
+				},
+				visiblePreviousBtn: function() {
+					var pages = this.$.pages;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === 0) {
+						return false;
+					}
+					return true;
+				},
+				visibleNextBtn: function() {
+					var pages = this.$.pages;
+					var childrenCount = pages.childElementCount;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === childrenCount - 1) {
+						return false;
+					}
+					return true;
+				},
+				visibleSubmitBtn: function() {
+					var pages = this.$.pages;
+					var childrenCount = pages.childElementCount;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === childrenCount - 1) {
+						return this.formula('editable');
+					}
+					return false;
+				}
+			},
+			
+			languageParse: function(str) {
+				return SCLanguageManager.parse(str);
+			},
+			
+			load: function(survSubjUuid) {
+				var me = this;
+				me.$.findSurveyExecute.body = {
+					surv_subj_uuid: survSubjUuid
+				};
+				UT.request(me.$.findSurveyExecute);
+			},
+			
+			completeFindSurveyExecute: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				var survey = response.survey;
+				var sections = response.sections;
+				
+				me.set("survey", survey);
+				me.applyFormula();
+				
+				var forms;
+				if(survey.lyt_ccd === "SCROLL") {
+					forms = me.$.sectionForms;
+				} else {
+					forms = me.$.pages;
+					forms.set("selected", 0);
+				}
+				
+				me.addCover(forms, survey, "front");
+				for(var i = 0; i < sections.length; i++) {
+					var section = sections[i];
+					me.addSection(forms, section, i + 1);
+				}
+				me.addCover(forms, survey, "back");
+				me.applyFormula();
+			},
+			
+			addCover: function(forms, survey, type) {
+				var me = this;
+				
+				if(survey[type + "_cover_yn"] === "N") {
+					return;
+				}
+				
+				var coverForm = document.createElement("es-survey-cover");
+				Polymer.dom(forms).appendChild(coverForm);
+				Polymer.dom.flush();
+				coverForm.load(survey[type + "_cover_cont"]);
+			},
+			
+			addSection: function(sectionForms, section, number) {
+				var me = this;
+				var survey = me.get("survey");
+				
+				var sectionForm = document.createElement("es-survey-section");
+				sectionForm.set("editable", me.formula('editable'));
+				sectionForm.set("survey", survey);
+				sectionForm.set("number", number);
+				
+				Polymer.dom(sectionForms).appendChild(sectionForm);
+				Polymer.dom.flush();
+				sectionForm.load(section);
+			},
+			
+			validator: function() {
+				var me = this;
+				var sectionForms = me.$.sectionForms;
+				var childrens = sectionForms.children;
+				
+				var childrenValidate = true;
+				for(var i = 0; i < childrens.length; i++) {
+					if(childrens[i].is === "es-survey-section") {
+						if(!childrens[i].validator()) {
+							childrenValidate = false;
+							break;
+						}
+					}
+				}
+				if(!childrenValidate) {
+					/*UT.alert("STD.E0000");*/
+					return false;
+				}
+			},
+			
+			get getValue() {
+				var me = this;
+				var pages = me.$.pages;
+				
+				var sectionForms = pages.querySelectorAll('es-survey-section');
+				var values = [];
+				for(var i = 0; i < sectionForms.length; i++) {
+					var sectionValues = sectionForms[i].getValue;
+					values = values.concat(sectionValues);
+				}
+				return values;
+			},
+			
+			reset: function() {
+				var me = this;
+				/*var sectionForms = me.$.sectionForms;
+				
+				for(var i = sectionForms.childElementCount - 1; i >= 0; i--) {
+					sectionForms.removeChild(sectionForms.children[i])
+				}*/
+			},
+			
+			onPreviousPage: function() {
+				var me = this;
+				me.$.pages.selectPrevious();
+				me.applyFormula();
+			},
+			
+			onNextPage: function() {
+				var me = this;
+				if(me.formula('editable') && !me.currentPageValidator()) {
+					return false;
+				}
+				me.$.pages.selectNext();
+				me.applyFormula();
+			},
+			
+			currentPageValidator: function() {
+				var me = this;
+				var pages = me.$.pages;
+				var currentItem = pages.selectedItem;
+				if(currentItem.localName === "es-survey-section" && !currentItem.validator()) {
+					return false;
+				}
+				return true;
+			},
+			
+			onSubmit: function() {
+				var me = this;
+				if(!me.currentPageValidator()) {
+					return false;
+				}
+				UT.confirm("STD.SURV0009", function() { // 설문 작성이 완료되었습니다.<br>제출 하시겠습니까?
+					me.submit();
+				});
+			},
+			
+			submit: function() {
+				var me = this;
+				var values = me.getValue;
+				
+				me.$.submitSurveyExecute.body = {
+					survey: me.survey,
+					answers: values
+				};
+				UT.request(me.$.submitSurveyExecute);
+			},
+			
+			completeSubmitSurveyExecute: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				UT.completeAlert();
+				me.fire("reload");
+				me.fire("close");
+			}
+		})
+	</script>
+</dom-module>

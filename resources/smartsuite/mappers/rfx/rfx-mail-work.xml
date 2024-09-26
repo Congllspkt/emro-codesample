@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-mail-work">
+	<select id="findListRfxVendorListAndHistory" resultType="map">
+		/* rfx-mail-work.findListRfxVendorListAndHistory rfx vendorList 및 이력 조회 */
+		SELECT RFX_VD.RFX_UUID
+		     , RFX_VD.RFX_NO
+		     , RFX_VD.RFX_RND
+		     , RFX_VD.VD_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , RFX_VD.VD_PIC_UUID
+		     , CASE WHEN #{g.locale} = 'en_US' THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , RFX_VD.VD_PIC_EML
+		     , RFX_VD.VD_PIC_TEL
+		     , (
+		        SELECT A.EML_RE_YN
+		          FROM (
+		                SELECT EML_RE_YN
+		                     , EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY TEN_ID, TASK_UUID, EML_TASK_DTL_UUID ORDER BY REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS
+		                 WHERE TEN_ID = #{g.tenant}
+		                   AND TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS EML_RE_YN
+		     , (
+		        SELECT A.EML_TASK_STS_CCD
+		          FROM (
+		                SELECT EML_TASK_STS_CCD
+		                     , EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY TEN_ID, TASK_UUID, EML_TASK_DTL_UUID ORDER BY REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS
+		                 WHERE TEN_ID = #{g.tenant}
+		                   AND TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS EML_TASK_STS_CCD
+		     , (
+		        SELECT A.SND_DTTM
+		          FROM (
+		                SELECT SH.SND_DTTM
+		                     , AP.EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY AP.TEN_ID, AP.TASK_UUID, AP.EML_TASK_DTL_UUID ORDER BY AP.REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS AP
+		                  LEFT OUTER JOIN EML_TASK_SND_HISTREC SH
+		                    ON AP.TEN_ID             = SH.TEN_ID
+		                   AND AP.EML_TASK_SUBJ_UUID = SH.EML_TASK_SUBJ_UUID
+		                 WHERE AP.TEN_ID = #{g.tenant}
+		                   AND AP.TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS SND_DTTM
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		  FROM RFX RFX
+		 INNER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.MULTRND_SUBJ_XCEPT_YN = 'N'  -- 제외업체 아님
+		   AND RFX_VD.STS   != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_VD.VD_CD
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_VD.TEN_ID
+		   AND VD_USR.VD_CD  = RFX_VD.VD_CD
+		   AND VD_USR.USR_ID = RFX_VD.VD_PIC_UUID
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID   = RFX_VD.TEN_ID
+		   AND RFX_BID.RFX_NO   = RFX_VD.RFX_NO
+		   AND RFX_BID.RFX_RND  = RFX_VD.RFX_RND
+		   AND RFX_BID.VD_CD    = RFX_VD.VD_CD
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'S'
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.task_uuid}
+		 ORDER BY RFX_VD.VD_CD
+	</select>
+	<select id="findRfxVendorHistoryProcess" resultType="map">
+		/* rfx-mail-work.findRfxVendorHistory rfx vendor info 및 이력 조회 */
+		SELECT RFX_VD.RFX_UUID
+		     , RFX_VD.RFX_NO
+		     , RFX_VD.RFX_RND
+		     , RFX_VD.VD_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , RFX_VD.VD_PIC_UUID
+		     , CASE WHEN #{g.locale} = 'en_US' THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , RFX_VD.VD_PIC_EML
+		     , RFX_VD.VD_PIC_TEL
+		     , (
+		        SELECT A.EML_RE_YN
+		          FROM (
+		                SELECT EML_RE_YN
+		                     , EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY TEN_ID, TASK_UUID, EML_TASK_DTL_UUID ORDER BY REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS
+		                 WHERE TEN_ID = #{g.tenant}
+		                   AND TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS EML_RE_YN
+		     , (
+		        SELECT A.EML_TASK_STS_CCD
+		          FROM (
+		                SELECT EML_TASK_STS_CCD
+		                     , EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY TEN_ID, TASK_UUID, EML_TASK_DTL_UUID ORDER BY REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS
+		                 WHERE TEN_ID = #{g.tenant}
+		                   AND TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS EML_TASK_STS_CCD
+		     , (
+		        SELECT A.SND_DTTM
+		          FROM (
+		                SELECT SH.SND_DTTM
+		                     , AP.EML_TASK_DTL_UUID
+		                     , ROW_NUMBER() OVER(PARTITION BY AP.TEN_ID, AP.TASK_UUID, AP.EML_TASK_DTL_UUID ORDER BY AP.REG_DTTM DESC) AS RN
+		                  FROM EML_TASK_PRGS_STS AP
+		                  LEFT OUTER JOIN EML_TASK_SND_HISTREC SH
+		                    ON AP.TEN_ID             = SH.TEN_ID
+		                   AND AP.EML_TASK_SUBJ_UUID = SH.EML_TASK_SUBJ_UUID
+		                 WHERE AP.TEN_ID = #{g.tenant}
+		                   AND AP.TASK_UUID = #{p.task_uuid}
+		               ) A
+		         WHERE A.RN = 1
+		           AND A.EML_TASK_DTL_UUID = RFX_VD.VD_CD
+		       ) AS SND_DTTM
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.RFX_BID_NO
+		     , RFX_BID.RFX_BID_REVNO
+		  FROM RFX RFX
+		 INNER JOIN RFX_VD RFX_VD
+		    ON RFX_VD.TEN_ID = RFX.TEN_ID
+		   AND RFX_VD.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_VD.MULTRND_SUBJ_XCEPT_YN = 'N'  -- 제외업체 아님
+		   AND RFX_VD.STS   != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_VD.VD_CD
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_VD.TEN_ID
+		   AND VD_USR.VD_CD  = RFX_VD.VD_CD
+		   AND VD_USR.USR_ID = RFX_VD.VD_PIC_UUID
+		  LEFT OUTER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID   = RFX_VD.TEN_ID
+		   AND RFX_BID.RFX_NO   = RFX_VD.RFX_NO
+		   AND RFX_BID.RFX_RND  = RFX_VD.RFX_RND
+		   AND RFX_BID.VD_CD    = RFX_VD.VD_CD
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y'
+		   AND RFX_BID.RFX_BID_STS_CCD = 'S'
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.task_uuid}
+		   AND RFX_VD.VD_CD = #{p.eml_task_dtl_uuid}
+		 ORDER BY RFX_VD.VD_CD
+	</select>
+</mapper>

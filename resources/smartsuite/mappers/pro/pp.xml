@@ -1,0 +1,553 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 
+ASN: 기성요청 헤더
+ASN_ITEM: 기성요청 품목
+GR: 기성승인 헤더
+GR_ITEM: 기성승인 품목
+ -->
+
+<mapper namespace="pp">
+    <select id="searchProgressPaymentRequestByPoNo" resultType="map">
+    /* pp.searchProgressPaymentRequestByPoNo: 기성요청 목록 by poNo */
+        SELECT AH.TEN_ID
+             , AH.ASN_UUID
+             , AH.ASN_NO
+             , AH.ASN_ORDN
+             , AH.ASN_TIT
+             , AH.OORG_CD
+             , AH.VD_CD
+             , AH.ASN_TYP_CCD
+             , AH.PURC_TYP_CCD
+             , AH.ASN_DT
+             , AH.ASN_CRN_DT
+             , AH.DOMOVRS_DIV_CCD
+             , AH.SHPGMETH_CCD
+             , AH.PYMTMETH_CCD
+             , AH.PYMTMETH_EXPLN
+             , AH.DLVYMETH_CCD
+             , AH.DLVYMETH_EXPLN
+             , AH.CUR_CCD
+             , (CASE WHEN AH.ASN_AMT     IS NULL THEN 0 ELSE AH.ASN_AMT     END) AS ASN_AMT
+             , AH.PPBAS_ST_DT
+             , AH.PPBAS_CMPLD_DT
+             , AH.ASN_DT
+             , AH.PYMT_DT
+             , AH.PP_CMPLD_YN
+             , AH.DLVY_PLC
+             , AH.SHPR_NM
+             , AH.SHPG_VEHNO
+             , AH.SHPG_TEL
+             , AH.SHPG_RMK
+             , AH.GR_PIC_ID
+             , AH.DLVY_DTTM
+             , AH.ASN_OPN
+             , AH.ASN_STS_CCD
+             , AH.ATHG_UUID
+             , AH.RMK
+             , AH.PO_UUID
+             , AH.PO_NO
+             , AH.PO_REVNO
+             , AH.STS
+             , AH.REGR_ID
+             , AH.REG_DTTM
+             , AH.MODR_ID
+             , AH.MOD_DTTM
+             , GH.GR_STS_CCD
+             , (CASE WHEN GH.GR_STS_CCD = 'PP_CMPLD'  /* C:검수완료 */
+                          THEN CASE WHEN GH.GR_AMT IS NULL
+                                         THEN 0
+                                    ELSE GH.GR_AMT
+                               END
+                     ELSE 0
+                END)                              AS GR_TTL_AMT
+             , (CASE WHEN GH.GR_STS_CCD = 'PP_CMPLD'  /* C:검수완료 */
+                          THEN GH.GR_DT
+                     ELSE NULL
+                END)                              AS GR_DT
+             , GH.GR_UUID
+             , GH.GR_NO
+             , GH.GR_ORDN
+             , GH.GR_TIT
+             , GH.GR_STS_CCD
+             , VD.VD_NM
+             , VD.ERP_VD_CD
+             , CASE WHEN GH.PYMT_TYP_CCD IS NOT NULL  AND GH.PYMT_TYP_CCD = 'APYMT'
+                         THEN 'Y'
+                    WHEN AH.PYMT_TYP_CCD = 'APYMT' THEN 'Y'
+                    ELSE 'N'
+               END                                AS APYMT_YN
+             , CASE WHEN GH.PYMT_TYP_CCD IS NOT NULL  THEN GH.PYMT_TYP_CCD
+                    ELSE AH.PYMT_TYP_CCD
+               END                                AS PYMT_TYP_CCD
+             , AH.ASN_ORDN                          AS SORT_ORD
+             , CASE WHEN GH.ASNEVAL_STS_CCD  IS NULL OR GH.ASNEVAL_STS_CCD = ''
+                          THEN 'EVAL_SETUP_WTG' /* S:평가미설정 */
+                     ELSE GH.ASNEVAL_STS_CCD
+                END ASNEVAL_STS_CCD /* 검수 평가 진행상태 */
+             , GE.GE_UUID
+             , GE.GE_STS_CCD
+             , GE.EVAL_SC
+          FROM ASN AH
+          LEFT OUTER JOIN GR GH
+            ON AH.TEN_ID = GH.TEN_ID
+           AND AH.ASN_UUID  = GH.ASN_UUID
+           AND GH.STS   != 'D'
+          LEFT OUTER JOIN GR_GE_MAPG
+            ON GR_GE_MAPG.TEN_ID = GH.TEN_ID
+           AND GR_GE_MAPG.GR_UUID = GH.GR_UUID
+          LEFT OUTER JOIN GE
+            ON GE.TEN_ID = GR_GE_MAPG.TEN_ID
+           AND GE.GE_UUID = GR_GE_MAPG.GE_UUID
+          LEFT OUTER JOIN VD VD
+            ON VD.TEN_ID = AH.TEN_ID
+           AND VD.VD_CD  = AH.VD_CD
+         WHERE AH.TEN_ID      = #{g.tenant}
+           AND AH.PO_NO       = #{p.po_no}
+           AND AH.STS        != 'D'
+         UNION ALL
+        SELECT A.TEN_ID
+             , A.ASN_UUID
+             , A.ASN_NO
+             , A.ASN_ORDN
+             , ''                            AS ASN_TIT
+             , A.OORG_CD
+             , A.VD_CD
+             , ''                                 AS ASN_TYP_CCD
+             , A.PURC_TYP_CCD
+             , A.GR_CRN_DT                      AS ASN_DT          /*요청일자*/
+             , ''                                 AS ASN_CRN_DT
+             , ''                                 AS DOMOVRS_DIV_CCD
+             , ''                                 AS SHPGMETH_CCD
+             , A.PYMTMETH_CCD
+             , A.PYMTMETH_EXPLN
+             , A.DLVYMETH_CCD
+             , A.DLVYMETH_EXPLN
+             , A.CUR_CCD /*통화*/
+             , (CASE WHEN A.GR_AMT     IS NULL THEN 0 ELSE A.GR_AMT     END) AS ASN_AMT /*요청금액*/
+             , A.PPBAS_ST_DT
+             , A.PPBAS_CMPLD_DT
+             , A.PPREQ_DT
+             , A.PYMT_DT
+             , A.PP_CMPLD_YN
+             , ''                                 AS DLVY_PLC
+             , ''                                 AS SHPR_NM
+             , ''                                 AS SHPG_VEHNO
+             , ''                                 AS SHPG_TEL
+             , A.SHPG_RMK
+             , A.GR_PIC_ID
+             , ''                                 AS DLVY_DTTM
+             , ''                                 AS ASN_OPN
+             , ''                                 AS ASN_STS_CCD
+             , A.ATHG_UUID
+             , A.RMK
+             , A.PO_UUID
+             , A.PO_NO
+             , A.PO_REVNO
+             , A.STS
+             , A.REGR_ID
+             , A.REG_DTTM
+             , A.MODR_ID
+             , A.MOD_DTTM
+             , A.GR_STS_CCD
+             , (CASE WHEN A.GR_STS_CCD = 'PP_CMPLD'
+                          THEN (CASE WHEN A.GR_AMT IS NULL
+                                          THEN 0
+                                     ELSE A.GR_AMT
+                                END)
+                     ELSE 0
+               END)                               AS GR_TTL_AMT /*승인금액*/
+             , (CASE WHEN A.GR_STS_CCD = 'PP_CMPLD'
+                          THEN A.GR_DT
+                     ELSE NULL
+               END)                               AS GR_DT    /*승인일자*/
+             , A.GR_UUID
+             , A.GR_NO                                          /*기성번호*/
+             , A.GR_ORDN
+             , A.GR_TIT
+             , A.GR_STS_CCD
+             , ''                                 AS VD_NM
+             , ''                                 AS ERP_VD_CD
+             , CASE WHEN A.PYMT_TYP_CCD IS NOT NULL  AND A.PYMT_TYP_CCD = 'APYMT'
+                         THEN 'Y'
+                    ELSE 'N'
+                END AS APYMT_YN
+             , A.PYMT_TYP_CCD
+             , A.GR_ORDN                          AS SORT_ORD
+             , ''                                 AS ASNEVAL_STS_CCD
+             , GE.GE_UUID
+             , GE.GE_STS_CCD
+             , GE.EVAL_SC
+         FROM GR A
+         LEFT OUTER JOIN GR_GE_MAPG
+           ON GR_GE_MAPG.TEN_ID = A.TEN_ID
+          AND GR_GE_MAPG.GR_UUID = A.GR_UUID
+         LEFT OUTER JOIN GE
+           ON GE.TEN_ID = GR_GE_MAPG.TEN_ID
+          AND GE.GE_UUID = GR_GE_MAPG.GE_UUID
+        WHERE A.TEN_ID     = #{g.tenant}
+          AND A.PO_NO      = #{p.po_no}
+          AND A.STS       != 'D'
+          AND (A.ASN_UUID IS NULL OR A.ASN_UUID = '')  -- AR없이 GR 생성된 경우는 선급금등록 뿐  24/01/25 기성도 생성될 수 있음
+        ORDER BY REG_DTTM DESC, ASN_NO DESC, GR_NO DESC, SORT_ORD DESC
+    </select>
+    <select id="findAdvancePaymentYnByGrId" parameterType="java.lang.String" resultType="java.lang.String">
+    /* pp.findAdvancePaymentYnByGrId : 기성 아이디로 선급금 여부 조회 */
+    SELECT CASE WHEN ( SELECT COUNT(1)
+                         FROM PO_PYMT_EXPT POPP
+                        WHERE POPP.TEN_ID     = GRHD.TEN_ID
+                          AND POPP.PO_UUID      = GRHD.PO_UUID
+                          AND POPP.PYMT_TYP_CCD = 'APYMT'
+                     ) = 0
+                     THEN 'N'
+                WHEN GRHD.PYMT_TYP_CCD = 'APYMT'
+                     THEN 'Y'
+                ELSE 'N'
+           END  AS APYMT_YN
+      FROM GR GRHD
+     WHERE GRHD.TEN_ID = #{g.tenant}
+       AND GRHD.GR_UUID  = #{p}
+       AND GRHD.STS    != 'D'
+    </select>
+    <select id="findProgressPayment" resultType="map">
+    /* pp.findProgressPayment: 기성승인 상세정보 */
+    SELECT GR.TEN_ID
+         , GR.GR_UUID
+         , GR.GR_NO
+         , GR.GR_ORDN
+         , GR.GR_TIT
+         , GR.VD_CD
+         , GR.OORG_CD
+         , GR.GR_TYP_CCD
+         , GR.PURC_TYP_CCD
+         , GR.GR_DT
+         , GR.GR_CRN_DT
+         , GR.PYMTMETH_CCD
+         , GR.PYMTMETH_EXPLN
+         , GR.DLVYMETH_CCD
+         , GR.DLVYMETH_EXPLN
+         , GR.CUR_CCD
+         , (CASE WHEN GR.GR_AMT     IS NULL THEN 0 ELSE GR.GR_AMT     END) AS GR_AMT
+         , (CASE WHEN GR.DELAY_AMT        IS NULL THEN 0 ELSE GR.DELAY_AMT        END) AS DELAY_AMT
+         , (CASE WHEN GR.PRTL_DELAY_AMT   IS NULL THEN 0 ELSE GR.PRTL_DELAY_AMT   END) AS PRTL_DELAY_AMT
+         , (CASE WHEN GR.DFRM_RO       IS NULL THEN 0 ELSE GR.DFRM_RO       END) AS DFRM_RO
+         , GR.DELAY_DCNT
+         , GR.DELAY_RSN
+         , GR.PRTL_DELAY_YN
+         , GR.PRTL_DELAY_RSN
+         , GR.DFRM_EXMT_YN
+         , GR.DFRM_EXMT_REQ_DCNT
+         , GR.DFRM_EXMT_RSN
+         , GR.PPBAS_ST_DT
+         , GR.PPBAS_CMPLD_DT
+         , GR.PPREQ_DT
+         , GR.PYMT_DT
+         , GR.PP_CMPLD_YN
+         , GR.DLVY_PLC
+         , GR.GR_OPN
+         , GR.BUYER_RMK
+         , GR.VD_RMK
+         , GR.SHPR_NM
+         , GR.SHPG_VEHNO
+         , GR.SHPG_TEL
+         , GR.SHPG_RMK
+         , GR.APVL_STS_CCD
+         , GR.GR_STS_CCD
+         , GR.ATHG_UUID
+         , GR.GR_PIC_ID
+         , GR.DLVY_DT
+         , GR.ASN_UUID
+         , GR.ASN_NO
+         , GR.ASN_ORDN
+         , AR.ASN_DT
+         , AR.ASN_STS_CCD
+         , GR.PO_NO
+         , GR.PO_REVNO
+         , GR.RMK
+         , GR.STS
+         , GR.REGR_ID
+         , GR.REG_DTTM
+         , GR.MODR_ID
+         , GR.MOD_DTTM
+         , GR.GE_SUBJ_YN
+         , GR.PYMT_TYP_CCD
+         , GR_GE_MAPG.GE_UUID
+         , ( SELECT SUM(POPP.PYMT_AMT)
+               FROM PO_PYMT_EXPT POPP
+              WHERE POPP.TEN_ID     = PO.TEN_ID
+                AND POPP.PO_UUID      = PO.PO_UUID
+                AND POPP.PYMT_TYP_CCD = 'APYMT'
+           ) AS APYMT_AMT
+         , ( SELECT COUNT(POPP.PO_PYMT_EXPT_UUID)
+               FROM PO_PYMT_EXPT POPP
+              WHERE POPP.TEN_ID = PO.TEN_ID
+                AND POPP.PO_UUID  = PO.PO_UUID
+           ) AS PAY_PLAN_CNT   /* 총 지급회차 count */
+         , ( SELECT COUNT(1)
+               FROM GR GRHD
+              WHERE GRHD.TEN_ID      = PO.TEN_ID
+                AND GRHD.PO_NO       = PO.PO_NO
+                AND GRHD.PO_REVNO      <![CDATA[<=]]> PO.PO_REVNO  /* 발주변경이 가능하므로 이전 발주차수에 연결된 GR들도 포함 */
+                AND GRHD.GR_STS_CCD = 'PP_CMPLD'
+                AND GRHD.ASN_ORDN    <![CDATA[<]]> GR.ASN_ORDN/*AR없이 GR 생성한 경우(선급금등록) 포함*/
+                AND GRHD.STS        != 'D'
+           ) + 1 AS CRNT_PAY_REV    /* 현재 지급회차: 이전차수까지의 총 기성승인 건 count + 1 */
+         , ( SELECT SUM(PP.PYMT_AMT)
+               FROM PO_PYMT_EXPT PP
+              WHERE PP.TEN_ID  = AR.TEN_ID
+                AND PP.PO_UUID   = AR.PO_UUID
+                AND PP.PYMT_REVNO <![CDATA[<=]]> GR.GR_ORDN
+           ) AS SUM_PAY_PLAN_AMT  /* 차수기준 지급계획 총액 */
+         , (CASE WHEN PO.PO_AMT  IS NULL THEN 0 ELSE PO.PO_AMT  END) AS PO_AMT
+         , (CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+                 ELSE VD.VD_NM
+             END) AS DISP_VD_NM
+         , VD.ERP_VD_CD
+         , COALESCE((SELECT SUM(CASE WHEN GT.GR_AMT IS NULL THEN 0 ELSE GT.GR_AMT END)
+              FROM GR GT
+             WHERE GT.TEN_ID = GR.TEN_ID
+               AND GT.PO_NO  = GR.PO_NO
+               AND GT.PO_REVNO <![CDATA[<=]]> GR.PO_REVNO  /* 발주변경이 가능하므로 이전 발주차수에 연결된 GR들도 포함 */
+               AND GT.GR_ORDN <![CDATA[<]]> GR.GR_ORDN /* 이전 회차까지 */
+               AND GT.GR_STS_CCD = 'PP_CMPLD'  /* C:검수완료 */
+               AND GT.STS != 'D'
+           ), 0) AS PRE_GR_TTL_AMT /* 전회누적금액 */
+          , (CASE WHEN AR.ASN_AMT IS NULL THEN 0 ELSE AR.ASN_AMT END) AS ASN_AMT /* 금회 신청금액 */
+          , COALESCE((SELECT SUM(CASE WHEN AT.ASN_AMT IS NULL THEN 0 ELSE AT.ASN_AMT END)
+                        FROM GR GT
+                       INNER JOIN ASN AT
+                          ON AT.TEN_ID = GT.TEN_ID
+                         AND AT.ASN_UUID = GT.ASN_UUID
+                         AND AT.ASN_STS_CCD = 'CMPLD'
+                       WHERE GT.TEN_ID = GR.TEN_ID
+                         AND GT.PO_NO  = GR.PO_NO
+                         AND GT.PO_REVNO  <![CDATA[<=]]>  GR.PO_REVNO  /* 발주변경이 가능하므로 이전 발주차수에 연결된 GR들도 포함 */
+                         AND GT.GR_ORDN  <![CDATA[<]]>  GR.GR_ORDN /* 이전 회차까지 */
+                         AND GT.GR_STS_CCD = 'PP_CMPLD'  /* C:검수완료 */
+                         AND GT.STS != 'D'
+           ), 0) AS PRE_ASN_TTL_AMT /* 전회 누적 요청 금액*/
+          , CASE WHEN ( SELECT COUNT(DT.GR_ITEM_UUID)
+                          FROM GR_ITEM DT
+                         WHERE DT.TEN_ID        = GR.TEN_ID
+                           AND DT.GR_UUID         = GR.GR_UUID
+                           AND DT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+                           AND DT.STS          != 'D'
+                      ) &gt; 0
+                      THEN 'Y'
+                 ELSE 'N'
+            END  AS HAS_NO_CD_ITEM
+      FROM GR GR
+     INNER JOIN PO PO
+        ON GR.TEN_ID = PO.TEN_ID
+       AND GR.PO_UUID  = PO.PO_UUID
+      LEFT OUTER JOIN ASN AR
+        ON AR.TEN_ID = GR.TEN_ID
+       AND AR.ASN_UUID  = GR.ASN_UUID
+       AND AR.STS   != 'D'
+      LEFT OUTER JOIN VD VD
+        ON VD.TEN_ID = GR.TEN_ID
+       AND VD.VD_CD  = GR.VD_CD
+      LEFT OUTER JOIN GR_GE_MAPG
+        ON GR_GE_MAPG.TEN_ID = GR.TEN_ID
+       AND GR_GE_MAPG.GR_UUID = GR.GR_UUID
+     WHERE GR.TEN_ID = #{g.tenant}
+       AND GR.GR_UUID  = #{p.gr_uuid}
+       AND GR.STS   != 'D'
+    </select>
+    <!-- 기성등록 취소 가능여부 체크 -->
+    <select id="checkProgressPaymentCancelable" resultType="map">
+    /* pp.checkProgressPaymentCancelable : 검수등록 취소 가능여부 */
+    SELECT T.GR_NO
+         , T.PO_NO
+         , T.CHECK_RESULT
+      FROM ( SELECT GRHD.GR_NO    AS GR_NO
+                  , POHD.PO_NO    AS PO_NO
+                  , CASE WHEN ( SELECT COUNT(1)
+                                  FROM PO A
+                                 WHERE A.TEN_ID      = POHD.TEN_ID
+                                   AND A.PO_NO       = POHD.PO_NO
+                                   AND A.PO_REVNO      = ( SELECT MAX(B.PO_REVNO) FROM PO B WHERE B.TEN_ID = POHD.TEN_ID AND B.PO_NO = POHD.PO_NO AND B.STS != 'D' )
+                                   AND A.STS        != 'D'
+                                   AND A.PO_CHG_TYP_CCD     = 'CHG'
+                                   AND A.PO_STS_CCD IN ('CRNG', 'CHG_REQ', 'PRGSG')    /* 발주 진행 상태(T:임시저장, R:변경요청, P:발주진행중)*/
+                              ) &gt; 0
+                              THEN 'PO_CHANGE_PROGRESS'
+                         WHEN ( SELECT COUNT(1)
+                                  FROM ASN ARHD
+                                 INNER JOIN ASN_ITEM ARDT
+                                    ON ARDT.TEN_ID = ARHD.TEN_ID
+                                   AND ARDT.ASN_UUID  = ARHD.ASN_UUID
+                                   AND ARDT.STS   != 'D'
+                                 WHERE ARHD.TEN_ID      = POHD.TEN_ID
+                                   AND ARHD.PO_NO       = POHD.PO_NO
+                                   AND ARHD.ASN_STS_CCD = 'CRNG'
+                                   AND ARHD.STS        != 'D'
+                              ) &gt; 0
+                              THEN 'HAS_TEMP_ASN_ITEM' /*검수/기성요청 임시저장 건 존재*/
+                         WHEN ( SELECT COUNT(1)
+                                  FROM ASN_ITEM ARDT
+                                 WHERE ARDT.TEN_ID       = POHD.TEN_ID
+                                   AND ARDT.PO_NO        = POHD.PO_NO
+                                   AND ARDT.STS         != 'D'
+                                   AND ARDT.ASN_STS_CCD  IN ('GR_REQ', 'GR_PRGSG')  /* GR:기성요청 GP:기성진행중*/
+                              ) &gt; 0
+                              THEN 'HAS_GR_ITEM'
+                         WHEN ( SELECT COUNT(1)
+                                  FROM GR_ITEM GRDT
+                                 INNER JOIN INV_ITEM IVDT
+                                    ON IVDT.TEN_ID     = GRDT.TEN_ID
+                                   AND IVDT.GR_ITEM_UUID = GRDT.GR_ITEM_UUID
+                                 INNER JOIN INV IVHD
+                                    ON IVHD.TEN_ID       = IVDT.TEN_ID
+                                   AND IVHD.INV_UUID       = IVDT.INV_UUID
+                                   AND IVHD.INV_STS_CCD = 'CRNG'  -- 임시저장(T)
+                                 WHERE GRDT.TEN_ID = GRHD.TEN_ID
+                                   AND GRDT.GR_UUID  = GRHD.GR_UUID
+                              ) &gt; 0
+                              THEN 'HAS_TEMP_INVOICE_ITEM'
+                         WHEN ( SELECT COUNT(1)
+                                  FROM GR_ITEM GRDT
+                                 INNER JOIN INV_ITEM IVDT
+                                    ON IVDT.TEN_ID     = GRDT.TEN_ID
+                                   AND IVDT.GR_ITEM_UUID = GRDT.GR_ITEM_UUID
+                                 INNER JOIN INV IVHD
+                                    ON IVHD.TEN_ID       = IVDT.TEN_ID
+                                   AND IVHD.INV_UUID       = IVDT.INV_UUID
+                                   AND IVHD.INV_STS_CCD = 'CNFD'  -- 확정(C)
+                                 WHERE GRDT.TEN_ID = GRHD.TEN_ID
+                                   AND GRDT.GR_UUID  = GRHD.GR_UUID
+                              ) &gt; 0
+                              THEN 'HAS_INVOICE_ITEM'
+                         ELSE NULL
+                    END            AS CHECK_RESULT
+               FROM GR GRHD
+              INNER JOIN PO POHD
+                 ON POHD.TEN_ID = GRHD.TEN_ID
+                AND POHD.PO_UUID  = GRHD.PO_UUID
+              WHERE GRHD.TEN_ID = #{g.tenant}
+                AND GRHD.GR_UUID  = #{p.gr_uuid}
+           ) T
+     WHERE T.CHECK_RESULT IS NOT NULL </select>
+    <!-- 선급금 GR 헤더 조회 -->
+    <select id="findAdvancePaymentByGrUuid" resultType="map">
+    /* pp.findAdvancePaymentByGrUuid: 선급금 상세 조회 */
+           SELECT A.TEN_ID        /*시스템 아이디*/
+                 ,A.GR_UUID         /*입고 아이디*/
+                 ,A.GR_NO         /*입고 번호(기성번호)*/
+                 ,A.GR_ORDN        /*입고 회차(기성차수)*/
+                 ,A.GR_TIT         /*입고 제목(기성명)*/
+                 ,A.VD_CD
+                 ,A.OORG_CD   /*운영 조직 코드*/
+                 ,A.GR_TYP_CCD
+                 ,A.PURC_TYP_CCD
+                 ,A.GR_DT       /*입고 일자(기성일자)*/
+                 ,A.GR_CRN_DT
+                 ,A.PYMTMETH_CCD
+                 ,A.PYMTMETH_EXPLN
+                 ,A.DLVYMETH_CCD
+                 ,A.DLVYMETH_EXPLN
+                 ,A.CUR_CCD           /*통화*/
+                 ,A.DLVY_DT     /*납품 일자(납품일자)*/
+                 ,A.GR_AMT  /*납품 합계 금액(기성금액)*/
+                 ,A.GR_PIC_ID
+                 ,B.PO_NO         /*발주번호*/
+                 ,B.PO_REVNO        /*발주차수*/
+                 ,B.PO_AMT    /*발주 총 금액(발주총액))*/
+                 ,A.PPBAS_ST_DT        /*실적 시작일(수행기간)*/
+                 ,A.PPBAS_CMPLD_DT        /*실적 종료일(수행기간)*/
+                 ,( SELECT SUM(POPP.PYMT_AMT)
+                      FROM PO_PYMT_EXPT POPP
+                     WHERE POPP.TEN_ID     = B.TEN_ID
+                       AND POPP.PO_UUID      = B.PO_UUID
+                       AND POPP.PYMT_TYP_CCD = 'APYMT'
+                  ) AS APYMT_AMT   /*선급금(PO기준 지급계획)*/
+                 ,A.GR_OPN        /*비고(담당자의견)*/
+                 ,A.ATHG_UUID        /*첨부 번호*/
+                 ,A.GR_STS_CCD      /*입고 진행 상태 */
+                 ,A.ASN_UUID
+                 ,A.ASN_NO
+                 ,A.ASN_ORDN
+                 ,C.ASN_AMT       /* 선급금요청금액 */
+                 ,C.ASN_DT
+                 ,CASE WHEN ( SELECT COUNT(GRDT.ASN_ITEM_UUID)
+                         FROM GR_ITEM GRDT
+                        WHERE GRDT.TEN_ID        = A.TEN_ID
+                          AND GRDT.GR_UUID         = A.GR_UUID
+                          AND GRDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+                          AND GRDT.STS          != 'D'
+                     ) <![CDATA[>]]> 0
+                     THEN 'Y'
+                ELSE 'N'
+           END  AS HAS_NO_CD_ITEM
+             FROM GR A
+            INNER JOIN PO B
+               ON B.TEN_ID = A.TEN_ID
+              AND B.PO_UUID  = A.PO_UUID
+             LEFT OUTER JOIN ASN C
+               ON C.TEN_ID = A.TEN_ID
+              AND C.ASN_UUID  = A.ASN_UUID
+            WHERE A.TEN_ID = #{g.tenant}
+              AND A.GR_UUID  = #{p.gr_uuid}
+    </select>
+    <select id="compareGrHdSts" resultType="map">
+    /* pp.compareGrHdSts */
+    SELECT GRHD.GR_UUID
+         , GRHD.GR_NO
+         , GRHD.GR_ORDN
+         , GRHD.GR_STS_CCD
+         , CDDL.DTLCD_NM      AS GR_STS_CCD_NM
+         , CASE WHEN GRHD.GR_STS_CCD = #{p.gr_sts_ccd}
+                     THEN 'Y'
+                ELSE 'N'
+           END  AS VALID_YN
+      FROM GR GRHD
+     INNER JOIN DTLCD CDDT
+        ON CDDT.TEN_ID = GRHD.TEN_ID
+       AND CDDT.CCD = 'P082'
+       AND CDDT.DTLCD = GRHD.GR_STS_CCD
+       AND CDDT.USE_YN = 'Y'
+       AND CDDT.STS   != 'D'
+     INNER JOIN DTLCD_MULTLANG CDDL
+        ON CDDL.TEN_ID  = CDDT.TEN_ID
+       AND CDDL.CCD  = CDDT.CCD
+       AND CDDL.DTLCD  = CDDT.DTLCD
+       AND CDDL.LANG_CCD = #{g.locale}
+       AND CDDL.STS    != 'D'
+     WHERE GRHD.TEN_ID = #{g.tenant}
+       AND GRHD.GR_UUID  = #{p.gr_uuid}
+    </select>
+    <select id="getProgressPaymentTypeRelatedInfo" resultType="map">
+    /* pp.getProgressPaymentTypeRelatedInfo: 지급 유형 결정을 위한 기성 관련 정보 가져오기 */
+        SELECT GR.GR_UUID
+             , GR.GR_ORDN
+             , GR.PO_NO
+             , GR.PO_UUID
+             , GR.GR_AMT
+             , PO.PO_AMT
+             , (SELECT COALESCE(SUM(TGR.GR_AMT), 0)
+                 from GR TGR
+                 WHERE TGR.TEN_ID = GR.TEN_ID
+                   AND TGR.PO_NO = GR.PO_NO
+                   AND TGR.PO_REVNO <![CDATA[<=]]> GR.PO_REVNO
+                   AND TGR.GR_STS_CCD = 'PP_CMPLD'
+                   AND TGR.STS != 'D'
+                ) AS TTL_GR_AMT
+          FROM GR GR
+         INNER JOIN PO PO
+            ON PO.TEN_ID = GR.TEN_ID
+           AND PO.PO_UUID = GR.PO_UUID
+           AND PO.STS != 'D'
+         WHERE GR.TEN_ID = #{g.tenant}
+           AND GR.GR_UUID = #{p.gr_uuid}
+           AND GR.STS != 'D'
+    </select>
+    <update id="updatePaymentTypeCommonCode">
+    /* pp.updatePaymentTypeCommonCode: 지급 유형 업데이트 */
+        UPDATE GR
+           SET PYMT_TYP_CCD = #{p.pymt_typ_ccd}
+         WHERE TEN_ID = #{g.tenant}
+           AND GR_UUID = #{p.gr_uuid}
+           AND STS    != 'D'
+    </update>
+</mapper>

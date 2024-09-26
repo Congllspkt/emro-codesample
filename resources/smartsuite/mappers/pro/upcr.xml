@@ -1,0 +1,750 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="upcr">
+	<!-- 진행 상태 콤보박스 조회 -->
+	<select id="getUpcrPurpCcd" resultType="map">
+		/* upcr.getUpcrPurpCcd 구매요청 목적 공통코드 조회 */
+		SELECT A.DTLCD       AS DATA
+		     , B.DTLCD_NM    AS LABEL
+		  FROM DTLCD A
+		     , DTLCD_MULTLANG B
+		     , CCD_CSTR_CND_VAL C
+		 WHERE A.TEN_ID          =  #{g.tenant}
+		   AND A.STS            != 'D'
+		   AND A.USE_YN          = 'Y'
+		   AND A.TEN_ID          = B.TEN_ID
+		   AND A.TEN_ID          = C.TEN_ID
+		   AND A.CCD          = B.CCD
+		   AND A.CCD          = C.CCD
+		   AND A.DTLCD          = B.DTLCD
+		   AND A.DTLCD          = C.DTLCD
+		   AND A.CCD          = 'P049'
+		   AND B.LANG_CCD         = #{g.locale}
+		   AND C.CSTR_CND_VAL = #{p}
+		 ORDER BY A.DTLCD_SORT
+	</select>
+	<resultMap id="resultMap-findUpcr" type="map">
+		<result column="UPCR_CHG_RSN" javaType="string" property="upcr_chg_rsn" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findUpcr" resultMap="resultMap-findUpcr">
+		/* upcr.findUpcr */
+		SELECT PHD.TEN_ID
+		     , PHD.UPCR_UUID
+		     , PHD.UPCR_NO
+		     , PHD.UPCR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.UPCR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.UPCR_PURP_CCD
+		     , PHD.UPCR_REQ_DT
+		     , PHD.UPCR_CRTR_ID
+		     , PHD.UPCR_CRTR_TEL
+		     , PHD.UPCR_CRTR_DEPT_CD
+		     , PHD.UPCR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.UPCR_RMK
+		     , PHD.UPCR_CHG_RSN
+		     , PHD.ATHG_UUID
+		     , PHD.UPCR_STS_CCD
+		     , PHD.UPCR_CHG_YN
+		     , PHD.UPCR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		         	ELSE USR.USR_NM
+		        END AS UPCR_CRTR_NM
+		     , CASE WHEN DEPT.DEPT_NM IS NULL OR DEPT.DEPT_NM = '' THEN ''
+		        	WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS UPCR_REQ_DEPT_NM               /* 부서명 */
+		     , CASE WHEN (
+		                  SELECT COUNT(DT.UPCR_ITEM_UUID)
+		                    FROM UPCR_ITEM DT
+		                   WHERE DT.TEN_ID      = PHD.TEN_ID
+		                     AND DT.UPCR_UUID       = PHD.UPCR_UUID
+		                     AND DT.UPCR_STS_CCD NOT IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		                 ) &gt; 0
+		                 THEN 'N'
+		            ELSE 'Y'
+		        END AS ALL_ITEM_RETURNED
+		     , CASE WHEN (
+		                  SELECT COUNT(DT.UPCR_ITEM_UUID)
+		                    FROM UPCR_ITEM DT
+		                   WHERE DT.TEN_ID        = PHD.TEN_ID
+		                     AND DT.UPCR_UUID         = PHD.UPCR_UUID
+		                     AND DT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+		                 ) &gt; 0
+		                 THEN 'Y'
+		            ELSE 'N'
+		        END AS HAS_NO_CD_ITEM
+		  --  , PHD.VENDOR_TEMPL_ID
+		  FROM UPCR PHD
+		  LEFT OUTER JOIN USR USR       /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.UPCR_CRTR_ID = USR.USR_ID
+		  LEFT OUTER JOIN LOGIC_ORG B         /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+						  ON USR.TEN_ID = ODM.TEN_ID
+							  AND USR.CO_CD = ODM.LOGIC_ORG_CD
+							  AND PHD.UPCR_CRTR_DEPT_CD = ODM.DEPT_CD
+							  AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD = DEPT.DEPT_CD
+		   AND USR.STS        != 'D'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.UPCR_UUID  = #{p.upcr_uuid}
+	</select>
+	<select id="findPrevUpcrId" resultType="java.lang.String">
+		/* upcr.findPrevUpcrId */
+		SELECT PREV_UPCRHD.UPCR_UUID
+		  FROM UPCR UPCRHD
+		 INNER JOIN UPCR PREV_UPCRHD
+		    ON PREV_UPCRHD.TEN_ID = UPCRHD.TEN_ID
+		   AND PREV_UPCRHD.UPCR_NO  = UPCRHD.UPCR_NO
+		   AND PREV_UPCRHD.UPCR_REVNO = UPCRHD.UPCR_REVNO -1
+		   AND PREV_UPCRHD.STS   != 'D'
+		 WHERE UPCRHD.TEN_ID = #{g.tenant}
+		   AND UPCRHD.UPCR_UUID  = #{p}
+	</select>
+	<select id="findUpcrRevMax" resultType="java.lang.Integer">
+		/* upcr.findUpcrRevMax */
+		SELECT MAX(CAST(PHD.UPCR_REVNO AS INT))
+		  FROM UPCR PHD
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.UPCR_NO  = #{p.upcr_no}
+	</select>
+	<select id="findListUpcr" resultType="map">
+		/* upcr.findListUpcr 전체 구매 목록 조회 */
+		SELECT PHD.TEN_ID
+		     , PHD.UPCR_UUID
+		     , TASK_APVL.TASK_UUID
+		     , PHD.UPCR_NO
+		     , PHD.UPCR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.UPCR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.UPCR_PURP_CCD
+		     , PHD.UPCR_REQ_DT
+		     , PHD.UPCR_CRTR_ID
+		     , PHD.UPCR_CRTR_TEL
+		     , PHD.UPCR_CRTR_DEPT_CD
+		     , PHD.UPCR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.ATHG_UUID
+		     , PHD.UPCR_STS_CCD
+		     , PHD.UPCR_CHG_YN
+		     , PHD.UPCR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS UPCR_CRTR_NM       /* 구매요청 의뢰자 */
+		     , (
+		        SELECT COUNT(UPCR_ITEM_UUID)
+		          FROM UPCR_ITEM DT
+		         WHERE DT.TEN_ID = PHD.TEN_ID
+		           AND DT.UPCR_UUID  = PHD.UPCR_UUID
+		       ) AS TOT_ITEM_CNT
+		     , (
+		        SELECT COUNT(UPCR_ITEM_UUID)
+		          FROM UPCR_ITEM DT
+		         WHERE DT.TEN_ID = PHD.TEN_ID
+		           AND DT.UPCR_UUID  = PHD.UPCR_UUID
+		           AND DT.UPCR_STS_CCD IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		       ) AS RETURN_ITEM_CNT
+		     , CASE WHEN (
+		                  SELECT COUNT(UPCR_ITEM_UUID)
+		                    FROM UPCR_ITEM DT
+		                   WHERE DT.TEN_ID      = PHD.TEN_ID
+		                     AND DT.UPCR_UUID       = PHD.UPCR_UUID
+		                     AND DT.UPCR_STS_CCD NOT IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		                 ) &gt; 0
+		                 THEN 'N'
+		            ELSE 'Y'
+		        END AS ALL_ITEM_RETURNED
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS UPCR_REQ_DEPT_NM       /* 구매요청자 부서 */
+		  FROM UPCR PHD
+		  LEFT OUTER JOIN USR USR  /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.UPCR_CRTR_ID = USR.USR_ID
+		  LEFT OUTER JOIN LOGIC_ORG B    /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+			LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+		      ON USR.TEN_ID = ODM.TEN_ID
+		      AND B.LOGIC_ORG_TYP_CCD = ODM.LOGIC_ORG_TYP_CCD
+		      AND USR.CO_CD = ODM.LOGIC_ORG_CD
+			  AND PHD.UPCR_CRTR_DEPT_CD = ODM.DEPT_CD
+		      AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD     = DEPT.DEPT_CD
+		   AND PHD.UPCR_CRTR_DEPT_CD = DEPT.DEPT_CD
+		   AND USR.STS        != 'D'
+		  LEFT OUTER JOIN TASK_APVL
+		    ON TASK_APVL.TEN_ID = PHD.TEN_ID
+		   AND TASK_APVL.TASK_UUID = PHD.UPCR_UUID
+		   AND TASK_APVL.USE_YN = 'Y'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.STS   != 'D'
+		   <if test="p.upcr_crtr_nm != null and p.upcr_crtr_nm != ''">
+		       <bind name="userNamePattern" value="'%' + p.upcr_crtr_nm + '%'"/>
+			   AND (UPPER(USR.USR_NM) LIKE UPPER(#{userNamePattern}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{userNamePattern}) )
+		   </if>
+		   <if test="p.upcr_crtr_id != null and p.upcr_crtr_id != ''">
+		       AND USR.USR_ID = #{p.upcr_crtr_id}
+		   </if>
+		   <if test="p.upcr_req_dept_nm != null and p.upcr_req_dept_nm != ''">
+		       <bind name="deptNamePattern" value="'%' + p.upcr_req_dept_nm + '%'"/>
+		   AND (UPPER(DEPT.DEPT_NM) LIKE UPPER(#{deptNamePattern}) OR UPPER(DEPT.DEPT_NM_EN) LIKE UPPER(#{deptNamePattern}))
+		   </if>
+		   <if test="p.upcr_crtr_dept_cd != null and p.upcr_crtr_dept_cd != ''">
+		       <bind name="deptCdPattern" value="'%' + p.upcr_crtr_dept_cd + '%'"/>
+		       AND UPPER(DEPT.DEPT_CD) LIKE UPPER(#{deptCdPattern})
+		   </if>
+		   <if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+		       AND UPPER(PHD.OORG_CD) IN
+		       <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_create_date != null">
+		       AND PHD.UPCR_REQ_DT &gt;= #{p.from_create_date}
+		   </if>
+		   <if test="p.to_create_date != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_create_date,1)"/>
+		       AND PHD.UPCR_REQ_DT <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <choose>
+		       <when test="p.upcr_nos != null and p.upcr_nos.size() != 0">
+		           AND UPPER(PHD.UPCR_NO) IN
+		           <foreach close=")" collection="p.upcr_nos" item="upcr_no" open="(" separator=",">
+		               #{upcr_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.upcr_no != null and p.upcr_no != ''">
+		               <bind name="noPattern" value="'%' + p.upcr_no + '%'"/>
+		               AND UPPER(PHD.UPCR_NO) LIKE UPPER(#{noPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+		       AND PHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   </if>
+		   <if test="p.upcr_sts_ccd != null and p.upcr_sts_ccd != ''">
+		       AND PHD.UPCR_STS_CCD = #{p.upcr_sts_ccd}
+		   </if>
+		   <if test="p.upcr_tit != null and p.upcr_tit != ''">
+		       <bind name="namePattern" value="'%' + p.upcr_tit + '%'"/>
+		       AND UPPER(PHD.UPCR_TIT) LIKE UPPER(#{namePattern})
+		   </if>
+		   <if test="p.upcr_purp_ccd != null and p.upcr_purp_ccd !=''">
+		       AND PHD.UPCR_PURP_CCD = #{p.upcr_purp_ccd}
+		   </if>
+		 ORDER BY PHD.UPCR_NO DESC, PHD.UPCR_REVNO DESC
+	</select>
+	<update id="updateUpcr">
+		/* updateUpcr : 구매 header 수정 */
+		UPDATE UPCR
+		   SET UPCR_STS_CCD     = #{p.upcr_sts_ccd}
+		     , UPCR_REVNO          = CAST(#{p.upcr_revno} AS INT)
+		     , UPCR_TIT          = #{p.upcr_tit}
+		     , PURC_TYP_CCD        = #{p.purc_typ_ccd}
+		     , UPCR_PURP_CCD    = #{p.upcr_purp_ccd}
+		     , UPCR_REQ_DT     = #{g.now}
+		     , UPCR_CRTR_ID       = #{p.upcr_crtr_id}
+		     , UPCR_CRTR_TEL = #{p.upcr_crtr_tel}
+		     , UPCR_CRTR_DEPT_CD     = #{p.upcr_crtr_dept_cd}
+		     , UPCR_AMT      = CAST(#{p.upcr_amt} AS FLOAT  )
+		     , CUR_CCD             = #{p.cur_ccd}
+		     , UPCR_RMK          = #{p.upcr_rmk}
+		     , ATHG_UUID          = #{p.athg_uuid}
+		     , UPCR_CHG_YN = #{p.upcr_chg_yn}
+		     , UPCR_CHG_PIC_ID = #{p.upcr_chg_pic_id}
+		     , MIGR_YN          = #{p.migr_yn}
+		     , STS             = 'U'
+		     , MODR_ID          = #{g.username}
+		     , MOD_DTTM          = #{g.now}
+		     , UPCR_CHG_RSN          = #{p.upcr_chg_rsn,jdbcType=CLOB}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND UPCR_UUID  = #{p.upcr_uuid}
+	</update>
+	<insert id="insertUpcr">
+		/* insertUpcr : 구매 header 추가 */
+		INSERT INTO UPCR (
+			TEN_ID
+			, UPCR_UUID
+			, UPCR_NO
+			, UPCR_REVNO
+			, OORG_CD
+			, UPCR_TIT
+			, PURC_TYP_CCD
+			, UPCR_PURP_CCD
+			, UPCR_REQ_DT
+			, UPCR_CRTR_ID
+			, UPCR_CRTR_TEL
+			, UPCR_CRTR_DEPT_CD
+			, UPCR_AMT
+			, CUR_CCD
+			, UPCR_RMK
+			, ATHG_UUID
+			, UPCR_CHG_YN
+			, UPCR_CHG_PIC_ID
+			, MIGR_YN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+			, UPCR_CHG_RSN
+		) VALUES (
+			#{g.tenant}
+			, #{p.upcr_uuid}
+			, #{p.upcr_no}
+			, CAST(#{p.upcr_revno} AS INT)
+			, #{p.oorg_cd}
+			, #{p.upcr_tit}
+			, #{p.purc_typ_ccd}
+			, #{p.upcr_purp_ccd}
+			, #{g.now}
+			, #{p.upcr_crtr_id}
+			, #{p.upcr_crtr_tel}
+			, #{p.upcr_crtr_dept_cd}
+			, CAST(#{p.upcr_amt} AS FLOAT  )
+			, #{p.cur_ccd}
+			, #{p.upcr_rmk}
+			, #{p.athg_uuid}
+			, #{p.upcr_chg_yn}
+			, #{p.upcr_chg_pic_id}
+			, #{p.migr_yn}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+			, #{p.upcr_chg_rsn,jdbcType=CLOB}
+		)
+	</insert>
+	<delete id="deleteUpcr">
+		/* deleteUpcr */
+		DELETE
+		  FROM UPCR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND UPCR_UUID  = #{p.upcr_uuid}
+	</delete>
+	<select id="countAutoPoItem" resultType="java.lang.Integer">
+		SELECT COUNT(1) AS AUTO_PO_ITEM_CNT
+		  FROM UPCR UPCRHD
+		 INNER JOIN UPCR_ITEM UPCRDT
+		    ON UPCRDT.TEN_ID = UPCRHD.TEN_ID
+		   AND UPCRDT.UPCR_UUID  = UPCRHD.UPCR_UUID
+		 WHERE UPCRHD.TEN_ID       = #{g.tenant}
+		   AND UPCRHD.UPCR_UUID        = #{p.upcr_uuid}
+		   AND UPCRHD.UPCR_PURP_CCD = 'SPTPURC'
+		   AND UPCRDT.UPCR_PURP_CCD = 'UPRCCNTR_PURC'
+		   AND UPCRDT.STS         != 'D'
+	</select>
+	<select id="findListMyPurcGrpCd" resultType="map">
+		/* upcr.findListMyPurcGrpCd : 나의 담당 구매그룹 리스트 조회 */
+		SELECT CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN ELSE JOB.PURC_GRP_NM END AS PURC_GRP_NM
+		     , JOB.PURC_GRP_CD
+		  FROM PURC_GRP JOB
+		 INNER JOIN PURC_GRP_PIC JOB_USR
+		    ON JOB_USR.TEN_ID       = JOB.TEN_ID
+		   AND JOB_USR.PURC_GRP_TYP_CCD = JOB.PURC_GRP_TYP_CCD
+		   AND JOB_USR.PURC_GRP_CD  = JOB.PURC_GRP_CD
+		   AND JOB_USR.CO_CD      = JOB.CO_CD
+		   AND JOB_USR.USR_ID       = #{g.username}
+		   AND JOB_USR.STS         != 'D'
+		 WHERE JOB.TEN_ID       = #{g.tenant}
+		   AND JOB.CO_CD      = #{g.co_cd}
+		   AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+		   AND JOB.STS         != 'D'
+	</select>
+	<resultMap id="resultMap-findListUpcrHistory" type="map">
+		<result column="UPCR_UUID" property="upcr_uuid"/>
+		<result column="UPCR_TIT" property="upcr_tit"/>
+		<result column="UPCR_REVNO" property="upcr_revno"/>
+		<result column="UPCR_CRTR_NM" property="upcr_crtr_nm"/>
+		<result column="UPCR_REQ_DEPT_NM" property="upcr_req_dept_nm"/>
+		<result column="UPCR_CRTR_TEL" property="upcr_crtr_tel"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<result column="UPCR_AMT" property="upcr_amt"/>
+		<result column="UPCR_RMK" property="upcr_rmk"/>
+		<result column="UPCR_CHG_RSN" javaType="string" property="upcr_chg_rsn" typeHandler="stringClob"/>
+		<result column="ATHG_UUID" property="athg_uuid"/>
+		<result column="ATT_CNT" property="att_cnt"/>
+	</resultMap>
+	<select id="findListUpcrHistory" resultMap="resultMap-findListUpcrHistory">
+		/* upcr.findListUpcrHistory */
+		SELECT UPCRHD.UPCR_UUID
+		     , UPCRHD.UPCR_TIT
+		     , UPCRHD.UPCR_REVNO
+		     , CASE WHEN 'en_US' = #{g.locale} THEN UPCR_REQ_USR.USR_NM_EN ELSE UPCR_REQ_USR.USR_NM END AS UPCR_CRTR_NM
+		     , UPCRHD.UPCR_CRTR_DEPT_CD
+		     , UPCRHD.UPCR_CRTR_TEL
+		     , UPCRHD.CUR_CCD
+		     , UPCRHD.UPCR_AMT
+		     , UPCRHD.UPCR_RMK
+		     , UPCRHD.UPCR_CHG_RSN
+		     , UPCRHD.ATHG_UUID
+		     , (
+		        SELECT COUNT(1)
+		          FROM ATHF ATT
+		         WHERE ATT.TEN_ID = UPCRHD.TEN_ID
+		           AND ATT.ATHG_UUID = UPCRHD.ATHG_UUID
+		       ) AS ATT_CNT
+		  FROM UPCR UPCRHD
+		  LEFT OUTER JOIN USR UPCR_REQ_USR        /* UPCR_REQ_USR : 구매요청자 */
+		    ON UPCRHD.TEN_ID    = UPCR_REQ_USR.TEN_ID
+		   AND UPCRHD.UPCR_CRTR_ID = UPCR_REQ_USR.USR_ID
+		 WHERE UPCRHD.TEN_ID = #{g.tenant}
+		   AND UPCRHD.UPCR_NO  = #{p.upcr_no}
+		   <if test="p.upcr_revs != null">
+		       AND UPCRHD.UPCR_REVNO IN
+		       <foreach close=")" collection="p.upcr_revs" item="upcr_revno" open="(" separator=",">
+		           #{upcr_revno}
+		       </foreach>
+		   </if>
+		   AND UPCRHD.STS != 'D'
+		 ORDER BY UPCRHD.UPCR_REVNO
+	</select>
+	<resultMap id="resultMap-findCompareUpcrData" type="map">
+		<result column="PREV_UPCR_ID" property="prev_upcr_id"/>
+		<result column="PREV_UPCR_TIT" property="prev_upcr_tit"/>
+		<result column="PREV_UPCR_REV" property="prev_upcr_rev"/>
+		<result column="PREV_UPCR_REQ_NM" property="prev_upcr_req_nm"/>
+		<result column="PREV_UPCR_REQ_DEPT_NM" property="prev_upcr_req_dept_nm"/>
+		<result column="PREV_UPCR_REQ_PHONE_NO" property="prev_upcr_req_phone_no"/>
+		<result column="PREV_CUR" property="prev_cur"/>
+		<result column="PREV_UPCR_TOT_AMT" property="prev_upcr_tot_amt"/>
+		<result column="PREV_UPCR_REM" property="prev_upcr_rem"/>
+		<result column="PREV_UPCR_TXT" javaType="string" property="prev_upcr_txt" typeHandler="stringClob"/>
+		<result column="PREV_ATT_NO" property="prev_att_no"/>
+		<result column="POST_UPCR_ID" property="post_upcr_id"/>
+		<result column="POST_UPCR_TIT" property="post_upcr_tit"/>
+		<result column="POST_UPCR_REV" property="post_upcr_rev"/>
+		<result column="POST_UPCR_REQ_NM" property="post_upcr_req_nm"/>
+		<result column="POST_UPCR_REQ_DEPT_NM" property="post_upcr_req_dept_nm"/>
+		<result column="POST_UPCR_REQ_PHONE_NO" property="post_upcr_req_phone_no"/>
+		<result column="POST_CUR" property="post_cur"/>
+		<result column="POST_UPCR_TOT_AMT" property="post_upcr_tot_amt"/>
+		<result column="POST_UPCR_REM" property="post_upcr_rem"/>
+		<result column="POST_UPCR_TXT" javaType="string" property="post_upcr_txt" typeHandler="stringClob"/>
+		<result column="POST_ATT_NO" property="post_att_no"/>
+	</resultMap>
+	<select id="findCompareUpcrData" resultMap="resultMap-findCompareUpcrData">
+		/* upcr.findCompareUpcrData */
+		SELECT PREV_UPCRHD.UPCR_UUID              AS PREV_UPCR_ID
+		     , POST_UPCRHD.UPCR_UUID              AS POST_UPCR_ID
+		     , PREV_UPCRHD.UPCR_TIT             AS PREV_UPCR_TIT
+		     , POST_UPCRHD.UPCR_TIT             AS POST_UPCR_TIT
+		     , PREV_UPCRHD.UPCR_REVNO             AS PREV_UPCR_REV
+		     , POST_UPCRHD.UPCR_REVNO             AS POST_UPCR_REV
+		     , PREV_UPCR_REQ.USR_NM           AS PREV_UPCR_REQ_NM
+		     , POST_UPCR_REQ.USR_NM           AS POST_UPCR_REQ_NM
+		     , PREV_DEPT.DEPT_NM            AS PREV_UPCR_REQ_DEPT_NM
+		     , POST_DEPT.DEPT_NM            AS POST_UPCR_REQ_DEPT_NM
+		     , PREV_UPCRHD.UPCR_CRTR_TEL    AS PREV_UPCR_REQ_PHONE_NO
+		     , POST_UPCRHD.UPCR_CRTR_TEL    AS POST_UPCR_REQ_PHONE_NO
+		     , PREV_UPCRHD.CUR_CCD                AS PREV_CUR
+		     , POST_UPCRHD.CUR_CCD                AS POST_CUR
+		     , PREV_UPCRHD.UPCR_AMT         AS PREV_UPCR_TOT_AMT
+		     , POST_UPCRHD.UPCR_AMT         AS POST_UPCR_TOT_AMT
+		     , PREV_UPCRHD.UPCR_RMK             AS PREV_UPCR_REM
+		     , POST_UPCRHD.UPCR_RMK             AS POST_UPCR_REM
+		     , PREV_UPCRHD.UPCR_CHG_RSN             AS PREV_UPCR_TXT
+		     , POST_UPCRHD.UPCR_CHG_RSN             AS POST_UPCR_TXT
+		     , PREV_UPCRHD.ATHG_UUID             AS PREV_ATT_NO
+		     , POST_UPCRHD.ATHG_UUID             AS POST_ATT_NO
+		  FROM UPCR PREV_UPCRHD
+		 INNER JOIN UPCR POST_UPCRHD
+		    ON POST_UPCRHD.TEN_ID = PREV_UPCRHD.TEN_ID
+		   AND POST_UPCRHD.UPCR_NO  = PREV_UPCRHD.UPCR_NO
+		   AND POST_UPCRHD.UPCR_REVNO = CAST(#{p.post_upcr_rev} AS INT)
+		   AND POST_UPCRHD.STS   != 'D'
+		  LEFT OUTER JOIN USR PREV_UPCR_REQ
+		    ON PREV_UPCR_REQ.TEN_ID = PREV_UPCRHD.TEN_ID
+		   AND PREV_UPCR_REQ.USR_ID = PREV_UPCRHD.UPCR_CRTR_ID
+		  LEFT OUTER JOIN LOGIC_ORG PREV_OGMG
+		    ON PREV_OGMG.TEN_ID      = PREV_UPCR_REQ.TEN_ID
+		   AND PREV_OGMG.LOGIC_ORG_CD      = PREV_UPCR_REQ.CO_CD
+		   AND PREV_OGMG.LOGIC_ORG_TYP_CCD  = 'COMPANY'
+		   AND PREV_OGMG.STS        != 'D'
+		 LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG PREV_ODM
+						 ON PREV_UPCR_REQ.TEN_ID = PREV_ODM.TEN_ID
+							 AND PREV_UPCR_REQ.CO_CD = PREV_ODM.LOGIC_ORG_CD
+							 AND PREV_UPCRHD.UPCR_CRTR_DEPT_CD = PREV_ODM.DEPT_CD
+							 AND PREV_ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT PREV_DEPT
+		    ON PREV_DEPT.TEN_ID     = PREV_ODM.TEN_ID
+		   AND PREV_DEPT.DEPT_CD    = PREV_ODM.DEPT_CD
+		   AND PREV_DEPT.STS != 'D'
+		  LEFT OUTER JOIN USR POST_UPCR_REQ
+		    ON POST_UPCR_REQ.TEN_ID = POST_UPCRHD.TEN_ID
+		   AND POST_UPCR_REQ.USR_ID = POST_UPCRHD.UPCR_CRTR_ID
+		  LEFT OUTER JOIN LOGIC_ORG POST_OGMG
+		    ON POST_OGMG.TEN_ID      = POST_UPCR_REQ.TEN_ID
+		   AND POST_OGMG.LOGIC_ORG_CD      = POST_UPCR_REQ.CO_CD
+		   AND POST_OGMG.LOGIC_ORG_TYP_CCD  = 'COMPANY'
+		   AND POST_OGMG.STS        != 'D'
+		 LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG POST_ODM
+						 ON PREV_UPCR_REQ.TEN_ID = POST_ODM.TEN_ID
+							 AND PREV_UPCR_REQ.CO_CD = POST_ODM.LOGIC_ORG_CD
+							 AND PREV_UPCRHD.UPCR_CRTR_DEPT_CD = POST_ODM.DEPT_CD
+							 AND POST_ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT POST_DEPT
+		    ON POST_DEPT.TEN_ID     = POST_ODM.TEN_ID
+		   AND POST_DEPT.DEPT_CD    = POST_ODM.DEPT_CD
+		  AND POST_DEPT.STS != 'D'
+		 WHERE PREV_UPCRHD.TEN_ID = #{g.tenant}
+		   AND PREV_UPCRHD.UPCR_NO  = #{p.upcr_no}
+		   AND PREV_UPCRHD.UPCR_REVNO = CAST(#{p.prev_upcr_rev} AS INT)
+		   AND PREV_UPCRHD.STS   != 'D'
+	</select>
+	<resultMap id="resultMap-findPreviousUpcrInfo" type="map">
+		<result column="UPCR_CHG_RSN" javaType="string" property="upcr_chg_rsn" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findPreviousUpcrInfo" resultMap="resultMap-findPreviousUpcrInfo">
+		/* upcr.xml : findPreviousUpcrInfo  : 이전차수 구매 조회 결재서식생성시 사용 */
+		SELECT PHD.TEN_ID
+		     , PHD.UPCR_UUID
+		     , PHD.UPCR_NO
+		     , PHD.UPCR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.UPCR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.UPCR_PURP_CCD
+		     , PHD.UPCR_REQ_DT
+		     , PHD.UPCR_CRTR_ID
+		     , PHD.UPCR_CRTR_TEL
+		     , PHD.UPCR_CRTR_DEPT_CD
+		     , PHD.UPCR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.UPCR_RMK
+		     , PHD.UPCR_CHG_RSN
+		     , PHD.ATHG_UUID
+		     , PHD.UPCR_STS_CCD
+		     , PHD.UPCR_CHG_YN
+		     , PHD.UPCR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+			, CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN ELSE USR.USR_NM END AS UPCR_CRTR_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS UPCR_REQ_DEPT_NM               /* 부서명 */
+		  FROM UPCR PHD
+		  LEFT OUTER JOIN USR USR        /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.UPCR_CRTR_ID = USR.USR_ID
+			AND USR.STS != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG B         /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+						  ON USR.TEN_ID = ODM.TEN_ID
+							  AND USR.CO_CD = ODM.LOGIC_ORG_CD
+							  AND PHD.UPCR_CRTR_DEPT_CD = ODM.DEPT_CD
+							  AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD = DEPT.DEPT_CD
+		   AND DEPT.STS        != 'D'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.UPCR_REVNO = CAST(#{p.upcr_revno} AS INT)
+		   AND PHD.UPCR_NO  = #{p.upcr_no}
+	</select>
+	<select id="compareUpcrHdSts" resultType="map">
+		/* upcr.compareUpcrHdSts */
+		SELECT UPCRHD.UPCR_UUID
+		     , UPCRHD.UPCR_NO
+		     , UPCRHD.UPCR_REVNO
+		     , UPCRHD.UPCR_STS_CCD
+		     , CDDL.DTLCD_NM AS UPCR_APRV_STS_NM
+		     , CASE WHEN UPCRHD.UPCR_STS_CCD = #{p.upcr_sts_ccd} THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM UPCR UPCRHD
+		 INNER JOIN DTLCD CDDT
+		    ON CDDT.TEN_ID = UPCRHD.TEN_ID
+		   AND CDDT.CCD = 'P011'
+		   AND CDDT.DTLCD = UPCRHD.UPCR_STS_CCD
+		   AND CDDT.USE_YN = 'Y'
+		   AND CDDT.STS   != 'D'
+		 INNER JOIN DTLCD_MULTLANG CDDL
+		    ON CDDL.TEN_ID  = CDDT.TEN_ID
+		   AND CDDL.CCD  = CDDT.CCD
+		   AND CDDL.DTLCD  = CDDT.DTLCD
+		   AND CDDL.LANG_CCD = #{g.locale}
+		   AND CDDL.STS    != 'D'
+		 WHERE UPCRHD.TEN_ID = #{g.tenant}
+		   AND UPCRHD.UPCR_UUID  = #{p.upcr_uuid}
+	</select>
+	<update id="updateUpcrTotAmt">
+		/* upcr.updateUpcrTotAmt */
+		UPDATE UPCR
+		   SET UPCR_AMT = #{p.upcr_amt}
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM     = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND UPCR_UUID  = #{p.upcr_uuid}
+	</update>
+	<select id="findListUpcrByUpcrItems" resultType="map">
+		/* upcr.findListUpcrByUpcrItems */
+		SELECT UPCR.UPCR_UUID
+		FROM UPCR_ITEM
+		INNER JOIN UPCR
+		ON UPCR.TEN_ID = UPCR_ITEM.TEN_ID
+		AND UPCR.UPCR_UUID = UPCR_ITEM.UPCR_UUID
+		AND UPCR.STS != 'D'
+		WHERE UPCR_ITEM.TEN_ID = #{g.tenant}
+		AND UPCR_ITEM.STS != 'D'
+		AND UPCR_ITEM.UPCR_ITEM_UUID IN
+						   <foreach close=")" collection="p.upcr_item_uuids" item="upcr_item_uuid" open="(" separator=",">
+							   #{upcr_item_uuid}
+						   </foreach>
+	</select>
+	<select id="findListPriceGateByUpcr" resultType="map">
+		/* upcr.findListUpcrByUpcrItems */
+		SELECT A.TEN_ID
+			 , A.CUR_CCD
+			 , (
+			    SELECT  OORG.OORG_CD
+			      FROM OORG_MAPG
+			     INNER JOIN OORG
+			        ON OORG.TEN_ID = OORG_MAPG.TEN_ID
+			       AND OORG.OORG_CD = OORG_MAPG.CONNSRC_OORG_CD
+			     WHERE OORG_MAPG.TEN_ID = B.TEN_ID
+			       AND OORG_MAPG.CONN_TYP_CCD = 'POCO'
+			       AND OORG_MAPG.CONNSUBJ_OORG_CD = B.OORG_CD
+			       AND OORG_MAPG.STS != 'D'
+			       AND OORG.STS != 'D'
+			       AND ROWNUM = 1  ) AS OORG_CD
+			 , CONCAT(CONCAT(CONCAT(CONCAT(CONCAT('[', B.PROJ_NM), '] '), B.MDL_NM), '_'), A.GATE_CD) AS UPCR_TIT
+			 , 'QTY'                     AS PURC_TYP_CCD
+			 , 'UPRCCNTR_SGNG'           AS UPCR_PURP_CCD
+			 , 0                         AS UPCR_AMT
+			 , #{g.username}             AS UPCR_CRTR_ID
+			 , #{g.dept_cd}              AS UPCR_CRTR_DEPT_CD
+		  FROM (SELECT Z.TEN_ID
+				     , Z.PROJ_CD
+				     , Z.REP_ITEM_CD
+				     , Z.GATE_CD
+				     , Z.CUR_CCD
+			      FROM GATE_RFX Z
+			     WHERE Z.TEN_ID      = #{g.tenant}
+				   AND Z.PROJ_CD     = #{p.proj_cd}
+				   AND Z.REP_ITEM_CD = #{p.rep_item_cd}
+				   AND Z.GATE_CD     = #{p.gate_cd}
+				   AND Z.STS        != 'D'
+				   AND (Z.UPCR_ITEM_UUID IS NULL OR Z.UPCR_ITEM_UUID = '')
+			     GROUP BY Z.TEN_ID, Z.PROJ_CD, Z.REP_ITEM_CD, Z.GATE_CD, Z.CUR_CCD
+			 ) A
+		 INNER JOIN PROJ B
+		    ON B.TEN_ID      = A.TEN_ID
+		   AND B.PROJ_CD     = A.PROJ_CD
+		   AND B.STS        != 'D'
+		  LEFT OUTER JOIN ITEM D
+		    ON D.TEN_ID      = A.TEN_ID
+		   AND D.ITEM_CD     = A.REP_ITEM_CD
+		   AND D.STS        != 'D'
+	</select>
+	<select id="findListPriceGateItemsByUpcr" resultType="map">
+		/* upcr.findListPriceGateItemsByUpcr */
+		SELECT A.TEN_ID
+			 , A.BOM_UUID
+			 , A.CUR_CCD
+			 , D.ITEM_CD
+			 , CASE WHEN A.ITEM_NM IS NULL OR A.ITEM_NM = '' THEN D.ITEM_NM
+			        ELSE A.ITEM_NM
+			    END AS ITEM_NM
+		     , CASE WHEN A.ITEM_NM IS NULL OR A.ITEM_NM = '' THEN D.ITEM_NM
+			        ELSE A.ITEM_NM
+			    END AS DISP_ITEM_NM
+		     , CASE WHEN A.UOM_CCD IS NULL OR A.UOM_CCD = '' THEN D.UOM_CCD
+			        ELSE A.UOM_CCD
+			    END AS UOM_CCD
+		     , CASE WHEN D.ITEM_SPEC IS NULL OR D.ITEM_SPEC = '' THEN A.ITEM_NM
+			        ELSE D.ITEM_SPEC
+			    END AS ITEM_SPEC
+			 , (
+			    SELECT  OORG.OORG_CD
+			      FROM OORG_MAPG
+			     INNER JOIN OORG
+			        ON OORG.TEN_ID = OORG_MAPG.TEN_ID
+			       AND OORG.OORG_CD = OORG_MAPG.CONNSRC_OORG_CD
+			     WHERE OORG_MAPG.TEN_ID = B.TEN_ID
+			       AND OORG_MAPG.CONN_TYP_CCD = 'POCO'
+			       AND OORG_MAPG.CONNSUBJ_OORG_CD = B.OORG_CD
+			       AND OORG_MAPG.STS != 'D'
+			       AND OORG.STS != 'D'
+			       AND ROWNUM = 1  ) AS OORG_CD
+			 , TO_CHAR(ROW_NUMBER() OVER(ORDER BY A.ITEM_CD) * 10) AS UPCR_LNO
+			 , 1 AS UPCR_QTY
+			 , 0 AS UPCR_UPRC
+			 , 0 AS UPCR_AMT
+			 , #{g.username} AS UPCR_REALUSR_ID
+			 , CASE WHEN D.ITEM_CD IS NOT NULL  THEN 'ITEM_CD'
+			        ELSE 'CDLS'
+			    END AS ITEM_CD_CRN_TYP_CCD
+		  FROM (SELECT Z.TEN_ID
+				     , Z.PROJ_CD
+				     , Z.ITEM_CD
+		             , Z.ITEM_NM
+				     , Z.GATE_CD
+				     , Z.BOM_ID AS BOM_UUID
+				     , Z.UOM_CCD
+				     , Z.CUR_CCD
+			      FROM GATE_RFX Z
+			     WHERE Z.TEN_ID      = #{g.tenant}
+				   AND Z.PROJ_CD     = #{p.proj_cd}
+				   AND Z.REP_ITEM_CD = #{p.rep_item_cd}
+				   AND Z.GATE_CD     = #{p.gate_cd}
+				   AND Z.STS        != 'D'
+			       AND CASE WHEN Z.CUR_CCD IS NULL OR Z.CUR_CCD = '' THEN 'X'
+			                ELSE Z.CUR_CCD
+			            END = CASE WHEN #{p.cur_ccd} IS NULL OR #{p.cur_ccd} = '' THEN 'X'
+			                       ELSE #{p.cur_ccd}
+			                   END
+				   AND (Z.UPCR_ITEM_UUID IS NULL OR Z.UPCR_ITEM_UUID = '')
+			 ) A
+		 INNER JOIN PROJ B
+		    ON B.TEN_ID      = A.TEN_ID
+		   AND B.PROJ_CD     = A.PROJ_CD
+		   AND B.STS        != 'D'
+		  LEFT OUTER JOIN ITEM D
+		    ON D.TEN_ID      = A.TEN_ID
+		   AND D.ITEM_CD     = A.ITEM_CD
+		   AND D.STS        != 'D'
+	</select>
+	<update id="updatePriceGateByUpcr">
+		/* upcr.updatePriceGateByUpcr */
+		UPDATE GATE_RFX A
+		   SET UPCR_ITEM_UUID = (SELECT Z.UPCR_ITEM_UUID FROM UPCR_ITEM Z
+		                          WHERE Z.TEN_ID = A.TEN_ID
+		                            AND Z.BOM_UUID = A.BOM_ID
+		                            AND Z.STS != 'D')
+		     , MODR_ID        = #{g.username}
+		     , MOD_DTTM       = #{g.now}
+		 WHERE TEN_ID         = #{g.tenant}
+		   AND PROJ_CD        = #{p.proj_cd}
+		   AND REP_ITEM_CD    = #{p.rep_item_cd}
+		   AND GATE_CD        = #{p.gate_cd}
+		   AND STS           != 'D'
+		   AND (UPCR_ITEM_UUID IS NULL OR UPCR_ITEM_UUID = '')
+	</update>
+</mapper>

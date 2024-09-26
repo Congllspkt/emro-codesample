@@ -1,0 +1,162 @@
+<sc-link rel="import" href="ep-sg-itemcat-list.html"></sc-link>
+
+<dom-module id="es-sg-item-category-list">
+	<style>
+		:host{
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 소싱그룹 품목 카테고리 조회 -->
+		<sc-ajax id="findSourcingGroupItemCategoryList" url="findSourcingGroupItemCategoryList.do" body="{{sgInfo}}" last-response="{{resultList}}"></sc-ajax>
+		<!-- 저장 -->
+		<sc-ajax id="saveSgItemCategoryList" url="saveSgItemCategoryList.do" on-response="completeSaveSgItemCategoryList"></sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-search-condition-panel on-search="onSearch">
+			<cc-fieldset>
+				<sc-label text="품목분류"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{sgInfo.itemcat_cd}}" class="w-100" on-enter="onSearch" placeholder="코드"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{sgInfo.itemcat_nm}}"  on-enter="onSearch" placeholder="품목분류 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" use-status="false" use-selection="true" editable="false"
+				 data-provider="{{resultList}}">
+			<cc-grid-toolbar>
+				<sc-button text="추가" on-click="onAdd" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDelete" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="itemcat_cd" header-text="품목분류 코드" width="100"></sc-data-column>
+				<sc-data-column data-field="itemcat_nm" header-text="품목분류 명" width="200" text-align="left"></sc-data-column>
+				<sc-date-column data-field="reg_dttm" header-text="등록 일자" width="100"></sc-date-column>
+				<sc-date-column data-field="mod_dttm" header-text="수정 일자" width="100"></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="sg_cd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-sg-item-category-list',
+			
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				sgInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				completeAlertKey: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				}
+			},
+			
+			formulas: {
+			
+			},
+			
+			initialize: function() {
+				const me = this;
+			},
+			
+			load: function(param) {
+				const me = this;
+				
+				me.set("sgInfo", param);
+				me.onSearch();
+			},
+			
+			//조회
+			onSearch: function() {
+				const me = this;
+				
+				UT.request(me.$.findSourcingGroupItemCategoryList);
+			},
+			
+			//품목 분류 추가
+			onAdd: function() {
+				const me = this;
+				
+				const itemCatPopup = UT.popup("ep-sg-itemcat-list",me, 1200, 800, {
+					'selected-items': function(popup, e){
+						const data = e.detail;
+						me.onSearch();
+						popup.close();
+					}
+				});
+				
+				itemCatPopup.show();
+				itemCatPopup.getWindowContent().load(me.get("sgInfo"));
+			},
+			
+			//삭제
+			onDelete: function(e) {
+				const me = this,
+					  btnName = e.target.text;
+				const provider = me.$.gridPanel.getDataProvider(),
+					  checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600");
+					return ;
+				}
+				
+				//삭제하시겠습니까?
+				UT.confirm("STD.N1300", function() {
+					me.set("completeAlertKey", btnName);
+					
+					me.$.saveSgItemCategoryList.body = {itemList : checked, sg_cd: null};
+				
+					UT.request(me.$.saveSgItemCategoryList);
+				});
+			},
+			
+			//삭제 후 처리
+			completeSaveSgItemCategoryList: function(e, res) {
+				const me = this,
+					  result = res.response;
+				
+				if(!UT.isEmpty(result) && result.resultStatus === 'S') {
+					UT.completeAlert(me.get("completeAlertKey"), function() {
+						me.onSearch();
+					})
+				} else {
+					UT.alert("STD.E9999");		//오류가 발생하였습니다.<br/>시스템관리자에게 문의하세요.
+				}
+				
+				me.set("completeAlertKey", "");
+			},
+			
+		});
+	</script>
+</dom-module>

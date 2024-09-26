@@ -1,0 +1,690 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="calc-factor">
+	<select id="findListCalcFactor" resultType="map">
+	/* calc-factor.findListCalcFactor : 계산항목목록 조회 */
+		SELECT CALCFACT_UUID  					/* 계산항목 UUID */
+			 , CALCFACT_CD 						/* 계산항목 코드 */
+			 , CALCFACT_NM 						/* 계산항목 명 */
+			 , CALCFACT_TYP_CCD   				/* 계산항목 유형 공통코드 */
+			 , NMTR_DNTR_DIV_CCD				/* 분자/분모 구분 공통코드 */
+			 , NMTR_VAL_NULLV_DATFIL_METH_CCD	/* 분자 값 NULL값 데이터보정 방식 공통코드 */
+		 	 , DAT_COLLMETH_CCD					/* 데이터 수집방법 공통코드 */
+		     , VAL_COLL_TYP_CCD                 /* 값 수집 유형 공통코드 */
+			 , DAT_UNIT							/* 데이터 단위 */
+		     , DB_TBL_CD
+		     , DB_TBL_VAL_COL_CD AS DB_COL_CD
+		     , VAL_COLL_TYP_CCD
+			 , RMK          					/* 비고 */
+			 , REGR_ID       					/* 등록자 아이디 */
+			 , ( SELECT USR_NM
+				   FROM USR
+				  WHERE TEN_ID = CAL.TEN_ID
+				    AND USR_ID = CAL.REGR_ID
+			    ) AS REGR_NM    				/* 등록자 명 */
+			, REG_DTTM							/* 등록 일시 */
+			, MODR_ID       					/* 수정자 아이디 */
+			, ( SELECT USR_NM
+				  FROM USR
+				 WHERE TEN_ID = CAL.TEN_ID
+				   AND USR_ID = CAL.MODR_ID
+			   ) AS REGR_NM    					/* 수정자 명 */
+			, MOD_DTTM       					/* 수정 일시 */
+			, CASE ( SELECT COUNT(CALCFACT_UUID)
+					   FROM EVALFACT_CALCFACT
+					  WHERE TEN_ID = CAL.TEN_ID
+						AND CALCFACT_UUID = CAL.CALCFACT_UUID
+						AND STS != 'D' )
+			   WHEN 0 THEN 'N'
+			   ELSE 'Y'
+			    END AS FACT_USE_YN				/* 평가항목-계산항목 사용여부 체크 */
+		FROM CALCFACT CAL						/* 계산항목 Table */
+		WHERE TEN_ID = #{g.tenant}
+		AND STS != 'D'
+		<if test="p.calcfact_nm != null and p.calcfact_nm != ''">
+			<bind name="calFactNamePattern" value="'%' + p.calcfact_nm + '%'"/>
+			AND UPPER(CALCFACT_NM) LIKE UPPER(#{calFactNamePattern})
+		</if>
+		ORDER BY CALCFACT_CD
+	</select>
+	<insert id="insertCalcFactor">
+	/* calc-factor.insertCalcFactor : 계산항목 저장(신규) */
+		INSERT INTO CALCFACT
+		(
+		  TEN_ID			  					/* 테넌트 아이디 */
+		, CALCFACT_UUID       					/* 계산항목 UUID */
+		, CALCFACT_CD							/* 계산항목 코드 */
+		, CALCFACT_NM							/* 계산항목 명 */
+		<if test="p.calcfact_typ_ccd != null and p.calcfact_typ_ccd != ''">
+		, CALCFACT_TYP_CCD						/* 계산항목 유형 공통코드 */
+		</if>
+		, NMTR_DNTR_DIV_CCD						/* 분자/분모 구분 공통코드 */
+		<if test="p.nmtr_val_nullv_datfil_meth_ccd != null and p.nmtr_val_nullv_datfil_meth_ccd != ''">
+		, NMTR_VAL_NULLV_DATFIL_METH_CCD		/* 분자 값 NULL값 데이터보정 방식 공통코드 */
+		</if>
+		<if test="p.dat_collmeth_ccd != null and p.dat_collmeth_ccd != ''">
+		, DAT_COLLMETH_CCD						/* 데이터 수집방법 공통코드 */
+		</if>
+		<if test="p.dat_unit != null and p.dat_unit != ''">
+		, DAT_UNIT								/* 데이터 단위 */
+		</if>
+		<if test="p.rmk != null and p.rmk != ''">
+		, RMK                 					/* 비고 */
+		</if>
+		<if test="p.prcr_cd != null and p.prcr_cd != ''">
+		, PRCR_CD                 				/* 프로시저 코드 */
+		</if>
+		<if test="p.db_tbl_cd != null and p.db_tbl_cd != ''">
+		, DB_TBL_CD                             /* 데이터베이스 테이블 코드 */
+		</if>
+		<if test="p.db_col_cd != null and p.db_col_cd != ''">
+		, DB_TBL_VAL_COL_CD                      /* 데이터베이스 값 컬럼 코드 */
+		</if>
+		<if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd != ''">
+		, VAL_COLL_TYP_CCD                      /* 값 수집 유형 공통코드(R801) */
+		</if>
+		, EVAL_TASK_TYP_CCD                     /* [R704] 평가 업무 유형 공통코드 */
+		, EVALFACT_CD                           /* 평가항목 코드 */
+		, STS                 					/* 상태 */
+		, REGR_ID             					/* 등록자 아이디 */
+		, REG_DTTM            					/* 등록 일시 */
+		, MODR_ID								/* 수정자 아이디 */
+		, MOD_DTTM								/* 수정 일시 */
+		)
+		VALUES
+		(
+		  #{g.tenant}                 			/* 테넌트 아이디 */
+		, #{p.calcfact_uuid}					/* 계산항목 UUID */
+		, #{p.calcfact_cd}						/* 계산항목 코드 */
+		, #{p.calcfact_nm}						/* 계산항목 명 */
+		<if test="p.calcfact_typ_ccd != null and p.calcfact_typ_ccd != ''">
+		, #{p.calcfact_typ_ccd}					/* 계산항목 유형 공통코드 */
+		</if>
+		, #{p.nmtr_dntr_div_ccd}				/* 분자/분모 구분 공통코드 */
+		<if test="p.nmtr_val_nullv_datfil_meth_ccd != null and p.nmtr_val_nullv_datfil_meth_ccd != ''">
+		, #{p.nmtr_val_nullv_datfil_meth_ccd}	/* 분자 값 NULL값 데이터보정 방식 공통코드 */
+		</if>
+		, #{p.dat_collmeth_ccd}					/* 데이터 수집방법 공통코드 */
+		, #{p.dat_unit}							/* 데이터 단위 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, #{p.rmk}                    			/* 비고 */
+		</if>
+		<if test="p.prcr_cd != null and p.prcr_cd != ''">
+		, #{p.prcr_cd}                   		/* 프로시저 코드 */
+		</if>
+		<if test="p.db_tbl_cd != null and p.db_tbl_cd != ''">
+		, #{p.db_tbl_cd}                        /* 데이터베이스 테이블 코드 */
+		</if>
+		<if test="p.db_col_cd != null and p.db_col_cd != ''">
+		, #{p.db_col_cd}                        /* 데이터베이스 값 컬럼 코드 */
+		</if>
+		<if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd != ''">
+		, #{p.val_coll_typ_ccd}                 /* 값 수집 유형 공통코드(R801) */
+		</if>
+		, #{p.eval_task_typ_ccd}                /* [R704] 평가 업무 유형 공통코드 */
+		, #{p.evalfact_cd}                      /* 평가항목 코드 */
+		, 'C'                         			/* 상태 */
+		, #{g.username}               			/* 작성자아이디 */
+		, #{g.now}                    			/* 작성일시 */
+		, #{g.username}							/* 수정자 아이디 */
+		, #{g.now} 								/* 수정 일시 */
+		)
+	</insert>
+	<update id="updateCalcFactor">
+	/* calc-factor.updateCalcFactor : 계산항목 상세정보 저장(수정) */
+		UPDATE CALCFACT
+		SET   CALCFACT_NM = #{p.calcfact_nm}											/* 계산항목 명 */
+			, CALCFACT_TYP_CCD	= #{p.calcfact_typ_ccd}									/* 계산항목 유형 공통코드 */
+			, NMTR_DNTR_DIV_CCD = #{p.nmtr_dntr_div_ccd}								/* 분자/분모 구분 공통코드 */
+			<choose>
+				<when test="p.nmtr_dntr_div_ccd != null and p.nmtr_dntr_div_ccd == &quot;NMTR&quot;">
+					, NMTR_VAL_NULLV_DATFIL_METH_CCD = #{p.nmtr_val_nullv_datfil_meth_ccd}	/* 분자 값 NULL값 데이터보정 방식 공통코드 */
+				</when>
+				<otherwise>
+					, NMTR_VAL_NULLV_DATFIL_METH_CCD = NULL								    /* 분모(D) or ALL(A)인 경우 기존 데이터 삭제 */
+				</otherwise>
+			</choose>
+			, DB_TBL_CD = #{p.db_tbl_cd}                                                /* 데이터베이스 테이블 코드 */
+			, DB_TBL_VAL_COL_CD = #{p.db_col_cd}                                        /* 데이터베이스 컬럼 코드 */
+			, PRCR_CD = #{p.prcr_cd}													/* 프로시저 코드 */
+			, DAT_COLLMETH_CCD	= #{p.dat_collmeth_ccd}									/* 데이터 수집방법 공통코드 */
+			, VAL_COLL_TYP_CCD = #{p.val_coll_typ_ccd}                                  /* 값 수집유형 공통코드 */
+			, DAT_UNIT = #{p.dat_unit}													/* 데이터 단위 */
+			, RMK = #{p.rmk}                											/* 비고 */
+		    , EVAL_TASK_TYP_CCD =  #{p.eval_task_typ_ccd}                               /* [R704] 평가 업무 유형 공통코드 */
+		    , EVALFACT_CD = #{p.evalfact_cd}                                            /* 평가항목 코드 */
+			, STS = 'U'              													/* 상태 */
+			, MODR_ID = #{g.username}         			 								/* 수정자 아이디 */
+			, MOD_DTTM = #{g.now}          												/* 수정 일시 */
+		WHERE TEN_ID = #{g.tenant}
+		AND CALCFACT_UUID = #{p.calcfact_uuid}
+		AND STS != 'D'
+	</update>
+	<select id="findCalcFactorInfo" resultType="map">
+	/* calc-factor.findCalcFactorInfo : 계산항목 상세정보 조회 */
+		SELECT CAL.CALCFACT_UUID  					/* 계산항목 UUID */
+			 , CAL.CALCFACT_CD 						/* 계산항목 코드 */
+			 , CAL.CALCFACT_NM 						/* 계산항목 명 */
+			 , CAL.CALCFACT_TYP_CCD   				/* 계산항목 유형 공통코드 */
+			 , CAL.NMTR_DNTR_DIV_CCD				/* 분자/분모 구분 공통코드 */
+			 , CAL.NMTR_VAL_NULLV_DATFIL_METH_CCD	/* 분자 값 NULL값 데이터보정 방식 공통코드 */
+			 , CAL.DAT_COLLMETH_CCD					/* 데이터 수집방법 공통코드 */
+			 , CAL.DAT_UNIT							/* 데이터 단위 */
+			 , CAL.DB_TBL_CD                        /* 데이터베이스 테이블 코드 */
+			 , CAL.DB_TBL_VAL_COL_CD AS DB_COL_CD   /* 데이터베이스 컬럼 코드 */
+			 , CAL.VAL_COLL_TYP_CCD                 /* 값 수집 유형 공통코드 */
+		     , CAL.EVAL_TASK_TYP_CCD                /* [R704] 평가 업무 유형 공통코드 */
+		     , CAL.EVALFACT_CD                      /* 평가항목 코드 */
+             , (SELECT EVALFACT_NM FROM EVALFACT WHERE TEN_ID = CAL.TEN_ID AND EVALFACT_CD = CAL.EVALFACT_CD) AS EVALFACT_NM
+			 , (SELECT DB_TBL_PHYC_NM FROM DB_TBL WHERE TEN_ID = CAL.TEN_ID AND DB_TBL_CD = CAL.DB_TBL_CD) AS DB_TBL_PHYC_NM
+			 , (SELECT DB_TBL_LOGIC_NM FROM DB_TBL WHERE TEN_ID = CAL.TEN_ID AND DB_TBL_CD = CAL.DB_TBL_CD) AS DB_TBL_LOGIC_NM
+			 , (SELECT DB_COL_PHYC_NM FROM DB_COL WHERE TEN_ID = CAL.TEN_ID AND DB_COL_CD = CAL.DB_TBL_VAL_COL_CD) AS DB_COL_PHYC_NM
+			 , (SELECT DB_COL_LOGIC_NM FROM DB_COL WHERE TEN_ID = CAL.TEN_ID AND DB_COL_CD = CAL.DB_TBL_VAL_COL_CD) AS DB_COL_LOGIC_NM
+			 , CAL.RMK          					/* 비고 */
+			 , CAL.REGR_ID       					/* 등록자 아이디 */
+			 , ( SELECT USR_NM
+			     FROM USR
+			     WHERE TEN_ID = CAL.TEN_ID
+				   AND USR_ID = CAL.REGR_ID
+				) AS REGR_NM    				/* 등록자 명 */
+			 , CAL.REG_DTTM
+			 , CAL.MODR_ID       					/* 수정자 아이디 */
+			 , ( SELECT USR_NM
+			       FROM USR
+			      WHERE TEN_ID = CAL.TEN_ID
+				    AND USR_ID = CAL.MODR_ID
+				) AS REGR_NM    				/* 수정자 명 */
+			 , CAL.MOD_DTTM       					/* 수정 일시 */
+			 , CAL.PRCR_CD							/* 프로시저 코드 */
+			 , (SELECT PRCR_NM
+			      FROM PRCR
+			     WHERE TEN_ID = CAL.TEN_ID
+				   AND PRCR_CD = CAL.PRCR_CD
+				) AS PRCR_NM				/* 프로시저 명 */
+		FROM CALCFACT CAL						/* 계산항목 Table */
+		WHERE CAL.TEN_ID = #{g.tenant}
+		  AND CAL.CALCFACT_UUID = #{p.calcfact_uuid}
+	</select>
+	<update id="deleteListCalcFactor">
+	/* calc-factor.deleteListCalcFactor : 계산항목 삭제 */
+		UPDATE CALCFACT
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}         		/* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}          		/* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}
+		   AND CALCFACT_UUID = #{p.calcfact_uuid}
+	</update>
+	<select id="findListProcedureCode" resultType="map">
+	/* calc-factor.findListProcedureCode : 프로시저목록 조회 */
+		SELECT TEN_ID			/* 테넌트 아이디 */
+			 , PRCR_CD			/* 프로시저 코드 */
+			 , PRCR_NM		/* 프로시저 명 */
+			 , RMK				/* 비고 */
+			 , REGR_ID			/* 등록자 아이디 */
+			 , REG_DTTM			/* 등록자 일시 */
+			 , MODR_ID			/* 수정자 아이디 */
+			 , MOD_DTTM			/* 수정 일시 */
+			 , CASE ( SELECT COUNT(CALCFACT_UUID)
+						FROM CALCFACT
+						WHERE TEN_ID = PRCR.TEN_ID
+						AND PRCR_CD = PRCR.PRCR_CD
+						AND STS != 'D' )
+			   WHEN 0 THEN 'N'
+			   ELSE 'Y'
+			   END AS CALC_USE_YN	/* 계산항목 사용여부 체크 */
+		FROM PRCR
+		WHERE TEN_ID = 'EMRO'
+		AND STS != 'D'
+		<if test="p.prcr_nm != null and p.prcr_nm != ''">
+			<bind name="procedureNamePattern" value="'%' + p.prcr_nm + '%'"/>
+			AND UPPER(PRCR_NM) LIKE UPPER(#{procedureNamePattern})
+		</if>
+		ORDER BY PRCR_CD
+	</select>
+	<insert id="insertListProcedureCode">
+	/* calc-factor.insertListProcedureCode : 프로시저 저장(신규) */
+		INSERT INTO PRCR
+		(
+		  TEN_ID				/* 테넌트 아이디 */
+		, PRCR_CD				/* Procedure 코드 */
+		, PRCR_NM			/* Procedure 명 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, RMK					/* 비고 */
+		</if>
+		, STS					/* 상태 */
+		, REGR_ID				/* 등록자 아이디 */
+		, REG_DTTM				/* 등록자 일시 */
+		)
+		VALUES
+		(
+		 #{g.tenant}			/* 테넌트 아이디 */
+		, #{p.prcr_cd}			/* Procedure 코드 */
+		, #{p.prcr_nm}		/* Procedure 명 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, #{p.rmk}				/* 비고 */
+		</if>
+		, 'C'					/* 상태 */
+		, #{g.username}			/* 등록자 아이디 */
+		, #{g.now}				/* 등록자 일시 */
+		)
+	</insert>
+	<update id="updateListProcedureCode">
+	/* calc-factor.updateListProcedureCode : 프로시저 저장(수정) */
+		UPDATE PRCR
+		   SET PRCR_NM = #{p.prcr_nm}
+		     , RMK = #{p.rmk}
+		     , MODR_ID = #{g.username}         		/* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}          		/* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PRCR_CD = #{p.prcr_cd}
+	</update>
+	<update id="deleteListProcedureCode">
+	/* calc-factor.deleteListProcedureCode : 프로시저 삭제 */
+		UPDATE PRCR
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}         		/* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}          		/* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PRCR_CD = #{p.prcr_cd}
+	</update>
+	<select id="findListParameterCode" resultType="map">
+	/* calc-factor.findListParameterCode : 파라미터목록 조회 */
+		SELECT PM.TEN_ID			/* 테넌트 아이디 */
+			 , PM.PARM_CD			/* 파라미터 코드 */
+			 , PM.PARM_NM			/* 파라미터 명 */
+			 , PM.RMK				/* 비고 */
+			 , PM.REGR_ID			/* 등록자 아이디 */
+			 , PM.REG_DTTM			/* 등록자 일시 */
+			 , PM.MODR_ID			/* 수정자 아이디 */
+			 , PM.MOD_DTTM			/* 수정 일시 */
+		     , PRPM.ORD				/* 순서 */
+			 , CASE WHEN PRPM.PRCR_CD IS NULL OR PRPM.PRCR_CD = ''
+				    THEN 'N'
+			        ELSE 'Y'
+					END AS PRCR_CD_YN	/* 프로시저 사용여부 체크(해당 프로시저에서 사용중인 파라미터인지 체크)*/
+			 , CASE ( SELECT COUNT(PRCR_CD)
+			            FROM PRCR_PARM
+			           WHERE TEN_ID = PM.TEN_ID
+				         AND PARM_CD = PM.PARM_CD
+				         AND STS != 'D' )
+			   WHEN 0 THEN 'N'
+			   ELSE 'Y'
+			   END AS PRCR_USE_YN	/* 프로시저-파라미터 존재여부(해당 프로시저 포함 다른 프로시저에서 사용하는지 체크) */
+		 FROM PARM PM
+	     LEFT JOIN PRCR_PARM PRPM
+           ON PM.TEN_ID = PRPM.TEN_ID
+           AND PM.PARM_CD = PRPM.PARM_CD
+           AND PRPM.STS != 'D'
+           AND PRPM.PRCR_CD = #{p.prcr_cd}
+		WHERE PM.TEN_ID = #{g.tenant}
+		  AND PM.STS != 'D'
+		ORDER BY PM.PARM_CD
+	</select>
+	<insert id="insertListParameterCode">
+	/* calc-factor.insertListParameterCode : 파라미터 저장(신규) */
+		INSERT INTO PARM
+		(
+		  TEN_ID				/* 테넌트 아이디 */
+		, PARM_CD				/* 파라미터 코드 */
+		, PARM_NM				/* 파라미터 명 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, RMK					/* 비고 */
+		</if>
+		, STS					/* 상태 */
+		, REGR_ID				/* 등록자 아이디 */
+		, REG_DTTM				/* 등록자 일시 */
+		)
+		VALUES
+		(
+		  #{g.tenant}			/* 테넌트 아이디 */
+		, #{p.parm_cd}			/* 파라미터 코드 */
+		, #{p.parm_nm}			/* 파라미터 명 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, #{p.rmk}				/* 비고 */
+		</if>
+		, 'C'					/* 상태 */
+		, #{g.username}			/* 등록자 아이디 */
+		, #{g.now}				/* 등록자 일시 */
+		)
+	</insert>
+	<update id="updateListParameterCode">
+	/* calc-factor.updateListParameterCode : 파라미터 저장(수정) */
+		UPDATE PARM
+		   SET PARM_NM = #{p.parm_nm}
+		     , RMK = #{p.rmk}
+		     , MODR_ID = #{g.username}         		/* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}          		/* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PARM_CD = #{p.parm_cd}
+	</update>
+	<insert id="insertListProcedureParameter">
+	/* calc-factor.insertListProcedureParameter : 프로시저파라미터 저장 */
+		INSERT INTO PRCR_PARM
+		(
+		  TEN_ID				/* 테넌트 아이디 */
+		, PRCR_CD				/* 프로시저 코드 */
+		, PARM_CD				/* 파라미터 코드 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, RMK					/* 비고 */
+		</if>
+		, STS					/* 상태 */
+		, ORD					/* 순서*/
+		, REGR_ID				/* 등록자 아이디 */
+		, REG_DTTM				/* 등록자 일시 */
+		)
+		VALUES
+		(
+		  #{g.tenant}				/* 테넌트 아이디 */
+		, #{p.prcr_cd}			/* 프로시저 코드 */
+		, #{p.parm_cd}			/* 파라미터 코드 */
+		<if test="p.rmk != null and p.rmk != ''">
+		, #{p.rmk}				/* 비고 */
+		</if>
+		, 'C'					/* 상태 */
+		, #{p.ord}				/* 순서 */
+		, #{g.username}			/* 등록자 아이디 */
+		, #{g.now}				/* 등록자 일시 */
+		)
+	</insert>
+	<delete id="deleteListProcedureParameterByPrcrCd">
+	/* calc-factor.deleteListProcedureParameterByPrcrCd : 프로시저파라미터 삭제 */
+		DELETE FROM PRCR_PARM
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PRCR_CD = #{p.prcr_cd}
+	</delete>
+	<update id="deleteListParameterCode">
+	/* calc-factor.deleteListParameterCode : 파라미터 삭제 */
+		UPDATE PARM
+		   SET STS = 'D'
+		    , MODR_ID = #{g.username}         	/* 수정자 아이디 */
+		    , MOD_DTTM = #{g.now}          		/* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PARM_CD = #{p.parm_cd}
+	</update>
+	<delete id="deleteListProcedureParameterByParmCd">
+	/* calc-factor.deleteListProcedureParameterByParmCd : 프로시저파라미터 삭제 */
+		DELETE FROM PRCR_PARM
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PARM_CD = #{p.parm_cd}
+	</delete>
+	<select id="checkDuplicatedProcedureName" resultType="map">
+	/* calc-factor.checkDuplicatedProcedureName : 프로시저명 중복 체크 */
+		SELECT CASE WHEN COUNT(*) &gt; 0 THEN 'Y' ELSE 'N' END AS DUPLICATED_YN
+		  FROM PRCR
+	     WHERE TEN_ID = #{g.tenant}
+		   AND PRCR_NM = #{p.prcr_nm}
+	       <if test="p.prcr_cd != null and p.prcr_cd != ''">
+		   AND PRCR_CD != #{p.prcr_cd}
+	       </if>
+		   AND STS != 'D'
+	</select>
+	<select id="checkDuplicatedParameterName" resultType="map">
+	/* calc-factor.checkDuplicatedParameterName : 파라미터명 중복 체크 */
+		SELECT CASE WHEN COUNT(*) &gt; 0 THEN 'Y' ELSE 'N' END AS DUPLICATED_YN
+	      FROM PARM
+		WHERE TEN_ID = #{g.tenant}
+		  AND PARM_NM = #{p.parm_nm}
+		  <if test="p.parm_cd != null and p.parm_cd != ''">
+		  AND PARM_CD != #{p.parm_cd}
+		  </if>
+		  AND STS != 'D'
+	</select>
+	<select id="findListDbTable" resultType="map">
+	/* calc-factor.findListDbTable : 실적 대상 테이블 목록 조회 */
+		SELECT TEN_ID
+			 , DB_TBL_CD
+			 , DB_TBL_PHYC_NM
+			 , DB_TBL_LOGIC_NM
+			 , USE_YN
+			 , RMK
+		     , STS
+			 , REGR_ID
+		     , REG_DTTM
+		     , MODR_ID
+		     , MOD_DTTM
+		  FROM DB_TBL 							/* 실적 대상 테이블 */
+	     WHERE TEN_ID = #{g.tenant}
+	       AND STS != 'D'
+		<if test="p.db_tbl_phyc_nm != null and p.db_tbl_phyc_nm != ''">
+			<bind name="db_tbl_phyc_nm" value="'%' + p.db_tbl_phyc_nm + '%'"/>
+			AND UPPER(DB_TBL_PHYC_NM) LIKE UPPER(#{db_tbl_phyc_nm})
+		</if>
+		<if test="p.db_tbl_logic_nm != null and p.db_tbl_logic_nm != ''">
+			<bind name="db_tbl_logic_nm" value="'%' + p.db_tbl_logic_nm + '%'"/>
+			AND UPPER(DB_TBL_LOGIC_NM) LIKE UPPER(#{db_tbl_logic_nm})
+		</if>
+		ORDER BY DB_TBL_CD
+	</select>
+	<select id="findListDbColumn" resultType="map">
+	/* calc-factor.findListDbColumn : 실적 대상 테이블 조건 컬럼 목록 조회 */
+		SELECT DB_COL.TEN_ID
+			 , DB_COL.DB_COL_CD
+			 , DB_COL.DB_TBL_CD
+			 , DB_TBL.DB_TBL_PHYC_NM
+			 , DB_TBL.DB_TBL_LOGIC_NM
+			 , DB_COL.DB_COL_PHYC_NM
+			 , DB_COL.DB_COL_LOGIC_NM
+			 , DB_COL.USE_YN
+			 , DB_COL.RMK
+			 , DB_COL.STS
+			 , DB_COL.REGR_ID
+			 , DB_COL.REG_DTTM
+			 , DB_COL.MODR_ID
+			 , DB_COL.MOD_DTTM
+		  FROM DB_COL							/* 실적 대상 테이블 조건 컬럼 */
+		 INNER JOIN DB_TBL						/* 실적 대상 테이블 */
+		    ON DB_TBL.TEN_ID = DB_COL.TEN_ID
+		   AND DB_TBL.DB_TBL_CD = DB_COL.DB_TBL_CD
+		 WHERE DB_COL.TEN_ID = #{g.tenant}
+		   AND DB_COL.STS != 'D'
+		   AND DB_COL.DB_TBL_CD = #{p.db_tbl_cd}
+		<if test="p.db_col_phyc_nm != null and p.db_col_phyc_nm != ''">
+			<bind name="db_col_phyc_nm" value="'%' + p.db_col_phyc_nm + '%'"/>
+		   AND UPPER(DB_COL.DB_COL_PHYC_NM) LIKE UPPER(#{db_col_phyc_nm})
+		</if>
+		<if test="p.db_col_logic_nm != null and p.db_col_logic_nm != ''">
+			<bind name="db_col_logic_nm" value="'%' + p.db_col_logic_nm + '%'"/>
+		   AND UPPER(DB_COL.DB_COL_LOGIC_NM) LIKE UPPER(#{p.db_col_logic_nm})
+		</if>
+		ORDER BY DB_COL.DB_COL_CD
+	</select>
+	<select id="findListCalcCndColumn" resultType="map">
+	/* calc-factor.findListCalcCndColumn : 계산항목 조건 컬럼 목록 조회 */
+		SELECT TEN_ID
+			 , CALCFACT_UUID
+			 , DB_COL_CD
+			 , CND_DIV_CCD
+			 , RMK
+			 , STS
+			 , REGR_ID
+			 , REG_DTTM
+			 , MODR_ID
+			 , MOD_DTTM
+		  FROM CALCFACT_CND_COL					/* 계산항목 조건 컬럼 */
+	     WHERE TEN_ID = #{g.tenant}
+	       AND STS != 'D'
+	     ORDER BY DB_COL_CD
+	</select>
+	<insert id="insertDbTblInfo">
+	/* calc-factor.insertDbTblInfo : 실적 대상 테이블 저장(신규) */
+	INSERT INTO DB_TBL (
+		TEN_ID
+	  , DB_TBL_CD
+	  , DB_TBL_PHYC_NM
+	  , DB_TBL_LOGIC_NM
+	  , USE_YN
+	  , RMK
+	  , STS
+	  , REGR_ID
+	  , REG_DTTM
+	  , MODR_ID
+	  , MOD_DTTM
+	) VALUES (
+	    #{g.tenant}
+      , #{p.db_tbl_cd}
+      , #{p.db_tbl_phyc_nm}
+      , #{p.db_tbl_logic_nm}
+      , #{p.use_yn}
+      , #{p.rmk}
+      , 'C'
+      , #{g.username}
+      , #{g.now}
+      , #{g.username}
+      , #{g.now}
+	)
+	</insert>
+	<update id="updateDbTblInfo">
+	/* calc-factor.updateDbTblInfo : 실적 대상 테이블 저장(수정) */
+		UPDATE DB_TBL
+		   SET DB_TBL_PHYC_NM = #{p.db_tbl_phyc_nm}
+		     , DB_TBL_LOGIC_NM = #{p.db_tbl_logic_nm}
+		     , USE_YN = #{p.use_yn}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+		   AND DB_TBL_CD = #{p.db_tbl_cd}
+		   AND STS != 'D'
+	</update>
+	<select id="findListDbTblColumn" resultType="map">
+	/* calc-factor.findListDbTblColumn */
+		SELECT TEN_ID
+		     , DB_COL_CD
+			 , DB_TBL_CD
+			 , DB_COL_PHYC_NM
+			 , DB_COL_LOGIC_NM
+			 , USE_YN
+			 , RMK
+			 , STS
+			 , REGR_ID
+			 , REG_DTTM
+		     , MODR_ID
+			 , MOD_DTTM
+		  FROM DB_COL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND DB_TBL_CD = #{p.db_tbl_cd}
+		   AND USE_YN = 'Y'
+		   AND STS != 'D'
+	</select>
+	<select id="findListDbTblCondition" resultType="map">
+	/* calc-factor.findListDbTblCondition */
+		SELECT DTL.DTLCD
+			 , DTL_ML.DTLCD_NM	AS COND_NM
+			 , CFACT_C.CALCFACT_UUID
+			 , CFACT_C.DB_COL_CD
+			 , CFACT_C.CND_DIV_CCD
+			 , CFACT_C.DB_TBL_CD
+			 , CFACT_C.DB_COL_PHYC_NM
+			 , CFACT_C.DB_COL_LOGIC_NM
+		     , CASE WHEN CFACT_C.USE_YN IS NULL OR CFACT_C.USE_YN = '' THEN 'N'
+				    ELSE 'Y'
+		             END AS USE_YN
+		  FROM DTLCD DTL
+		 INNER JOIN DTLCD_MULTLANG DTL_ML
+		    ON DTL_ML.TEN_ID = DTL.TEN_ID
+		   AND DTL_ML.CCD = DTL.CCD
+		   AND DTL_ML.DTLCD = DTL.DTLCD
+		   AND DTL_ML.CCD = 'R802'
+		   AND DTL.USE_YN = 'Y'
+		   AND DTL.STS != 'D'
+		  LEFT JOIN
+				  ( SELECT CFACT_CCOL.TEN_ID
+				    	 , CFACT_CCOL.CALCFACT_UUID
+				         , CFACT_CCOL.DB_COL_CD
+				         , CFACT_CCOL.CND_DIV_CCD
+				         , DB_COL.DB_TBL_CD
+				    	 , DB_COL.DB_COL_PHYC_NM
+				         , DB_COL.DB_COL_LOGIC_NM
+				         , DB_COL.USE_YN
+				      FROM CALCFACT_CND_COL CFACT_CCOL
+				     INNER JOIN DB_COL
+				        ON DB_COL.TEN_ID = CFACT_CCOL.TEN_ID
+				       AND DB_COL.DB_COL_CD = CFACT_CCOL.DB_COL_CD
+				     WHERE CFACT_CCOL.TEN_ID = #{g.tenant}
+				       AND CFACT_CCOL.CALCFACT_UUID = #{p.calcfact_uuid}
+				       AND CFACT_CCOL.STS != 'D'
+				       AND DB_COL.USE_YN = 'Y'
+				       AND DB_COL.STS != 'D'
+				  ) CFACT_C
+		  ON ( DTL.TEN_ID = CFACT_C.TEN_ID
+		 AND   DTL.DTLCD = CFACT_C.CND_DIV_CCD
+			  )
+	    WHERE DTL_ML.TEN_ID = #{g.tenant}
+		  AND DTL_ML.LANG_CCD = #{g.locale}
+		ORDER BY DTL.DTLCD_SORT
+	</select>
+	<insert id="insertDbColInfo">
+	/* calc-factor.insertDbColInfo : 실적 대상 컬럼 저장(신규) */
+		INSERT INTO DB_COL (
+              TEN_ID
+            , DB_COL_CD
+            , DB_TBL_CD
+            , DB_COL_PHYC_NM
+            , DB_COL_LOGIC_NM
+            , USE_YN
+            , RMK
+            , REGR_ID
+            , MODR_ID
+            , MOD_DTTM
+        ) VALUES (
+		     #{g.tenant}
+		   , #{p.db_col_cd}
+           , #{p.db_tbl_cd}
+           , #{p.db_col_phyc_nm}
+           , #{p.db_col_logic_nm}
+           , #{p.use_yn}
+           , #{g.username}
+           , #{g.now}
+           , #{g.username}
+           , #{g.now}
+		)
+	</insert>
+	<update id="updateDbColInfo">
+	/* calc-factor.updateDbColInfo : 실적 대상 컬럼 저장(수정) */
+		UPDATE DB_COL
+		   SET DB_COL_PHYC_NM = #{p.db_col_phyc_nm}
+		     , DB_COL_LOGIC_NM = #{p.db_col_logic_nm}
+		     , USE_YN = #{p.use_yn}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+	     WHERE TEN_ID = #{g.tenant}
+	       AND DB_COL_CD = #{p.db_col_cd}
+	       AND DB_TBL_CD = #{p.db_tbl_cd}
+	       AND STS != 'D'
+	</update>
+	<delete id="deleteListCndColumn">
+	/* calc-factor.deleteListCndColumn : 조건 컬럼 목록 삭제 */
+		DELETE FROM CALCFACT_CND_COL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND CALCFACT_UUID = #{p.calcfact_uuid}
+		   AND STS != 'D'
+	</delete>
+	<insert id="insertCndColumn">
+	/* calc-factor.insertCndColumn : 계산항목 조건 컬럼 저장 */
+		INSERT INTO CALCFACT_CND_COL (
+			TEN_ID
+		  , CALCFACT_UUID
+		  , DB_COL_CD
+		  , CND_DIV_CCD
+		  , RMK
+		  , STS
+		  , REGR_ID
+		  , REG_DTTM
+		  , MODR_ID
+		  , MOD_DTTM
+		) VALUES (
+	       #{g.tenant}
+         , #{p.calcfact_uuid}
+         , #{p.db_col_cd}
+         , #{p.dtlcd}
+         , #{p.rmk}
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+		)
+	</insert>
+</mapper>

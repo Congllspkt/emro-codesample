@@ -1,0 +1,286 @@
+<dom-module id="es-widget-todo-list">
+    <!--
+/**
+ *
+ *	@description : 
+ *  <pre>
+ * </pre>
+ * @author : user
+ * @FileName : sc-widget-todo-list
+ * @Since 오전 9:50
+ * @변경이력 : [오전 9:50] user 최초작성
+ */
+-->
+    <style>
+        :host {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+            }
+    </style>
+
+    <template>
+        <!-- ajax 선언 부 -->
+
+        <sc-ajax id="findListTaskNew" url="../findListTask.do" body="{{taskListSearchParam}}"></sc-ajax>
+
+        <sc-ajax id="findListApproval"
+                 url="/approval/findListApproval.do"
+                 body="{{approvalParam}}">
+        </sc-ajax>
+
+		<sc-ajax id="findListRfxReceipt" url="../findListTask.do" body="{{rfxReceiptParam}}"></sc-ajax>
+
+		<!--<sc-ajax id="findListRfxReceipt"
+				 url="../findListTaskByRfxReq.do"
+				 body="{{rfxReceiptParam}}">
+		</sc-ajax>-->
+        <div class="landing_widget list">
+			<h5 class="more">To-do</h5>
+			<div class="tab_bar">
+				<button  class="tab select" on-click="onClickTab" data="all">All</button>
+				<button  class="tab" on-click="onClickTab" data="taskRequest">Task request</button>
+				<button  class="tab" on-click="onClickTab" data="approval">Approval</button>
+				<button  class="tab" on-click="onClickTab" data="rfxReq">RFX Requests</button>
+			</div>
+			<div class="tab_content pdt20">
+				<ul id="resultList">
+				</ul>
+			</div>
+		</div>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'es-widget-todo-list',
+            properties: {
+                taskListSearchParam: {
+					 type: Object,
+                    value: function () {
+						return {
+							init: true,
+							main_task_nm: "ALL",
+							new_srch_yn: "Y",
+							searchTerm: "",
+							task_sts_uuids: []
+						};
+					}
+                },
+                approvalParam: {
+                    type: Object,
+                    value: function () {
+                        return {
+                            apvl_sts_ccd: "PRGSG",
+                            curr_apvr_yn: "Y"
+                        };
+                    }
+                },
+				rfxReceiptParam: {
+					type: Object,
+					value: function(){
+						return {
+							init: true,
+							main_task_nm: "RFX",
+							new_srch_yn: "Y",
+							searchTerm: "",
+							task_sts_uuids: []
+						}
+					}
+				}
+            },
+            /**************************************************
+             * 초기화 설정
+             **************************************************/
+            // 1. 화면 로딩시 최초 호출
+            initialized: function () {
+                var me = this;
+				var buttons = document.querySelectorAll('[data]');
+
+				buttons.forEach(button => {
+					button.classList.remove('select');
+				});
+
+				if (buttons.length > 0) {
+					buttons[0].classList.add('select');
+				}
+
+				buttons.forEach(button => {
+					button.addEventListener('click', () => {
+						buttons.forEach(btn => btn.classList.remove('select'));
+
+						button.classList.add('select');
+					});
+				});
+
+				UT.request(me.$.findListTaskNew,  (e, result) => me.completeFindListAll(e, result));
+            },
+            completeFindLisResult: function(e, res) {
+                var me = this;
+                var result = res.response;
+
+                me.createListItem(result);
+            },
+			onClickTab: function(e) {
+				var me = this;
+				var evnt_cd = e.target.getAttribute("data");
+				me.set("searchDetailParam.evnt_cd", evnt_cd);
+
+				var tabs = me.querySelectorAll('.tab');
+				// 모든 탭에서 'select' 클래스를 제거합니다.
+				tabs.forEach(function(t) {
+					t.classList.remove('select');
+				});
+
+				// 클릭한 탭에 'select' 클래스를 추가합니다.
+				e.target.classList.add('select');
+
+				if(evnt_cd === "all"){
+					UT.request(me.$.findListTaskNew, (e, result) => me.completeFindListAll(e, result));
+				}else if(evnt_cd === "taskRequest"){
+					UT.request(me.$.findListTaskNew, (e, result) => me.completeFindListTask(e, result));
+				}else if(evnt_cd === "approval"){
+					UT.request(me.$.findListApproval, (e, result) => me.completeFindListApproval(e, result));
+				}else if(evnt_cd === "rfxReq"){
+					UT.request(me.$.findListRfxReceipt, (e, result) => me.completeFindListRfxReceipt(e, result));
+				}
+			},
+			completeFindListAll: function(e,res){
+				var me = this;
+                var result = res.response;
+
+				me.set("allList",result);
+				UT.request(me.$.findListApproval, (e, result) => me.completeFindListApprovalByAll(e, result));
+			},
+			completeFindListApprovalByAll: function(e,res){
+				var me = this;
+                var result = res.response;
+
+				var allList = me.get("allList");
+				for (let item of result) {
+					allList.push(item);
+				}
+				me.createListItem(allList);
+				me.set("allList",null);
+			},
+			completeFindListTask: function(e,res){
+				var me = this;
+                var result = res.response;
+                me.createListItem(result);
+			},
+			completeFindListApproval: function(e,res){
+				var me = this;
+                var result = res.response;
+                me.createListItem(result);
+			},
+			completeFindListRfxReceipt: function(e,res) {
+				var me = this;
+				var result = res.response;
+				me.createListItem(result);
+			},
+            createListItem: function(result){
+                var rows = result;
+                var me = this;
+                var resultList = Polymer.dom(me.$.resultList);
+                while(resultList.firstChild) {
+            		var a = resultList.firstChild.querySelector("a");
+            		if(a) me.unlisten(a, "tap", "onMoveDetail");
+            		resultList.removeChild(resultList.firstChild);
+            	}
+                resultList.setHtml("");
+                if(rows.length == 0) {
+                    var li = document.createElement("li");
+                    var spanArticle = document.createElement("b");
+                    spanArticle.innerHTML = me.translate("검색결과가 없습니다.");
+                    li.appendChild(spanArticle);
+                    Polymer.dom(me.$.resultList).appendChild(li);
+                } else {
+                    for(var i = 0; i < rows.length; i++) {
+						var row = rows[i];
+                		var li = document.createElement("li");
+                		var a = document.createElement("a");
+						a.href = "javascript:void(0);";
+
+						//[24.08.23] To-do list에 업무유형 추가
+						var span = document.createElement("span");
+						span.className = "taskTyp";
+						var taskTyp = UT.isNotEmpty(row.display_main_task_nm) ? row.display_main_task_nm : "";
+						if(taskTyp != "") {
+							span.innerHTML = taskTyp;
+							a.appendChild(span);
+						} else {
+							a.remove(span);
+						}
+
+						var b = document.createElement("b");
+                		a.data = row;
+                        a.appendChild(b);
+                        b.innerHTML =  (UT.isNotEmpty(row.apvl_tit) ? row.apvl_tit : row.task_tit);
+						a.data.type = (UT.isNotEmpty(row.apvl_tit) ? "approval" : "taskRequest");
+						//RFX Requests 버튼 추가
+						if(row.display_main_task_nm == "RFX") {
+							a.data.type = "rfxReq";
+						}
+                		me.listen(a, "tap", "onMoveDetail");
+                        a.appendChild(b);
+
+                        var span = document.createElement("span");
+                        span.className ="date";
+						var regDttm = (UT.isNotEmpty(row.apvl_tit) ? row.apvl_rptg_dttm : row.mod_dttm);
+                        span.innerHTML = me.dateConvert(regDttm);
+                        a.appendChild(span);
+
+                		li.appendChild(a)
+                		Polymer.dom(me.$.resultList).appendChild(li);
+                    }
+                }
+
+                Polymer.dom.flush();
+            },
+			dateConvert: function(value){
+            	//return UT.formatDate(value,"yyyy/MM/dd HH:mm");
+				return UT.formatDate(value,"yyyy/MM/dd");
+            },
+            _getMenuInfo : function(menuCd) {
+                var menuInfo = SCMenuManager.getMenuNode(menuCd);
+                return menuInfo;
+            },
+            onMoveDetail: function(e){
+            	var me = this;
+				var target = event.target;
+				 var data = "";
+
+				if (target.tagName === 'A' || target.closest('a')) {
+				 var aTag = target.tagName === 'A' ? target : target.closest('a');
+				 	data = aTag.data;
+
+			 	}
+            	var type = data.type;
+
+                if(type === "taskRequest"){
+                    me.createTaskModule(data.menu_cd,data);
+                }else if(type == "approval"){
+                    me.moveApprovalDetail(data);
+                }else if(type == "rfxReq"){
+					me.moveRfxReqList(data);
+				}
+            },
+			moveApprovalDetail: function(data){
+				var me = this;
+                var menuInfo = me._getMenuInfo("APRV00002");
+				var apvlDocNo = data.apvl_docno;
+            	var menuName = menuInfo.menu_nm,
+            		menuUrl = menuInfo.menu_url;
+
+            	MDIUT.createWindow("APRV00002", menuName, menuUrl + '?&widget=1&apvl_docno='+apvlDocNo);
+			},
+			moveRfxReqList: function(data) {
+				var me = this;
+				var menuInfo = me._getMenuInfo("PRO21000");
+				var menuName = menuInfo.menu_nm,
+					menuUrl = menuInfo.menu_url;
+				MDIUT.createWindow('PRO21000', menuName, menuUrl + '?task_uuid='+data.task_uuid+'&workplace_yn=Y');
+			},
+			behaviors: [Polymer.CCWorkplaceBehavior]
+        });
+    </script>
+</dom-module>

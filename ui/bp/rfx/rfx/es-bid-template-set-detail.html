@@ -1,0 +1,1237 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="../../../bp/common/bidtemplate/ep-bidtemplate-list.html"></sc-link>
+<link rel="import" href="../../template/dynamic/es-template-page-view.html"></link>
+<sc-link rel="stylesheet" type="text/css" href="../../template/dynamic/template-form.css"></sc-link>
+<sc-link rel="import" href="../../template/es-rfx-price-template.html"></sc-link>
+
+<dom-module id="es-bid-template-set-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 조회-->
+		<sc-ajax id="findRfxAndListRfxItem"
+				 url="findRfxData.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<sc-ajax id="findListPriceGroup"
+				 url="findListPriceGroupByItemGrpTyp.do">
+		</sc-ajax>
+		
+		<sc-ajax id="findListPriceFactor"
+				 url="findListPriceFactorByRfxItem.do">
+		</sc-ajax>
+		
+		<sc-ajax id="saveRfxItemPriceFactor"
+				 url="saveRfxItemPriceFactor.do">
+		</sc-ajax>
+		
+		<sc-ajax id="deleteRFQTemplateSheetAll"
+				 url="deleteRFQTemplateSheetAll.do"
+				 on-response="resetCompleteFind">
+		</sc-ajax>
+		
+		<!-- 조회 -->
+		<sc-ajax id="findListRFQTemplateList"
+				 url="findListRFQTemplateList.do"
+				 on-response="completeFindTemplateSheetList">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-code-group>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+			<!-- 품목군 -->
+			<sc-code code="C023" value="{{codes.itemGrpTyp}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="비드템플릿 항목 설정">
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex page">
+			<sc-grid id="rfxItemGridPanel" collapsible="false" use-dummy="false" use-state="false" use-selection="false" class="flex-4"
+					 editable="false"
+					 on-item-click="onRfxItemGridItemClick">
+				<cc-grid-toolbar title-text="품목 정보"></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="rfx_lno" header-text="RFX 항번" width="90" text-align="center" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100" text-align="center"></sc-data-column>
+					<sc-group-column hide-child-headers="true" header-text="템플릿 시트" width="180" text-align="center">
+						<sc-data-column data-field="sheet_nm" width="150" text-align="center"></sc-data-column>
+						<sc-image-column data-field="img_template_grp" width="30" text-align="center" image-cls="link"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column data-field="item_nm" header-text="품목 명" width="250" text-align="left"></sc-data-column>
+					<sc-data-column data-field="spec" header-text="품목 규격" width="250" text-align="left"></sc-data-column>
+					<sc-image-column data-field="img_item_spec_dtl" header-text="품목 규격 상세" width="60" text-align="center" visible="[[formula('hasNoCdItem')]]"
+									 image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="60" text-align="center"
+										display-field="data" value-field="data" items="{{codes.uomCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="rfx_qty" header-text="요청 수량" width="80" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="rfx_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="vendor_templ_id"></sc-grid-field>
+					<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+					<sc-grid-field data-field="costfact_grp_cd"></sc-grid-field>
+					<sc-grid-field data-field="coststr_purc_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_grp_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-splitter split-type="horizontal"></sc-splitter>
+			
+			<div class="vbox flex page">
+				<sc-panel title-text="Template 시트" collapsible="true">
+					<!-- header info [END]-->
+					<sc-tabbar id="templateTabBar" on-item-select="ontemplateTabSelected" class="template-tab-bar" style="min-height: 23px"></sc-tabbar>
+					<sc-pages id="templateViewPages"></sc-pages>
+				</sc-panel>
+			</div>
+		</div>
+	
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-bid-template-set-detail',
+			
+			behaviors: [
+				Polymer.Templatizer
+			],
+			
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: ""
+						}
+					}
+				},
+				itemGroupList: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							comboUnitCoGrpTyp: [],
+							itemGrpTyp: []
+						}
+					},
+					reset: false
+				},
+				titleText: {
+					type: String,
+					value: function() {
+						return ""
+					}
+				},
+				selectedItem: {
+					type: Object,
+					
+					value: function() {
+						return {}
+					}
+				},
+				rfxQtaItemInfo: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				dataList: {
+					type: Object,
+					value: function() {
+						return [
+							{id: "new", nm: "new Template"}
+						];
+					}
+				},
+				tabProperties: {
+					type: Object,
+					value: function() {
+						return {
+							tabTitle: "sheet_nm",
+							moduleUrl: "form_url",
+							tabId: "templ_sheet_id",
+							params: "param"
+						}
+					}
+				},
+				
+				/*
+				   taskPool 오브젝트 속성
+					uiUrl: import를 위한 화면 정보 ,
+					tabElement: 탭엘리먼트(lazy속성을 사용하기위한 껍데기정도..),
+					module: 탭화면에 보여지는 모듈,
+				*/
+				taskPool: {
+					type: Array,
+					value: function() {
+						return [];
+					},
+					reset: false
+				},
+				
+				is_new: {
+					type: Boolean,
+					value: false
+				},
+				
+				sheetTemplateInfo: {
+					type: Object,
+					value: function() {
+						return {
+							sheet_nm: ""
+						};
+					}
+				},
+			},
+			formulas: {
+				editable: function() {
+					return this.rfxData.rfx_sts_ccd === "CRNG";
+				},
+				hasNoCdItem: function() {
+					return this.get("rfxData.has_no_cd_item") === "Y";
+				}
+			},
+			listeners: {
+				"templateTabBar.click": "mdiTabClickHandler"
+			},
+			initialized: function() {
+			
+			},
+			load: function(param) {
+				var me = this;
+				
+				me.set("searchParam.rfx_uuid", param.rfx_uuid);
+				me.templateTabInit();
+				me.findRfxAndRfxItems();
+			},
+			// RFx 품목 리스트 조회
+			findRfxAndRfxItems: function() {
+				var me = this;
+				
+				UT.request(me.$.findRfxAndListRfxItem, function(e, res) {
+					var result = res.response;
+					
+					me.set("rfxData", result);
+					me.$.rfxItemGridPanel.setDataProvider(result.rfxItems);
+					me.applyFormula();
+				});
+			},
+			
+			resetCompleteFind(e, res) {
+				var me = this;
+				var result = res.response;
+				me.applyFormula();
+				me.findRfxAndRfxItems();
+				me.templateTabInit();
+			},
+			
+			// Template입찰항목설정 그리드 컬럼 생성
+			buildDynamicColumns: function(factors) {
+				var me      = this,
+					factors = factors || [];
+				
+				var maxLevel = 1;
+				var leafs = [];
+				var trees = {};
+				
+				for(var i = 0; i < factors.length; i++) {
+					var level = parseInt(factors[i].lvl, 10);
+					var key = factors[i].costfact_cd;
+					
+					if(typeof trees[key] === "undefined") {
+						trees[key] = factors[i];
+						trees[key]._children = 0;
+						trees[key]["level" + level] = factors[i].fact_nm;
+						trees[key].costfact_grp_cd = factors[i].costfact_grp_cd || "";
+					}
+					if(level > 1) {
+						var upKey = factors[i].par_costfact_cd;
+						trees[upKey]._children += 1;
+						
+						for(var j = level - 1; j > 0; j--) {
+							factors[i]["level" + j] = trees[upKey]["level" + j];
+						}
+					}
+					maxLevel = Math.max(maxLevel, level);
+				}
+				for(var key in trees) {
+					if(trees[key]._children === 0) {
+						leafs.push(trees[key]);
+					}
+				}
+				
+				var columns = [];
+				
+				for(var i = 0; i < maxLevel; i++) {
+					var col = document.createElement("sc-data-column");
+					col.dataField = "level" + (i + 1);
+					col.headerText = col.dataField;
+					col.width = 200;
+					col.textAlign = "left";
+					col.mergeable = true;
+					col.mergeBasedField = "level" + i;
+					
+					columns.push(col);
+				}
+				
+				// 기본 컬럼
+				var defaultColumns = UT.templateColumns(this, '#defaultColumnsTemplate', '#defaultColumns');
+				
+				me.$.priceFactorGridPanel.setColumns(columns.concat(defaultColumns));
+				me.$.priceFactorGridPanel.setDataProvider(leafs);
+				me.$.priceFactorGridPanel.setColumnFilters("costfact_grp_cd", [{name: "filter", criteria: "value != ''", active: true}]);
+			},
+			// 그리드 동적컬럼 초기화
+			resetDynamicColumns: function() {
+				var me = this;
+				
+				me.$.priceFactorGridPanel.getDataProvider().removeAll(false);	// 그리드 데이터 초기화. removeItems에 담지 않도록 collectionRemoveItems를 false로 넘김
+				me.$.priceFactorGridPanel.setColumns([]);
+			},
+			// 그리드 title-text 설정
+			makeTitleText: function(itemGrpNm, prcGrpNm) {
+				var me = this;
+				var titleText = me.translate("비드템플릿 항목 설정");
+				
+				if(UT.isNotEmpty(me.get("selectedItem"))) {
+					if(!itemGrpNm && !prcGrpNm) {
+						itemGrpNm = me.get("selectedItem.item_grp_nm");
+						prcGrpNm = me.get("selectedItem.sheet_nm");
+					}
+					titleText += (itemGrpNm) ? (" [" + itemGrpNm + "]") : "";
+					titleText += (prcGrpNm) ? (" [" + prcGrpNm + "]") : "";
+					titleText += " [" + (me.translate("항번") + " : " + me.get("selectedItem.rfx_lno")) + "]";
+				}
+				me.set("titleText", titleText);
+			},
+			// RFx 품목정보 그리드 item click
+			onRfxItemGridItemClick: function(event) {
+				var me = this;
+				
+				var e        = event.detail,
+					data     = e.data,
+					item     = e.item,
+					provider = e.provider;
+				
+				if(item.dataField === "img_template_grp") {
+					
+					if(UT.isNotEmpty(data["vendor_templ_id"])) {
+						me.set("rfxQtaItemInfo", data);
+						me.makeTitleText();
+						me.$.findListRFQTemplateList.body = data;
+						UT.request(me.$.findListRFQTemplateList);
+					} else {
+						me.set("rfxQtaItemInfo", data);
+						me.makeTitleText();
+						me.onBidTemplatePopup(data);
+					}
+					
+				} else if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					return "link";
+				} else {
+					return null;
+				}
+			},
+			
+			// 품목군 그리드 item click
+			onItemGroupGridItemClick: function() {
+				var me = this;
+				
+				var e        = event.detail,
+					data     = e.data,
+					item     = e.item,
+					provider = e.provider;
+				
+				if(UT.isEmpty(me.get("selectedItem"))) {
+					UT.alert("STD.RFX1062");
+					return;
+				}
+				
+				var priceFactorProvider = me.$.priceFactorGridPanel.getDataProvider();
+				if(priceFactorProvider.getUpdateItems().length > 0) {
+					UT.confirm("STD.N3900",
+							function() { //yes
+								me.resetDynamicColumns();
+								me.makeTitleText(data["label"]);
+								me.findPriceGroups(data["data"], null);
+							},
+							function() { //no
+							}
+					);
+				} else {
+					me.resetDynamicColumns();
+					me.makeTitleText(data["label"]);
+					me.findPriceGroups(data["data"], null);
+				}
+			},
+			
+			
+			onSave: function() {
+				var me = this;
+				
+				var provider = me.$.priceFactorGridPanel.getDataProvider();
+				var updateItems = provider.getUpdateItems();
+				if(updateItems.length > 0) {
+					
+					if(provider.filterItems({select_yn: "Y"}).length === 0) {
+						UT.alert("STD.N1600");
+						return;
+					} else {
+						var rfxItem = me.get("selectedItem"), checkItem = updateItems[0];
+						
+						if(UT.isNotEmpty(rfxItem["costfact_grp_cd"]) && rfxItem["costfact_grp_cd"] !== checkItem["costfact_grp_cd"]) {
+							UT.confirm("STD.RFX1063", function() {
+								me.savePriceFactorSet(rfxItem, updateItems);
+							});
+						} else {
+							me.savePriceFactorSet(rfxItem, updateItems);
+						}
+					}
+				} else {
+					UT.alert("STD.N1700");
+					return;
+				}
+			},
+			
+			savePriceFactorSet: function(rfxItem, updateItems) {
+				var me = this;
+				
+				var insertItems = [], removeItems = [], checkItem = updateItems[0];
+				for(var i = 0; i < updateItems.length; i++) {
+					var updateItem = updateItems[i];
+					
+					if(updateItem["select_yn"] === "Y") {
+						insertItems.push(updateItem);
+					} else {
+						removeItems.push(updateItem);
+					}
+				}
+				
+				me.$.saveRfxItemPriceFactor.body = {
+					rfxData: me.rfxData,
+					rfxItem: rfxItem,
+					insertItems: insertItems,
+					removeItems: removeItems,
+					checkItem: checkItem
+				};
+				
+				UT.request(me.$.saveRfxItemPriceFactor, function(e, res) {
+					var result = res.response,
+						status = result.resultStatus;
+					
+					if(status === "S") {
+						UT.completeAlert();
+						me.set("selectedItem.coststr_purc_typ_ccd", checkItem["coststr_purc_typ_ccd"]);
+						me.set("selectedItem.costfact_grp_cd", checkItem["costfact_grp_cd"]);
+						
+						me.findRfxAndRfxItems();
+						me.findPriceGroups(checkItem["coststr_purc_typ_ccd"], checkItem["costfact_grp_cd"]);
+						me.findPriceFactors(checkItem["costfact_grp_cd"]);
+						
+					} else if(status === "INVALID_STATUS_ERR") {
+						UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+						me.findRfxAndRfxItems();
+						me.findPriceGroups(checkItem["coststr_purc_typ_ccd"], checkItem["costfact_grp_cd"]);
+						me.findPriceFactors(checkItem["costfact_grp_cd"]);
+						
+					} else {
+						UT.alert("STD.E9999");
+						
+						if(status === "N") {
+							me.fire("show-list");
+							me.reset();
+						}
+					}
+				});
+			},
+			
+			onClose: function() {
+				var me = this;
+				
+				me.fire("show-detail", me.get("searchParam"));
+				me.reset();
+			},
+			
+			
+			onFindList: function() {
+				var me = this;
+				UT.request(me.$.findListRFQTemplateList);
+				//me.fire("reset-find-tabbar",me);
+			},
+			
+			
+			// 그룹 컬럼 생성
+			createGroupColumn: function(headerText, colCd) {
+				var grpCol = document.createElement("sc-group-column");
+				grpCol.col_cd = colCd;
+				grpCol.headerText = headerText;
+				grpCol.i18nDisabled = true;
+				grpCol.width = "300";
+				return grpCol;
+			},
+			
+			// 컬럼 생성
+			createColumn: function(dataField, headerText, width, textAlign, i18nDisabled, columnType, codeItems, maxLength, pointCalTyp, pointLength, mandatoryYn, colClsType) {
+				
+				var elementType = "";
+				var option = "";
+				
+				//String
+				if(columnType === "STRING") {
+					var column = document.createElement("sc-data-column");
+					column.editable = colClsType == "S" ? true : false;
+				} else if(columnType === "INT") { //int
+					var column = document.createElement("sc-data-column");
+					column.dataType = "number";
+					column.editable = colClsType == "S" ? true : false;
+				} else if(columnType === "CALC") { //int
+					var column = document.createElement("sc-data-column");
+					column.dataType = "number";
+					column.formatType = "amt";
+					column.editable = false;
+				} else if(columnType === "DATE") { //date
+					var column = document.createElement("sc-date-column");
+					column.editable = colClsType == "S" ? true : false;
+				} else if(columnType === "COMBOBOX") { //combobox
+					var column = document.createElement("sc-combobox-column");
+					column.items = codeItems;
+					column.displayField = "label";
+					column.valueField = "data";
+					column.editable = colClsType == "S" ? true : false;
+				} else if(columnType === "POPUP") { //popup
+					var column = document.createElement("sc-data-column");
+					column.dyniamicColumnPopupFunction = "ep-column-list";
+					column.editable = colClsType == "S" ? true : false;
+				} else {
+					var column = document.createElement("sc-data-column");
+					column.editable = colClsType == "S" ? true : false;
+				}
+				
+				
+				if(textAlign === 3) {
+					textAlign = "right";
+				} else if(textAlign === 2) {
+					textAlign = "left";
+				} else if(textAlign === 1) {
+					textAlign = "center";
+				}
+				column.maxLength = maxLength;
+				column.dataField = dataField;
+				column.headerText = headerText;
+				column.width = width || "100";
+				column.textAlign = textAlign || "center";
+				column.i18nDisabled = i18nDisabled || "false";
+				column.pointCalTyp = pointCalTyp || "NONE";
+				column.pointLength = pointLength || 0;
+				if(UT.isNotEmpty(mandatoryYn) && mandatoryYn === "true") column.required = mandatoryYn; // required 에 true/false 형식으로 값을 넣어서 반영되는것이 아닌 required 속성이 넣어지면 빨간모서리 태그가 박힘
+				return column;
+			},
+			
+			
+			onItemEditEnd: function(event) {
+				var me         = this,
+					e          = event.detail,
+					data       = e.data,
+					item       = e.item,
+					dataField  = item.dataField,
+					columnName = item.columnName,
+					newValue   = e.newValue,
+					oldValue   = e.oldValue,
+					provider   = me.$.templateSheetColumnGridPanel.getDataProvider();
+				
+				me.rowIndex = item.rowIndex;
+				
+				// 소수점 처리 방안이 있을 경우 값을 강제로 변경한다.
+				if(UT.isNotEmpty(e.grid.getColumnElByName(dataField).pointCalTyp) && "NONE" != e.grid.getColumnElByName(dataField).pointCalTyp) {
+					var pointCalTyp = e.grid.getColumnElByName(dataField).pointCalTyp;
+					var pointLength = e.grid.getColumnElByName(dataField).pointLength;
+					
+					newValue = me.onRegex(newValue, pointCalTyp, pointLength);
+					var a = {};
+					a[dataField] = newValue;
+					provider.setItemAt(item.rowIndex, a);
+				}
+				
+			},
+			
+			
+			onRegex: function(value, pointCalTyp, pointLength) {
+				var precision = 0;
+				var me = this;
+				
+				//몇자리 올림인지
+				var lmt = pointLength || 0;
+				precision = parseInt(lmt, 10);
+				
+				//(ROUND: 반올림, CEIL: 올림, FLOOR: 내림)
+				return me.toFixedRound(value, pointCalTyp, precision + 1);
+			},
+			
+			
+			onPopupExcelUpload: function() {
+				
+				
+				var me = this, grid = me.$.templateSheetColumnGridPanel;
+				var provider = me.$.templateSheetColumnGridPanel.getDataProvider();
+				var itemCnt = me.$.templateSheetColumnGridPanel.getDataProvider().getItems().length;
+				
+				
+				// 엑셀 업로드 팝업
+				var popup = UT.popup('cc-excel-import', me, 900, 700, null, {closable: false});
+				
+				var i = 0;
+				
+				var importer = popup.getContent();
+				importer.autoColumnMapping = true;
+				importer.doImport(grid, function(rows) {
+					
+					var rowColumnInfo = {};
+					
+					
+					for(var a = 0; a < Object.keys(rows[0]).length; a++) {
+						//Object
+						var columnInfo = {};
+						rowColumnInfo[Object.keys(rows[0])[a]] = me.$.templateSheetColumnGridPanel.getColumnElByName(Object.keys(rows[0])[a]);
+					}
+					
+					rows.forEach(function(row) {
+						
+						//validation
+						var entriesObject = Object.entries(row);
+						
+						for(var b = 0; b < entriesObject.length; b++) {
+							if(UT.isNotEmpty(rowColumnInfo[entriesObject[b][0]])) {
+								if(UT.isNotEmpty(rowColumnInfo[entriesObject[b][0]].pointCalTyp)) {
+									var pointCalTyp = rowColumnInfo[entriesObject[b][0]].pointCalTyp;
+									var pointLength = rowColumnInfo[entriesObject[b][0]].pointLength;
+									
+									var newValue = me.onRegex(entriesObject[b][1], pointCalTyp, pointLength);
+									row[entriesObject[b][0]] = newValue;
+								}
+								
+								
+								if(UT.isNotEmpty(rowColumnInfo[entriesObject[b][0]].items)) {
+									var comboDatas = UT.getArrayValuesByKey(rowColumnInfo[entriesObject[b][0]].items, "data");
+									
+									//공통 코드에 맞는 데이터가 엑셀에 넣었는가.
+									if(comboDatas.indexOf(entriesObject[b][1]) == -1) {
+										row[entriesObject[b][0]] = "";
+									}
+								}
+							}
+						}
+						
+						
+						i++;
+						row.sheet_data_id = UT.generateUUID();
+						provider.addItemAt(itemCnt + i, row);
+					});
+				}, me);
+				
+				// 엑셀 업로드 팝업 열기
+				popup.show();
+				
+			},
+			
+			checkDup: function(selectedList) {
+				var me = this;
+				var newList = selectedList;
+				var existList = me.$.columnsGridPanel.getDataProvider().getItems() || [];
+				for(var i = 0; i < newList.length; i++) {
+					for(var j = 0; j < existList.length; j++) {
+						if(newList[i].col_cd == existList[j].col_cd) {
+							// 중복시 true
+							return true;
+						}
+					}
+				}
+				// 미중복시 false
+				return false;
+			},
+			
+			
+			completeSaveInfo: function(e, res) {
+				var me = this;
+				
+				UT.completeAlert("저장", function() { // 저장하였습니다.
+					me.onFindList();
+					//me.$.columnListDialog.close();
+				});
+			},
+			
+			
+			onShowList: function() {
+				var me = this;
+				me.fire("show-list");
+			},
+			
+			onTemplateAdd: function() {
+				var me = this;
+				var provider = me.$.templateSheetColumnGridPanel.getDataProvider();
+				
+				var row = {
+					sheet_data_id: UT.generateUUID(),
+					use_yn: 'Y'
+				}
+				
+				provider.addItemAt(0, row);
+			},
+			
+			onCalculateColumnSave: function() {
+				var me = this;
+				var provider = me.$.columnsGridPanel.getDataProvider();
+				
+				var data = me.get("sheetInfo");
+				
+				// 계산식 팝업 호출
+				var templateFactorCalcPopup = UT.popup('ep-template-calc-column', me, 950, 600, {
+					"apply-data": function(popup, e) {
+						var calcData = e.detail;
+						
+						var row = {
+							sheet_data_id: UT.generateUUID(),
+							use_yn: 'Y',
+							calculate_val: calcData.calc,
+							col_nm: calcData.col_nm,
+							disp_nm: calcData.col_nm,
+							col_cd: calcData.col_cd,
+							col_typ_cd: "CALC",
+						}
+						
+						provider.addItemAt(0, row);
+						
+						
+						popup.close();
+					}
+				});
+				templateFactorCalcPopup.show();
+				templateFactorCalcPopup.getWindowContent().load({"sheetInfo": data});
+			},
+			
+			onCalculateColumnChange: function() {
+				var me = this;
+				var provider = me.$.templateSheetColumnGridPanel.getDataProvider();
+				var items = provider.getItems();
+				
+				if(!me.validate()) {
+					UT.alert('STD.E0000');
+					return;
+				}
+				
+				me.$.findCalculateColumn.body = {
+					items: items,
+					sheetInfo: me.get("sheetInfo")
+				}
+				
+				UT.request(me.$.findCalculateColumn);
+			},
+			
+			
+			onTemplateDelete: function() {
+				var me = this;
+				var provider = me.$.templateSheetColumnGridPanel.getDataProvider();
+				var item = provider.selectionCheckedItems();
+				
+				if(item.length < 1) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					me.$.deleteBidTemplateSheetDataListForSp.body = {
+						deleteItem: item,
+						sheetInfo: me.get("sheetInfo"),
+						
+						rfxQtaItemInfo: me.rfxQtaItemInfo
+					};
+					UT.request(me.$.deleteBidTemplateSheetDataListForSp);
+				});
+				
+			},
+			
+			onTemplateSave: function() {
+				var me = this;
+				// 데이터 유효성 확인
+				if(!me.validate()) {
+					UT.alert('STD.E0000');
+					return;
+				}
+				
+				var provider = me.$.templateSheetColumnGridPanel.getDataProvider(),
+					created  = provider.getNewItems(),
+					updated  = provider.getUpdateItems();
+				
+				if(created.length + updated.length === 0) {
+					UT.alert("STD.N1700"); // "변경된 내용이 없습니다"
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() { // 저장 하시겠습니까?
+					me.$.saveBidTemplateSheetDataListForSp.body = {
+						insertList: created,
+						updateList: updated,
+						sheetInfo: me.sheetInfo,
+						rfxQtaItemInfo: me.rfxQtaItemInfo
+					};
+					
+					UT.request(me.$.saveBidTemplateSheetDataListForSp);
+				});
+			},
+			
+			
+			completeDeleteInfo: function(e, res) {
+				var me = this;
+				UT.alert("STD.N2500", function() { // 삭제하였습니다.
+					me.onFindList();
+				});
+			},
+			
+			
+			onGridItemClick: function(e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+				
+				//popupColumn이 있다면, 별도 펑션을 호출 처리
+				if(UT.isNotEmpty(e.currentTarget.getColumns()[item.columnIndex]) && UT.isNotEmpty(e.currentTarget.getColumns()[item.columnIndex].dyniamicColumnPopupFunction)) {
+					var columnsPopup = UT.popup(e.currentTarget.getColumns()[item.columnIndex].dyniamicColumnPopupFunction, me, "900", "700", {
+						"selected-items": function(popup, e) {
+							if(!me.checkDup(e.detail)) {
+								var dataProvider = me.$.columnsGridPanel.getDataProvider();
+								var sheetInfo = me.get("sheetInfo");
+								
+								for(var i = 0; i < e.detail.length; i++) {
+									var selected = e.detail[i];
+									
+									var addRow = {
+										col_id: selected.col_id,
+										col_cd: selected.col_cd,
+										col_nm: selected.col_nm,
+										col_cls: "B",
+										disp_nm: selected.col_nm,
+										col_typ_cd: selected.col_typ_cd,
+										col_len: selected.col_len,
+										point_len: selected.point_len,
+										point_cal_typ: selected.point_cal_typ,
+										ccd: selected.ccd,
+										field_align: selected.field_align,
+										use_yn: selected.use_yn,
+										sheet_id: sheetInfo.sheet_id
+									};
+									dataProvider.addItem(addRow);
+								}
+								
+								columnsPopup.hide();
+							} else {
+								UT.alert("STD.N1900"); // 중복
+							}
+						}
+					}, {titleText: this.translate("컬럼 검색")});
+					
+					columnsPopup.show();
+					columnsPopup.getWindowContent().load(me.get("sheetInfo"));
+				}
+				;
+				
+			},
+			
+			
+			resetSortOrd: function() {
+				var me       = this,
+					provider = me.$.columnsGridPanel.getDataProvider();
+				var i = 0;
+				provider.setItemAtBatch(true, function(index, data) {
+					i++;
+					return {"sort_ord": i};
+				}, {visibleOnly: true});
+			},
+			
+			
+			toFixedRound: function(_number1, Round, Scale) {
+				
+				if(Scale === 0) {
+					return null;
+				}
+				// String 변환
+				var _num = _number1.toString();
+				
+				var sign = "";
+				
+				if(Round === null || typeof Round === 'undefined') {
+					Round = "NONE";
+				}
+				if(Scale === null || typeof Scale === 'undefined') {
+					Scale = 4;
+				}
+				
+				if(_number1 < 0) {
+					sign = "-";
+					_num = _num.substring(1, _num.length);
+				}
+				//소수점 위치
+				var indexdot = _num.indexOf(".");
+				
+				// 곱한 10의 n 승
+				var muxcnt = _num.length - indexdot - 1;
+				
+				// 정수가 들어왔거나 소수점처리 안한다면 그냥 리턴
+				if(indexdot == -1 || Round == "NONE" || muxcnt < Scale)
+					return _number1.toString();
+				
+				// 소수점 제거된 입력값
+				var _numX = Number(_num.substring(0, indexdot) + _num.substring(indexdot + 1, _num.length));
+				
+				var _numS = "";
+				
+				switch(Round) {
+					case "ROUND" :
+						_numS = ((Number(_numX) + (5 * Math.pow(10, muxcnt - Scale))) / Math.pow(10, muxcnt)).toString();
+						_numS = (_numS.indexOf(".") == -1) ? _numS : _numS.substring(0, _numS.indexOf(".") + Scale);
+						break;
+					case "CEIL":
+						_numS = ((Number(_numX) + (Math.pow(10, muxcnt + 1 - Scale) - 1)) / Math.pow(10, muxcnt)).toString();
+						_numS = (_numS.indexOf(".") == -1) ? _numS : _numS.substring(0, _numS.indexOf(".") + Scale);
+						break;
+					case "FLOOR":
+						_numS = (Number(_numX) / Math.pow(10, muxcnt)).toString();
+						_numS = (_numS.indexOf(".") == -1) ? _numS : _numS.substring(0, _numS.indexOf(".") + Scale);
+						break;
+					default: //아무것도 아닐 경우
+						return _number1.toString();
+						break;
+				}
+				
+				return Number(sign + _numS);
+			},
+			
+			
+			completeCalculateColumn: function(e, res) {
+				var me = this;
+				var data = res.response;
+				
+				if(data) {
+					me.$.templateSheetColumnGridPanel.setDataProvider(data);
+					me.$.templateSheetColumnGridPanel.getDataProvider().setItemStateAtBatch(true, function(index, data) {
+						return "updated";
+					})
+				}
+			},
+			
+			itemColTypeStyleFunction: function(data, item) {
+				var me = this;
+				if(item.dataField === "col_cd" && data.col_typ_cd === "CALC") {
+					return {
+						fontWeight: "bold",
+						fontColor: "#0e006f"
+					};
+				}
+			},
+			
+			
+			onBidTemplatePopup: function(data) {
+				var me = this;
+				
+				var bidTemplateConfirmPopup = UT.popup("ep-bidtemplate-list", me, 1000, 500, {
+					"selected-items": function(popup, e) {
+						var selected = e.detail;
+						
+						if(null != selected) {
+							me.set("sheetTemplateInfo", selected);
+							me.$.findListRFQTemplateList.body = selected;
+						}
+						
+						UT.request(me.$.findListRFQTemplateList);
+						
+						popup.close();
+					}
+				}, {titleText: "RFX BidTemplate 생성", maximizable: true});
+				bidTemplateConfirmPopup.show();
+				bidTemplateConfirmPopup.getWindowContent().load();
+				
+			},
+			
+			
+			//탭을 구성하기전에 초기화한다.
+			templateTabInit: function() {
+				var me = this;
+				var module,
+					tabar        = me.$.templateTabBar,
+					page         = me.$.templateViewPages,
+					contents     = Polymer.dom(tabar).queryDistributedElements('*'),
+					gridContents = Polymer.dom(page).queryDistributedElements('*');
+				for(var i = 0, len = contents.length; i < len; i++) {
+					Polymer.dom(tabar).removeChild(contents[i]);
+					//contents[i].hidden = true;
+				}
+				for(var i = 0, len = gridContents.length; i < len; i++) {
+					Polymer.dom(page).removeChild(gridContents[i]);
+					//contents[i].hidden = true;
+				}
+				Polymer.dom.flush();
+				
+			},
+			
+			completeFindTemplateSheetList: function(e, res) {
+				var me = this;
+				var result = res.response;
+				me.templateTabInit();
+				me.applyFormula();
+				me.taskPool = [];
+				
+				
+				if(result.length > 0) {
+					for(var a = 0; a < result.length; a++) {
+						var defaultTabInfo = {};
+						var setDataParam = {};
+						defaultTabInfo["sord_ord"] = a;
+						defaultTabInfo["templ_sheet_id"] = result[a].templ_sheet_id;
+						defaultTabInfo["sheet_nm"] = result[a].sheet_nm == null ? "" : result[a].sheet_nm;
+						defaultTabInfo["form_url"] = "ui/bp/template/es-rfx-price-template.html";
+						defaultTabInfo[me.tabProperties.tabId] = result[a].templ_sheet_id;
+						
+						setDataParam.sheetInfo = result[a];
+						setDataParam.rfxQtaItemInfo = me.get("rfxQtaItemInfo");
+						setDataParam.editable = me.formula("editable");
+						
+						defaultTabInfo["param"] = setDataParam;
+						me.templateAppendTab([defaultTabInfo]);
+						
+						if(a == result.length - 1) {
+							me.templateLastItemSelect([defaultTabInfo]);
+						}
+					}
+				} else {
+				
+				}
+				
+			},
+			
+			//template에 따른 동적탭 생성.
+			templateAppendTab: function(templateList) {
+				var me     = this,
+					module,
+					tabBar = me.$.templateTabBar,
+					tabChildElement, len, templateInfo;
+				if(!templateList) {
+					return;
+				}
+				//me.isReset = true;
+				for(var i = 0, len = templateList.length; i < len; i++) {
+					templateInfo = templateList[i];
+					me.createTabView(templateInfo);
+					
+				}
+				//me.templateLastItemSelect(templateInfo);
+			},
+			//tab에 사용할 엘리먼트를 생성한다. 활성화 되는 순산 module를 import하기때문에 껍데기를 만드는 정도이다.
+			createTabView: function(templateInfo) {
+				/*var me = this,
+						taskPoolInfo = me.hastemplateTabChildElement(templateInfo[me.tabProperties.tabId]);*/
+				var me = this;
+				var taskPoolInfo = null;
+				me.addtemplate(templateInfo);
+				var createHandler = function() {
+					var tabViewElement = document.createElement("es-template-page-view");
+					tabViewElement.taskName = templateInfo[me.tabProperties.tabTitle];
+					tabViewElement.taskId = templateInfo[me.tabProperties.tabId];
+					tabViewElement.moduleUrl = templateInfo[me.tabProperties.moduleUrl];
+					tabViewElement.params = templateInfo[me.tabProperties.params];
+					me.listen(tabViewElement, 'template-execute-completed', me.onTemplateExecuteCompleted.bind(me));
+					me.listen(tabViewElement, 'template-task-loaded-init', me.taskLoadedInit.bind(me));
+					me.listen(tabViewElement, 'reset-find-tabbar', me.reSetFindTabbar.bind(me));
+					me.listen(tabViewElement, 'reset-complete-find', me.resetCompleteFind.bind(me));
+					
+					Polymer.dom(me.$.templateViewPages).appendChild(tabViewElement);
+					//풀등록
+					me.taskPool.push({
+						uiUrl: templateInfo[me.tabProperties.moduleUrl],
+						tabId: templateInfo[me.tabProperties.tabId],
+						view: tabViewElement
+					});
+				}
+				
+				if(taskPoolInfo == null) {
+					createHandler();
+				} else {
+					taskPoolInfo.view.taskName = templateInfo[me.tabProperties.tabTitle];
+					taskPoolInfo.view.params = me.getTaskParam(templateInfo);
+				}
+			},
+			hastemplateTabChildElement: function(tabId) {
+				var me = this, poolInfo;
+				var poolInfo = me.taskPool.filter(function(item) {
+					if(item.tabId == tabId) {
+						return true;
+					}
+				});
+				if(poolInfo.length == 0) {
+					return null;
+				}
+				return poolInfo[0];
+			},
+			//각각의 task에서 사용할 파라미터를 가져온다.
+			getTaskParam: function(taskInfo) {
+				var me          = this,
+					moduleParam = UT.copy(me.get("searchParam"));
+				moduleParam.templ_sheet_id = taskInfo.templ_sheet_id;
+				
+				return moduleParam;
+			},
+			/*
+			* 탭에서 flow를 실행한후에  이벤트를 발생시킬때 실행된다.
+			* template목록을 다시 다시 조회해서 다음 flow가 보여준느 기능을 한다.
+			*/
+			onTemplateExecuteCompleted: function(e, detail) {
+				var me = this;
+				var param = e.detail;
+				if(!UT.isEmpty(param)) {
+					me.searchParam.templ_sheet_id = param.templ_sheet_id;
+					me.searchParam.templ_id = param.templ_id;
+				}
+				me.taskLoadedInit();
+				//me.onFindList();
+			},
+			
+			taskLoadedInit: function(e) {
+				var me         = this,
+					allInit    = !e,
+					targetView = !allInit ? e.target : null;
+				me.taskPool.forEach(function(item) {
+					if(allInit || item.view.module != targetView) {
+						item._loaded = false;
+						item.view.module && item.view.module.reset();
+					}
+				});
+			},
+			reSetFindTabbar: function(e, detail) {
+				var me = this;
+				if(UT.isObject(e.detail.sheetInfo) && UT.isNotEmpty(e.detail.sheetInfo.sheet_nm)) {
+					if(null != me.$.templateTabBar.querySelector('sc-tab[data-tab-id="' + e.detail.sheetInfo.templ_sheet_id + '"]')) {
+						me.$.templateTabBar.querySelector('sc-tab[data-tab-id="' + e.detail.sheetInfo.templ_sheet_id + '"]').text = e.detail.sheetInfo.sheet_nm;
+					}
+				}
+			},
+			addtemplate: function(newUserTaskInfo) {
+				var me = this;
+				me.addTab(newUserTaskInfo);
+				
+			},
+			//scTab을  생성하고 tabar에 탭을 추가한다.
+			addTab: function(newUserTaskInfo) {
+				var me     = this,
+					newTab = document.createElement('sc-tab');
+				newTab.classList.add("template-tab-bar");
+				
+				newTab.text = newUserTaskInfo[me.tabProperties.tabTitle];
+				
+				newTab.setAttribute('data-tab-id', newUserTaskInfo[me.tabProperties.tabId]);
+				newTab.setAttribute('data-tab-module-url', newUserTaskInfo[me.tabProperties.moduleUrl]);
+				
+				var editable = me.formula('editable');
+				
+				if(editable) {
+					newTab.closable = "true";
+				}
+				
+				Polymer.dom(me.$.templateTabBar).appendChild(newTab);
+				Polymer.dom.flush();
+			},
+			templateLastItemSelect: function(templateInfo) {
+				var me = this;
+				
+				me.$.templateTabBar.selectItem(me.$.templateTabBar.lastItem);
+				me.activateTaskView(templateInfo[me.tabProperties.tabId]);
+			},
+			//탭,그리드에서 task선택시 해당하는 화면을 보여준다.
+			activateTaskView: function(tabId) {
+				var me    = this, pageItem, poolInfo, tabItem,
+					pages = me.$.templateViewPages;
+				poolInfo = me.hastemplateTabChildElement(tabId);
+				if(poolInfo) {
+					pageItem = poolInfo.view;
+					if(pageItem.module == null) {
+						pageItem.loadModule();
+						poolInfo._loaded = true;
+					} else if(!poolInfo._loaded) {
+						pageItem.callModuleLoadFunction();
+						poolInfo._loaded = true;
+					}
+					pages.selectItem(pageItem);
+				}
+			},
+			
+			
+			//탭 클릭시 발생하는 이벤트. 선택한 탭에 해당하는 task를 보여준다.
+			ontemplateTabSelected: function(e) {
+				var me      = this,
+					tabId   = e.detail.item.dataset.tabId,
+					tabItem = me.$.templateTabBar.querySelector('sc-tab[data-tab-id="' + tabId + '"]');
+				me.$.templateTabBar.selectItem(tabItem);
+				me.activateTaskView(tabId);
+			},
+			
+			//Sheet 처리된 닫기 클릭 시
+			mdiTabClickHandler: function(event) {
+				if(event.target.tagName == "SPAN") {
+					var me = this;
+					UT.confirm("STD.BID0006", function() { //Sheet를 정말 삭제하시겠습니까?
+						var sheetInfo = {templ_sheet_id: event.target.parentElement.getAttribute("data-tab-id")};
+						
+						me.$.deleteRFQTemplateSheetAll.body = {
+							sheetInfo: sheetInfo,
+							rfxQtaItemInfo: me.get("rfxQtaItemInfo")
+						};
+						
+						UT.request(me.$.deleteRFQTemplateSheetAll);
+						var tab = UT.closest(event.target.parentElement, 'sc-tab');
+						event.stopPropagation();
+						Polymer.dom.flush();
+						
+						tab.destroy();
+					});
+				}
+			},
+			
+			
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,234 @@
+<dom-module id="ep-sg-itemcat-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<!-- 목록조회 -->
+		<sc-ajax id="findListItemCat"
+				 url="../../itemMaster/itemcat/findListItemCat.do"
+				 on-response="completeFindListItemCat">
+		</sc-ajax>
+		
+		<!-- 목록조회 -->
+		<sc-ajax id="findListItemCatWithCdOrNm"
+				 url="../../itemMaster/itemcat/findListItemCatWithCdOrNm.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListItemCat">
+		</sc-ajax>
+		<!-- 저장 -->
+		<sc-ajax id="saveSgItemCategoryList" url="saveSgItemCategoryList.do" on-response="completeSaveSgItemCategoryList"></sc-ajax>
+
+		<cc-search-condition-panel on-search="onSearch"  auth-r>
+			<cc-fieldset>
+				<sc-label text="품목분류"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.itemcat_cd}}" class="w-100" on-enter="onSearch" placeholder="코드"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{searchParam.itemcat_nm}}" on-enter="onSearch" placeholder="품목분류 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" is-tree="true" use-state="false" reset="false" on-item-double-click="onItemDoubleClick"
+				 selection-able-function="onSelectionAbleFn" on-selection-checked="onSelectionChecked">
+			<cc-grid-toolbar>
+				<sc-button text="펼침"         on-click="onExpandAll"     auth-r></sc-button>
+				<sc-button text="접기"         on-click="onCollapseAll"   auth-r></sc-button>
+				<sc-button text="선택" on-click="onSelect" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="itemcat_cd" header-text="분류코드" width="130" text-align="left"></sc-data-column>
+				<sc-data-column data-field="disp_itemcat_nm" header-text="분류명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="sg_cd" header-text="소싱그룹 코드" width="100"></sc-data-column>
+				<sc-data-column data-field="sg_nm" header-text="소싱그룹 명" width="150"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="ten_id"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_cd"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_lvl"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_nm_en"></sc-grid-field>
+				<sc-grid-field data-field="use_yn"></sc-grid-field>
+				<sc-grid-field data-field="tree"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_path"></sc-grid-field>
+				<sc-grid-field data-field="itemcat_path_en"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-sg-itemcat-list",
+			
+			properties: {
+				titleText: {
+					type: String,
+					value: I18N.translate("품목 분류")
+				},
+				
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				sgInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				completeAlertKey: {
+					type: String,
+					value : function() {
+						return ";"
+					}
+				}
+			},
+			
+			_reset: function() {
+				var me = this;
+				me.$.gridPanel.collapseAll();
+			},
+			
+			onSelectionAbleFn: function(data) {
+				const me = this;
+				
+				return !(Number(data.itemcat_lvl) > 4);
+			},
+			
+			onSelectionChecked: function(event){
+                var me = this,detail = event.detail,
+						grid = me.$.gridPanel,
+                    checked = detail.checked,  //체크하여 변경된값
+                    nodeIndex = detail.nodeIndex;
+				grid.expand(nodeIndex, true);
+
+				//parents = provider.getAncestorsIndexes(nodeIndex) || [];
+				grid.selectionChild(nodeIndex, checked);
+            },
+			
+			// 공통코드를 가져온 뒤 수행
+			load: function(data) {
+				var me = this;
+				if(!UT.isEmpty(data)) {
+					me.set("sgInfo", data);
+				}
+				me.onSearch();
+			},
+			
+			//조회
+			onSearch: function() {
+				var me = this;
+				var searchParam = me.get("searchParam");
+				me.set("searchParam.master_yn", "N");
+				
+				if(UT.isNotEmpty(searchParam.itemcat_cd) || UT.isNotEmpty(searchParam.itemcat_nm)) {
+					UT.request(me.$.findListItemCatWithCdOrNm);
+				} else {
+					UT.request(me.$.findListItemCat);
+				}
+			},
+			// 조회 완료 callback
+			completeFindListItemCat: function(e, res) {
+				var me = this;
+				var hier = new CCHierachicalData();
+				hier.onNodeAppend = function(parentNode, node, parentNodeLevel) {
+					if(parentNodeLevel === 0) {
+						node['itemcat_path'] = (node['itemcat_nm'] != null ? node['itemcat_nm'] : '');
+					} else {
+						node['itemcat_path'] = parentNode['itemcat_path'] + ' > ' + (node['itemcat_nm'] != null ? node['itemcat_nm'] : '');
+					}
+				};
+				var hierachiDatas = hier.HierachyTransformByKey(res.response, "itemcat_cd", "par_itemcat_cd", "children", "0", null, true);
+				me.$.gridPanel.setHierachyDataProvider(hierachiDatas, "children");
+				
+				if(UT.isNotEmpty(me.get("searchParam.itemcat_cd"))) {
+					me.searchTreeGridView(me.$.gridPanel, "itemcat_cd", me.get("searchParam.itemcat_cd"));
+				} else if(UT.isNotEmpty(me.get("searchParam.itemcat_nm"))) {
+					me.searchTreeGridView(me.$.gridPanel, "itemcat_nm", me.get("searchParam.itemcat_nm"));
+				}
+			},
+			
+			//트리 그리드 검색
+			searchTreeGridView: function(treeGrid, field, value) {
+				var currentCell  = treeGrid.getCurrentCell(),
+					currentIndex = (currentCell === null) ? -1 : currentCell.rowIndex;
+				// treeGird 경우 펼쳐진 노드에 대해서만 searchItem 기능 제공
+				// 트리를 모드 펼친 상태로 검색
+				treeGrid.expandAll();
+				treeGrid.searchItem(field, value, currentIndex);
+			},
+			
+			// 펼침
+            onExpandAll:function(){
+                var me = this;
+                me.$.gridPanel.expandAll();
+            },
+
+            // 접기
+            onCollapseAll:function(){
+                var me = this;
+                me.$.gridPanel.collapseAll();
+            },
+			
+			// 선택 후 반환
+			onSelect: function(e) {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				const btnName = e.target.text;
+				
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600");
+					return ;
+				}
+				
+				//선택된 데이터 중 4레벨만 반환
+				selected = selected.filter(selectedItem => Number(selectedItem.itemcat_lvl) === 4);
+				
+				if(UT.isEmpty(selected)) {
+					//소싱그룹은 {0} 레벨까지 생성할 수 있습니다.
+					UT.alert(me.translate("STD.SRM1086", null, "4"));
+					return ;
+				} else {
+					me.set("completeAlertKey", btnName);
+					me.$.saveSgItemCategoryList.body = {itemList : selected, sg_cd : me.get("sgInfo.vmg_cd")};
+					UT.request(me.$.saveSgItemCategoryList);
+				}
+			},
+			//저장 후 처리
+			completeSaveSgItemCategoryList: function(e, res) {
+				const me = this,
+					  result = res.response;
+				
+				if(!UT.isEmpty(result) && result.resultStatus === 'S') {
+					UT.completeAlert(me.get("completeAlertKey"), function() {
+						me.fire("selected-items");
+					})
+				} else {
+					UT.alert("STD.E9999");		//오류가 발생하였습니다.<br/>시스템관리자에게 문의하세요.
+				}
+				
+				me.set("completeAlertKey", "");
+			},
+			onItemDoubleClick: function(e, detail) {
+				var me = this;
+				var data = detail.data;
+				var item = detail.item;
+				var grid = me.$.gridPanel;
+				
+				if(item.dataField == 'disp_itemcat_nm' || item.dataField == 'itemcat_cd') {
+					if(item.expanded) {
+						grid.collapse(item.nodeIndex, true);
+					} else {
+						grid.expand(item.nodeIndex, false);
+					}
+				}
+			}
+		});
+	</script>
+</dom-module>

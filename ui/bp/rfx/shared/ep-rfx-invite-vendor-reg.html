@@ -1,0 +1,432 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 견적(지명) 협력사 신규 등록
+	** @Create Date 	: 2024.08.21
+	******************************************************************************************
+-->
+
+<dom-module id="ep-rfx-invite-vendor-reg">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+		<!-- 공통코드 조회 -->
+		<sc-request-group init>
+			<sc-code-group>
+				<sc-code code="C001" value="{{codes.ctry_ccd}}"></sc-code><!-- 국가 -->
+				<sc-code code="C008" value="{{codes.eu_ctry_ccd}}"></sc-code><!-- EU국가 -->
+				<sc-code code="E024" value="{{codes.vd_size_ccd}}"></sc-code><!-- 회사 규모 -->
+			</sc-code-group>
+		</sc-request-group>
+		
+		<!-- 중복체크 -->
+		<sc-ajax id="checkDuplicatedVdInfo"
+				 url="checkDuplicatedVdInfo.do"
+				 on-response="completeCheckDuplicatedVdInfo">
+		</sc-ajax>
+		
+		<!-- 신규 등록 -->
+		<sc-ajax id="saveNewVdOorg"
+				 url="saveNewVdOorg.do"
+				 on-response="completeSaveNewVdOorg">
+		</sc-ajax>
+		
+		<cc-page-title-bar>
+			<sc-button text="추가" on-click="onSave"></sc-button>
+		</cc-page-title-bar>
+		<cc-form-panel column="1" form-cls="label-row" i18n-disabled>
+			<cc-fieldset>
+				<sc-label text="국가"></sc-label>
+				<sc-combobox-field id="netCombo"
+								   display-field="label" value-field="data" items="{{codes.ctry_ccd}}"
+								   required="true" value="{{basicInfo.ctry_ccd}}" placeholder="선택"
+								   input-clear="false" validation-group="info"
+								   on-select="changedStateByCtryCcd">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text=""></sc-label>
+				<p style="margin:0 5px">[[translate('귀사의 소속 국가를 선택하세요.')]]</p>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사 명"></sc-label>
+				<sc-text-field value="{{basicInfo.vd_nm}}" max-length="50" required="true" validation-group="info"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사 명 영문"></sc-label>
+				<sc-text-field value="{{basicInfo.vd_nm_en}}" max-length="50" required="true" validation-group="info"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('kr')]]">
+				<sc-label text="사업자등록번호"></sc-label>
+				<sc-text-field value="{{basicInfo.bizregno}}" input-mask="999-99-99999" required="true" pattern="^[0-9-]{12}$" on-keyup="onCheckBizRegNo" validation-group="kr"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('kr')]]">
+				<sc-label text=""></sc-label>
+				<p style="font-weight: bold; color: red;">[[lb_biz_reg_no]]</p>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사 규모"></sc-label>
+				<sc-combobox-field
+						class="w-150" display-field="label" value-field="data" validation-group="info"
+						items="{{codes.vd_size_ccd}}" value="{{basicInfo.vd_size_ccd}}" placeholder="선택" required="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('etc')]]">
+				<sc-label text="Tax Id"></sc-label>
+				<sc-text-field value="{{basicInfo.tax_id}}" required="true"  max-length="36" readonly="[[!formula('etc')]]" validation-group="etc"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('etc')]]">
+				<sc-label text=""></sc-label>
+				<p>[[translate('Tax Id를 입력하세요.')]]</p>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('eu')]]">
+				<sc-label text="EU VAT Id"></sc-label>
+				<sc-text-field value="{{basicInfo.eu_vat_reg_id}}" required="true" max-length="36" readonly="[[!formula('eu')]]" validation-group="eu"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden$="[[!formula('eu')]]">
+				<sc-label text=""></sc-label>
+				<p>[[translate('EU VAT Id를 입력하세요.')]]</p>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="대표자 명"></sc-label>
+				<sc-text-field value="{{basicInfo.ceo_nm}}" max-length="50" required="true" validation-group="info"></sc-text-field>
+				<p>[[translate('대표자가 다수인 경우 콤마(,)로 구분하여 입력하세요.')]]</p>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="대표자 명 영문"></sc-label>
+				<sc-text-field value="{{basicInfo.ceo_nm_en}}" max-length="50" validation-group="info"></sc-text-field>
+				<p>[[translate('대표자가 다수인 경우 콤마(,)로 구분하여 입력하세요.')]]</p>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="담당자 명"></sc-label>
+				<sc-text-field value="{{basicInfo.vd_pic_nm}}" max-length="50" required="true" validation-group="info"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="담당자 이메일"></sc-label>
+				<sc-text-field value="{{basicInfo.vd_eml}}" max-length="128" required="true" validation-group="info" validator-type="email" class="align-right"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text=""></sc-label>
+				<p>[[translate('등록된 메일로 협력사 초청(Quick RFX) 정보가 전달됩니다.')]]</p>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+	<script>
+		Polymer({
+			is : "ep-rfx-invite-vendor-reg",
+			
+			properties : {
+				// TITLE
+				stepTitle : String,
+				
+				// Code 데이터
+				codes: {
+					type: Object,
+					reset: false,
+					value : function(){
+						return {
+							ctry_ccd    : [],
+							eu_ctry_ccd : [],
+							vd_size_ccd : []
+						};
+					}
+				},
+				
+				// 신규 가입 Info
+				basicInfo: {
+					type: Object,
+					value : function(){
+						return {
+							ctry_ccd: "KR",
+						};
+					}
+				},
+				// 사업자등록번호
+				lb_biz_reg_no : {
+					type: String,
+				},
+				
+				isPossibleRegVendor: {
+					type: Boolean,
+					value: false
+				}
+			},
+			
+			formulas : {
+				kr: function(){
+					var ctryCcd = this.get("basicInfo.ctry_ccd");
+					return (ctryCcd === "KR");
+				},
+				eu: function(){
+					var codes = this.get("codes.eu_ctry_ccd");
+					var euCtryList = [];
+					for(var i = 0; i < codes.length; i++){
+						euCtryList[i] = codes[i].data;
+					}
+					var ctryCcd = this.get("basicInfo.ctry_ccd");
+					return (euCtryList.indexOf(ctryCcd) != -1);
+				},
+				etc: function(){
+					return (!this.formula('kr') && !this.formula('eu'));
+				}
+			},
+			
+			// Initialized
+			initialized : function() {
+				this.set("lb_biz_reg_no", this.translate("STD.N10600"));  //사업자등록번호를 입력하세요.
+			},
+			
+			load : function(oorgCd) {
+				this.set("basicInfo.oorg_cd", oorgCd);
+				this.changedStateByCtryCcd();
+			},
+			
+			// 국가 Combobox Select Event
+			changedStateByCtryCcd: function(){
+				this.onClearFields();
+				this.applyFormula();
+			},
+			
+			// 사업자등록번호 Change Event
+			onCheckBizRegNo : function() {
+				var basicInfo = this.get('basicInfo');
+				
+				var euCtryList = [];
+				for(var i = 0; i < this.codes.eu_ctry_ccd.length; i++){
+					// EU 국가 초기화
+					euCtryList[i] = this.codes.eu_ctry_ccd[i].data;
+				}
+				
+				if(!basicInfo.ctry_ccd){
+					// 국가는 필수입력 항목입니다.
+					UT.alert(this.translate("STD.E1001", null, this.translate('국가')), null, true);
+					return;
+				}
+				
+				if(basicInfo.ctry_ccd == "KR") {
+					// 사업자등록번호는 필수 입력항목 입니다.
+					if(!basicInfo.bizregno){
+						//UT.alert("STD.VS1057");
+						this.set("lb_biz_reg_no", this.translate("STD.N10600")); //사업자등록번호를 입력하세요.
+						return;
+					}
+					
+					// 사업자등록번호가 유효하지 않습니다.
+					if(!this.checkBizRegNo(basicInfo.bizregno)){
+						this.set("lb_biz_reg_no", this.translate("STD.VS1026"));
+						return;
+					}
+				} else if(euCtryList.indexOf(basicInfo.ctry_ccd) != -1) {
+					// EU Vat Id는 필수 입력항목 입니다.
+					if(!basicInfo.eu_vat_reg_id){
+						UT.alert(this.translate("STD.E1001", null, this.translate('EU Vat Id')), null, true);
+						return;
+					}
+				} else if(!this.formula('kr') && !this.formula('eu')) {
+					// Tax Id는 필수 입력항목 입니다.
+					if(!basicInfo.tax_id){
+						UT.alert(this.translate("STD.E1001", null, this.translate('Tax Id')), null, true);
+						return;
+					}
+				}
+				
+				// 파라미터 setting
+				this.$.checkDuplicatedVdInfo.body =  this.basicInfo;
+				UT.request(this.$.checkDuplicatedVdInfo);
+			},
+			
+			// 사업자등록번호 체크 로직
+			checkBizRegNo: function(bizRegNo) {
+				var checkID = new Array(1, 3, 7, 1, 3, 7, 1, 3, 5, 1);
+				var tmpBizID, i, chkSum=0, c2, remander;
+				if(10 === bizRegNo.length){
+					for (i=0; i<=7; i++) chkSum += checkID[i] * bizRegNo.charAt(i);
+					
+					c2 = "0" + (checkID[8] * bizRegNo.charAt(8));
+					c2 = c2.substring(c2.length - 2, c2.length);
+					
+					chkSum += Math.floor(c2.charAt(0)) + Math.floor(c2.charAt(1));
+					
+					remander = (10 - (chkSum % 10)) % 10 ;
+					
+					if (Math.floor(bizRegNo.charAt(9)) == remander) return true; // OK!
+				}
+				
+				return false;
+			},
+			
+			// Email 주소 체크 로직
+			checkEmailAddr: function(sVal) {
+				var regExp = UT.emailRegExp();	//길이 8~20자
+				try {
+					// 정규식 지원하는 경우
+					return regExp.test(sVal);
+				} catch (e) {
+					// 정규식 지원하지 않는 경우
+					var tmpArray = new Array();
+					var lCma, lStr, tmpStr;
+					tmpArray = sVal.split("@");
+					if (tmpArray.length != 2) return false;
+					// 이메일 처음, 끝 문자 제한
+					for (var i = 0; i < tmpArray.length; i++) {
+						for (var j = 0; j < tmpArray[i].length; j++) {
+							tmpStr = tmpArray[i].charCodeAt(j);
+							if (tmpStr == 45 || tmpStr == 46 || tmpStr == 95 || (tmpStr >= 48 && tmpStr <= 57) || (tmpStr >= 65 && tmpStr <= 90) || (tmpStr >= 97 && tmpStr <= 122)) {
+								if (j == 0 && (tmpStr == 45 || tmpStr == 46 || tmpStr == 95)) return false;
+								if (j == tmpArray[i].length-1 && (tmpStr == 45 || tmpStr == 46 || tmpStr == 95)) return false;
+								continue;
+							} else {
+								return false;
+							}
+						}
+					}
+					// 이메일 뒷자리수 제한
+					lCma = tmpArray[1].lastIndexOf(".");
+					if (lCma == -1 || lCma == 0) return false;
+					lStr = tmpArray[1].substring(lCma+1).length;
+					if (!(lStr > 0 && lStr <= 3)) return false;
+					return true;
+				}
+			},
+			
+			// 중복체크 Callback Function
+			completeCheckDuplicatedVdInfo : function(e, res){
+				var result = res.response;
+				var lb_text = "STD.VS1030";
+				this.set("isPossibleRegVendor", true);
+				if(result.length > 0){
+					this.set("isPossibleRegVendor", false);
+					// 등록된 사업자등록번호이므로 신규 등록이 불가능 합니다.
+					lb_text = "STD.VS1029";
+					UT.confirm(this.translate(lb_text) + '<br>' + this.translate('STD.RFX1310'), function() {  //등록된 정보로 추가하시겠습니까?
+						this.setBasicInfo(result[0]);
+						this.fire('add-vendor', this.get("basicInfo"));
+					}.bind(this));
+				}
+				this.set("lb_biz_reg_no", this.translate(lb_text));
+			},
+			
+			setBasicInfo: function(vendorInfo) {
+				this.set("basicInfo.vd_cd",vendorInfo.vd_cd);
+				this.set("basicInfo.erp_vd_cd",vendorInfo.erp_vd_cd);
+				this.set("basicInfo.disp_vd_cd",vendorInfo.disp_vd_cd);
+				this.set("basicInfo.disp_vd_nm",vendorInfo.disp_vd_nm);
+				this.set("basicInfo.vd_nm",vendorInfo.vd_nm);
+				this.set("basicInfo.chr_id",vendorInfo.usr_id);
+				this.set("basicInfo.chr_nm",vendorInfo.usr_nm);
+				this.set("basicInfo.tel",vendorInfo.tel);
+				this.set("basicInfo.mob",vendorInfo.mob);
+				this.set("basicInfo.eml",vendorInfo.eml);
+			},
+			
+			// 저장완료 Callback Function
+			completeSaveNewVdOorg: function(e, res){
+				var result = res.response;
+				
+				if (UT.isObject(result) && result.resultStatus === "S") {
+					var resultData = result.resultList[0];
+					// 등록하신 이메일 주소로 아이디/비밀번호가 전송되었습니다.<br>아이디 : '{0}'
+					//OORG_CD 저장로직 추가 -> 직접 완료
+					UT.completeAlert("추가",function() {
+						this.setBasicInfo(resultData);
+						this.fire("add-vendor", this.get("basicInfo"));
+					}.bind(this));
+					/*UT.alert(this.translate("STD.VS1061",null,resultData.vd_cd),function(){
+						this.setBasicInfo(resultData);
+						this.fire("add-vendor", this.get("basicInfo"));
+					}.bind(this), true);*/
+				}else if(UT.isObject(result) && result.resultStatus === "D"){
+					// 등록된 사업자등록번호이므로 신규 등록이 불가능 합니다.
+					UT.alert("STD.VS1029");
+				}else{
+					// 저장실패 : 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 화면 TextField 초기화
+			onClearFields: function(){
+				//초기화
+				this.set("basicInfo.ceo_nm","");          // 대표자명
+				this.set("basicInfo.ceo_nm_en","");       // 대표자명(EN)
+				this.set("basicInfo.vd_pic_nm","");       // 담당자명
+				this.set("basicInfo.vd_eml","");          // 담당자 이메일
+				this.set("basicInfo.bizregno","");        // 사업자등록번호
+				this.set("basicInfo.eu_vat_reg_id","");   // EU VAT id
+				this.set("basicInfo.tax_id","");          // Tax id
+				this.set("basicInfo.vd_nm","");
+				this.set("basicInfo.vd_nm_en","");
+				this.set("basicInfo.vd_size_ccd","");
+				this.set("basicInfo.vd_cd","");
+				this.set("basicInfo.erp_vd_cd","");
+				this.set("basicInfo.disp_vd_cd","");
+				this.set("basicInfo.disp_vd_nm","");
+				this.set("basicInfo.chr_id","");
+				this.set("basicInfo.chr_nm","");
+				this.set("basicInfo.tel","");
+				this.set("basicInfo.mob","");
+				this.set("basicInfo.eml","");
+			},
+			onSave : function() {
+				var basicInfo = this.get("basicInfo");
+				
+				// Validation Check
+				if(!this.validate('info')){
+					// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(this.formula('kr') && !this.validate('kr')){
+					// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(this.formula('eu') && !this.validate('eu')){
+					// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(this.formula('etc') && !this.validate('etc')){
+					// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(basicInfo.ctry_ccd === "KR") {
+					if(!this.checkBizRegNo(basicInfo.bizregno)){
+						// 사업자등록번호가 유효하지 않습니다.
+						UT.alert("STD.VS1026");
+						return;
+					}
+					
+					if(!this.get("isPossibleRegVendor")) {
+						UT.alert("STD.VS1029"); //등록된 사업자등록번호이므로 신규 등록이 불가능 합니다.
+						return;
+					}
+					
+					if(!this.checkEmailAddr(basicInfo.vd_eml)){
+						// 담당자 이메일의 값이 정확하지 않습니다.
+						UT.alert(this.translate("STD.E1016", null, this.translate('담당자 이메일')), null, true);
+						return;
+					}
+				}
+				// STD.VS1060 : 등록하신 이메일 주소로 아이디/비밀번호가 전송됩니다.
+				/*UT.alert("STD.VS1060", function() {
+					var param = UT.copy(this.basicInfo);
+					this.$.saveNewVdOorg.body = param;
+					UT.request(this.$.saveNewVdOorg);
+				});*/
+				UT.confirm("STD.N1113", function() { // 추가하시겠습니까?
+					var param = UT.copy(this.basicInfo);
+					this.$.saveNewVdOorg.body = param;
+					UT.request(this.$.saveNewVdOorg);
+				}.bind(this));
+			},
+		})
+	</script>
+</dom-module>

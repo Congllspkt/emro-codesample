@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="contract-shared">
+    <select id="findContractTypeCount" resultType="map">
+        /* contract-shared.findContractTypeCount */
+        SELECT
+             SUM(CASE WHEN HD.CNTRDOC_TYP_CCD =  'ELEM_CNTRDOC' THEN 1 ELSE 0 END) AS ELEM_CNTRDOC_CNT
+             ,SUM(CASE WHEN HD.CNTRDOC_TYP_CCD = 'UPRC_AGT' THEN 1 ELSE 0 END) AS UPRC_AGT_CNT
+             ,SUM(CASE WHEN HD.CNTRDOC_TYP_CCD = 'PO_CNTRDOC' THEN 1 ELSE 0 END) AS PO_CNTRDOC_CNT
+             ,SUM(CASE WHEN HD.CNTRDOC_TYP_CCD = 'GEN_CNTRDOC' THEN 1 ELSE 0 END) AS GEN_CNTRDOC_CNT
+        FROM (SELECT CT.*
+		  FROM CNTR CT
+		  LEFT OUTER JOIN USR US
+		    ON US.TEN_ID = CT.TEN_ID
+		   AND US.USR_ID = CT.CNTR_PIC_ID
+		  LEFT OUTER JOIN VD VD
+		    ON VD.TEN_ID = CT.TEN_ID
+		   AND VD.VD_CD =  CT.VD_CD
+		  LEFT OUTER JOIN TASK_APVL TA
+		    ON TA.TEN_ID = CT.TEN_ID
+		   AND TA.TASK_UUID = CT.CNTR_UUID
+		   AND TA.USE_YN = 'Y'
+		  LEFT OUTER JOIN APVL AP
+		    ON AP.TEN_ID = TA.TEN_ID
+		   AND AP.APVL_UUID = TA.APVL_UUID
+		 WHERE CT.TEN_ID = #{g.tenant}
+		<if test="p.exp_from_date != null and p.exp_from_date !=''">
+		   AND CT.CNTR_EXP_DT &gt;= #{p.exp_from_date}
+		</if>
+		<if test="p.exp_to_date != null and p.exp_to_date !=''">
+		   AND CT.CNTR_EXP_DT <![CDATA[<=]]> #{p.exp_to_date}
+		</if>
+		<if test="p.cntr_sts_ccd !=null and p.cntr_sts_ccd !=''">
+		   AND CT.CNTR_STS_CCD = #{p.cntr_sts_ccd}
+		</if>
+		<if test="p.cntr_typ_ccd != null and p.cntr_typ_ccd !=''">
+		   AND CT.CNTR_TYP_CCD = #{p.cntr_typ_ccd}
+		</if>
+		<if test="p.cntrdoc_typ_ccd != null and p.cntrdoc_typ_ccd !=''">
+		   AND CT.CNTRDOC_TYP_CCD = #{p.cntrdoc_typ_ccd}
+		</if>
+		<if test="p.cntr_nm != null and p.cntr_nm !=''">
+		   <bind name="cntrNm" value="'%'+p.cntr_nm+'%'"/>
+		   AND CT.CNTR_NM LIKE UPPER(#{cntrNm})
+		</if>
+		<if test="p.cntr_no != null and p.cntr_no !=''">
+		   <bind name="cntrNo" value="'%'+p.cntr_no+'%'"/>
+		   AND CT.CNTR_NO LIKE UPPER(#{cntrNo})
+		</if>
+		<if test="p.cntr_pic_id != null and p.cntr_pic_id !=''">
+		   AND CT.CNTR_PIC_ID = #{p.cntr_pic_id}
+		</if>
+		<if test="p.cntr_pic_nm != null and p.cntr_pic_nm !=''">
+		   <bind name="cntrPicNm" value="'%'+p.cntr_pic_nm+'%'"/>
+		   AND (UPPER(US.USR_NM) LIKE UPPER(#{cntrPicNm}) OR UPPER(US.USR_NM_EN) LIKE UPPER(#{cntrPicNm}))
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd !=''">
+		   <bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+		   AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm !=''">
+		   <bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+		   AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm}))
+		</if>
+		   ) HD
+        WHERE  (1=0
+            OR HD.CNTRDOC_TYP_CCD =  'ELEM_CNTRDOC'
+            OR HD.CNTRDOC_TYP_CCD =  'UPRC_AGT'
+            OR HD.CNTRDOC_TYP_CCD =  'PO_CNTRDOC'
+            OR HD.CNTRDOC_TYP_CCD =  'GEN_CNTRDOC'
+         )
+    </select>
+	<select id="findNonStandardContractCount" resultType="int">
+        /* contract-shared.findNonStandardContractCount */
+        SELECT COUNT(CNTR_PIC_ID)
+		  FROM CNTR CT
+		  LEFT OUTER JOIN USR US
+		    ON US.TEN_ID = CT.TEN_ID
+		   AND US.USR_ID = CT.CNTR_PIC_ID
+		  LEFT OUTER JOIN VD VD
+		    ON VD.TEN_ID = CT.TEN_ID
+		   AND VD.VD_CD =  CT.VD_CD
+		  LEFT OUTER JOIN TASK_APVL TA
+		    ON TA.TEN_ID = CT.TEN_ID
+		   AND TA.TASK_UUID = CT.CNTR_UUID
+		   AND TA.USE_YN = 'Y'
+		  LEFT OUTER JOIN APVL AP
+		    ON AP.TEN_ID = TA.TEN_ID
+		   AND AP.APVL_UUID = TA.APVL_UUID
+		 WHERE CT.TEN_ID = #{g.tenant}
+		   <if test="p.cntr_tmpl_typ_ccd != null and p.cntr_tmpl_typ_ccd !=''">
+			   AND CT.CNTR_TMPL_TYP_CCD = #{p.cntr_tmpl_typ_ccd}
+		   </if>
+		<if test="p.exp_from_date != null and p.exp_from_date !=''">
+		   AND CT.CNTR_EXP_DT &gt;= #{p.exp_from_date}
+		</if>
+		<if test="p.exp_to_date != null and p.exp_to_date !=''">
+		   AND CT.CNTR_EXP_DT <![CDATA[<=]]> #{p.exp_to_date}
+		</if>
+		<if test="p.cntr_sts_ccd !=null and p.cntr_sts_ccd !=''">
+		   AND CT.CNTR_STS_CCD = #{p.cntr_sts_ccd}
+		</if>
+		<if test="p.cntr_typ_ccd != null and p.cntr_typ_ccd !=''">
+		   AND CT.CNTR_TYP_CCD = #{p.cntr_typ_ccd}
+		</if>
+		<if test="p.cntrdoc_typ_ccd != null and p.cntrdoc_typ_ccd !=''">
+		   AND CT.CNTRDOC_TYP_CCD = #{p.cntrdoc_typ_ccd}
+		</if>
+		<if test="p.cntr_nm != null and p.cntr_nm !=''">
+		   <bind name="cntrNm" value="'%'+p.cntr_nm+'%'"/>
+		   AND CT.CNTR_NM LIKE UPPER(#{cntrNm})
+		</if>
+		<if test="p.cntr_no != null and p.cntr_no !=''">
+		   <bind name="cntrNo" value="'%'+p.cntr_no+'%'"/>
+		   AND CT.CNTR_NO LIKE UPPER(#{cntrNo})
+		</if>
+		   AND CT.CNTR_PIC_ID = #{g.username}
+		<if test="p.cntr_pic_nm != null and p.cntr_pic_nm !=''">
+		   <bind name="cntrPicNm" value="'%'+p.cntr_pic_nm+'%'"/>
+		   AND (UPPER(US.USR_NM) LIKE UPPER(#{cntrPicNm}) OR UPPER(US.USR_NM_EN) LIKE UPPER(#{cntrPicNm}))
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd !=''">
+		   <bind name="erpVdCd" value="'%'+p.erp_vd_cd+'%'"/>
+		   AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpVdCd})
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm !=''">
+		   <bind name="vdNm" value="'%'+p.vd_nm+'%'"/>
+		   AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm}))
+		</if>
+    </select>
+	<select id="findContractExpirationNotification" resultType="map">
+		/* contract-shared.findContractExpirationNotification */
+		SELECT
+		COUNT(CASE WHEN CT.CNTR_EXP_DT BETWEEN SYSDATE AND ADD_MONTHS(SYSDATE, 1) THEN 1 END) AS one_month_remaining,
+          COUNT(CASE WHEN CT.CNTR_EXP_DT BETWEEN ADD_MONTHS(SYSDATE, 1) AND ADD_MONTHS(SYSDATE, 2) THEN 1 END) AS two_months_remaining,
+          COUNT(CASE WHEN CT.CNTR_EXP_DT BETWEEN ADD_MONTHS(SYSDATE, 2) AND ADD_MONTHS(SYSDATE, 3) THEN 1 END) AS three_months_remaining  FROM CNTR CT
+		  LEFT OUTER JOIN USR US
+		    ON US.TEN_ID = CT.TEN_ID
+		   AND US.USR_ID = CT.CNTR_PIC_ID
+		  LEFT OUTER JOIN VD VD
+		    ON VD.TEN_ID = CT.TEN_ID
+		   AND VD.VD_CD =  CT.VD_CD
+		  LEFT OUTER JOIN TASK_APVL TA
+		    ON TA.TEN_ID = CT.TEN_ID
+		   AND TA.TASK_UUID = CT.CNTR_UUID
+		   AND TA.USE_YN = 'Y'
+		  LEFT OUTER JOIN APVL AP
+		    ON AP.TEN_ID = TA.TEN_ID
+		   AND AP.APVL_UUID = TA.APVL_UUID
+		 WHERE CT.TEN_ID = #{g.tenant}
+		AND CT.CNTR_PIC_ID = #{g.username}
+	</select>
+</mapper>

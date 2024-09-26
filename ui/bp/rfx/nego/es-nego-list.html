@@ -1,0 +1,228 @@
+<sc-link rel="import" href="../rfx/cc-rfx-progress-state.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-cause.html"></sc-link>
+<sc-link rel="import" href="es-nego-slctn.html"></sc-link>
+<sc-link rel="import" href="es-nego-slctn-result.html"></sc-link>
+
+<!-- 
+/**
+ * @description : 협상헤더 조회 리스트
+ * @Since 2022. 9. 02.
+ * @변경이력 : [2022. 9. 02.]
+ */
+-->
+<dom-module id="es-nego-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		
+		#container {
+			width: 80%;
+			margin: 0 auto;
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findNegoInfo"
+				 url="findNegoInfo.do"
+				 body="{{searchParam}}"
+				 on-response="completefindNegoInfo">
+		</sc-ajax>
+		
+		<sc-ajax id="cancelNego"
+				 url="cancelNego.do"
+				 on-response="completeCancelNego">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-code-group>
+			<!-- 협상진행상태  -->
+			<sc-code code="P207" value="{{codes.negoStsCcd}}"></sc-code>
+			<!-- 협상 결과 상태  -->
+			<sc-code code="P208" value="{{codes.negoResStsCcd}}"></sc-code>
+			<!-- 협상 유형  -->
+			<sc-code code="P209" value="{{codes.negoTypCcd}}"></sc-code>
+			<!-- RFX 유형 -->
+			<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+			<!-- 구매 유형 -->
+			<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+			<!-- RFX 목적 -->
+			<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>
+			<!-- 협력사 거래 유형 -->
+			<sc-code code="E902" value="{{codes.regTyp}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		<cc-page-title-bar title-text="협상 통보 상세">
+			<sc-button text="갱신" on-click="onReLoad" auth-r></sc-button>
+			<sc-button text="RFX 정보" on-click="onShowRfxDetail" auth-r></sc-button>
+			<sc-button text="협상 취소" on-click="onCancel" hidden="[[!formula('isVisibleButton')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-rfx-progress-state id="rfxProgressBar" rfx-data="{{rfxData}}"></cc-rfx-progress-state>
+		
+		<sc-tab-navigation id="tabNavi" class="fit" style="padding-top: 10px;">
+			<es-nego-slctn id="slctnTab" class="flex" title-text="RFX 선정 기준" codes="{{codes}}" on-reload="onReload" on-close="onClose"></es-nego-slctn>
+			<es-nego-slctn-result hidden></es-nego-slctn-result>
+		</sc-tab-navigation>
+		
+		
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-nego-list',
+			properties: {
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							negoStsCcd: [],
+							negoResStsCcd: [],
+							negoTypCcd: [],
+							rfxTypCcd: [],
+							p2pPurcTypCcd: [],
+							rfxPurpCcd: [],
+							regTyp: []
+						};
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				//결재 유형 코드
+				apvlTypCcd: {
+					type: String,
+					value: function() {
+						return 'NEGO';
+					}
+				},
+				causeInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isVisibleButton: function() {
+					return "NEGO_PRGSG" === this.get("rfxData.rfx_sts_ccd");
+				},
+				showSlctnResult: function() {
+					return this.rfxData.rfx_sts_ccd === "ED" && this.rfxData.rfx_res_sts_ccd === "VD_SLCTN";
+				}
+			},
+			
+			initialized: function() {
+				this.load();
+			},
+			
+			load: function(param) {
+				if(UT.isNotEmpty(param)) {
+					this.set("searchParam", param);
+					this.findNegoInfo();
+				}
+			},
+			
+			findNegoInfo: function() {
+				UT.request(this.$.findNegoInfo);
+			},
+			
+			completefindNegoInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.set("rfxData", result.rfxData);
+				
+				me.$.tabNavi.selectItem(me.$.slctnTab);
+				me.$.slctnTab.load({
+					rfxData: result.rfxData,
+					negoDataList: result.negoDataList
+				});
+				
+				me.removeResultTab();
+				if(me.formula("showSlctnResult")) {
+					me.appendResultTab();
+				}
+				
+				me.applyFormula();
+			},
+			
+			appendResultTab: function() {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				
+				var resultTab = document.createElement("es-nego-slctn-result");
+				resultTab.setAttribute('title', "RFX 선정 결과 확인");  // 프로세스 명으로 탭 명 설정
+				resultTab.addEventListener('close', function() {
+					me.onClose();
+				});
+				
+				// tab navigation에 생성한 헤더 탭 append
+				Polymer.dom(tabNavi).appendChild(resultTab);
+				Polymer.dom.flush();
+				resultTab.load(me.get("rfxData"));
+			},
+			removeResultTab: function() {
+				var me = this;
+				var tabNavi = me.$.tabNavi;
+				
+				var resultTab = tabNavi.querySelector("es-nego-slctn-result[title]");
+				if(!!resultTab) {
+					Polymer.dom(tabNavi).removeChild(resultTab);
+				}
+			},
+			
+			onShowRfxDetail: function() {
+				this.fire("show-rfx-detail", {rfx_uuid: this.get("rfxData.rfx_uuid")});
+			},
+			
+			onClose: function() {
+				this.reset();
+				this.fire('close');
+			},
+			
+			onCancel: function() {
+				var me = this;
+				var provider = document.querySelector('#slctnTab #gridPanel').getDataProvider();
+				var allItems = provider.getItems();
+				
+				var len = allItems.length;
+				if(len < 1) {
+					UT.alert("STD.NG1007"); //삭제할 협상이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.NG1005", function() { //협상을 취소하시겠습니까?
+					me.$.cancelNego.body = {
+						rfxData: me.get("rfxData"),
+						items: allItems
+					}
+					UT.request(me.$.cancelNego);
+				});
+			},
+			
+			completeCancelNego: function(e) {
+				UT.alert("STD.NG1006"); //협상을 취소했습니다.
+				this.reset();
+				this.fire("find-target-list");
+			},
+			
+			onReload: function() {
+				this.findNegoInfo();
+			}
+		})
+	</script>
+</dom-module>

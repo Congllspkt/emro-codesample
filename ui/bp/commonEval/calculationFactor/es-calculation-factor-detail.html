@@ -1,0 +1,812 @@
+<sc-link rel="import" href="ep-procedure-code-list.html"></sc-link>
+<sc-link rel="import" href="ep-db-table-detail.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-evalfactor.html"></sc-link>
+
+<dom-module id="es-calculation-factor-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 콤보 목록 조회 서비스 그룹 -->
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 평가업무구분 -->
+				<sc-code code="R704" value="{{codes.R704}}" ></sc-code>
+				<!-- 데이터 수집 방법 공통코드 조회 -->
+				<sc-code code="R800" value="{{codes.R800}}"></sc-code>
+				<!-- 값 수집 유형 공통코드 조회 -->
+				<sc-code code="R801" value="{{codes.R801}}"></sc-code>
+				<!-- 집계 Procedure 공통코드 조회 -->
+				<sc-code code="R803" value="{{codes.R803}}" ></sc-code>
+				<!-- 집계함수 공통코드 조회 -->
+				<sc-code code="R804" value="{{codes.R804}}" ></sc-code>
+				<!-- 분자/분모 공통코드 조회 -->
+				<sc-code code="R805" value="{{codes.R805}}" ></sc-code>
+				<!-- 무실적 처리 공통코드 조회 -->
+				<sc-code code="R806" value="{{codes.R806}}" ></sc-code>
+				<!-- 사용여부 공통코드 조회 -->
+				<sc-code code="C022" value="{{codes.C022}}" ></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<!-- 계산항목 상세정보 조회 -->
+		<sc-ajax
+				id="findCalcFactorInfo"
+				url="findCalcFactorInfo.do"
+				body="{{calcFactorData}}"
+				on-response="completeFindCalcFactorInfo">
+		</sc-ajax>
+		
+		<!-- 실적항목 데이터베이스 테이블 조건 컬럼 정보 조회-->
+		<sc-ajax
+				id="findListDbTblCondition"
+				url="findListDbTblCondition.do"
+				last-response="{{dbTableInfo}}">
+		</sc-ajax>
+		
+		<!-- 계산항목 저장 -->
+		<sc-ajax id="saveCalcFactor"
+				url="saveCalcFactor.do"
+				on-response="onSaveResultHandler">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		<cc-sub-title-bar title-text="계산항목 상세">
+			<sc-button text="저장" on-click="onSaveCalcFactor" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+		</cc-sub-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel column="1">
+				<cc-fieldset>
+					<sc-label text="계산항목"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{calcFactorData.calcfact_cd}}" required="[[!formula('isEditable')]]" readonly="true" placeholder="계산항목 코드" ></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{calcFactorData.calcfact_nm}}" required="[[formula('isEditable')]]" readonly="[[!formula('isEditable')]]" max-length="50" placeholder="계산항목 명" ></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="분자/분모 구분"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" required="[[formula('isEditable')]]"
+									   items="{{codes.R805}}" value="{{calcFactorData.nmtr_dntr_div_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]" >
+					</sc-combobox-field>
+				</cc-fieldset>
+				<!-- 분자/분모 구분값이 분자(NMTR)인 경우에만 활성화 -->
+				<cc-fieldset hidden="[[!formula('isNumerator')]]">
+					<sc-label text="NULL값 데이터보정 방식"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" required="[[formula('isEditable')]]"
+									   items="{{codes.R806}}" value="{{calcFactorData.nmtr_val_nullv_datfil_meth_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]" >
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="단위"></sc-label>
+					<sc-text-field value="{{calcFactorData.dat_unit}}" max-length="18" readonly="[[!formula('isEditable')]]" required="[[formula('isEditable')]]" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field class="h-150"	value="{{calcFactorData.rmk}}" max-length="1000" readOnly="[[!formula('isEditable')]]" ></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="값 수집 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" required="[[formula('isEditable')]]" items="{{codes.R801}}"
+									   value="{{calcFactorData.val_coll_typ_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="데이터 수집 방법"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" required="[[formula('isEditable')]]" items="{{codes.R800}}"
+									   value="{{calcFactorData.dat_collmeth_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]" >
+					</sc-combobox-field>
+				</cc-fieldset>
+				
+				<!-- 데이터 수집방법이 평가점수인 경우에만 활성화 -->
+				<cc-fieldset hidden="[[!formula('isEvalScOrEvalfactSc')]]">
+					<sc-label text="평가 업무 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" required="[[formula('isEditable')]]" validation-group="searchEvalfactInfo"
+									   items="{{codes.R704}}" value="{{calcFactorData.eval_task_typ_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]" >
+					</sc-combobox-field>
+				</cc-fieldset>
+				
+				<!-- 데이터 수집방법이 평가항목점수인 경우에만 활성화 -->
+				<cc-fieldset hidden="[[!formula('isEvalfactSc')]]">
+					<sc-label text="평가항목 코드"></sc-label>
+					<div class="field-box flex">
+						<sc-text-field class="w-150" value="{{calcFactorData.evalfact_cd}}" readonly="true" required="[[formula('isEditable')]]" placeholder="평가항목 코드"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{calcFactorData.evalfact_nm}}" required="[[formula('isEditable')]]" max-length="60" class="flex"
+									   trigger-cls="search" on-trigger-click="onGetEvalfactInfo" hide-trigger="[[!formula('isEditable')]]" readonly="[[!formula('isEditable')]]"
+									   on-enter="onGetEvalfactInfo" placeholder="평가항목 명" >
+						</sc-text-field>
+					</div>
+				</cc-fieldset>
+				
+				<!-- 데이터 수집방법이 procedure인 경우에만 활성화 -->
+				<cc-fieldset hidden="[[!formula('isPrcr')]]">
+					<sc-label text="Procedure"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{calcFactorData.prcr_cd}}" readonly="true" required="[[formula('isEditable')]]" placeholder="프로시저 코드"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{calcFactorData.prcr_nm}}" required="[[formula('isEditable')]]" max-length="100"
+									   trigger-cls="search" on-trigger-click="onGetProcedureInfo" hide-trigger="[[!formula('isEditable')]]" readonly="[[!formula('isEditable')]]"
+									   on-enter="onGetProcedureInfo" placeholder="Procedure 명" ></sc-text-field>
+					</div>
+				</cc-fieldset>
+				
+				<!-- 데이터 수집방법이 집계 Table인 경우에만 활성화 -->
+				<cc-fieldset hidden="[[!formula('isTable')]]">
+					<sc-label text="데이터베이스 테이블"></sc-label>
+					<div class="field-box">
+						<sc-text-field id="dbTable" value="{{calcFactorData.db_tbl_phyc_nm}}" readonly="[[!formula('isEditableTable')]]" required="[[formula('isEditableTable')]]" max-length="255"
+									   trigger-cls="search" on-trigger-click="onGetDbTableInfo" hide-trigger="[[!formula('isEditable')]]" readonly="[[!formula('isEditable')]]"
+									   on-enter="onGetDbTableInfo" placeholder="데이터베이스 테이블 물리 명" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{calcFactorData.db_tbl_logic_nm}}" required="[[formula('isEditableTable')]]" readonly="true" ></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('isTable')]]">
+					<sc-label text="데이터베이스 값 컬럼"></sc-label>
+					<div class="field-box">
+						<sc-text-field id="dbSummCol" value="{{calcFactorData.db_col_phyc_nm}}" readonly="[[!formula('isEditableTable')]]" required="[[formula('isEditableTable')]]" max-length="255"
+									   trigger-cls="search" on-trigger-click="onGetDbTableInfo"	hide-trigger="[[!formula('isEditable')]]" readonly="[[!formula('isEditable')]]"
+									   on-enter="onGetDbTableInfo" placeholder="데이터베이스 컬럼 물리 명" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{calcFactorData.db_col_logic_nm}}" required="[[formula('isEditableTable')]]" readonly="true" ></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('isTable')]]">
+					<sc-label text="계산항목 조건 컬럼"></sc-label>
+					<sc-grid id="gridPanel" class="h-200"
+							 use-selection="false"
+							 on-item-edit-end="onItemEditEnd"
+							 editable="[[formula('isEditableTable')]]"
+							 hidden="[[!formula('isTable')]]">
+						<cc-grid-toolbar>
+							<sc-button id="calcCndCol" text="컬럼 추가" on-click="onGetDbTableInfo" hidden="[[!formula('isEditableTable')]]" auth-s></sc-button>
+						</cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-data-column     data-field="cond_nm"            header-text="조건"          	width="150"     text-align="left"></sc-data-column>
+							<sc-checkbox-column data-field="use_yn"             header-text="사용"      		width="60"      text-align="center" validator-function="validCondColFunc"
+												display-checkbox="false" 		checked-value="Y" 			un-checked-value="N" 				item-editable-function="onItemEditableFn"></sc-checkbox-column>
+							<sc-combobox-column id="combo_test" data-field="db_col_phyc_nm"    	header-text="컬럼 물리 명"    width="150"  	item-editable-function="onItemEditableFn" validator-function="validCondColFunc"
+												display-field="db_col_phyc_nm"  value-field="db_col_phyc_nm" 	items="{{dbTableInfo.colList}}" 	text-align="left"></sc-combobox-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field  data-field="dtlcd" ></sc-grid-field>
+							<sc-grid-field  data-field="calcfact_uuid" ></sc-grid-field>
+							<sc-grid-field  data-field="db_tbl_cd" ></sc-grid-field>
+							<sc-grid-field  data-field="db_col_cd" ></sc-grid-field>
+							<sc-grid-field  data-field="cnd_div_ccd" ></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</cc-fieldset>
+				
+			</cc-form-panel>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-calculation-factor-detail",
+			properties: {
+				titleText: {
+					type: String,
+					value: "실적항목 정보"
+				},
+				// 코드 콤보 Object
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							operOrgCd : [],     // SRM운영조직
+							R800 : [],          // 실행구분
+							R801 : [],          // 값 수집 유형
+							R803 : [],          // 집계Procedure
+							R804 : [],          // 집계Function
+							R805 : [],          // 분자 분모 코드
+							R806 : [],          // 무실적 처리
+							R704 : [],          // 평가 업무 유형
+							C022 : []           // 사용여부
+						};
+					}
+				},
+				//계산항목 정보 Object
+				calcFactorData : {
+					type : Object,
+					value : function() {
+						return {
+							rec_fact_nm : "",
+							db_tbl_phyc_nm : "",
+							db_col_phyc_nm : "",
+							evalfact_nm : "",
+							prcr_nm: "",
+							db_col_cd: "",
+							db_tbl_cd: ""
+						};
+					}
+				},
+				// 실적 테이블 목록
+				dbTableInfo : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				},
+				disabled : {
+					type : Boolean,
+					value : true
+				},
+				recTablePopupMode : {
+					type : String,
+					value : ""
+				},
+				procedureYn : {
+					type : Boolean,
+					value : false
+				},
+				selectedObj : {
+					type : Object,
+					value : function() {
+						return {
+							dbTbl : false,
+							dbCol : false,
+							evalfactSc : false,
+							evalSc : false
+						}
+					}
+				},
+				// [R800] 데이터 수집방법 별 필드 목록
+				datCollmethFieldsInfo : {
+					type : Object,
+					value : function() {
+						return {
+							PRCR : ["prcr_cd", "prcr_nm"],
+							DAT_TBL : ["db_tbl_phyc_nm", "db_tbl_logic_nm", "db_tbl_cd", "db_col_phyc_nm", "db_col_logic_nm", "db_col_cd"],
+							EVAL_SC : ["eval_task_typ_ccd"],
+							EVAL_FACT_SC : ["eval_task_typ_ccd", "evalfact_cd", "evalfact_nm"],
+						}
+					},
+					reset : false
+				},
+				loadCompleted : {
+					type : Boolean,
+					value : function() {
+						return false;
+					}
+				}
+			},
+			formulas: {
+				isEditable : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					// 계산항목 정보 수정여부 설정
+					return !me.disabled;
+				},
+				isEvalScOrEvalfactSc : function() {
+					var me = this;
+					var data = me.get("calcFactorData");
+					return data.dat_collmeth_ccd == "EVAL_SC" || data.dat_collmeth_ccd == "EVAL_FACT_SC";
+				},
+				isEvalfactSc : function() {
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "EVAL_FACT_SC");
+				},
+				isPrcr : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "PRCR");
+				},
+				isFunc : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "FC");
+				},
+				isTable : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "DAT_TBL");
+				},
+				isEvalResult : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "EVAL_SC") || (data.dat_collmeth_ccd == "EVAL_FACT_SC");
+				},
+				isFactResult : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "EVAL_FACT_SC");
+				},
+				isEditableTable : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.dat_collmeth_ccd == "DAT_TBL") && me.formula('isEditable');
+				},
+				isNumerator : function(){
+					var me = this;
+					var data = me.get("calcFactorData");
+					return (data.nmtr_dntr_div_ccd == "NMTR");
+				}
+			},
+			
+			observers : [
+				"onChangePrcrNm(calcFactorData.prcr_nm)",			// 프로시저 명
+				"onChangeNumerator(calcFactorData.nmtr_dntr_div_ccd)",	// 분자/분모 구분
+				"onChangeDatCollmeth(calcFactorData.dat_collmeth_ccd)",		// 데이터 수집 방법
+				"onChangeDbTable(calcFactorData.db_tbl_phyc_nm)",		// 데이터베이스 테이블 명
+				"onChangeDbColumn(calcFactorData.db_col_phyc_nm)",		// 데이터베이스 컬럼 명
+				"onChangeEvalTaskTypCombo(calcFactorData.eval_task_typ_ccd)"		// 평가업무유형 공통코드
+			],
+			
+			/* 초기화 */
+			clear : function(){
+				var me = this;
+				//me.reset();
+				me.set("disabled", true);
+				me.applyFormula();
+			},
+			
+			/* 집계대상테이블 변경 */
+			onChangeDbTable : function(){
+				var me = this;
+				var data = me.get("calcFactorData");
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				if(!me.loadCompleted){
+					return;
+				}
+				
+				if(me.selectedObj.dbTbl){
+					me.set("selectedObj.dbTbl", false);
+				}else if(data.db_tbl_logic_nm){
+					me.set("calcFactorData.db_tbl_logic_nm", "");
+					me.set("calcFactorData.db_tbl_cd", "");
+				}
+				
+				if(provider.getItemSize() > 0 && (UT.isEmpty(data.db_tbl_phyc_nm) || UT.isEmpty(data.db_tbl_logic_nm))){
+					me.$.gridPanel.getDataProvider().removeAll();
+				}
+			},
+			
+			/* 데이터베이스 컬럼 변경 */
+			onChangeDbColumn : function(){
+				var me = this;
+				var data = me.get("calcFactorData");
+				
+				if(!me.loadCompleted){
+					return;
+				}
+				if(me.selectedObj.dbCol){
+					me.set("selectedObj.dbCol", false);
+				}else if(data.db_col_logic_nm){
+					me.set("calcFactorData.db_col_logic_nm", "");
+					me.set("calcFactorData.db_col_cd", "");
+				}
+			},
+			
+			/* 평가항목 변경 */
+			onChangeEvalfact : function(){
+				var me = this;
+				var data = me.get("calcFactorData");
+				
+				if(!me.loadCompleted){
+					return;
+				}
+				if(me.selectedObj.evalfactSc){
+					me.set("selectedObj.evalfactSc", false);
+				}else if(data.evalfact_cd){
+					me.set("calcFactorData.evalfact_cd", "");
+					me.set("calcFactorData.evalfact_nm", "");
+				}
+			},
+			
+			/**
+			 * 데이터 수집 방법 변경 시
+			 * 이전 데이터 수집 방법에 대한 부가 정보 초기화
+			 */
+			onChangeDatCollmeth : function(chgDatCollmethCcd) {
+				var me = this;
+				if(!me.loadCompleted){
+					return;
+				}
+				me.applyFormula();
+				me.$.gridPanel.doContentElementResize();
+				
+				// 데이터 수집 방법 공통코드 변경 -> 초기화 필요한 필드를 resetFields에 담음
+				var resetFields = [];
+				Object.keys(me.datCollmethFieldsInfo).forEach((datCollmeth) => {
+					if(datCollmeth !== chgDatCollmethCcd) {
+						resetFields = resetFields.concat(this.datCollmethFieldsInfo[datCollmeth]);
+					}
+				}, me);
+				
+				// 필드 초기화
+				resetFields.forEach((field) => {
+					this.set("calcFactorData." + field, null);
+				}, me);
+			},
+			
+			/* 분자 분모 코드 변경*/
+			onChangeNumerator : function(nmtr_val_nullv_datfil_meth_ccd){
+				var me = this;
+				if(!me.loadCompleted){
+					return;
+				}
+				me.applyFormula("isNumerator");
+			},
+			
+			/**
+			 * 계산항목 정보 setting
+			 */
+			load : function(param) {
+				var me = this;
+				me.set("loadCompleted", false);
+				
+				var uiDisabled = (param.fact_use_yn == "Y") ? true : false;	//평가항목에서의 사용여부
+				me.set("disabled", uiDisabled);
+
+				if(param.calcfact_uuid){
+					me.set("calcFactorData", {
+						calcfact_uuid : param.calcfact_uuid,
+					});
+					me.onSearch();
+				}else{	// 신규추가
+					me.set("calcFactorData", {
+						calcfact_cd : "",
+						calcfact_nm : "",
+						nmtr_dntr_div_ccd : "",
+						dat_unit : "",
+						rmk : "",
+						dat_collmeth_ccd : "",
+						val_coll_typ_ccd : ""
+					});
+					me.applyFormula();
+				}
+			},
+			
+			/**
+			 * 평가업무유형 combo 변경처리
+			 */
+			onChangeEvalTaskTypCombo : function(evalTaskTypCcd) {
+				var me = this;
+				
+				if(!me.get("loadCompleted")) {
+					return;
+				}
+				me.set("calcFactorData.evalfact_cd", null);
+				me.set("calcFactorData.evalfact_nm", null);
+			},
+			/**
+			 * 평가항목 조회 팝업
+			 */
+			onGetEvalfactInfo : function(e) {
+				var me = this;
+				var evalfactNm = me.get("calcFactorData.evalfact_nm");
+				var evalTaskTypCcd = me.get("calcFactorData.eval_task_typ_ccd");
+				
+				if(!me.validate('searchEvalfactInfo')) {
+					// STD.E1001	'{0}'은(는) 필수 입력 항목입니다.
+					UT.alert("STD.E1001", null, me.translate('평가 업무 유형'));
+					return;
+				}
+				
+				var evalfactorPopup = UT.popup("ep-evalfactor", me, 900, 700, {
+					"selected-items" : function(popup, e) {
+						var selected = e.detail;
+						if(UT.isNotEmpty(selected)){
+							var result = selected[0];
+							//결과값 처리하는 callback
+							me.set("evalfactYn", true);
+							me.set("calcFactorData.evalfact_cd", result.evalfact_cd);
+							me.set("calcFactorData.evalfact_nm", result.evalfact_nm);
+						}
+						popup.close();
+					}
+				}, {titleText : "평가항목"});
+				evalfactorPopup.show();
+				evalfactorPopup.getWindowContent().load({
+					searchParam : {
+						evalfact_nm : evalfactNm,
+						eval_task_typ_ccd : evalTaskTypCcd
+					},
+					singleSelect : true,
+					disableMode : true
+				});
+				
+			},
+			/**
+			 * 프로시저 조회 팝업
+			 */
+			onGetProcedureInfo : function(e) {
+				var me = this;
+				var procedureNm = me.get("calcFactorData.prcr_nm");
+				
+				var procedureCodePopup = UT.popup("ep-procedure-code-list", me, 900, 700, {
+					"selected-items" : function(popup, e) {
+						var selected = e.detail;
+						if(UT.isNotEmpty(selected)){
+							var result = selected[0];
+							//결과값 처리하는 callback
+							me.set("procedureYn", true);
+							me.set("calcFactorData.prcr_cd", result.prcr_cd);
+							me.set("calcFactorData.prcr_nm", result.prcr_nm);
+						}
+						popup.close();
+					}
+				}, {titleText : "Procedure"});
+				procedureCodePopup.show();
+				procedureCodePopup.getWindowContent().load({
+					defaultParam : {
+						prcr_nm : procedureNm,
+						isEditMode : me.formula("isEditable")
+					}
+				});
+				
+			},
+
+			onGetDbTableInfo : function(e){
+				var me = this;
+				var targetId = e.currentTarget.id;
+				var param = me.get("calcFactorData");
+				var autoComplete = false;
+
+				if(e.type == "enter"){
+					autoComplete = true;
+				}
+				
+				if(targetId == "dbTable") {
+					param.mode = "DAT_TBL";	// 집계 Table
+				} else {
+					if(!param.db_tbl_cd || !param.db_tbl_phyc_nm){
+						return UT.alert("STD.SRM1110"); // 대상 테이블을 입력하세요.
+					}
+					
+					if(targetId == "dbSummCol") {	// 데이터베이스 컬럼의 search click
+						param.mode = "SC";
+					}else if(targetId == "calcCndCol"){ // 계산항목 조건 컬럼의 '컬럼 추가' btn click
+						param.mode = "CC";
+						//useSelection = false;
+					}
+				}
+				
+				me.recTablePopupMode = param.mode;
+				var recTablePopup = UT.popup("ep-db-table-detail", me, 800, 500,{
+					"selected-items": function(popup, e) {
+						var selected = e.detail;
+						me.selectedCallback(selected);
+						popup.close();
+					},
+					"complete-save": function(popup, e) {
+						if(me.get("recTablePopupMode") == "CC"){
+							me.findCalcFactTbCondition();
+						}
+					}
+				});
+				recTablePopup.show();
+				recTablePopup.getWindowContent().load({defaultParam: param, autoComplete : autoComplete, singleSelect: true});
+			},
+			
+			selectedCallback : function(selected){
+				var me = this;
+				var item = selected[0] || {};
+				var mode = me.recTablePopupMode;
+				if(mode == "DAT_TBL"){
+					me.set("calcFactorData.db_tbl_phyc_nm", item.db_tbl_phyc_nm);
+					me.set("calcFactorData.db_tbl_logic_nm", item.db_tbl_logic_nm);
+					me.set("calcFactorData.db_tbl_cd", item.db_tbl_cd);
+					me.set("selectedObj.dbTbl", true);
+					
+					// DB column 초기화
+					me.resetDbColumn(item);
+					
+					me.findCalcFactTbCondition();
+				}else if(mode == "SC"){
+					me.set("calcFactorData.db_col_phyc_nm", item.db_col_phyc_nm);
+					me.set("calcFactorData.db_col_logic_nm", item.db_col_logic_nm);
+					me.set("calcFactorData.db_col_cd", item.db_col_cd);
+					me.set("selectedObj.dbCol", true);
+				}
+			},
+			
+			/**
+			 * DB column 초기화
+			 */
+			resetDbColumn : function(item) {
+				var me = this;
+				me.set("calcFactorData.db_col_phyc_nm", item.db_col_phyc_nm);
+				me.set("calcFactorData.db_col_logic_nm", item.db_col_logic_nm);
+				me.set("calcFactorData.db_col_cd", item.db_col_cd);
+			},
+			
+			findCalcFactTbCondition : function(){
+				var me = this;
+				var valueParam = me.get("calcFactorData");
+				
+				me.$.findListDbTblCondition.set("body", valueParam);
+				
+				UT.request(me.$.findListDbTblCondition, function(){
+					me.$.gridPanel.setDataProvider(me.get("dbTableInfo.conditions"));
+					me.set("selectedObj.dbTbl", false);
+				});
+				
+				
+			},
+			
+			/**
+			 * 그리드 item-editable-function
+			 */
+			onItemEditableFn: function(data, item) {
+				var me = this;
+				var dataField = item.dataField;
+				var flag = false;
+				
+				if(dataField == "db_col_phyc_nm"){
+					flag = (data.use_yn == "Y");
+				}else if(dataField == "db_col_logic_nm"){
+					flag = UT.isNotEmpty(data.db_col_phyc_nm);
+				}else if(dataField == "use_yn"){
+					flag = true;
+				}
+				return (me.formula('isEditableTable') && flag);
+			},
+			
+			/**
+			 * 그리드 item-edit-end
+			 */
+			onItemEditEnd : function(e){
+				var me = this, detail = e.detail,
+					item = detail.item,
+					dataField = item.dataField,
+					newValue = detail.newValue,
+					oldValue = detail.oldValue,
+					provider = detail.provider
+				data = provider.getItemAt(item.rowIndex);
+				
+				if(dataField == "use_yn" && newValue == "N"){
+					provider.setItemAt(item.rowIndex, {
+						"db_col_phyc_nm"       : "",
+						"db_col_logic_nm"       : "",
+						"db_col_cd"   : "",
+						"db_tbl_cd"            : "",
+						"db_tbl_phyc_nm"        : ""
+					});
+				}else if(dataField == "db_col_phyc_nm"){
+					var conditions = me.dbTableInfo.colList || [];
+					var filters = conditions.filter(function(item){
+						if(item.db_col_phyc_nm === newValue) {
+							return item;
+						}
+					});
+					
+					if(UT.isEmpty(filters)){
+						provider.setItemAt(item.rowIndex, {
+							"db_col_logic_nm"       : "",
+							"db_col_cd"   : "",
+							"db_tbl_cd"            : "",
+							"db_tbl_phyc_nm"        : ""
+						});
+					}else{
+						data.db_col_logic_nm = filters[0].db_col_logic_nm;
+						data.db_col_phyc_nm = newValue;
+						data.db_tbl_cd = filters[0].db_tbl_cd;
+						data.db_tbl_phyc_nm = filters[0].db_tbl_phyc_nm;
+						data.db_col_cd = filters[0].db_col_cd;
+						
+						provider.setItemAt(item.rowIndex, data);
+					}
+				}
+			},
+			
+			/**
+			 * 계산항목 상세정보 조회
+			 */
+			onSearch : function() {
+				var me = this;
+				me.set("loadCompleted", false);
+				UT.request(me.$.findCalcFactorInfo);
+			},
+			
+			/**
+			 * 계산항목 상세정보 조회 callback
+			 */
+			completeFindCalcFactorInfo: function(e, res) {
+				var me = this;
+				var valueParam = res.response || {};
+				
+				//me.set("selectedObj.calcFact", true);
+				me.set("selectedObj.dbTbl", true);
+				me.set("selectedObj.dbCol", true);
+				//me.set("selectedObj.evalFact", true);
+				me.set("procedureYn", true);
+				
+				me.set("calcFactorData", valueParam);
+				me.set("loadCompleted", true);
+				me.applyFormula();
+				
+				if(me.formula("isTable")){
+					me.findCalcFactTbCondition();
+				}
+				
+			},
+			
+			/**
+			 * 그리드 데이터 유효성 검사
+			 */
+			validCondColFunc : function(headerText, dataField, data){
+				var me = this,
+					text = me.translate("사용할 조건컬럼");
+				if(dataField == "db_col_phyc_nm" && UT.isEmpty(data[dataField]) && data.use_yn == "Y"){
+					return me.translate("STD.SRM1112", null, text, me.translate(headerText));
+				}
+				// value가 없으면 valid Function이 수행되지 않는 현상으로 use_yn field로 db_col_phyc_nm 필수 값 검사
+				if(dataField == "use_yn" && data[dataField] == "Y" && UT.isEmpty(data["db_col_phyc_nm"])){
+					return me.translate("STD.SRM1112", null, text, me.translate("컬럼명(물리)"));
+				}
+				return true;
+			},
+			
+			/**
+			 * 계산항목 정보 저장
+			 */
+			onSaveCalcFactor: function() {
+				var me = this;
+				var data = me.get("calcFactorData"),
+					cndColData = me.$.gridPanel.getDataProvider();
+
+				// 데이터 유효성 확인
+				if(!me.validate()){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				//조건 컬럼에서 사용 column에 체크된 항목
+				var cndColCheckedData = cndColData.filterItems({use_yn:"Y"});
+				
+				me.$.saveCalcFactor.set("body", {
+					saveParam : data,
+					cndColList : cndColCheckedData
+				});
+				
+				UT.confirm("STD.N1200", function(){
+					UT.request(me.$.saveCalcFactor);
+				});
+			},
+			
+			/**
+			 * 저장 완료 event handler
+			 */
+			onSaveResultHandler: function(e, res) {
+				var me = this;
+				var result = res.response || {};
+				if (result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						var data = me.get("calcFactorData");
+						me.fire("complete-save", data);
+					});
+				}else{
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 프로시저명 변경감지 observer
+			 */
+			onChangePrcrNm : function() {
+				var me = this;
+				var data = me.get("calcFactorData");
+				
+				if(me.procedureYn) {
+					me.set("procedureYn", false);
+				} else if(UT.isNotEmpty(data['prcr_cd'])){
+					me.set("calcFactorData.prcr_cd", "");
+				}
+			}
+			
+		});
+	</script>
+
+</dom-module>

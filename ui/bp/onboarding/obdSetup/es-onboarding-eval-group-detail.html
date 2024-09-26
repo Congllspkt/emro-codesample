@@ -1,0 +1,257 @@
+<sc-link rel="import" href="es-onboarding-eval-group-info.html"></sc-link>
+<sc-link rel="import" href="es-onboarding-evalsheet-tab.html"></sc-link>
+
+<dom-module id="es-onboarding-eval-group-detail">
+<!-- 
+/**
+ *
+ *	@description : 협력사 > 온보딩평가 설정 > 온보딩평가그룹 > 온보딩평가그룹 상세
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 온보딩평가그룹 조회 -->
+        <sc-ajax
+                id="findOeg"
+                url="findOeg.do"
+                body="{{searchParam}}"
+                on-response="onFindResultHandler">
+        </sc-ajax>
+
+        <!-- 온보딩평가그룹 저장 -->
+        <sc-ajax
+                id="saveOeg"
+                url="saveOeg.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+
+        <cc-page-title-bar title-text="[[titleText]]">
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <div class="hbox flex">
+            <es-onboarding-eval-group-info id="oeg" class="flex-3" on-save-oeg="onSaveOeg" on-load-obd-evalsht-his="onLoadObdEvalshtHis"></es-onboarding-eval-group-info>
+            <div class="hspace-10"></div>
+            <es-onboarding-evalsheet-tab id="obdEvalshtTab" class="flex-7" on-saved-obd-evalsht="onSavedObdEvalsht" on-saved-obd-evalsht-prcs="onSavedObdEvalshtPrcs"></es-onboarding-evalsheet-tab>
+        </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-onboarding-eval-group-detail",
+            properties: {
+                titleText:{
+                    type: String,
+                    value: "온보딩평가그룹"
+                },
+                searchParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                oeg:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                oegVmgs:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                obdEvalshtHis:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+				
+				// 재조회할 프로세스(= 저장한 프로세스) 코드
+				reloadPrcsCcd:{
+                    type: String,
+                    value: null
+                },
+				reloadable : {	// Save, Submit 등의 행동을 했는지 판별
+					type: Boolean,
+					value : false
+				}
+            },
+
+            initialized: function(){
+            },
+
+            /**
+             * 화면 load
+             */
+            loadScreen: function(param){
+                var me = this;
+                me.$.oeg.load(param);
+				
+				var reloadPrcsCcd = me.get("reloadPrcsCcd");
+				if(UT.isEmpty(reloadPrcsCcd)){  // load
+					me.$.obdEvalshtTab.load(param);
+				}else{  // reload
+					me.$.obdEvalshtTab.reload(param, reloadPrcsCcd);
+					me.set("reloadPrcsCcd", null);  // 초기화
+				}
+            
+            },
+
+            load: function(param){
+                var me = this;
+
+                if(UT.isEmpty(param.oeg_uuid)){
+                    // 신규
+                    me.set("titleText", "온보딩평가그룹 등록");
+                    me.set("oeg", param);
+
+                    var param = {
+                        oeg : me.get("oeg"),
+                        oegVmgs : new Array()
+                    };
+
+                    me.loadScreen(param);
+                }else {
+                    // 상세
+                    me.set("titleText", "온보딩평가그룹 상세");
+                    me.set("searchParam", param);
+                    this.onSearchOeg();
+                }
+            },
+
+            /**
+             * 온보딩평가그룹 조회
+             */
+            onSearchOeg: function(){
+                var me = this;
+                UT.request(me.$.findOeg);
+            },
+
+            /**
+             * 온보딩평가그룹 조회 callback
+             */
+            onFindResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var resultData = result.resultData;
+                    var oegInfo = resultData.oegInfo;
+                    var oegVmgs = resultData.oegVmgs;
+                    var obdEvalshtHis = resultData.obdEvalshtHis;
+					var obdEvalshtInfo = UT.isEmpty(resultData.obdEvalshtInfo) ? new Object() : resultData.obdEvalshtInfo;
+
+                    // 1. 온보딩평가그룹 Mater
+                    me.set("oeg", oegInfo);
+                    // 2. 온보딩평가그룹 - 협력사관리그룹
+                    me.set("oegVmgs", oegVmgs);
+                    // 3. 온보딩평가그룹 - 평가시트이력 조회
+                    me.set("obdEvalshtHis", obdEvalshtHis);
+					// 5. 온보딩 평가시트 조회
+                    me.set("obdEvalshtInfo", obdEvalshtInfo);
+
+                    var param = {
+                        oeg : me.get("oeg"),
+                        oegVmgs : me.get("oegVmgs"),
+                        obdEvalshtHis : me.get("obdEvalshtHis"),
+						obdEvalshtInfo : me.get("obdEvalshtInfo")
+                    };
+
+                    me.loadScreen(param);
+                }
+            },
+
+            /**
+             * 온보딩평가그룹 (OEG) 저장
+             */
+            onSaveOeg: function(e){
+                var me = this;
+                var body = e.detail;
+				
+				me.set("reloadable", true);
+
+                me.$.saveOeg.body = body;
+                UT.request(me.$.saveOeg);
+            },
+
+            /**
+             * 온보딩평가그룹 (OEG) 저장 callback
+             */
+            onSaveResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+                    UT.completeAlert("저장", function(){
+                        me.load(result.resultData);
+                    });
+                }
+            },
+
+            /**
+             * 온보딩 평가그룹 - 평가시트이력 상세 조회
+             */
+            onLoadObdEvalshtHis: function(e){
+                var me = this;
+                var data = e.detail;
+
+				var param = {
+					oeg : me.get("oeg"),
+					obdEvalshtInfo : data,
+					obdEvalshtHis : me.get("obdEvalshtHis")
+				}
+                me.$.obdEvalshtTab.load(param);
+            },
+			
+			/**
+             * 온보딩 평가그룹 - 평가시트 저장 후처리 재조회 요청
+             */
+			onSavedObdEvalsht: function(e){
+				var me = this;
+                var data = e.detail;
+				
+				me.set("reloadable", data.reloadable);
+				
+				me.load(data);
+			},
+			
+			/**
+             * 온보딩 평가그룹 - 평가시트 프로세스 저장 후처리 재조회 요청
+             */
+			onSavedObdEvalshtPrcs: function(e){
+				var me = this;
+				var data = e.detail;
+				var oegInfo = data.oegInfo;
+				var obdEvalshtInfoPrcs = data.obdEvalshtInfoPrcs;
+				
+				me.set("reloadable", data.reloadable);	//닫기 버튼 후 reload 여부
+				
+				me.set("reloadPrcsCcd", obdEvalshtInfoPrcs.prcs_ccd);  // 재조회할 프로세스(= 저장한 프로세스) 코드 셋팅
+				me.load(oegInfo);
+			},
+			
+            /**
+             * 닫기 버튼 클릭
+             */
+            onClose: function() {
+                var me = this;
+				var reloadable = me.get("reloadable");
+                me.clear();
+                me.fire("close-detail", reloadable);
+            },
+            clear: function(){
+                var me = this;
+                me.reset();
+            }
+        });
+    </script>
+
+</dom-module>

@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="bid-notice-eval">
+	<select id="findListBidNotiEval" resultType="map">
+		/* bid-notice-eval.findListBidNotiEval */
+		SELECT RFX_PRENTC.RFX_PRENTC_UUID
+		     , RFX_PRENTC.RFX_PRENTC_NO
+		     , RFX_PRENTC.RFX_PRENTC_RND
+		     , RFX_PRENTC.OORG_CD
+		     , RFX_PRENTC.RFX_PRENTC_TIT
+		     , RFX_PRENTC.RFX_PRENTC_STS_CCD
+		     , RFX_PRENTC.RFX_PRENTC_ST_DTTM
+		     , RFX_PRENTC.RFX_PRENTC_CLSG_DTTM
+		     , RFX_PRENTC.COMP_TYP_CCD
+		     , CASE WHEN RFX_PRENTC.RFX_PRENTC_STS_CCD IN ('CLSG','RENTC','PRENTC_CORR','PRENTC_ED') THEN 'CLSG'
+		            ELSE 'CLSG_WTG'
+		        END AS CLOSE_STS
+		     , CASE WHEN RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN IS NULL THEN 'N'
+		            WHEN RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN = '' THEN 'N'
+		            ELSE 'Y'
+		        END AS PTCP_QUALEVAL_CMPLD_YN
+		     , CASE WHEN RFX_PRENTC.RFX_PRENTC_EVAL_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRENTC.RFX_PRENTC_EVAL_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRENTC.RFX_PRENTC_EVAL_RES_CCD
+		        END AS RFX_PRENTC_EVAL_RES_CCD
+		     , (
+		        SELECT COUNT(RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID)
+		          FROM RFX_PRENTC_AFP RFX_PRENTC_AFP
+		         WHERE RFX_PRENTC_AFP.TEN_ID   = RFX_PRENTC.TEN_ID
+		           AND RFX_PRENTC_AFP.RFX_PRENTC_UUID  = RFX_PRENTC.RFX_PRENTC_UUID
+		           AND RFX_PRENTC_AFP.AFP_SUBM_STS_CCD = 'SUBM'
+		           AND RFX_PRENTC_AFP.STS     != 'D'
+		       ) AS PART_APP_VD_CNT
+		  FROM RFX_PRENTC RFX_PRENTC
+		 WHERE RFX_PRENTC.TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC.RFX_PRENTC_STS_CCD IN ('PRENTC_PRGSG','CLSG','RENTC','PRENTC_CORR','PRENTC_ED')
+		   <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND UPPER(RFX_PRENTC.OORG_CD) IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_rfx_prentc_st_dttm != null">
+		       AND RFX_PRENTC.RFX_PRENTC_ST_DTTM &gt;= #{p.from_rfx_prentc_st_dttm}
+		   </if>
+		   <if test="p.to_rfx_prentc_st_dttm != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_prentc_st_dttm,1)"/>
+		       AND RFX_PRENTC.RFX_PRENTC_ST_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.comp_typ_ccd != null and p.comp_typ_ccd != ''">
+		       AND RFX_PRENTC.COMP_TYP_CCD = #{p.comp_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_prentc_nos != null and p.rfx_prentc_nos.size() != 0">
+		           AND UPPER(RFX_PRENTC.RFX_PRENTC_NO) IN
+		           <foreach close=")" collection="p.rfx_prentc_nos" item="rfx_prentc_no" open="(" separator=",">
+		               #{rfx_prentc_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_prentc_no != null and p.rfx_prentc_no != ''">
+		               <bind name="noPattern" value="'%' + p.rfx_prentc_no + '%'"/>
+		               AND UPPER(RFX_PRENTC.RFX_PRENTC_NO) LIKE UPPER(#{noPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfx_prentc_tit != null and p.rfx_prentc_tit != ''">
+		       <bind name="namePattern" value="'%' + p.rfx_prentc_tit + '%'"/>
+		       AND UPPER(RFX_PRENTC.RFX_PRENTC_TIT) LIKE UPPER(#{namePattern})
+		   </if>
+		   <if test="p.rfx_prentc_sts_ccd != null and p.rfx_prentc_sts_ccd != ''">
+		       AND RFX_PRENTC.RFX_PRENTC_STS_CCD = #{p.rfx_prentc_sts_ccd}
+		   </if>
+		   <if test="p.rfx_prentc_crn_typ_ccd != null and p.rfx_prentc_crn_typ_ccd != ''">
+		       AND RFX_PRENTC.RFX_PRENTC_CRN_TYP_CCD = #{p.rfx_prentc_crn_typ_ccd}
+		   </if>
+		   <if test="p.ptcp_qualeval_cmpld_yn != null and p.ptcp_qualeval_cmpld_yn != ''">
+		       <choose>
+		           <when test="p.ptcp_qualeval_cmpld_yn == &quot;Y&quot;">
+		               AND RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN = #{p.ptcp_qualeval_cmpld_yn}
+		           </when>
+		           <otherwise>
+		               AND (
+		                    RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN IS NULL OR
+		                    RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN = '' OR
+		                    RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN = 'N'
+		                   )
+		           </otherwise>
+		       </choose>
+		   </if>
+		   <if test="p.close_sts != null and p.close_sts != ''">
+		       <choose>
+		           <when test="p.close_sts == &quot;CLSG&quot;">
+		               AND RFX_PRENTC.RFX_PRENTC_STS_CCD IN ('CLSG','RENTC','PRENTC_CORR','PRENTC_ED')
+		           </when>
+		           <otherwise>
+		               AND RFX_PRENTC.RFX_PRENTC_STS_CCD IN ('PRENTC_PRGSG')
+		           </otherwise>
+		       </choose>
+		   </if>
+		 ORDER BY RFX_PRENTC.RFX_PRENTC_NO DESC, RFX_PRENTC.RFX_PRENTC_RND DESC
+	</select>
+	<select id="findListBidNotiEvalDetailByOpen" resultType="map">
+		/* bid-notice-eval.findListBidNotiEvalDetailByOpen */
+		SELECT RFX_PRENTC_AFP.VD_CD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_UUID
+		     , RFX_PRENTC_AFP.AFP_SUBM_STS_CCD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD
+		        END AS PTCP_QUALEVAL_RES_CCD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_PTCP_DQ_RSN
+		     , RFX_PRENTC_AFP.AFP_SUBM_DTTM
+		     , RFX_PRENTC_AFP.PTCP_QUALEVAL_DTTM
+		     , RFX_PRENTC_AFP.VD_PIC_NM
+		     , RFX_PRENTC_AFP.VD_PIC_TEL
+		     , RFX_PRENTC_AFP.VD_PIC_EML
+		     , VD.BIZREGNO
+		     , (
+		        SELECT COUNT(RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_SUBMDDOC_UUID)
+		          FROM RFX_PRENTC_VD_SUBMDDOC RFX_PRENTC_VD_SUBMDDOC
+		         WHERE RFX_PRENTC_VD_SUBMDDOC.TEN_ID              = RFX_PRENTC_AFP.TEN_ID
+		           AND RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID = RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		           AND RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID IS NOT NULL  ) AS ATT_CNT
+		  FROM RFX_PRENTC_AFP RFX_PRENTC_AFP
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_PRENTC_AFP.TEN_ID
+		   AND VD.VD_CD  = RFX_PRENTC_AFP.VD_CD
+		 WHERE RFX_PRENTC_AFP.TEN_ID            = #{g.tenant}
+		   AND RFX_PRENTC_AFP.RFX_PRENTC_UUID   = #{p.rfx_prentc_uuid}
+		   AND RFX_PRENTC_AFP.AFP_SUBM_STS_CCD != 'CRNG'
+		   <if test="p.ptcp_qualeval_res_ccd != null and p.ptcp_qualeval_res_ccd != ''">
+		       <choose>
+		           <when test="p.ptcp_qualeval_res_ccd == &quot;SN_WTG&quot;">
+		               AND (RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = #{p.ptcp_qualeval_res_ccd} OR RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD IS NULL OR RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = '')
+		           </when>
+		           <otherwise>
+		               AND PTCP_QUALEVAL_RES_CCD = #{p.ptcp_qualeval_res_ccd}
+		           </otherwise>
+		       </choose>
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != ''">
+		       <bind name="vdnamePattern" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdnamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdnamePattern}))
+		   </if>
+	</select>
+	<select id="findListAttachCnt" resultType="map">
+		/* bid-notice-eval.findListAttachInfo */
+		SELECT RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID
+		     , COUNT(ATHF.ATHF_UUID) AS ATT_CNT
+		  FROM RFX_PRENTC_VD_SUBMDDOC RFX_PRENTC_VD_SUBMDDOC
+		 INNER JOIN ATHF ATHF
+		    ON ATHF.TEN_ID        = RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		   AND ATHF.ATHG_UUID = RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID
+		   AND ATHF.STS          != 'D'
+		 WHERE RFX_PRENTC_VD_SUBMDDOC.TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   AND RFX_PRENTC_VD_SUBMDDOC.STS            != 'D'
+		 GROUP BY RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID
+	</select>
+	<select id="findListBidNotiEvalDetail" resultType="map">
+		/* bid-notice-eval.findListBidNotiEvalDetail */
+		SELECT RFX_PRENTC_VD.VD_CD
+		     , RFX_PRENTC_VD.RFX_PRENTC_UUID
+		     , CASE WHEN RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID IS NULL THEN 'SUBM_WTG'
+		            WHEN RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID = '' THEN 'SUBM_WTG'
+		            ELSE RFX_PRENTC_AFP.AFP_SUBM_STS_CCD
+		        END AS AFP_SUBM_STS_CCD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD
+		        END AS PTCP_QUALEVAL_RES_CCD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_PTCP_DQ_RSN
+		     , RFX_PRENTC_AFP.AFP_SUBM_DTTM
+		     , RFX_PRENTC_AFP.PTCP_QUALEVAL_DTTM
+		     , CASE WHEN #{g.locale} = 'en_US' THEN VD_USR.USR_NM_EN
+		            ELSE VD_USR.USR_NM
+		        END AS VD_PIC_NM
+		     , RFX_PRENTC_VD.VD_PIC_TEL
+		     , RFX_PRENTC_VD.VD_PIC_EML
+		     , VD.BIZREGNO
+		     , (
+		        SELECT COUNT(RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_SUBMDDOC_UUID)
+		          FROM RFX_PRENTC_VD_SUBMDDOC RFX_PRENTC_VD_SUBMDDOC
+		         WHERE RFX_PRENTC_VD_SUBMDDOC.TEN_ID           = RFX_PRENTC_AFP.TEN_ID
+		           AND RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID = RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		           AND RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID IS NOT NULL  ) AS ATT_CNT
+		  FROM RFX_PRENTC_VD RFX_PRENTC_VD
+		  LEFT OUTER JOIN RFX_PRENTC_AFP RFX_PRENTC_AFP
+		    ON RFX_PRENTC_AFP.TEN_ID            = RFX_PRENTC_VD.TEN_ID
+		   AND RFX_PRENTC_AFP.RFX_PRENTC_UUID   = RFX_PRENTC_VD.RFX_PRENTC_UUID
+		   AND RFX_PRENTC_AFP.VD_CD             = RFX_PRENTC_VD.VD_CD
+		   AND RFX_PRENTC_AFP.AFP_SUBM_STS_CCD != 'CRNG'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_PRENTC_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_PRENTC_VD.VD_CD
+		  LEFT OUTER JOIN USR VD_USR
+		    ON VD_USR.TEN_ID = RFX_PRENTC_VD.TEN_ID
+		   AND VD_USR.VD_CD  = RFX_PRENTC_VD.VD_CD
+		   AND VD_USR.USR_ID = RFX_PRENTC_VD.VD_PIC_UUID
+		 WHERE RFX_PRENTC_VD.TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_VD.RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   <if test="p.ptcp_qualeval_res_ccd != null and p.ptcp_qualeval_res_ccd != ''">
+		       <choose>
+		           <when test="p.ptcp_qualeval_res_ccd == &quot;SN_WTG&quot;">
+		               AND (RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = #{p.ptcp_qualeval_res_ccd} OR RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD IS NULL OR RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = '')
+		           </when>
+		           <otherwise>
+		               AND RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD = #{p.ptcp_qualeval_res_ccd}
+		           </otherwise>
+		       </choose>
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != ''">
+		       <bind name="vdnamePattern" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdnamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdnamePattern}))
+		   </if>
+	</select>
+	<update id="disqualBidNotiEval">
+		/* bid-notice-eval.disqualBidNotiEval */
+		UPDATE RFX_PRENTC_AFP
+		   SET RFX_PRENTC_PTCP_DQ_RSN = #{p.rfx_prentc_ptcp_dq_rsn}
+		     , PTCP_QUALEVAL_RES_CCD      = 'DQ'
+		     , STS                    = 'U'
+		 WHERE TEN_ID         = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.bidNotiInfo.rfx_prentc_uuid}
+		   AND VD_CD IN
+		   <foreach close=")" collection="p.selectedList" item="selected" open="(" separator=",">
+		       #{selected.vd_cd}
+		   </foreach>
+	</update>
+	<update id="qualBidNotiEval">
+		/* bid-notice-eval.qualBidNotiEval */
+		UPDATE RFX_PRENTC_AFP
+		   SET RFX_PRENTC_PTCP_DQ_RSN = #{p.rfx_prentc_ptcp_dq_rsn}
+		     , PTCP_QUALEVAL_RES_CCD      = 'QUAL'
+		     , STS                    = 'U'
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.bidNotiInfo.rfx_prentc_uuid}
+		   AND VD_CD IN
+		   <foreach close=")" collection="p.selectedList" item="selected" open="(" separator=",">
+		       #{selected.vd_cd}
+		   </foreach>
+	</update>
+	<select id="findBidNotiPartInfo" resultType="map">
+		/* bidnotice-eval.findBidNotiPartInfo */
+		SELECT RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		     , RFX_PRENTC_AFP.VD_CD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_NO
+		     , RFX_PRENTC_AFP.RFX_PRENTC_RND
+		     , RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD
+		     , RFX_PRENTC_AFP.AFP_OPN
+		     , RFX_PRENTC_AFP.AFP_SUBM_DTTM
+		     , RFX_PRENTC_AFP.AFP_SUBM_STS_CCD
+		     , RFX_PRENTC_AFP.VD_PIC_NM
+		     , RFX_PRENTC_AFP.VD_PIC_MOB
+		     , RFX_PRENTC_AFP.VD_PIC_TEL
+		     , RFX_PRENTC_AFP.VD_PIC_EML
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.CEO_NM_EN
+		            ELSE VD.CEO_NM
+		        END AS VD_CEO_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN CONCAT(CONCAT(VD.DTL_ADDR_EN_1, ' '), VD.DTL_ADDR_EN_2)
+		            ELSE CONCAT(CONCAT(VD.DTL_ADDR_1, ' '), VD.DTL_ADDR_2)
+		        END AS VD_ADDR
+		     , RFX_PRENTC.RFX_PRENTC_TIT
+		     , RFX_PRENTC.OORG_CD
+		     , RFX_PRENTC.RFX_PRENTC_UUID
+		     , RFX_PRENTC.COMP_TYP_CCD
+		     , RFX_PRENTC.RFX_PRENTC_TYP_CCD
+		     , RFX_PRENTC.RFX_PRENTC_ST_DTTM
+		     , RFX_PRENTC.RFX_PRENTC_CLSG_DTTM
+		  FROM RFX_PRENTC_AFP RFX_PRENTC_AFP
+		 INNER JOIN RFX_PRENTC RFX_PRENTC
+		    ON RFX_PRENTC.TEN_ID          = RFX_PRENTC_AFP.TEN_ID
+		   AND RFX_PRENTC.RFX_PRENTC_UUID = RFX_PRENTC_AFP.RFX_PRENTC_UUID
+		   AND RFX_PRENTC.STS            != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_PRENTC_AFP.TEN_ID
+		   AND VD.VD_CD  = RFX_PRENTC_AFP.VD_CD
+		 WHERE RFX_PRENTC_AFP.TEN_ID              = #{g.tenant}
+		   AND RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+	</select>
+	<select id="findListBidPartedAttach" resultType="map">
+		/* bid-notice-eval.findListBidPartedAttach : 입찰참가신청 제출서류*/
+		SELECT RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_SUBMDDOC_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.VD_CD
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_NO
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_RND
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_TYP_CCD
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_TYP_NM
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_MAND_YN
+		     , RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.ATHF_NM
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_SORT
+		     , (
+		        SELECT COUNT(ATHF.ATHF_UUID)
+		          FROM ATHF ATHF
+		         WHERE ATHF.TEN_ID        = RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		           AND ATHF.ATHG_UUID = RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID
+		           AND ATHF.STS          != 'D'
+		       ) AS ATHF_CNT
+		  FROM RFX_PRENTC_VD_SUBMDDOC RFX_PRENTC_VD_SUBMDDOC
+		 WHERE RFX_PRENTC_VD_SUBMDDOC.TEN_ID              = #{g.tenant}
+		   AND RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND RFX_PRENTC_VD_SUBMDDOC.STS                != 'D'
+		 ORDER BY RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_SORT
+	</select>
+	<select id="compareBidNotiHdStsByEval" resultType="map">
+		SELECT RFX_PRENTC.RFX_PRENTC_UUID
+		     , RFX_PRENTC.RFX_PRENTC_NO
+		     , RFX_PRENTC.RFX_PRENTC_RND
+		     , RFX_PRENTC.RFX_PRENTC_STS_CCD
+		     , (
+		        SELECT DTLCD_MULTLANG.DTLCD_NM
+		          FROM DTLCD DTLCD
+		         INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		            ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		           AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		           AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		           AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		           AND DTLCD_MULTLANG.STS     != 'D'
+		         WHERE DTLCD.TEN_ID = RFX_PRENTC.TEN_ID
+		           AND DTLCD.CCD    = 'P213'    /* 공고 진행상태 */
+		           AND DTLCD.DTLCD  = RFX_PRENTC.RFX_PRENTC_STS_CCD
+		           AND DTLCD.USE_YN = 'Y'
+		           AND DTLCD.STS   != 'D'
+		       ) AS RFX_PRENTC_STS_CCD_NM
+		     , RFX_PRENTC.RFX_PRENTC_RES_STS_CCD
+		     , (
+		        SELECT DTLCD_MULTLANG.DTLCD_NM
+		          FROM DTLCD DTLCD
+		         INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		            ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		           AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		           AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		           AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		           AND DTLCD_MULTLANG.STS     != 'D'
+		         WHERE DTLCD.TEN_ID = RFX_PRENTC.TEN_ID
+		           AND DTLCD.CCD    = 'P214'    /* 공고 종료상태 */
+		           AND DTLCD.DTLCD  = RFX_PRENTC.RFX_PRENTC_RES_STS_CCD
+		           AND DTLCD.USE_YN = 'Y'
+		           AND DTLCD.STS   != 'D'
+		       ) AS RFX_PRENTC_RES_STS_CCD_NM
+		     , CASE WHEN RFX_PRENTC.RFX_PRENTC_STS_CCD = #{p.rfx_prentc_sts_ccd}
+		                 AND RFX_PRENTC.RFX_PRENTC_RES_STS_CCD <choose>
+		                                                     <when test="p.rfx_prentc_res_sts_ccd != null">
+		                                                         = #{p.rfx_prentc_res_sts_ccd}
+		                                                     </when>
+		                                                     <otherwise>
+		                                                         IS NULL OR RFX_PRENTC.RFX_PRENTC_RES_STS_CCD = ''
+		                                                     </otherwise>
+		                                                 </choose>
+		                 THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM RFX_PRENTC RFX_PRENTC
+		 WHERE RFX_PRENTC.TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC.RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+	</select>
+	<select id="findListEvalVdCnt" resultType="int">
+		/* bid-notice-eval.findListEvalVdCnt */
+		SELECT COUNT(RFX_PRENTC_AFP_UUID)
+		  FROM RFX_PRENTC_AFP
+		 WHERE TEN_ID            = #{g.tenant}
+		   AND RFX_PRENTC_UUID   = #{p.rfx_prentc_uuid}
+		   AND STS              != 'D'
+		   AND PTCP_QUALEVAL_RES_CCD = 'QUAL'
+	</select>
+	<update id="updateEvalRstYes">
+		/* bid-notice-eval.updateEvalRstYes */
+		UPDATE RFX_PRENTC
+		   SET RFX_PRENTC_STS_CCD     = 'PRENTC_ED'
+		     , RFX_PRENTC_RES_STS_CCD = 'SN_CMPLD'
+		     , RFX_PRENTC_EVAL_RES_CCD    = 'QUAL'
+		     , PTCP_QUALEVAL_CMPLD_YN = 'Y'
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+	</update>
+	<update id="updateEvalRstNo">
+		/* bid-notice-eval.updateEvalRstYes */
+		UPDATE RFX_PRENTC
+		   SET RFX_PRENTC_STS_CCD     = 'PRENTC_ED'
+		     , RFX_PRENTC_RES_STS_CCD = 'SN_CMPLD'
+		     , RFX_PRENTC_EVAL_RES_CCD    = 'DQ'
+		     , PTCP_QUALEVAL_CMPLD_YN = 'Y'
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+	</update>
+	<update id="updateBidNotiEvalVd">
+		/* bid-notice-eval.updateBidNotiEvalVd */
+		UPDATE RFX_PRENTC_AFP
+		   SET PTCP_QUALEVAL_DTTM = #{g.now}
+		     , STS                = 'U'
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+	</update>
+	<select id="findBidNotiInfo" resultType="map">
+		/* bid-notice-eval.findBidNotiInfo */
+		SELECT RFX_PRENTC_UUID
+		     , RFX_PRENTC_RES_STS_CCD
+		     , RFX_PRENTC_STS_CCD
+		  FROM RFX_PRENTC
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+	</select>
+</mapper>

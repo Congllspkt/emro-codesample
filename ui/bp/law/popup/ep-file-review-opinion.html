@@ -1,0 +1,165 @@
+<dom-module id="ep-file-review-opinion">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 검토요청 템플릿 비교 정보 조회 -->
+		<sc-ajax id="findReqReviewTmplDiff"
+				url="findReqReviewTmplDiff.do"
+				body="{{paramData}}"
+				on-response="completeFindTmplDiff">
+		</sc-ajax>
+		<!-- 템플릿 검토 의견 저장 -->
+		<sc-ajax id="saveTmplOpn"
+				url="saveReqReviewTmplOpn.do"
+				on-response="completeSaveTmplOpn">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="저장" on-click="onSave" hidden="[[!formula('saveable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel title-text="검토 파일" collapsible="true">
+			<cc-fieldset>
+				<sc-label text="검토 요청 파일"></sc-label>
+				<sc-upload id="uploadReq" class="h-200" editable="false"
+							value="{{reviewData.lgl_rv_athg_uuid}}"
+							sort-data-field="name" sort-direction="asc"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="검토 결과 파일"></sc-label>
+				<sc-upload id="uploadRes" class="h-200" editable="[[formula('editable')]]"
+							value="{{reviewData.lgl_rv_res_athg_uuid}}"
+							sort-data-field="name" sort-direction="asc"
+							max-total-file-count="1" max-total-file-size="10MB"
+							extension="jpg,gif,png,tif,bmp,txt,xls,doc,ppt,xlsx,docx,pptx,rtf,gul,hwp,pdf,mht,mp4,dwg,eml,msg"
+							restrict-extension="exe,vbs,zip"></sc-upload>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<cc-form-panel title-text="검토 의견" collapsible="true">
+			<cc-fieldset>
+				<sc-label text="검토 의견"></sc-label>
+				<sc-textarea-field value="{{reviewData.lgl_rv_opn}}" class="h-100" max-length="1000" readonly="[[!formula('editable')]]" required="[[formula('editable')]]"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="법무 팀장 의견"></sc-label>
+				<sc-textarea-field value="{{reviewData.lgl_tmld_rv_opn}}" class="h-100" max-length="1000" readonly="[[!formula('confirmable')]]" required="[[formula('confirmable')]]"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+
+	<script>
+		Polymer({
+			is: "ep-file-review-opinion",
+			properties: {
+				titleText:{
+					type: String,
+					value: "파일 검토"
+				},
+				paramData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				reviewData : {
+					type : String,
+					value : function(){
+						return {};
+					}
+				}
+			},
+			
+			formulas : {
+				editable: function() {
+					return (this.get("paramData.editable") || false);
+				},
+				confirmable: function() {
+					return (this.get("paramData.confirmable") || false);
+				},
+				saveable: function() {
+					return this.formula("editable") || this.formula("confirmable");
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("paramData", param);
+				if(param.appx_typ_ccd === "FILE_LIST"){
+					me.$.uploadReq.maxTotalFileCount = 10;
+					me.$.uploadRes.maxTotalFileCount = 10;
+				} else {
+					me.$.uploadReq.maxTotalFileCount = 1;
+					me.$.uploadRes.maxTotalFileCount = 1;
+				}
+				me.applyFormula();
+				
+				UT.request(me.$.findReqReviewTmplDiff);
+			},
+			
+			completeFindTmplDiff: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					me.set("reviewData.lgl_rv_athg_uuid", result.resultData.reqRvAthgUuid);
+					me.set("reviewData.lgl_rv_res_athg_uuid", result.resultData.rvResultAthgUuid);
+					me.set("reviewData.lgl_rv_opn", result.resultData.rvOpn);
+					me.set("reviewData.lgl_tmld_rv_opn", result.resultData.rvTmldOpn);
+				} else {
+					UT.alert("STD.E9999");
+					me.onClose();
+				}
+			},
+			
+			onSave: function() {
+				var me = this;
+				
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				Promise.all([me.$.uploadRes.upload()]).then(function() {
+					var origData = UT.copy(me.get("paramData"));
+					var fileCnt = me.$.uploadRes.totalFileCount;
+					me.$.saveTmplOpn.body = {
+						cntrdoc_lgl_rv_tmpl_uuid: origData.cntrdoc_lgl_rv_tmpl_uuid,
+						lgl_rv_opn: me.get("reviewData.lgl_rv_opn"),
+						lgl_tmld_rv_opn: me.get("reviewData.lgl_tmld_rv_opn"),
+						lgl_rv_res_athg_uuid: fileCnt > 0 ? me.get("reviewData.lgl_rv_res_athg_uuid") : ""
+					};
+					UT.request(me.$.saveTmplOpn);
+				});
+			},
+			
+			completeSaveTmplOpn: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+					me.fire("complete-save");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+		});
+	</script>
+</dom-module>

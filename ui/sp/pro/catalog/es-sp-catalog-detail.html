@@ -1,0 +1,413 @@
+<sc-link rel="import" href="ep-catalog-uprccntr-item-list.html"></sc-link>
+<sc-link rel="import" href="../../../bp/home/ep-catalog-item-pr.html"></sc-link>
+<dom-module id="es-sp-catalog-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+
+        <sc-ajax
+                id="findCatalogInfo"
+                url="findCatalogInfo.do"
+                body="{{searchParam}}"
+                on-response="completeFindCatalog">
+        </sc-ajax>
+
+        <!-- 저장 ajax -->
+        <sc-ajax
+                id="saveCatalog"
+                url="saveCatalog.do"
+                body="{{catalogData}}"
+                on-response="completeSaveCatalog">
+        </sc-ajax>
+        <sc-ajax
+                id="cancelCatalog"
+                url="cancelCatalog.do"
+                on-response="completeCancelCatalog">
+        </sc-ajax>
+
+        <sc-ajax
+                id="applyCatalog"
+                url="applyCatalog.do"
+                on-response="completeApplyCatalog">
+        </sc-ajax>
+
+        <sc-ajax id="findImageList" url="/attachment/list.do"></sc-ajax>
+
+
+        <sc-request-group id="codes" init>
+            <sc-code-group>
+                <!-- 통화-->
+                <sc-code code="C004" value="{{codes.curCcd}}"></sc-code>
+                <!-- UOM -->
+                <sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+                <!-- 지급방법 -->
+                <sc-code code="P009" value="{{codes.pymtmethCcd}}"></sc-code>
+                <!-- 썸네일 저장 유형 -->
+                <sc-code code="P257" value="{{codes.thnlTypCcd}}"></sc-code>
+            </sc-code-group>
+            <sc-ajax id="findListOperationOrganizationBySupplier"
+                     url="findListOperationOrganizationBySupplier.do"
+                     body="PO"
+                     content-type="text/plain"
+                     last-response="{{codes.oorgCd}}">
+            </sc-ajax>
+        </sc-request-group>
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <cc-page-title-bar title-text="카탈로그 작성">
+            <!--<sc-button text="미리보기" on-click="onPreview" auth-r hidden="[[formula('editable')]]"></sc-button>-->
+            <sc-button text="저장" on-click="onSaveBtn" auth-s hidden="[[!formula('editable')]]"></sc-button>
+            <sc-button text="수정" on-click="onModify" auth-s hidden="[[formula('editable')]]"></sc-button>
+            <sc-button text="작성 완료" on-click="onCompleteBtn" auth-s hidden="[[!formula('editable')]]"></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <div class="flex page">
+            <cc-form-panel title-text="일반 정보" validation-group="catalog">
+                <cc-fieldset>
+                    <sc-label text="카탈로그 명"></sc-label>
+                    <sc-text-field value="{{catalogData.ctlg_nm}}" readonly="[[!formula('editable')]]" required="[[formula('editable')]]"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="품목 분류"></sc-label>
+                    <cc-cate-combobox-field id="itemCateField" itemcat-lvl1-cd="{{catalogData.itemcat_lvl_1_cd}}" itemcat-lvl2-cd="{{catalogData.itemcat_lvl_2_cd}}" readonly="[[!formula('editable')]]"
+                                            itemcat-lvl3-cd="{{catalogData.itemcat_lvl_3_cd}}" itemcat-lvl4-cd="{{catalogData.itemcat_lvl_4_cd}}"></cc-cate-combobox-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="모델 번호"></sc-label>
+                    <sc-text-field value="{{catalogData.mod_no}}" readonly="[[!formula('editable')]]" required="[[formula('editable')]]"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="제조사"></sc-label>
+                    <sc-text-field value="{{catalogData.mfgr_nm}}" readonly="[[!formula('editable')]]"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="원산지"></sc-label>
+                    <sc-text-field value="{{catalogData.orgn_ctry}}" readonly="[[!formula('editable')]]"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="썸네일"></sc-label>
+                    <sc-combobox-field value="{{catalogData.thnl_typ_ccd}}" items="{{codes.thnlTypCcd}}" display-field="label" value-field="data" required="[[formula('editable')]]" readonly="[[!formula('editable')]]"
+                                       selected-index="0" on-select="onSelectThnlCombo"></sc-combobox-field>
+                </cc-fieldset>
+                <cc-fieldset hidden="[[formula('isThnlAthf')]]">
+                    <sc-label text="이미지 주소"></sc-label>
+                    <sc-text-field value="{{catalogData.thnl_img_addr}}" readonly="[[!formula('editable')]]"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset column-span="2" hidden="[[!formula('isThnlAthf')]]">
+                    <sc-label text="썸네일"></sc-label>
+                    <sc-upload id="upload" class="h-200" value="{{catalogData.thnl_athg_uuid}}" view-type="thumbnail" editable="[[formula('editable')]]" max-total-file-count="1"></sc-upload>
+                </cc-fieldset>
+            </cc-form-panel>
+            <sc-grid id="gridPanel" class="h-200" editable="false" use-dummy="false" use-selection="true"
+                     use-state="false"
+                     on-item-click="onItemClick"
+                     data-provider="{{uprcItemList}}"
+                     hidden="[[formula('editable')]]">
+                <cc-grid-toolbar title-text="적용 단가계약">
+                    <sc-button text="카탈로그 적용" on-click="onApplyCatalog" auth-s hidden="[[formula('editable')]]"></sc-button>
+                    <sc-button text="카탈로그 적용취소" on-click="onCancelCatalog" auth-s hidden="[[formula('editable')]]"></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-combobox-column	data-field="oorg_cd"		header-text="운영조직"		width="170"	text-align="center"
+                                           display-field="logic_org_nm"			value-field="oorg_cd"		items="{{codes.oorgCd}}"></sc-combobox-column>
+                    <sc-data-column	data-field="item_cd"	header-text="품목 코드"	text-align="center"	width="120"	></sc-data-column>
+                    <sc-data-column	data-field="item_nm"	header-text="품목 명"	text-align="left"	width="150"	></sc-data-column>
+                    <sc-data-column	data-field="item_spec"	header-text="품목 규격"	text-align="left"	width="200"	></sc-data-column>
+                    <sc-data-column	data-field="cntr_no"	header-text="계약 번호"	text-align="center"	width="120"	></sc-data-column>
+                    <sc-data-column	data-field="cur_ccd"	header-text="통화"	text-align="center"	width="70"	></sc-data-column>
+                    <sc-data-column	data-field="uprccntr_uprc" header-text="계약 단가"	width="100"	text-align="right"
+                                           data-type="number"			format-type="price"				></sc-data-column>
+                    <sc-date-column data-field="uprccntr_dt" header-text="단가계약 일자" width="100" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                    <sc-date-column data-field="uprc_efct_st_dt" header-text="단가 유효 시작 일자" width="120" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                    <sc-date-column data-field="uprc_efct_exp_dt" header-text="단가 유효 만료 일자" width="120" text-align="center" display-format="yyyy/MM/dd"></sc-date-column>
+                    <sc-image-column data-field="preview"	header-text="미리보기" image-cls="search" 		width="80"	text-align="center"></sc-image-column>
+                </sc-grid-columns>
+            </sc-grid>
+                <!-- DEXT5 에디터 -->
+            <sc-editor id="editorPanel" class="h-500" value="{{catalogData.ctlg_cont}}" remove-source-button="[[formula('editable')]]" editable="[[formula('editable')]]" ></sc-editor>
+        </div>
+    </template>
+    <script>
+        Polymer({
+            is: "es-sp-catalog-detail",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            thnlTypCcd:[],
+                            oorgCd:[]
+                        }
+                    },
+                    reset: false
+                },
+                searchParam: {
+                    type: Object,
+                    value: function() {
+                        return {}
+                    }
+                },
+                catalogData: {
+                    type: Object,
+                    value: function() {
+                        return {}
+                    }
+                },
+
+                uprcItemList: {
+                    type: Array,
+                    value: function() {
+                        return []
+                    }
+                },
+
+                readonly: {
+                    type: Boolean,
+                    value: false
+                },
+
+                modifyMode:{
+                    type: Boolean,
+                    value: false
+                }
+
+            },
+
+            formulas: {
+                // 수정 가능여부
+                editable: function() {
+                    var me = this;
+                    // 신규작성이거나 임시저장 시
+                    return !me.readonly && (UT.isEmpty(me.get("catalogData.ctlg_uuid")) || me.get("catalogData.ctlg_sts_ccd") === "CRNG");
+                },
+                isThnlAthf: function(){
+                    var me = this;
+                    return me.catalogData.thnl_typ_ccd === "ATHF";
+                },
+                isAppliedToUprcItem: function(){
+                    return this.catalogData.cnt_of_applied > 0;
+                },
+                isCompletable: function(){
+                    return this.formula('editable') && this.modifyMode;
+                },
+            },
+            initialized: function() {
+
+            },
+            load: function(param) {
+                var me = this;
+
+                if(!param.is_new) {
+                    me.set("searchParam", param);
+                    me.findCatalogInfo();
+                }else{
+                    me.applyFormula();
+                }
+
+
+            },
+
+            findCatalogInfo: function(){
+                var me = this;
+                UT.request(me.$.findCatalogInfo);
+            },
+            // 저장/확정 시 validation
+            isValid: function() {
+                var me = this;
+                if(!me.validate("catalog")) {
+                    UT.alert("STD.E0000");	// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+                    return false;
+                }
+                return true;
+            },
+            onSave: function(){
+                var me = this;
+                UT.confirm("STD.N1200", function() {
+                    if(me.catalogData.thnl_typ_ccd === "ATHF"){
+                        Promise.all([me.$.upload.upload()]).then(function(e) {
+                            me.$.editorPanel.syncValue();
+                            UT.request(me.$.saveCatalog);
+                            /*
+                            me.$.findImageList.body = {
+                                groupId : e[0].value
+                            };
+                            UT.request(me.$.findImageList, function(e1, res1){
+                                var result1 = res1.response;
+                                me.catalogData.thnl_img_addr = me.getImageUrl(result1[0].id);
+                                UT.request(me.$.saveCatalog);
+                            });
+                            */
+                        });
+                    }else{
+                        UT.request(me.$.saveCatalog);
+                    }
+
+                }); // 저장하시겠습니까?
+
+            },
+            onSelectThnlCombo:function(e, detail){
+                var me = this;
+                var selected = detail.selectedItem;
+                if(selected.data == "ATHF") {
+                    me.set("catalogData.thnl_img_addr", "");
+                }else if(selected.data == "IMG_ADDR"){
+                    me.set("catalogData.thnl_athg_uuid", "");
+                }
+                me.applyFormula('isThnlAthf');
+            },
+
+            onSaveBtn: function(){
+                var me = this;
+                if(me.isValid()) {
+                    me.set("catalogData.ctlg_sts_ccd", "CRNG");
+                    me.saveType = "SAVE";
+                    me.onSave();
+                }
+            },
+            onCompleteBtn: function(){
+                var me = this;
+                if(me.isValid()) {
+                    me.set("catalogData.ctlg_sts_ccd", "CMPLD");
+                    me.saveType = "CONFIRM";
+                    me.onSave();
+                }
+
+            },
+            onItemClick: function(e){
+                var me = this,
+                    detail = e.detail,
+                    data = detail.data,
+                    item = detail.item;
+
+                if (item.dataField == "preview") {
+                    me.set("catalogData.item_cd",   data.item_cd);
+                    me.set("catalogData.item_nm",   data.item_nm);
+                    me.set("catalogData.item_spec", data.item_spec);
+                    me.set("catalogData.uprccntr_uprc",   data.uprccntr_uprc);
+                    me.set("catalogData.cur_ccd",   data.cur_ccd);
+                    me.set("catalogData.uprc_efct_st_dt",   data.uprc_efct_st_dt);
+                    me.set("catalogData.uprc_efct_exp_dt",   data.uprc_efct_exp_dt);
+
+                    me.onPreview();
+                }
+            },
+            onPreview: function(){
+                var me = this;
+                var popup = UT.popup('ep-catalog-item-pr', me, "50%", "80%",null, {titleText:"미리보기"});
+                popup.show();
+                me.catalogData.isPreview = true;
+                popup.getWindowContent().load(me.catalogData);
+            },
+            onModify: function(){
+                var me = this;
+                me.catalogData.ctlg_sts_ccd = "CRNG";
+                me.set("modifyMode", true);
+                me.applyFormula();
+            },
+            onApplyCatalog: function(){
+                var me = this;
+                var uprccntrPopup = UT.popup('ep-catalog-uprccntr-item-list', me, '70%', '60%', {
+                    "selected-item" : function(popup, e) {
+                        e.detail.ctlg_uuid = me.catalogData.ctlg_uuid;
+                        me.$.applyCatalog.body = e.detail;
+                        UT.request(me.$.applyCatalog);
+                        popup.close();
+                    }
+                },{titleText:"카탈로그 적용"});
+                uprccntrPopup.show();
+                uprccntrPopup.getWindowContent().load({catalogData : me.catalogData, oorgCd : codes.oorgCd});
+            },
+            onCancelCatalog: function(){
+                var me = this;
+                var provider = me.$.gridPanel.getDataProvider();
+                var checked = provider.selectionCheckedItems();
+
+                if(checked.length < 1){
+                    UT.alert("STD.N1600");
+                    return;
+                } else{
+
+                    UT.confirm("STD.N5200",function(){  // 취소하시겠습니까?
+                        me.$.cancelCatalog.body = {
+                            cancelList : checked
+                        }
+                        UT.request(me.$.cancelCatalog);
+                    });
+                }
+
+
+            },
+
+            completeCancelCatalog: function(e, res){
+                var me = this;
+                var result = res.response;
+                if(result.resultStatus === "S") {
+                    UT.completeAlert();    // 취소하였습니다.
+                    me.reload();
+                } else {
+                    //me.failureMessageHandler(result);
+                }
+            },
+            completeSaveCatalog: function(e, res){
+                var me = this,
+                    result = res.response;
+                if(result.resultStatus === "S") {
+                    if(me.saveType === "CONFIRM") {
+                        me.set("modifyMode", false);
+                        UT.completeAlert();	// 확정 하였습니다.
+                    } else {
+                        UT.completeAlert();	// 저장 하였습니다.
+                    }
+                    me.set("searchParam.ctlg_uuid", result.resultData.ctlg_uuid);
+
+
+                    me.reload();
+                } else {
+                    //me.failureMessageHandler(result);
+                }
+            },
+            getImageUrl : function(id) {
+                return '/attachment/download.do?id=' + encodeURIComponent(id);
+            },
+
+            reload: function() {
+                var me = this;
+                me.findCatalogInfo(true);
+            },
+
+            completeFindCatalog: function(e, res){
+                var me = this;
+                var result = res.response;
+                me.set("catalogData", result.catalogInfo);
+                me.set("uprcItemList",result.appliedUprcItemList);
+
+                me.applyFormula();
+               // me.$.repreImage.reloadImage();
+            },
+
+            completeApplyCatalog: function(e, res){
+                var me = this,
+                    result = res.response;
+                if(result.resultStatus === "S") {
+                    UT.alert("적용하였습니다.", function(){
+                        me.reload();
+                    });
+
+                } else {
+                    //me.failureMessageHandler(result);
+                }
+            },
+            // 닫기
+            onClose: function() {
+                var me = this;
+                me.reset();
+                me.fire("close");
+            },
+        });
+    </script>
+</dom-module>

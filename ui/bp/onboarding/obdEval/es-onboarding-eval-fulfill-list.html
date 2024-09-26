@@ -1,0 +1,211 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 온보딩평가 수행 목록
+	** @Author 			: sykim
+	** @Create Date 	: 2023.06.21
+	******************************************************************************************
+-->
+
+<dom-module id="es-onboarding-eval-fulfill-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+    	<!-- 공통코드 조회 -->
+    	<sc-request-group id="codes" init>
+        	<sc-ajax
+            	url="findListOperationOrganizationByUser.do"
+                body="EO"
+                content-type="text/plain" 
+                last-response="{{codes.oorg_cd}}"><!-- 협력사운영조직 콤보박스 목록 조회 -->
+         	</sc-ajax>
+            <sc-ajax
+                id="findListOegForCombobox"
+                url="findListOegForCombobox.do"
+                body="{}"
+                last-response="{{oegList}}"><!-- 온보딩평가그룹 조회 -->
+            </sc-ajax>
+			<sc-code-group>
+				<sc-code code="R704" value="{{codes.R704}}"></sc-code><!-- 평가업무구분 -->
+				<sc-code code="R401" value="{{codes.R401}}"></sc-code><!-- 평가수행상태 -->
+			</sc-code-group>
+		</sc-request-group>
+        
+        <!-- 온보딩평가 수행 목록 조회 -->
+    	<sc-ajax id="findListOnboardingEvalFulfill" url="findListOnboardingEvalFulfill.do" body="{{searchParam}}" last-response="{{evalList}}"></sc-ajax>
+
+		<cc-auth-checker check-list="auth-r"></cc-auth-checker>
+
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" validation-group="searchParam" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field display-field="logic_org_nm" value-field="oorg_cd" selected-index="0" on-change="onChangeOorgCombo"
+								   items="{{codes.oorg_cd}}" value="{{searchParam.oorg_cd}}" placeholder="선택" required="true">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="온보딩평가그룹"></sc-label>
+				<sc-combobox-field id="oegComboBox" display-field="oeg_nm" value-field="oeg_cd"
+								   items="{{codes.oegCodes}}" value="{{searchParam.oeg_cd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 진행 상태"></sc-label>
+				<sc-combobox-field
+						display-field="label" value-field="data"
+						items="{{codes.R401}}" value="{{searchParam.eval_prgs_sts_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" on-enter="onSearch" placeholder="코드"></sc-text-field>
+					<div class="hspace-2"></div>
+					<sc-text-field value="{{searchParam.vd_nm}}" on-enter="onSearch" placeholder="협력사 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" editable="true" use-selection="false" use-state="false" on-item-click="onDataCellClicked"
+				 data-provider="{{evalList}}">
+			<cc-grid-toolbar></cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column	data-field="oorg_cd" header-text="운영조직" width="200" items="{{codes.oorg_cd}}"
+									   display-field="logic_org_nm" value-field="oorg_cd" mergeable="true"></sc-combobox-column>
+				<sc-combobox-column	data-field="eval_prgs_sts_ccd" header-text="평가 진행 상태" width="130" items="{{codes.R401}}"
+									   display-field="label" value-field="data"></sc-combobox-column>
+				<sc-date-column	data-field="fufl_dttm" header-text="수행 일자" width="100"></sc-date-column>
+				<sc-data-column data-field="erp_vd_cd" header-text="협력사 코드" width="100"></sc-data-column>
+				<sc-data-column	data-field="vd_nm" header-text="협력사 명" width="250" text-align="left" style-name="link"></sc-data-column>
+				<sc-data-column	data-field="oeg_cd"	header-text="온보딩평가그룹 코드" width="120"></sc-data-column>
+				<sc-data-column	data-field="oeg_nm"	header-text="온보딩평가그룹 명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column	data-field="prcs_ccd_nm"	header-text="온보딩 프로세스 명" width="250" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="evalsht_cd" data-type="text"></sc-grid-field><!-- 평가시트 코드 -->
+				<sc-grid-field data-field="evaltr_id" data-type="text"></sc-grid-field><!-- 평가자 아이디 -->
+				<sc-grid-field data-field="vd_cd" data-type="text"></sc-grid-field>
+				<sc-grid-field data-field="oe_uuid" data-type="text"></sc-grid-field><!-- 온보딩평가 uuid -->
+				<sc-grid-field data-field="oe_prcs_uuid" data-type="text"></sc-grid-field><!-- 온보딩평가 프로세스 uuid -->
+				<sc-grid-field data-field="eval_subj_evaltr_res_uuid" data-type="text"></sc-grid-field><!-- 평가 대상 평가자 결과 uuid -->
+			</sc-grid-fields>
+		</sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-onboarding-eval-fulfill-list",
+            
+        	properties: {
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return {
+                            oorg_cd: [],   // 운영조직
+                            oegCodes: [],  // 평가그룹코드
+                            R704: [],      // 평가업무구분
+                            R401: []       // 평가수행상태
+                        };
+                    },
+					reset: false
+                },
+                // 평가 종류 목록
+                oegList : {
+                    type : Array,
+                    value : function(){
+                        return [];
+                    }
+                },
+                evalList : {
+                    type : Array,
+                    value : function(){
+                        return [];
+                    }
+                },
+                // 조회 조건 Obejct
+                searchParam: {
+                    type: Object,
+                    value: function(){
+                        return {
+							eval_task_typ_ccd : "OE"
+						};
+                    }
+                }
+            },
+             
+        	/* 화면 로딩 완료 */
+            initialized: function(){
+                var me = this;
+				me.setFilteredOegCodes();
+            },
+			
+			load: function(param){
+				var me = this;
+				me.set("searchParam.eval_task_typ_ccd", param.eval_task_typ_ccd);
+			},
+            
+            onDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+                if(item.dataField === "vd_nm"){
+                    // detail 화면 호출
+                    me.fire("show-detail", data);
+                }
+            },
+            
+            /* 운영조직 combo 변경 처리 */
+            onChangeOorgCombo: function(e) {
+                var me = this;
+				if(!me.isAttached) return;
+				
+                var selectedItem = e.detail.selectedItem;
+                if(!selectedItem){
+                    me.set("searchParam.org_nm", "");
+                    me.set("codes.oegCodes", []);
+                    me.$.oegComboBox.selectedItem = {};
+                    return;
+                }else{
+                    me.set("searchParam.org_nm", selectedItem.org_nm);
+                }
+                
+                if(UT.isNotEmpty(me.get("oegList"))){
+                    me.setFilteredOegCodes();
+                }
+            },
+            
+            /* 평가그룹 콤보 목록 filtering */
+            setFilteredOegCodes : function() {
+                var me = this;
+                var searchParam = me.get("searchParam");
+                var oegList = me.get("oegList");
+                var filtered = oegList.filter(function(item){
+                    if(item.oorg_cd === searchParam.oorg_cd){
+                        return item;
+                    }
+                });
+                
+                me.set("codes.oegCodes", filtered);
+                me.$.oegComboBox.selectedItem = {};
+            },
+            
+            /* 조회 */
+            onSearch: function(){
+                var me = this;
+                
+                if(!me.validate("searchParam")){
+                    UT.alert("STD.E0000");
+                    return;
+                }
+                
+                UT.request(me.$.findListOnboardingEvalFulfill);
+            }
+        });
+    </script>
+
+</dom-module>

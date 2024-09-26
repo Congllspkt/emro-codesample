@@ -1,0 +1,214 @@
+<dom-module id="ep-sp-offline-guarinfo">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 오프라인 보증보험정보 조회 -->
+        <sc-ajax id="getOfflineBondInfo"
+                 url="getOfflineBondInfo.do"
+                 on-response="completeFind"></sc-ajax>
+
+        <!-- 승인 요청 -->
+        <sc-ajax id="saveOfflineGuarInfo"
+                 url="saveOfflineGuarInfo.do"
+                 body="{{sendGuarInfo}}"
+                 on-response="completeSend"></sc-ajax>
+	
+		<!-- 보증 취소 -->
+		<sc-ajax id="saveOfflineGuarCancel"
+				 url="saveOfflineGuarCancel.do"
+				 body="{{sendGuarInfo}}"
+				 on-response="completeSend"></sc-ajax>
+                 
+        <!-- 공통 코드 -->
+        <sc-code-group>
+            <sc-code code="D013" value="{{codes.guarComp}}"></sc-code>
+            <sc-code code="D010" value="{{codes.grntMthd}}"></sc-code>
+        </sc-code-group>
+
+		<cc-page-title-bar hidden="[[!formula('isMod')]]">
+            <sc-button text="승인 요청" on-click="onSaveOfflineGuarInfo" hidden="[[!formula('isMod')]]"></sc-button>
+			<sc-button text="보증 취소" on-click="onSaveOfflineCancel" hidden="[[!formula('cancelBtn')]]"></sc-button>
+		</cc-page-title-bar>
+		
+		<!-- 반려정보 -->
+		<cc-form-panel title-text="반려 사유" hidden="[[!formula('isRejected')]]" column="1">
+	        <sc-textarea-field readonly="true" class="h-100" max-length="200" max-height="200" value="{{sendGuarInfo.ret_rsn}}"></sc-textarea-field>
+		</cc-form-panel>
+		<div class="vspace-10" hidden="[[!formula('isRejected')]]"></div>
+        <!-- 보험정보 -->
+        <cc-form-panel title-text="보험 정보">
+            <cc-fieldset>
+            	<sc-label text="보험사"></sc-label>
+            	<sc-combobox-field placeholder="선택" value-field="data" selected-index="0" display-field="label" items="{{codes.guarComp}}" value="{{sendGuarInfo.gur_insco_ccd}}" readonly="{{!formula('isMod')}}" required="true"></sc-combobox-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="증권 번호"></sc-label>
+            	<sc-text-field value="{{sendGuarInfo.gur_bond_no}}" max-length="40" readonly="{{!formula('isMod')}}" required="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="보증 유형"></sc-label>
+            	<sc-combobox-field placeholder="선택" value-field="data" selected-index="0" display-field="label" items="{{codes.grntMthd}}" value="{{sendGuarInfo.gur_typ_ccd}}" readonly="true"></sc-combobox-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="보증 비율 (%)"></sc-label>
+            	<sc-number-field value="{{sendGuarInfo.gur_ro}}" class="w-150 align-right" readonly="true"></sc-number-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="보증 기간"></sc-label>
+                <sc-period-date-field from-value="{{sendGuarInfo.gur_st_dt}}" to-value="{{sendGuarInfo.gur_exp_dt}}" 
+					init-date="false" string-date="true" required="true" readonly="{{!formula('isMod')}}"></sc-period-date-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="보험 가입 금액"></sc-label>
+            	<sc-number-field value="{{sendGuarInfo.gur_amt}}" readonly="true" format-type="amt" data-type="number" class="w-150 align-right"></sc-number-field>
+            </cc-fieldset>
+        </cc-form-panel>
+		<div class="vspace-10"></div>
+        <cc-form-panel title-text="계약 정보">
+            <cc-fieldset>
+            	<sc-label text="계약 번호"></sc-label>
+            	<sc-text-field value="{{sendGuarInfo.cntr_no}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="계약 명"></sc-label>
+            	<sc-text-field value="{{sendGuarInfo.cntr_nm}}" readonly="true"></sc-text-field>
+            </cc-fieldset>
+            <cc-fieldset>
+            	<sc-label text="계약 일자"></sc-label>
+            	<sc-date-field class="date" value="{{sendGuarInfo.cntr_dt}}" string-date="true" readonly="true"></sc-date-field>
+            </cc-fieldset>
+			<!--<cc-fieldset>
+				<sc-label text="계약 기간"></sc-label>
+				<sc-period-date-field from-value="{{sendGuarInfo.cntr_st_dt}}" to-value="{{sendGuarInfo.cntr_exp_dt}}"
+									  init-date="false" string-date="true" readonly="true"></sc-period-date-field>
+			</cc-fieldset>-->
+            <cc-fieldset>
+            	<sc-label text="계약 기간"></sc-label>
+            	<sc-date-field class="date" value="{{sendGuarInfo.cntr_st_dt}}" string-date="true" readonly="true"></sc-date-field>
+                &nbsp;&nbsp;~&nbsp;&nbsp;
+                <sc-date-field class="date" value="{{sendGuarInfo.cntr_exp_dt}}" string-date="true" readonly="true"></sc-date-field>
+            </cc-fieldset>
+            <cc-fieldset column-span="2">
+            	<sc-label text="보증 보험 증권 파일"></sc-label>
+            	<sc-upload id="upload" value="{{sendGuarInfo.athg_uuid}}" class="h-150" max-total-file-size="10MB" max-total-file-count="1" editable="[[formula('isMod')]]" ></sc-upload>
+            </cc-fieldset>
+        </cc-form-panel>   
+    </template>
+
+    <script>
+        Polymer({
+            is: "ep-sp-offline-guarinfo",
+
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "오프라인 보증 보험"
+				},
+                // 공통코드
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            guarComp: [],
+                            grntMthd: []
+                        };
+                    }
+                },
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                sendGuarInfo: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+
+            formulas: {
+                isMod: function() {
+                	var sts = this.get("sendGuarInfo").gur_sts_ccd;
+                	return sts === "PUBL_WTG" || sts === "RCPT_RET";
+                },
+               	isRejected: function() {
+                	var sts = this.get("sendGuarInfo").gur_sts_ccd;
+               		return sts === "RCPT_RET";
+               	},
+				cancelBtn: function() {
+					var sts = this.get("sendGuarInfo").gur_sts_ccd;
+					return sts !== "PUBL_WTG"
+				}
+            },
+
+            // 초기화
+            initialized: function () {
+                var me = this;
+            },
+
+            load: function (data) {
+                var me = this;
+                me.set("searchParam", data);
+                me.loadDetail();
+            },
+
+            loadDetail: function () {
+                var me = this;
+                me.$.getOfflineBondInfo.body = me.get("searchParam");
+                UT.request(me.$.getOfflineBondInfo);
+            },
+
+            completeFind: function (e, res) {
+                var me = this;
+                var result = res.response;
+				
+                me.set("sendGuarInfo", result);
+                me.applyFormula();
+            },
+            
+            onSaveOfflineGuarInfo: function () {
+                var me = this;
+                var length = me.$.upload.totalFileCount;
+                
+                if(!me.validate()){
+                	UT.alert("STD.E0000");//유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+                	return;
+                }
+                if(length < 1){
+                	UT.alert(me.translate("STD.E1001",null,me.translate("보증 보험 증권 파일")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+                	return;
+                }
+                
+                UT.confirm("STD.N1210", function() { //요청하시겠습니까?
+					me.$.upload.upload().then(function() {
+						UT.request(me.$.saveOfflineGuarInfo);
+					});
+                });
+            },
+			
+			onSaveOfflineCancel: function(){
+				var me = this;
+				
+				UT.confirm("STD.N1210", function() { //요청하시겠습니까?
+					UT.request(me.$.saveOfflineGuarCancel);
+				});
+			},
+			
+			completeSend: function (e, res) {
+				var me = this;
+				//var result = res.response;
+				
+				UT.alert("STD.N1500", function () {	//요청을 완료 하였습니다.
+					me.fire("completeSend");
+				});
+			}
+        });
+    </script>
+</dom-module>

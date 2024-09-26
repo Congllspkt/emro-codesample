@@ -1,0 +1,138 @@
+<dom-module id="es-sp-rfi-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- RFI 리스트 조회 -->
+		<sc-ajax id="findListRfiQta"
+				 url="findListRfiBid.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+
+		<!-- 코드 조회 -->
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<!-- RFI 진행 상태 -->
+				<sc-code code="P085" value="{{codes.rfiProgStsCd}}"></sc-code>
+				<!-- RFI 업체 제출 상태 -->
+				<sc-code code="P086" value="{{codes.rfiSbmtStsCd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+
+		<cc-page-title-bar></cc-page-title-bar>
+
+		<cc-search-condition-panel on-search="onFindList" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cds}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="전체"></cc-sp-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청 일시"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_rfi_req_dttm}}" to-value="{{searchParam.to_rfi_req_dttm}}"
+									  default-from-value="-3M" default-to-value="0d" string-date="false">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제출 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfiSbmtStsCd}}" value="{{searchParam.rfi_subm_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFI 번호"></sc-label>
+				<cc-multi-text-field value="{{searchParam.rfi_no}}" multi-value="{{searchParam.rfi_nos}}" placeholder="전체" on-enter="onFindList" title="RFI 번호"></cc-multi-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{searchParam.rfi_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+		<!-- 그리드 -->
+		<sc-grid id="gridPanel" class="flex" use-dummy="false" editable="false" data-provider="{{resultList}}"
+				 use-state="false"
+				 use-selection="false"
+				 on-item-click="onItemClick">
+			<!-- 그리드 toolbar -->
+			<cc-grid-toolbar>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column	data-field="oorg_cd"		header-text="운영조직"		width="170"	text-align="center" 	display-field="logic_org_nm"	value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column	data-field="rfi_sts_ccd"	header-text="상태"			width="100"	text-align="center" display-field="label"	value-field="data"	items="{{codes.rfiProgStsCd}}"	></sc-combobox-column>
+				<sc-combobox-column	data-field="rfi_subm_sts_ccd"	header-text="제출 상태"				width="100"	text-align="center" display-field="label"	value-field="data"			items="{{codes.rfiSbmtStsCd}}"	></sc-combobox-column>
+				<sc-data-column		data-field="rfi_no"			header-text="RFI 번호"				width="120"	text-align="center" style-name="link"	></sc-data-column>
+				<sc-data-column		data-field="rfi_tit"		header-text="제목"					width="300"	text-align="left"	></sc-data-column>
+				<sc-date-column 	data-field="rfi_req_dttm" 	header-text="요청 일시"				width="150" text-align="center" format-type="datetime"></sc-date-column>
+				<sc-date-column 	data-field="rfi_clsg_dttm"	header-text="마감 일시"				width="150" text-align="center" format-type="datetime"></sc-date-column>
+				<sc-date-column		data-field="subm_dttm"		header-text="제출 일시"				width="150"	text-align="center"	format-type="datetime"></sc-date-column>
+				<sc-data-column		data-field="reg_nm"			header-text="구매 담당자"			width="130"	text-align="center"	></sc-data-column>
+				<sc-data-column		data-field="reg_phone_no"	header-text="구매 담당자 전화번호"	width="150"	text-align="left"	></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-sp-rfi-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							rfiProgStsCd: [],
+							rfiSbmtStsCd: [],
+							oorgCd: []
+						}
+					},
+					reset: false
+				}
+			},
+			initialized: function() {
+
+			},
+			load: function() {
+				this.onFindList();
+			},
+			// RFI 현황 조회
+			onFindList: function() {
+				var me = this;
+				if(!me.validate("search")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				UT.request(me.$.findListRfiQta);
+			},
+			// grid item-click 이벤트
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+
+				if(item.dataField === 'rfi_no') {
+					//RFi 상세 조회 화면 호출
+					me.fire('show-detail', {rfi_uuid: data["rfi_uuid"], rfi_vd_uuid: data["rfi_vd_uuid"]});
+				}
+			}
+		});
+	</script>
+</dom-module>

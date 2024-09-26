@@ -1,0 +1,742 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="task-shared">
+    <select id="findTaskConfig" resultType="map">
+    /* task-shared.findTaskConfig */
+    SELECT MT.MAIN_TASK_UUID
+         , MT.MAIN_TASK_CD
+         , TS.TASK_STS_UUID
+         , TS.TASK_STS_CD
+         , TS.MENU_CD
+         , TS.TASK_STS_GRP_CCD
+         , TS.TASK_STS_DTL_CCD
+         , TS.DELAY_NOFN_CRTRA_DCNT  /* 지연 통보 기준 일수 */
+         , TS.IMMNT_NOFN_CRTRA_DCNT  /* 임박 통보 기준 일수 */
+         , TS.NEW_NOFN_PD_DCNT       /* 신규 통보 기준 일수 */
+         , DS.DAT_SRC_PHYC_NM        /* 데이터 소스 물리 명 */
+      FROM MAIN_TASK MT
+     INNER JOIN TASK_STS TS
+        ON TS.TEN_ID           = MT.TEN_ID
+       AND TS.MAIN_TASK_UUID   = MT.MAIN_TASK_UUID
+       AND TS.STS              <![CDATA[<>]]> 'D'
+       AND TS.USE_YN           = 'Y'
+     INNER JOIN DAT_SRC DS
+        ON DS.TEN_ID           = TS.TEN_ID
+       AND DS.DAT_SRC_UUID     = TS.DAT_SRC_UUID
+     WHERE TS.TEN_ID           = #{g.tenant}
+       AND TS.MENU_CD          = #{p.menu_cd}
+       AND TS.TASK_STS_GRP_CCD = #{p.grp_ccd}
+       AND TS.TASK_STS_DTL_CCD = #{p.task_sts_ccd}
+       AND MT.STS              <![CDATA[<>]]> 'D'
+    </select>
+	<select id="findTaskDataSrc" resultType="map">
+    /* task-shared.findTaskDataSrc */
+    <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+    SELECT TASK_TEN_ID
+         , TASK_UUID
+         , TASK_TIT
+         , TASK_STS_CCD
+         , TASK_CLSG_DT
+			, TO_CHAR(TO_DATE(TASK_CLSG_DT, 'YYYYMMDD') - #{p.delay_nofn_crtra_dcnt}, 'YYYYMMDD') AS TASK_DELAY_DSPY_ST_DT  /* 지연 표시 시작 일자  */
+			, TO_CHAR(TO_DATE(TASK_CLSG_DT, 'YYYYMMDD') - #{p.delay_nofn_crtra_dcnt} - #{p.immnt_nofn_crtra_dcnt}, 'YYYYMMDD') AS TASK_IMMNT_DSPY_ST_DT  /* 임박 표시 시작 일자  */
+			, TO_CHAR(TO_DATE(#{nowDate}, 'YYYYMMDD') + #{p.new_nofn_pd_dcnt}, 'YYYYMMDD') AS TASK_NEW_DSPY_ED_DT    /* 신규 표시 시작 일자  */  FROM ${p.dat_src_phyc_nm}
+     WHERE TASK_TEN_ID        = #{g.tenant}
+       AND TASK_UUID          = #{p.task_uuid}
+     GROUP BY TASK_TEN_ID, TASK_UUID, TASK_TIT, TASK_STS_CCD, TASK_CLSG_DT
+    </select>
+	<select id="findTaskAuthtyDataSrc" resultType="map">
+    /* task-shared.findTaskAuthtyDataSrc */
+    <bind name="nowDate" value="g.getDateWithNoTime(g.now)"/>
+    SELECT TASK_TEN_ID
+         , TASK_UUID
+         , TASK_AUTHTY_DIV_CCD
+         , TASK_AUTHTY_CD
+      FROM ${p.dat_src_phyc_nm}
+     WHERE TASK_TEN_ID        = #{g.tenant}
+       AND TASK_UUID          = #{p.task_uuid}
+    </select>
+    <select id="findMapId" resultType="java.lang.String">
+    /* task-shared.findMapId */
+    SELECT MAP_ID
+      FROM ESTWKMF
+     WHERE SYS_ID  = #{g.tenant}
+       AND WORK_ID = #{p.work_id}
+       AND MENU_CD = #{p.menu_cd}
+       AND FUNC_CD = #{p.func_cd}
+    </select>
+    <select id="findTaskUuidByTaskUuid" resultType="java.lang.String">
+    /* task-shared.findTaskUuidByTaskUuid */
+    SELECT TASK_UUID
+      FROM TASK
+     WHERE TEN_ID     = #{g.tenant}
+       AND TASK_UUID  = #{p.task_uuid}
+    </select>
+    <select id="findOpenTask" resultType="map">
+    /* task-shared.findOpenTask */
+    SELECT T.TASK_UUID        /* 업무 uuid */
+         , T.SNDR_ID      /* 발신자 아이디 */
+         , T.SND_DTTM        /* 발신 일시 */
+         , T.CLSG_DT           /* 마감 일시 */
+         , T.TASK_TIT         /* 업무 제목 */
+         , TS.MENU_CD
+         , TS.TASK_STS_GRP_CCD
+         , TS.TASK_STS_DTL_CCD
+         , T.IMMNT_DSPY_ST_DT  /* 임박 표시 시작 일자  */
+         , T.NEW_DSPY_ED_DT    /* 신규 표시 종료 일자 */
+      FROM TASK T
+     INNER JOIN TASK_STS TS
+        ON TS.TEN_ID           = T.TEN_ID
+       AND TS.TASK_STS_UUID    = T.TASK_STS_UUID
+       AND TS.USE_YN           = 'Y'
+       AND TS.STS             != 'D'
+     WHERE T.TEN_ID            = #{g.tenant}
+       AND T.TASK_UUID         = #{p.task_uuid}
+       AND TS.MENU_CD          = #{p.menu_cd}
+       AND TS.TASK_STS_GRP_CCD = #{p.grp_ccd}
+       AND TS.TASK_STS_DTL_CCD = #{p.task_sts_ccd}
+    </select>
+    <insert id="insertCloseTask">
+    /* task-shared.insertCloseTask */
+    INSERT INTO ESTCTMA (
+           PROC_USR_ID
+         , MAP_ID
+         , TICK_CLOSE_DT
+         , SYS_ID
+         , WORK_ID
+         , MENU_CD
+         , FUNC_CD
+         , TICK_ID
+         , USR_CLS
+         , TICK_TIT
+         , APP_ID
+         , OPEN_USR_ID
+         , TICK_OPEN_DT
+         , CLOSE_TYP_CD
+         , CLOSE_DT
+         , ORGN_CLOSE_DT
+         , GRP_CD
+         , DTL_CD
+         , ARR_START_DT
+         , NEW_CLOSE_DT
+         , UP_WORK_ID
+    )
+    SELECT #{g.username}
+         , MAP_ID
+         , #{g.now}
+         , SYS_ID
+         , WORK_ID
+         , MENU_CD
+         , FUNC_CD
+         , TICK_ID
+         , USR_CLS
+         , TICK_TIT
+         , APP_ID
+         , OPEN_USR_ID
+         , TICK_OPEN_DT
+         , CLOSE_TYP_CD
+         , CLOSE_DT
+         , ORGN_CLOSE_DT
+         , GRP_CD
+         , DTL_CD
+         , ARR_START_DT
+         , NEW_CLOSE_DT
+         , UP_WORK_ID
+      FROM ESTOTMA
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseAuth">
+    /* task-shared.insertCloseAuth */
+    INSERT INTO ESTCTAH (
+           SYS_ID
+         , TICK_ID
+         , AUTH_TYP_CD
+         , AUTH_CD
+         , REG_ID
+         , REG_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , AUTH_TYP_CD
+         , AUTH_CD
+         , REG_ID
+         , REG_DT
+      FROM ESTOTAH
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseAlarm">
+    /* task-shared.insertCloseAlarm */
+    INSERT INTO ESTCTAL (
+           SYS_ID
+         , TICK_ID
+         , REG_ID
+         , ALRM_DT
+         , EMAIL_ALRM_YN
+         , EMAIL
+         , SMS_ALRM_YN
+         , SMS_NO
+         , TIT
+         , ALRM_DESC
+         , REG_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , REG_ID
+         , ALRM_DT
+         , EMAIL_ALRM_YN
+         , EMAIL
+         , SMS_ALRM_YN
+         , SMS_NO
+         , TIT
+         , ALRM_DESC
+         , REG_DT
+      FROM ESTOTAL
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseExemption">
+    /* task-shared.insertCloseExemption */
+    INSERT INTO ESTCTEX (
+           SYS_ID
+         , TICK_ID
+         , REG_ID
+         , EXCT_DESC
+         , EXCT_DTL_DESC
+         , DEL_DESC
+         , DEL_YN
+         , REG_DT
+         , DEL_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , REG_ID
+         , EXCT_DESC
+         , EXCT_DTL_DESC
+         , DEL_DESC
+         , DEL_YN
+         , REG_DT
+         , DEL_DT
+      FROM ESTOTEX
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseMemo">
+    /* task-shared.insertCloseMemo */
+    INSERT INTO ESTCTMM(
+           SYS_ID
+         , TICK_ID
+         , REG_ID
+         , MEMO
+         , MEMO_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , REG_ID
+         , MEMO
+         , MEMO_DT
+      FROM ESTOTMM
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseReading">
+    /* task-shared.insertCloseReading */
+    INSERT INTO ESTCTRD (
+           SYS_ID
+         , TICK_ID
+         , READ_USR_ID
+         , READ_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , READ_USR_ID
+         , READ_DT
+      FROM ESTOTRD
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseScheduleChange">
+    /* task-shared.insertCloseScheduleChange */
+    INSERT INTO ESTCTCH (
+           SYS_ID
+         , TICK_ID
+         , REG_ID
+         , CHG_DT
+         , CHG_RSN
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , REG_ID
+         , CHG_DT
+         , CHG_RSN
+      FROM ESTOTCH
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <insert id="insertCloseNotice">
+    /* task-shared.insertCloseNotice */
+    INSERT INTO ESTCTNT (
+           SYS_ID
+         , TICK_ID
+         , REG_ID
+         , RCPNT_ID
+         , NOTI_RSN
+         , NOTI_DESC
+         , NOTI_DT
+    )
+    SELECT SYS_ID
+         , TICK_ID
+         , REG_ID
+         , RCPNT_ID
+         , NOTI_RSN
+         , NOTI_DESC
+         , NOTI_DT
+      FROM ESTOTNT
+     WHERE SYS_ID  = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </insert>
+    <delete id="deleteOpenTaskClsgDtChange">
+    /* task-shared.deleteOpenTaskClsgDtChange */
+    DELETE FROM TASK_CLSG_DT_CHG
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.task_uuid != null and p.task_uuid != ''">
+       AND TASK_UUID = #{p.task_uuid}
+       </when>
+       <when test="p.task_uuids != null">
+       AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteOpenTaskMemo">
+    /* task-shared.deleteOpenTaskMemo */
+    DELETE FROM TASK_MEMO
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.task_uuid != null and p.task_uuid != ''">
+       AND TASK_UUID = #{p.task_uuid}
+       </when>
+       <when test="p.task_uuids != null">
+       AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteOpenTaskAsgtXcept">
+    /* task-shared.deleteOpenTaskAsgtXcept */
+    DELETE FROM TASK_ASGT_XCEPT
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.task_uuid != null and p.task_uuid != ''">
+       AND TASK_UUID = #{p.task_uuid}
+       </when>
+       <when test="p.task_uuids != null">
+       AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteOpenTaskReAssign">
+    /* task-shared.deleteOpenTaskReAssign : 업무 재배정 삭제 */
+    DELETE FROM TASK_RASGN
+     WHERE TEN_ID = #{g.tenant}
+      <choose>
+        <when test="p.task_uuid != null and p.task_uuid != ''">
+            AND TASK_UUID = #{p.task_uuid}
+        </when>
+        <when test="p.task_uuids != null">
+            AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+        </when>
+        <otherwise>
+            AND 1 = 0
+        </otherwise>
+      </choose>
+    </delete>
+    <delete id="deleteOpenTaskAuthty">
+    /* task-shared.deleteOpenTaskAuthty */
+    DELETE FROM TASK_AUTHTY
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.task_uuid != null and p.task_uuid != ''">
+       AND TASK_UUID = #{p.task_uuid}
+       </when>
+       <when test="p.task_uuids != null">
+       AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteOpenTask">
+    /* task-shared.deleteOpenTask */
+    DELETE FROM TASK
+    WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.task_uuid != null and p.task_uuid != ''">
+       AND TASK_UUID = #{p.task_uuid}
+       </when>
+       <when test="p.task_uuids != null">
+       AND TASK_UUID IN <foreach close=")" collection="p.task_uuids" item="task_uuid" open="(" separator=",">#{task_uuid}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseNotice">
+    /* task-shared.deleteCloseNotice */
+    DELETE FROM ESTCTNT
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseScheduleChange">
+    /* task-shared.deleteCloseScheduleChange */
+    DELETE FROM ESTCTCH
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseReading">
+    /* task-shared.deleteCloseReading */
+    DELETE FROM ESTCTRD
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseMemo">
+    /* task-shared.deleteCloseMemo */
+    DELETE FROM ESTCTMM
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseExemption">
+    /* task-shared.deleteCloseExemption */
+    DELETE FROM ESTCTEX
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseAlarm">
+    /* task-shared.deleteCloseAlarm */
+    DELETE FROM ESTCTAL
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseAuth">
+    /* task-shared.deleteCloseAuth */
+    DELETE FROM ESTCTAH
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <delete id="deleteCloseTask">
+    /* task-shared.deleteCloseTask */
+    DELETE FROM ESTCTMA
+     WHERE SYS_ID = #{g.tenant}
+     <choose>
+       <when test="p.tick_id != null and p.tick_id != ''">
+       AND TICK_ID = #{p.tick_id}
+       </when>
+       <when test="p.tick_ids != null">
+       AND TICK_ID IN <foreach close=")" collection="p.tick_ids" item="tick_id" open="(" separator=",">#{tick_id}</foreach>
+       </when>
+       <otherwise>
+       AND 1 = 0
+       </otherwise>
+     </choose>
+    </delete>
+    <select id="findAuthtyCdByTaskConfig" resultType="java.lang.String">
+    /* task-shared.findAuthtyCdByTaskConfig */
+    SELECT ${p.chr_col}
+      FROM ${p.chr_tb}
+     WHERE SYS_ID  = #{g.tenant}
+       AND ${p.tick_app_col} = #{p.app_id}
+    </select>
+    <select id="findTaskTitleByTaskConfig" resultType="java.lang.String">
+    /* task-shared.findTaskTitleByTaskConfig */
+    SELECT DISTINCT ${p.tit_col}
+      FROM ${p.tit_tb}
+     WHERE SYS_ID = #{g.tenant}
+       AND ${p.tit_link_col} IN ( SELECT ${p.tit_link_col} FROM ${p.tick_tb} WHERE ${p.tick_app_col} = #{p.app_id} )
+    </select>
+    <select id="findCloseDtInfoByTaskConfig" resultType="map">
+    /* task-shared.findCloseDtInfoByTaskConfig */
+    <bind name="nowDate" value="g.getDateWithNoTime(g.now)"/>
+    SELECT
+		      TO_DATE(T.CLOSE_DT, 'YYYYMMDD') AS CLOSE_DT
+		    , TO_DATE(T.CLOSE_DT, 'YYYYMMDD')<if test="p.arr_bas_day != null"> - #{p.arr_bas_day}</if> AS ARR_START_DT
+		    , #{nowDate}<if test="p.new_bas_day != null"> + #{p.new_bas_day}</if> AS NEW_CLOSE_DT  FROM ( SELECT MIN(${p.close_col}) AS CLOSE_DT
+               FROM ${p.close_tb}
+              WHERE SYS_ID = #{g.tenant}
+                AND ${p.close_link_col} = ( SELECT ${p.close_link_col} FROM ${p.tick_tb} WHERE ${p.tick_app_col} = #{p.app_id} )
+           ) T
+    </select>
+    <select id="findDefaultCloseDtInfo" resultType="map">
+    /* task-shared.findCloseDtInfoByRfxEval */
+    <bind name="nowDate" value="g.getDateWithNoTime(g.now)"/>
+    SELECT #{nowDate}<if test="p.close_bas_day != null"> + #{p.close_bas_day}</if>    AS CLOSE_DT
+         , #{nowDate}<if test="p.arr_bas_day != null"> + #{p.arr_bas_day}</if>    AS ARR_START_DT
+         , #{nowDate}<if test="p.new_bas_day != null"> + #{p.new_bas_day}</if>    AS NEW_CLOSE_DT
+      FROM ESMBLNK
+    </select>
+    <insert id="insertOpenTask">
+    /* task-shared.insertOpenTask */
+    INSERT INTO TASK (
+           TEN_ID
+         , TASK_UUID
+         , TASK_STS_UUID
+         , TASK_TIT
+         , CLSG_DT
+         , DELAY_DSPY_ST_DT
+         , IMMNT_DSPY_ST_DT
+         , NEW_DSPY_ED_DT
+         , SNDR_ID
+         , SND_DTTM
+         , RMK
+         , STS
+         , REGR_ID
+         , REG_DTTM
+         , MODR_ID
+         , MOD_DTTM
+    )
+    VALUES (
+           #{g.tenant}
+         , #{p.task_uuid}
+         , #{p.task_sts_uuid}
+         , #{p.task_tit}
+         , #{p.clsg_dt}
+         , #{p.delay_dspy_st_dt}
+         , #{p.immnt_dspy_st_dt}
+         , #{p.new_dspy_ed_dt}
+         , #{g.username}
+         , #{g.now}
+         , NULL
+         , 'C'
+         , #{g.username}
+         , #{g.now}
+         , #{g.username}
+         , #{g.now}
+    )
+    </insert>
+    <insert id="insertOpenAuth">
+    /* task-shared.insertOpenAuth */
+    INSERT INTO TASK_AUTHTY (
+           TEN_ID
+         , TASK_AUTHTY_UUID
+         , TASK_UUID
+         , AUTHTY_DIV_CCD
+         , AUTHTY_CD
+    )
+    VALUES (
+           #{g.tenant}
+         , #{p.task_authty_uuid}
+         , #{p.task_uuid}
+         , #{p.authty_div_ccd}
+         , #{p.authty_cd}
+    )
+    </insert>
+    <update id="updateOpenTask">
+    /* task-shared.updateOpenTask */
+    UPDATE TASK
+       SET TASK_TIT           = #{p.task_tit}
+         , CLSG_DT             = #{p.clsg_dt}
+         , DELAY_DSPY_ST_DT   = #{p.delay_dspy_st_dt}
+         , IMMNT_DSPY_ST_DT   = #{p.immnt_dspy_st_dt}
+         , NEW_DSPY_ED_DT     = #{p.new_dspy_ed_dt}
+         , SNDR_ID        = #{g.username}
+         , SND_DTTM          = #{g.now}
+     WHERE TEN_ID    = #{g.tenant}
+       AND TASK_UUID = #{p.task_uuid}
+    </update>
+  	<select id="findListTaskStatusUsed" resultType="map">
+  	/* task-shared.findListTaskStatusUsed : 현재 사용 중인 업무 상태 목록을 조회한다. (마이그레이션 혹은 모니터링 목적) */
+    SELECT TSTS.MENU_CD
+         , TSTS.TASK_STS_GRP_CCD
+         , TSTS.TASK_STS_DTL_CCD
+         , TSTS.DAT_SRC_UUID
+         , MTASK.USR_TYP_CCD
+         , DSRC.DAT_SRC_LOGIC_NM
+         , DSRC.DAT_SRC_PHYC_NM
+      FROM MAIN_TASK MTASK
+     INNER JOIN TASK_STS TSTS
+        ON MTASK.TEN_ID = TSTS.TEN_ID
+       AND MTASK.MAIN_TASK_UUID = TSTS.MAIN_TASK_UUID
+       AND TSTS.STS != 'D'
+       AND TSTS.USE_YN = 'Y'
+     INNER JOIN DAT_SRC DSRC
+        ON TSTS.TEN_ID = DSRC.TEN_ID
+       AND TSTS.DAT_SRC_UUID = DSRC.DAT_SRC_UUID
+       AND DSRC.STS != 'D'
+     WHERE MTASK.TEN_ID = #{g.tenant}
+       AND MTASK.STS != 'D'
+  	</select>
+  	<select id="findListDataSourceTaskData" resultType="map">
+  	/* task-shared.findListDataSourceTaskData : 데이터소스에서 업무데이터를 조회한다. */
+  	SELECT TASK_TEN_ID
+         , TASK_UUID
+         , TASK_AUTHTY_DIV_CCD
+         , TASK_AUTHTY_CD
+         , #{p.menu_cd} AS MENU_CD
+  	     , #{p.task_sts_grp_ccd} AS GRP_CCD
+  	     , #{p.task_sts_dtl_ccd} AS TASK_STS_CCD
+  	  FROM ${p.dat_src_phyc_nm}
+  	 WHERE TASK_TEN_ID = #{g.tenant}
+  	   AND TASK_STS_CCD = #{p.task_sts_dtl_ccd}
+  	</select>
+</mapper>

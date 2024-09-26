@@ -1,0 +1,234 @@
+<dom-module id="es-vendor-improve-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+            ************************************************************************************************************
+            * Service Area
+            ************************************************************************************************************
+        -->
+		<!-- 협력사 개선요청 목록 조회 -->
+		<sc-ajax id="findListImprove"
+				 url="findListImprove.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}"
+				 on-response="completeFindListImprove">
+		</sc-ajax>
+		
+		<!-- 협력사 개선요청 목록 삭제 -->
+		<sc-ajax id="deleteImproveList"
+				 url="deleteImproveList.do"
+				 on-response="completeDeleteImproveList">
+		</sc-ajax>
+		
+		<sc-code-group init>
+			<!-- 개선요청 등록구분 -->
+			<sc-code code="E912" value="{{codes.E912}}"></sc-code>
+			<!-- 개선요청 등록상태 -->
+			<sc-code code="E913" value="{{codes.E913}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		<!--
+            ************************************************************************************************************
+            * UI Area
+            ************************************************************************************************************
+        -->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch" auth-r>
+			<cc-fieldset>
+				<sc-label text="개선 유형"></sc-label>
+				<sc-combobox-field placeholder="전체"
+								   display-field="label" value-field="data" items="{{codes.E912}}"
+								   value="{{searchParam.improv_typ_ccd}}">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" placeholder="코드" max-length="18" on-enter="onSearch"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" max-length="128" on-enter="onSearch"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+					<sc-label text="요청 일자"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.fr_dt}}" to-value={{searchParam.to_dt}} string-date="true"></sc-period-date-field><!-- default-from-value="-2M" default-to-value="0d"-->
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="개선 상태"></sc-label>
+				<sc-combobox-field placeholder="전체"
+								   display-field="label" value-field="data" items="{{codes.E913}}"
+								   value="{{searchParam.improv_sts_ccd}}">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="개선 요청 제목"></sc-label>
+				<sc-text-field value="{{searchParam.improv_req_tit}}" on-enter="onSearch" max-length="100"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" data-provider="{{resultList}}"
+				 on-item-click="onItemClick" use-selection="true" use-state="false"
+				 use-selection="true" selection-able-function="onSelectionAbleFn">
+			<cc-grid-toolbar>
+				<sc-button text="작성" on-click="onAddImprove" 		auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteImprove" 	auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column 	data-field="erp_vd_cd" 				header-text="협력사 코드" 		width="100" 	text-align="center"></sc-data-column>
+				<sc-data-column 	data-field="vd_nm" 					header-text="협력사 명" 			width="150" 	text-align="left"></sc-data-column>
+				<sc-combobox-column data-field="improv_typ_ccd" 		header-text="개선 유형"     		width="150" 	text-align="center" items="{{codes.E912}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-combobox-column data-field="improv_sts_ccd" 		header-text="개선 상태"     		width="220" 	text-align="center" items="{{codes.E913}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column 	data-field="improv_req_tit" 		header-text="개선 요청 제목"		width="600" 	text-align="left" 	style-name="link"></sc-data-column>
+				<sc-date-column 	data-field="improv_cmpld_req_dt" 	header-text="개선 완료 일자" 	width="180" ></sc-date-column>
+				<sc-data-column 	data-field="delay_day" 				header-text="지연 일수" 			width="80" ></sc-data-column>
+				<sc-date-column 	data-field="improv_req_dt" 			header-text="개선 요청 일자" 		width="150" ></sc-date-column>
+				<sc-date-column 	data-field="improv_plan_subm_dt"	 		header-text="개선 계획 제출 일자" 		width="160" 	></sc-date-column>
+				<sc-date-column 	data-field="improv_cmpld_subm_dt" 			header-text="개선 완료 제출 일자" 		width="140" 	></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field		data-field="erp_vd_cd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<!--
+        ************************************************************************************************************
+        * Script Area
+        ************************************************************************************************************
+    -->
+	<script>
+		Polymer({
+			is: "es-vendor-improve-list",
+			properties : {
+				// 조회조건
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				
+				// 조회결과
+				resultList: {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				
+				//공통코드
+				codes: {
+					type: Object,
+					value:function(){
+						return {
+							E912 : [],
+							E913 : []
+						}
+					},
+					reset: false
+				}
+			},
+			
+			formulas : {
+			
+			},
+			
+			/******************************
+			 * 초기화 설정
+			 ******************************/
+			load:function(data) {
+				var me = this;
+				
+				if (data === null || data.reloadable !== false) {
+					me.onSearch(data);
+				}
+			},
+			
+			/******************************
+			 * 그리드 이벤트
+			 ******************************/
+			// 그리드 cell click 이벤트
+			onItemClick: function(event) {
+				var me = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "improv_req_tit"){
+					me.fire("show-improve-detail", data);
+				}
+			},
+			
+			//grid checkable 설정
+			onSelectionAbleFn: function (data) {
+				if(data.improv_sts_ccd === 'IMPROV_REQ_CRNG') {
+					return true; //체크 가능
+				} else {
+					return false; //체크 불가능
+				}
+			},
+			
+			/******************************
+			 * 버튼 이벤트
+			 ******************************/
+			// 게시판 정보 조회
+			onSearch : function(data){
+				var me = this;
+				UT.request(me.$.findListImprove);
+			},
+			
+			// 게시판 정보 조회 완료
+			completeFindListImprove: function(e, res){
+				var me = this;
+			},
+			
+			// 글쓰기
+			onAddImprove : function(){
+				var me = this;
+				me.fire("show-improve-detail", {});
+			},
+			
+			// 삭제
+			onDeleteImprove : function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					checked = provider.selectionCheckedIndexes(),
+					message = "STD.N1300"; // "삭제 하시겠습니까?"
+				
+				if (checked.length === 0) {
+					UT.alert("STD.N1600");
+					return;
+				}
+				
+				UT.confirm(message, function() {
+					var deleted = provider.removeItems();
+					if(deleted.length > 0){
+						me.$.deleteImproveList.body = {
+							deleteList: deleted
+						};
+						UT.request(me.$.deleteImproveList);
+					}
+				});
+			},
+			
+			// 삭제 후 callBack
+			completeDeleteImproveList :function(e, res){
+				var me = this,
+					response = res.response;
+				
+				if(response.resultStatus === 'S') {
+					UT.completeAlert("삭제", function() {
+						me.onSearch();
+					});
+				}
+			}
+		});
+	</script>
+
+</dom-module>

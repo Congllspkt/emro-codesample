@@ -1,0 +1,165 @@
+<sc-link rel="import" href="ep-sp-rm-note-task-detail.html"></sc-link>
+<dom-module id="ep-sp-rm-shared-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+
+        <sc-ajax id="sharedRemoteMeetInfo" url="sharedRemoteMeetInfo.do" on-response="completeFindInfo"></sc-ajax>
+
+        <cc-detail-title-bar title-text="현장설명회 공유">
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-detail-title-bar>
+
+        <div class="flex page">
+            <cc-form-panel title-text="일반 정보" collapsible="true">
+				<cc-fieldset column-span="2">
+					<sc-label text="현장설명회 번호"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_no}}" readonly></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="협력사 공유 여부"></sc-label>
+					<sc-checkbox-field input-value="{{fiData.vconf_shr_yn}}" checked-value="Y" un-checked-value="N" disabled="true"></sc-checkbox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+
+            <sc-grid id="rmNotesGridPanel" class="h-200" collapsible="true" aggregate=true use-dummy="false"
+                     editable="false"
+                     use-state="false"
+                     use-selection="false"
+                     on-item-click="onItemClick">
+                <cc-grid-toolbar title-text="회의록">
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column data-field="mtg_theme" 			header-text="주제" 		width="200" text-align="center" editable="false"></sc-data-column>
+                    <sc-group-column	hide-child-headers="true"	header-text="회의록 상세정보"			width="150"	text-align="center"	editable="false">
+                        <sc-image-column	image-change-function="onImageNotesChange"	data-field="btn_notes"		width="30"	text-align="center" editable="false"></sc-image-column>
+                    </sc-group-column>
+                    <sc-date-column	data-field="fnl_mod_dttm" header-text="최종 수정 일시" display-format="yyyy/MM/dd HH:mm" value-format="yyyy-MM-dd HH:mm" width="150" text-align="center"></sc-date-column>
+                    <sc-data-column data-field="fnl_modr_id" 				header-text="최종 수정자" 			width="150" text-align="left"	editable="false"></sc-data-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field data-field="mtgmins_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="task_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="mtg_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="mtgmins_yn"></sc-grid-field>
+                    <sc-grid-field data-field="sitebrfg_sts_ccd"></sc-grid-field>
+                    <sc-grid-field data-field="vconf_sts_ccd"></sc-grid-field>
+                    <sc-grid-field data-field="sitebrfg_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="sitebrfg_no"></sc-grid-field>
+                    <sc-grid-field data-field="vconf_shr_yn"></sc-grid-field>
+                    <sc-grid-field data-field="rcrd_athg_uuid"></sc-grid-field>
+                    <sc-grid-field data-field="mtg_atne_nm"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+
+            <cc-form-panel form-cls="label-column" title-text="첨부파일" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="녹화 파일"></sc-label>
+					<sc-upload class="h-200" value="{{fiData.rcrd_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 공유 파일"></sc-label>
+					<sc-upload id="upload_attach" class="h-200" value="{{fiData.shr_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+        </div>
+
+
+        <sc-dialog id="dialog_note_info" title-text="회의록 상세정보" title-align="left" style="width:600px;height:200px" modal="true" draggable="true" >
+            <sc-data-field value="{{noteData.mtg_theme}}" 			header-text="주제" 		width="100" text-align="center" editable="false"></sc-data-field>
+            <sc-textarea-field value="{{noteData.note}}" max-length="500"></sc-textarea-field>
+
+            <sc-grid id="taskGridPanel" class="h-300" collapsible="true" use-dummy="false" use-selection="false">
+                <sc-grid-columns>
+                    <sc-data-column data-field="task_tit" header-text="Task 제목" width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column data-field="task_yn" header-text="Task 체크 여부" width="100"	text-align="center"	editable="false"></sc-data-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                </sc-grid-fields>
+            </sc-grid>
+        </sc-dialog>
+
+    </template>
+    <script>
+        Polymer({
+            is: 'ep-sp-rm-shared-detail',
+            properties: {
+
+                fiData: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                }
+
+            },
+
+            formulas: {
+            },
+
+            load: function(fiData) {
+                var me = this;
+                if(fiData.sitebrfg_uuid){
+                    me.set("fiData", fiData);
+                    me.onFindInfo();
+                }
+            },
+
+            onFindInfo: function() {
+                var me = this;
+                me.$.sharedRemoteMeetInfo.body = {sitebrfg_uuid : me.fiData.sitebrfg_uuid};
+                UT.request(me.$.sharedRemoteMeetInfo);
+            },
+
+            completeFindInfo: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                var fiData = UT.convertDtToDayHourMin(result.fiData);
+                me.set("fiData", fiData);
+
+                me.$.rmNotesGridPanel.setDataProvider(result.remoteMeetNotes);
+                //me.$.rmVendorGridPanel.setDataProvider(result.fiVendors);
+
+                me.applyFormula();
+            },
+
+            onClose : function (){
+                var me = this;
+                me.fire("close");
+            },
+
+
+            onImageNotesChange: function(data, item){
+                var me = this,
+                    provider = me.$.rmNotesGridPanel.getDataProvider();
+
+                if(UT.isNotEmpty(data["mtg_body"])){
+                    return "search";
+                }
+            },
+
+
+            onItemClick: function(e) {
+                var me = this,
+                    detail = e.detail,
+                    data = detail.data,
+                    item = detail.item;
+
+                me.set("noteData","");
+
+                if (item.dataField == "btn_notes") {
+                    var noteDetailAndTaskPopup = UT.popup('ep-sp-rm-note-task-detail', me, "50%","80%", {
+
+                    });
+                    noteDetailAndTaskPopup.show();
+                    noteDetailAndTaskPopup.getWindowContent().load(data);
+                }
+            }
+
+        })
+    </script>
+</dom-module>

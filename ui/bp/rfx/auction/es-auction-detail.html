@@ -1,0 +1,2215 @@
+<sc-link rel="import" href="../shared/ep-apply.html"></sc-link>
+<sc-link rel="import" href="../../shared/ep-vendor-list.html"></sc-link>
+<sc-link rel="import" href="../../shared/ep-job-list.html"></sc-link>
+<sc-link rel="import" href="cc-auction-progress-state.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-perform.html"></sc-link>
+
+<dom-module id="es-auction-detail">
+	<!--
+	/**
+	 *
+	 *	@description : 역경매 현황 - 상세
+	 *  <pre>
+	 * </pre>
+	 * @변경이력 : [2017. 2. 16.] 9.1 convert
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- 조회 -->
+		<sc-ajax id="findAuction"
+				 url="findAuction.do"
+				 on-response="completeFindAuction">
+		</sc-ajax>
+		
+		<sc-ajax id="findRfxDefaultDataByReqItemIds"
+				 url="findRfxDefaultDataByReqItemIds.do">
+		</sc-ajax>
+		
+		<sc-ajax id="findRfxDefaultDataByRfiId"
+				 url="findRfxDefaultDataByRfiId.do">
+		</sc-ajax>
+		
+		<!-- 저장 -->
+		<sc-ajax id="saveAuction"
+				 url="saveAuction.do"
+				 on-response="completeSaveAuction">
+		</sc-ajax>
+		
+		<!-- 삭제 -->
+		<sc-ajax id="deleteAuction"
+				 url="deleteAuction.do"
+				 body="{{rfxData}}"
+				 on-response="completeDeleteAuction">
+		</sc-ajax>
+		
+		<!-- 협력사 전송 -->
+		<sc-ajax id="directAuctionQta"
+				 url="directAuctionBid.do"
+				 on-response="completeDirectAuctionQta">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<!-- 코드 조회 request group -->
+			<sc-code-group>
+				<!-- 경쟁 방식 -->
+				<sc-code code="P211" value="{{codes.compTypCcd}}"></sc-code>
+				<!-- UOM -->
+				<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+				<!-- 내외자 구분-->
+				<sc-code code="C024" value="{{codes.domovrsDivCcd}}"></sc-code>
+				<!-- 협력사 선정방식(총액별/품목별) -->
+				<sc-code code="P002" value="{{codes.itemSlctnTypCcd}}"></sc-code>
+				<!-- 지급방법/설명 -->
+				<sc-code code="P009" value="{{codes.pymtmethCcd}}"></sc-code>
+				<!-- 납품방법/설명 -->
+				<sc-code code="P010" value="{{codes.dlvymethCcd}}"></sc-code>
+				<!-- RFx 유형 -->
+				<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+				<!-- 역경매 유형 -->
+				<sc-code code="P034" value="{{codes.raucTypCcd}}"></sc-code>
+				<!-- 구매코드 : 구매 유형 -->
+				<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+				<!-- RFX 목적 -->
+				<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>
+			</sc-code-group>
+			<sc-ajax
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.pymtmethParam}}"
+					last-response="{{codes.pymtmethAttrCcds}}">
+			</sc-ajax>
+			<sc-ajax
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.dlvymethParam}}"
+					last-response="{{codes.dlvymethAttrCcds}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="[[formula('title')]]" i18n-disabled>
+			<sc-button text="저장" on-click="onTempSave" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="역경매 발신" on-click="onDirectAuctionQta" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="결재 요청" on-click="onReqApproval" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('deletable')]]" auth-s></sc-button>
+			<sc-button text="역경매 결과" on-click="onShowResultDetail" hidden="[[!formula('showResultDetailBtn')]]" auth-r></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-auction-progress-state auction-data="[[rfxData]]"></cc-auction-progress-state>
+		
+		<cc-link-document param="{{rfxData}}" app-type="AUCTION"></cc-link-document>
+		
+		<div class="flex page">
+			<cc-approval-summary app-id="{{rfxData.rfx_uuid}}" aprv-typcd="{{apvlTypCcd}}" hidden="[[!formula('requestedApproval')]]" auth-r></cc-approval-summary>
+			
+			<cc-form-panel title-text="일반 정보" collapsible="true" validation-group="auctionInfo">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{rfxData.oorg_cd}}" selected-index="0" placeholder="필수" required="true" disabled="[[!formula('creatable')]]" on-change="onChangeOperOrgCd"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매 유형"></sc-label>
+					<sc-combobox-field value="{{rfxData.purc_typ_ccd}}" display-field="label" value-field="data" items="{{codes.p2pPurcTypCcd}}" selected-index="0" placeholder="필수" required="true" readonly="[[!formula('creatable')]]"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="역경매 번호/진행차수"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-text-field class="w-150" value="{{rfxData.rfx_no}}" readonly></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field class="w-50 align-right" value="{{rfxData.rfx_rnd}}" readonly></sc-text-field>
+						<span style="margin-left:5px"></span>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field required="true" value="{{rfxData.rfx_tit}}" readonly="[[!formula('firstRoundEditable')]]" max-length="100"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="역경매 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfxTypCcd}}" value="{{rfxData.rfx_typ_ccd}}" placeholder="필수" required="true" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="역경매 목적"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfxPurpFilterCcd}}" value="{{rfxData.rfx_purp_ccd}}" placeholder="필수" required="true" readonly="[[!formula('creatable')]]"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="일정" collapsible="true">
+				<cc-fieldset column-span="2">
+					<sc-label text="기간"></sc-label>
+					<div class="field-box">
+						<sc-date-field class="w-110" required="true"
+									   value="{{rfxData.rfx_st_dttm}}"
+									   default-value="0d"
+									   readonly="[[!formula('editable')]]"
+									   validator="rfxStartDtValidator"
+									   validation-group="rfxStartDt">
+						</sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="integer"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 value="{{rfxData.rfx_st_dttm_hour}}"
+										 readonly="[[!formula('editable')]]"
+										 validator="rfxStartDtValidator"
+										 validation-group="rfxStartDt">
+						</sc-number-field>
+						
+<!--						<sc-label text=":" style="margin:0 2px" i18n-disabled></sc-label>-->
+						<span style="margin:0 2px;">:</span>
+						<sc-number-field class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="integer"
+										 regex="/^[0-5]?[0-9]$/"
+										 value="{{rfxData.rfx_st_dttm_min}}"
+										 readonly="[[!formula('editable')]]"
+										 validator="rfxStartDtValidator"
+										 validation-group="rfxStartDt">
+						</sc-number-field>
+						
+<!--						<sc-label text="~" style="margin:0 2px" i18n-disabled></sc-label>-->
+						<span style="margin:0 2px;">~</span>
+						<sc-date-field class="w-110" required="true"
+									   value="{{rfxData.rfx_clsg_dttm}}"
+									   default-value="7d"
+									   readonly="[[!formula('editable')]]"
+									   validator="rfxCloseDtValidator"
+									   validation-group="rfxCloseDt">
+						</sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="integer"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 value="{{rfxData.rfx_clsg_dttm_hour}}"
+										 readonly="[[!formula('editable')]]"
+										 validator="rfxCloseDtValidator"
+										 validation-group="rfxCloseDt">
+						</sc-number-field>
+						
+<!--						<sc-label text=":" style="margin:0 2px" i18n-disabled></sc-label>-->
+						<span style="margin:0 2px;">:</span>
+						<sc-number-field class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="integer"
+										 regex="/^[0-5]?[0-9]$/"
+										 value="{{rfxData.rfx_clsg_dttm_min}}"
+										 readonly="[[!formula('editable')]]"
+										 validator="rfxCloseDtValidator"
+										 validation-group="rfxCloseDt">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="자동 연장 여부"></sc-label>
+					<div class="field-box" style="width:100%" validation-group="autoExtTime">
+						<sc-label text="자동 연장"></sc-label>
+						<sc-radio-group-field value="{{rfxData.auto_ext_use_yn}}" readonly="[[!formula('editable')]]">
+							<sc-radio-field label="예" input-value="Y"></sc-radio-field>
+							<sc-radio-field label="아니오" input-value="N"></sc-radio-field>
+						</sc-radio-group-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field id="autoExtTime" class="w-60 align-right" min-value="1" max-value="240" max-length="3"
+										 value="{{rfxData.auto_ext_tm}}"
+										 readonly="[[!formula('autoExtTimeEditable')]]"
+										 validator="autoExtTimeValidator">
+						</sc-number-field>
+						<span>[[translate('분')]]</span>
+					</div>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="진행방법" collapsible="true" validation-group="auctionInfo">
+				<cc-fieldset>
+					<sc-label text="경쟁 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.compTypFilterCcd}}" value="{{rfxData.comp_typ_ccd}}" selected-index="0" placeholder="필수" required="true" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="역경매 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.raucTypCcd}}" value="{{rfxData.rauc_typ_ccd}}" selected-index="0" placeholder="필수" required="true" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="품목 선정 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.itemSlctnTypCcd}}" value="{{rfxData.item_slctn_typ_ccd}}" selected-index="0" placeholder="필수" required="true" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="목표가 사용 여부"></sc-label>
+					<sc-radio-group-field value="{{rfxData.trgprc_use_yn}}" readonly="[[!formula('firstRoundEditable')]]">
+						<sc-radio-field label="예" input-value="Y"></sc-radio-field>
+						<sc-radio-field label="아니오" input-value="N"></sc-radio-field>
+					</sc-radio-group-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="최소 단위 금액"></sc-label>
+					<sc-combobox-field class="align-right" id="minBidUnitAmtCombo" selected-index="0" display-field="label" value-field="data" items="{{codes.raucSubmMinUnitAmt}}" value="{{rfxData.rauc_subm_min_unit_amt}}" required="true" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="계약 조건" collapsible="true" validation-group="auctionInfo">
+				<cc-fieldset>
+					<sc-label text="내외자 구분"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.domovrsDivCcd}}" value="{{rfxData.domovrs_div_ccd}}" selected-index="0" placeholder="필수" required="true" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="지체상금 비율"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-number-field class="w-100 align-right" min-value="0" max-value="1000" value="{{rfxData.dfrm_ro}}" readonly="[[!formula('firstRoundEditable')]]"></sc-number-field>
+						<sc-label text="/1000" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="통화"></sc-label>
+					<cc-cur-search value="{{rfxData.cur_ccd}}" required="true" readonly="true" on-change="onChangeCur" hide-trigger="[[!formula('firstRoundEditable')]]" result-hidden="true"></cc-cur-search>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="지급방법/설명"></sc-label>
+					<div class="field-box" style="width: 100%">
+						<sc-combobox-field class="w-350" display-field="label" value-field="data" items="{{codes.pymtmethCcd}}" value="{{rfxData.pymtmeth_ccd}}" placeholder="선택" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+						<span style="margin-right:5px"></span>
+						<sc-text-field value="{{rfxData.pymtmeth_expln}}" readonly="[[!formula('firstRoundEditable')]]" max-length="100"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="납품방법/설명"></sc-label>
+					<div class="field-box" style="width: 100%">
+						<sc-combobox-field class="w-350" display-field="label" value-field="data" items="{{codes.dlvymethCcd}}" value="{{rfxData.dlvymeth_ccd}}" placeholder="선택" readonly="[[!formula('firstRoundEditable')]]"></sc-combobox-field>
+						<span style="margin-right:5px"></span>
+						<sc-text-field value="{{rfxData.dlvymeth_expln}}" readonly="[[!formula('firstRoundEditable')]]" max-length="100"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label name="cntr_dt" text="계약 기간"></sc-label>
+					<sc-period-date-field name="cntr_dt" from-value="{{rfxData.cntr_st_dt}}" to-value="{{rfxData.cntr_exp_dt}}"
+										  default-from-value="1d" default-to-value="1M"
+										  string-date="true"
+										  readonly="[[!formula('editable')]]">
+					</sc-period-date-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel form-cls="label-column" title-text="첨부파일" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="내부용"></sc-label>
+					<sc-upload id="upload_in" class="h-200" value="{{rfxData.buyer_athg_uuid}}" editable="[[formula('firstRoundEditable')]]"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사용"></sc-label>
+					<sc-upload id="upload_out" class="h-200" value="{{rfxData.vd_athg_uuid}}" editable="[[formula('firstRoundEditable')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="비고" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="구매사 비고"></sc-label>
+					<sc-textarea-field value="{{rfxData.rfx_buyer_rmk}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 비고"></sc-label>
+					<sc-textarea-field value="{{rfxData.rfx_vd_rmk}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="itemGridPanel" class="h-400" collapsible="true" aggregate=true use-dummy="false"
+					 editable="[[formula('editable')]]"
+					 use-state="[[formula('editable')]]"
+					 use-selection="[[formula('firstRoundEditable')]]"
+					 calc-footer-include-invisible="true"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+					<sc-button text="무코드 품목 추가"	on-click="onAddNoCdItem"			hidden="[[!formula('noCdItemAddable')]]"	auth-s></sc-button>
+					<sc-button text="품목 추가"			on-click="onShowPrCateItemPopup"	hidden="[[!formula('itemAddable')]]"		auth-s></sc-button>
+					<sc-button text="일괄 적용"			on-click="onAllApplyBtn"			hidden="[[!formula('firstRoundEditable')]]"	auth-s></sc-button>
+					<sc-button text="삭제"				on-click="onDeleteAuctionItem"		hidden="[[!formula('itemAddable')]]"		auth-s></sc-button>
+				</cc-grid-toolbar>
+				
+				<sc-grid-columns>
+					<sc-data-column		data-field="rfx_lno"	header-text="항번"					width="90"	text-align="center"	editable="false"	data-type="number"></sc-data-column>
+					<sc-combobox-column	data-field="purc_typ_ccd"		header-text="구매 유형"				width="100"	text-align="center"	editable="false"	visible="false"
+										   display-field="label"		value-field="data"					items="{{codes.p2pPurcTypCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"				width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="품목 명"				width="280">
+						<sc-data-column		data-field="item_nm"										width="250"	text-align="left"	item-editable-function="onItemEditableFn"		max-length="500"	required="true"></sc-data-column>
+						<sc-image-column	data-field="img_item_cd"	image-change-function="onImageChangeFn"	width="30"	text-align="center" editable="false"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column		data-field="item_spec"			header-text="품목 규격"					width="250"	text-align="left"	item-editable-function="onItemEditableFn"		max-length="1000"
+										   item-style-function="onItemStyleFn"								validator-function="gridValidatorFn"></sc-data-column>
+					<sc-image-column	data-field="img_item_spec_dtl"	header-text="품목 규격 상세"				width="60"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+										image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="uom_ccd"		header-text="UOM"					width="60"	text-align="center"	item-editable-function="onItemEditableFn"		required="true"
+										   display-field="data"		value-field="data"					items="{{codes.uomCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_qty"		header-text="수량"				width="80"	text-align="right"	item-editable-function="onItemEditableFn"
+										   max-length="8"				editor-regex-function="onRegexFn" 	validate-on-cell-paste="true"
+										   data-type="number"			format-type="qty"					required="true"
+										   validator-function="gridValidatorFn"></sc-data-column>
+					<sc-data-column		data-field="rfx_req_uprc"		header-text="요청 단가"				width="100"	text-align="right"	item-editable-function="onItemEditableFn"
+										   max-length="13"				editor-regex-function="onRegexFn"	validate-on-cell-paste="true"
+										   data-type="number"			format-type="price"					aggregate-title="합계"		required="true"
+										   validator-function="gridValidatorFn"></sc-data-column>
+					<sc-data-column		data-field="rfq_amt"		header-text="요청 금액"				width="140"	text-align="right"	editable="false"
+										   format-type="amt"			aggregate-function="onAmtAggregateFn"	aggregate-format="amt"
+										   sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-data-column		data-field="rfx_trg_uprc"		header-text="목표 단가"				width="100"	text-align="right"	item-editable-function="onItemEditableFn"		visible="[[formula('showTgtPriceColumn')]]"
+										   max-length="13"				editor-regex-function="onRegexFn"	validate-on-cell-paste="true"
+										   data-type="number"			format-type="price"					required="true"
+										   validator-function="gridValidatorFn"></sc-data-column>
+					<sc-date-column		data-field="const_st_dt"			header-text="공사 시작 일자"			width="90"	text-align="center"	item-editable-function="onItemEditableFn"		visible="[[formula('showCTColumn')]]"	required="true"
+										   validator-function="gridValidatorFn"></sc-date-column>
+					<sc-date-column		data-field="const_exp_dt"			header-text="공사 종료 일자"			width="90"	text-align="center"	item-editable-function="onItemEditableFn"		visible="[[formula('showCTColumn')]]"	required="true"
+										   validator-function="gridValidatorFn"></sc-date-column>
+					<sc-date-column		data-field="req_dlvy_dt"		header-text="요청 납품 일자"				width="90"	text-align="center"	item-editable-function="onItemEditableFn"		visible="[[formula('showMTColumn')]]"	required="true"
+										   validator-function="gridValidatorFn"></sc-date-column>
+					<sc-data-column		data-field="dlvy_plc"		header-text="[[formula('rdLocatTitle')]]"		width="150"	text-align="left"	item-editable-function="onItemEditableFn"	visible="[[!formula('isRfxPurpUC')]]"		max-length="1000"	required="true"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="구매 그룹"				width="180"	text-align="center">
+						<sc-data-column	data-field="purc_grp_cd"										width="50"	text-align="center"	editable="false"	required="true"></sc-data-column>
+						<sc-data-column	data-field="purc_grp_nm"										width="100"	text-align="center"	item-editable-function="onItemEditableFn"		required="true"></sc-data-column>
+						<sc-image-column data-field="img_purc_grp"	image-cls="search"					width="30"	text-align="center" editable="false"	visible="[[formula('firstRoundEditable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column		data-field="pr_no"			header-text="구매요청 번호"			width="120"	text-align="center"	editable="false"	visible="[[formula('showPrColumn')]]"
+										   style-name="link"></sc-data-column>
+					<sc-data-column		data-field="pr_lno"			header-text="구매요청 항번"			width="120"	text-align="center"	editable="false"	data-type="number"	visible="[[formula('showPrColumn')]]"></sc-data-column>
+					<sc-data-column		data-field="upcr_no"			header-text="단가계약요청 번호"			width="120"	text-align="center"	editable="false"	visible="[[formula('showUpcrColumn')]]"
+										   style-name="link"></sc-data-column>
+					<sc-data-column		data-field="upcr_lno"			header-text="단가계약요청 항번"			width="120"	text-align="center"	editable="false"	data-type="number"	visible="[[formula('showUpcrColumn')]]"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="rfx_item_uuid"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="rfx_uuid"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="rfx_rnd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="oorg_cd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="pr_uuid"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="pr_item_uuid"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_uuid"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_item_uuid"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_no"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_revno"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="cntr_item_id"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_lno"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="cur_ccd"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="auto_po_yn"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="sg_cd"			    data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"	    data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec_dtl"		    data-type="text"></sc-grid-field>
+					<sc-grird-field	data-field="rfx_req_rcpt_uuid"></sc-grird-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-grid id="vdGridPanel" class="h-300" collapsible="true" use-dummy="false"
+					 hidden="[[formula('hiddenVdGridPanel')]]"
+					 editable="[[formula('editable')]]"
+					 use-state="[[formula('editable')]]"
+					 use-selection="[[formula('editable')]]"
+					 on-item-click="onVdItemClick">
+				<cc-grid-toolbar title-text="협력사 정보">
+					<sc-button text="협력사 검색"	on-click="onShowPopupVendor"		hidden="[[!formula('vdAddable')]]"		auth-s></sc-button>
+					<sc-button text="삭제"		    on-click="onDeleteAuctionVendor"	hidden="[[!formula('vdDeletable')]]"	auth-s></sc-button>
+					<sc-button text="제외"			on-click="onExcVendor"				hidden="[[!formula('vdExcable')]]"		auth-s></sc-button>
+					<sc-button text="제외 취소"		on-click="onCancelExcVendor"		hidden="[[!formula('vdExcable')]]"		auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="sbmt_yn"			header-text="이전 차수 제출 여부"	width="120"	text-align="center"	visible="[[formula('showSbmtYnColumn')]]"	converter="onConvertSbmtYn"></sc-data-column>
+					<sc-data-column		data-field="disp_vd_cd"			header-text="협력사 코드"			width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="vd_nm"				header-text="협력사 명"				width="200"	text-align="left"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="vd_pic_nm"			header-text="협력사 담당자 명"				width="120"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="vd_pic_tel"	header-text="협력사 담당자 전화"		width="150"	text-align="left"	editable="true"	max-length="18"></sc-data-column>
+					<sc-data-column		data-field="vd_pic_eml"		header-text="협력사 담당자 이메일"			width="150"	text-align="left"	editable="true"	max-length="100"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"		header-text="제외 여부"				width="90"	text-align="center"	visible="[[formula('showVdExcYnColumn')]]">
+						<sc-data-column		data-field="multrnd_subj_xcept_yn"												width="60"	text-align="center"	editable="false"></sc-data-column>
+						<sc-image-column	data-field="img_multrnd_xcept_rsn"										width="30"	text-align="center" editable="false"
+											image-change-function="onVdGridImageChangeFn"></sc-image-column>
+					</sc-group-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="rfx_vd_uuid"	data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="rfx_uuid"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="erp_vd_cd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="vd_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="rfx_no"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="rfx_rnd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="vd_pic_uuid"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="multrnd_subj_xcept_yn"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="multrnd_xcept_rsn"		data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<!-- 제외 사유 dialog -->
+		<sc-dialog id="dialog_multrnd_xcept_rsn" title-text="제외 사유" title-align="left" style="width:400px;height:250px" modal="true">
+			<cc-page-title-bar>
+				<sc-button text="입력" on-click="onExcCause" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			</cc-page-title-bar>
+			<table class="tb-form">
+				<tr>
+					<td>
+						<sc-textarea-field class="h-100" id="dialog_multrnd_xcept_rsn_text" value="" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-auction-detail',
+			properties: {
+				rfxData: {
+					type: Object,
+					value: function() {
+						var currentUser = SCSessionManager.currentUser;
+						return {
+							is_new: false,
+							saveType: '',
+							rfx_uuid: "",
+							rfx_no: "",
+							rfx_rnd: 1,
+							rfx_typ_ccd: "RAUC",
+							cur_ccd: "KRW",
+							rfx_sts_ccd: "CRNG",
+							rfx_apvl_sts_ccd: "CRNG",
+							rauc_subm_min_unit_amt: 1,
+							auto_ext_use_yn: "N",		//자동시간연장 여부
+							trgprc_use_yn: "N",		//목표가 설정 여부
+							has_pr_item_yn: "",
+							has_upcr_item_yn: "",
+							auto_ext_poss_wd : 0,
+							purc_pic_id: currentUser.usr_id,
+							purc_chr_nm: currentUser.disp_usr_nm,
+							purc_chr_dept_nm: currentUser.disp_dept_nm,
+							purc_chr_phone_no: currentUser.phone_no
+						};
+					}
+				},
+				apvlTypCcd: {
+					type: Object,
+					value: function() {
+						return "RAUC";
+					}
+				},
+				selectedVdItemIndexes: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							raucTypCcd: [],
+							uomCcd: [],
+							compTypCcd: [],
+							dlvymethCcd: [],
+							raucSubmMinUnitAmt: [{data: 1, label: "1"},
+								{data: 10, label: "10"},
+								{data: 100, label: "100"},
+								{data: 1000, label: "1,000"},
+								{data: 10000, label: "10,000"},
+								{data: 100000, label: "100,000"},
+								{data: 1000000, label: "1,000,000"},
+								{data: 10000000, label: "10,000,000"}],
+							pymtmethCcd: [],
+							p2pPurcTypCcd: [],
+							rfxPurpCcd: [],
+							rfxPurpFilterCcd: [],
+							compTypFilterCcd: [],
+							domovrsDivCcd: [],
+							itemSlctnTypCcd: [],
+							param: {
+								purc_grp_typ_ccd: "PURC",
+								co_cd: SCSessionManager.currentUser.co_cd
+							},
+							pymtmethParam: {
+								ccd: "P009",
+								cstr_cnd_cd: "DOMOVRS_DIV"
+							},
+							dlvymethParam: {
+								ccd: "P010",
+								cstr_cnd_cd: "DOMOVRS_DIV"
+							},
+							pymtmethAttrCcds: [],
+							dlvymethAttrCcds: [],
+							domPymtmethCcds: [],
+							ovsPymtmethCcds: [],
+							domDlvymethCcds: [],
+							ovsDlvymethCcds: [],
+						};
+					},
+					reset: false
+				},
+				dupLnos: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				}
+			},
+			formulas: {
+				isSaved: function() {
+					return UT.isNotEmpty(this.rfxData.rfx_uuid);
+				},
+				creatable: function() {
+					return (UT.isEmpty(this.rfxData.rfx_uuid) && this.rfxData.is_new === true);
+				},
+				editable: function() {
+					return (this.rfxData.rfx_sts_ccd === "CRNG");
+				},
+				isFirstRound: function() {
+					return (this.rfxData.rfx_rnd == 1);
+				},
+				isMultiRound: function() {
+					return (this.rfxData.rfx_rnd !== 1);
+				},
+				firstRoundEditable: function() {
+					return (this.formula('isFirstRound') && this.formula('editable'));
+				},
+				multiRoundEditable: function() {
+					return (this.formula('isMultiRound') && this.formula('editable'));
+				},
+				hasPrItem: function() {
+					return (this.rfxData.has_pr_item_yn === "Y");
+				},
+				hasUpcrItem: function() {
+					return (this.rfxData.has_upcr_item_yn === "Y");
+				},
+				deletable: function() {
+					return (this.formula('isSaved') && ["CRNG", "APVL_RET", "APVL_CNCL"].indexOf(this.rfxData.rfx_apvl_sts_ccd) > -1);
+				},
+				requestedApproval: function() {
+					return (this.formula('isSaved') && ["APVL_PRGSG", "APVD", "APVL_RET"].indexOf(this.rfxData.rfx_apvl_sts_ccd) > -1);
+				},
+				itemAddable: function() {
+					return (this.formula('firstRoundEditable') && (!this.formula('hasPrItem') && !this.formula('hasUpcrItem')));
+				},
+				hiddenVdGridPanel: function() {
+					return (this.rfxData.comp_typ_ccd === "OBID");
+				},
+				vdAddable: function() {
+					return this.formula('editable');
+				},
+				vdDeletable: function() {
+					return this.formula('editable');
+				},
+				vdExcable: function() {
+					return this.formula('multiRoundEditable');
+				},
+				autoExtTimeEditable: function() {
+					return (this.rfxData.auto_ext_use_yn === "Y" && this.formula('editable'));
+				},
+				isRfxPurpUC: function() {
+					return (this.rfxData.rfx_purp_ccd === "UPRCCNTR_SGNG");
+				},
+				showMTColumn: function() {
+					return (this.rfxData.purc_typ_ccd === "QTY" && !this.formula('isRfxPurpUC'));
+				},
+				showCTColumn: function() {
+					return (this.rfxData.purc_typ_ccd === "CONSTSVC" && !this.formula('isRfxPurpUC'));
+				},
+				showPrColumn: function() {
+					return this.formula("hasPrItem");
+				},
+				showUpcrColumn: function() {
+					return this.formula("hasUpcrItem");
+				},
+				showTgtPriceColumn: function() {
+					return (this.rfxData.trgprc_use_yn === "Y");
+				},
+				showSbmtYnColumn: function() {
+					return this.formula("isMultiRound");
+				},
+				showVdExcYnColumn: function() {
+					return this.formula("isMultiRound");
+				},
+				showResultDetailBtn: function() {
+					return (["CLSG", "ED", "SLCTN_APVL_PRGSG"].indexOf(this.rfxData.rfx_sts_ccd) > -1) && !this.get("isViewConfig");
+				},
+				title: function() {
+					var me = this;
+					
+					if(UT.isEmpty(me.rfxData.rfx_no)) {
+						return me.translate('역경매 작성');
+					}
+					return me.translate("역경매") + " : " + me.get("rfxData.rfx_no");
+				},
+				gridTitle: function() {
+					return (this.rfxData.purc_typ_ccd === "QTY") ? this.translate("품목 정보") : "공사/용역 정보";
+				},
+				rdLocatTitle: function() {
+					var me = this;
+					return (me.rfxData.purc_typ_ccd === "QTY") ? me.translate("납품 장소") : me.translate("수행 장소");
+				},
+				noCdItemAddable: function() {
+					return this.formula("itemAddable") && !this.formula("isRfxPurpUC");
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					return me.get("rfxData.has_no_cd_item") === "Y";
+				}
+			},
+			observers: [
+				'changePurcTyp(rfxData.purc_typ_ccd)',
+				'changeRfxPurp(rfxData.rfx_purp_ccd)',
+				'changeCptTyp(rfxData.comp_typ_ccd)',
+				'changeAutoExtYn(rfxData.auto_ext_use_yn)',
+				'changeTgtPriSetYn(rfxData.trgprc_use_yn)',
+				'changeDomOvrsDivCcd(rfxData.domovrs_div_ccd)'
+			],
+			
+			/**************************************************
+			 * 화면 바인딩 처리
+			 **************************************************/
+			// 구매 유형 변경시
+			changePurcTyp: function(purc_typ_ccd) {
+				var me = this;
+				
+				var elements = this.querySelectorAll('[name=cntr_dt]');
+				for(var i in elements) {
+					elements[i].required = (purc_typ_ccd === "CONSTSVC");
+				}
+				
+				me.applyFormula('showMTColumn', 'showCTColumn', 'gridTitle', 'rdLocatTitle');
+			},
+			//rfx 목적
+			changeRfxPurp: function(rfxPurp) {
+				var me = this;
+				
+				if(rfxPurp === "UPRCCNTR_SGNG" && me.formula('creatable') && me.get('loadCompleted')) {
+					var provider = me.$.itemGridPanel.getDataProvider();
+					
+					if(provider.filterItem({item_cd_crn_typ_ccd: "CDLS"}) != null) {
+						// "역경매결과유형을 단가계약으로 변경 시 무코드 품목은 목록에서 제외됩니다.<br/>계속 진행하시겠습니까?"
+						UT.confirm(me.translate("STD.RFX1096", null, me.translate("계약 유형")),
+								function() {
+									// 무코드 품목 삭제
+									provider.removeItemAtBatch(true, function(index, data) {
+										if(data.item_cd_crn_typ_ccd === "CDLS") {
+											return true;
+										}
+									});
+									me.set("rfxData.has_no_cd_item", "N");
+									me.applyFormula('isRfxPurpUC', 'showMTColumn', 'showCTColumn', 'hasNoCdItem', 'noCdItemAddable');
+								},
+								function() {
+									me.set("rfxData.rfx_purp_ccd", "UPRCCNTR_SGNG");
+									me.applyFormula('isRfxPurpUC', 'showMTColumn', 'showCTColumn', 'hasNoCdItem', 'noCdItemAddable');
+								}
+								, true);
+					} else {
+						me.applyFormula('isRfxPurpUC', 'showMTColumn', 'showCTColumn', 'hasNoCdItem', 'noCdItemAddable');
+					}
+				} else {
+					me.applyFormula('isRfxPurpUC', 'showMTColumn', 'showCTColumn', 'hasNoCdItem', 'noCdItemAddable');
+				}
+			},
+			// 경쟁 유형 변경시
+			changeCptTyp: function(comp_typ_ccd) {
+				var me = this;
+				
+				if(me.get('loadCompleted')) {
+					var provider = me.$.vdGridPanel.getDataProvider();
+					
+					if(comp_typ_ccd === "PRICNTR") { 		//경쟁 유형(C) : 수의
+						if(provider.getItemSize() > 1) {
+							UT.alert("STD.RFX1009");	//"경쟁 방식이 수의계약일 경우 하나의 협력사만 지정이 가능합니다. 협력사수를 확인하여주세요."
+							me.set("rfxData.comp_typ_ccd", "CBID");	//경쟁 유형(N) : 지명
+							return false;
+						}
+					} else if(comp_typ_ccd === "OBID") {	//경쟁 유형(P) : 공개
+						//경쟁 방식이 공개일 경우 협력사 그리드 data clear
+						provider.removeAll();
+						/*
+					 * removeAll(collectionRemoveItems=default:true)
+					 * -> removeItems에 담아두고 getRemoveItems()를 사용하여 DB에서 삭제할 데이터를 반환
+					 */
+					}
+				}
+				
+				me.applyFormula('hiddenVdGridPanel');
+			},
+			// 마감시간 자동연장 여부 변경시
+			changeAutoExtYn: function(auto_ext_use_yn) {
+				var me = this;
+				
+				me.applyFormula('autoExtTimeEditable');
+				
+				if(auto_ext_use_yn === "Y") {
+					me.$.autoExtTime.required = true;
+				} else {
+					me.set("rfxData.auto_ext_tm", null);
+					me.$.autoExtTime.required = false;
+					me.$.autoExtTime.clearInvalid();
+				}
+			},
+			//목표가 설정 변경시
+			changeTgtPriSetYn: function(trgprc_use_yn) {
+				var me = this;
+				
+				if(me.get('loadCompleted')) {
+					me.applyFormula('showTgtPriceColumn');
+					
+					if(trgprc_use_yn !== "Y") {
+						var provider = me.$.itemGridPanel.getDataProvider();
+						provider.setItemAtBatch(true, function(index, data) { //index: rowIndex, data: row데이터
+							return {rfx_trg_uprc: null};
+						});
+						
+					}
+				}
+			},
+			// 운영조직 변경시
+			onChangeOperOrgCd: function(e) {
+				var me = this;
+				if(!e.isTrusted) {
+					var operOrgCds =   me.$.operorgcombobox.get("codes.operOrgCd");
+					var operOrgCd = me.get("rfxData.oorg_cd");
+					if(me.formula('creatable') && UT.isNotEmpty(operOrgCd)){
+						var operOrgCdMap = UT.arrayFilterChange(operOrgCds, {key:  'oorg_cd' , value: operOrgCd });
+						me.set("rfxData.cur_ccd",operOrgCdMap[0]['cur_ccd']);
+					}
+					if(me.formula('creatable') && me.get('loadCompleted')) {
+						var itemProvider = me.$.itemGridPanel.getDataProvider();
+						var vdProvider = me.$.vdGridPanel.getDataProvider();
+						
+						if(UT.isNotEmpty(itemProvider) && UT.isNotEmpty(vdProvider) && (itemProvider.getItemSize() + vdProvider.getItemSize() > 0)) {
+							UT.alert("STD.RFX1033");	//"운영조직 변경시 품목 및 협력사 목록 정보가 초기화 됩니다."
+							
+							itemProvider.removeAll();
+							vdProvider.removeAll();
+							/*
+							 * removeAll(collectionRemoveItems=default:true)
+							 * -> removeItems에 담아두고 getRemoveItems()를 사용하여 DB에서 삭제할 데이터를 반환
+							 */
+						}
+					}
+				}
+			},
+			// 통화 변경시
+			onChangeCur: function(e) {
+				var me = this;
+				
+				if(me.get('loadCompleted') && me.formula("firstRoundEditable")) {
+					var cur_ccd = me.get("rfxData.cur_ccd");
+					
+					var provider = me.$.itemGridPanel.getDataProvider();
+					if(provider) {
+						// 금액 precision 적용 포맷유형
+						
+						provider.setItemAtBatch(true, function(nodeIndex, data) {
+							var price     = data["rfx_req_uprc"] || 0,											// RFX 요청 단가
+								qty       = data["rfx_qty"] || 0,											// 수량
+								precPrice = CCPrecManager.format('price', price, cur_ccd),						// RFX 요청 단가 소수점처리
+								amt       = (new BigNumber(precPrice)).mul(new BigNumber(qty)).toFixed(),	// 금액 = RFX 요청 단가 소수점처리 * 수량
+								precAmt   = CCPrecManager.format('amt', amt, cur_ccd);							// 금액 소수점처리
+							
+							return {
+								"rfx_req_uprc": precPrice,
+								"rfq_amt": precAmt
+							}
+						});
+					}
+				}
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				this.initCommonCodeSettingForPymtDlvyMeth();
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				
+				me.set("loadCompleted", false);
+				
+				me.set("codes.rfxPurpFilterCcd", me.codes.rfxPurpCcd);	//RFx 목적
+				me.set("codes.compTypFilterCcd", me.codes.compTypCcd);	//RFx 경쟁유형
+				
+				var filtered = me.codes.compTypCcd.filter(function(code){
+					if(code.data !== 'PRICNTR') {	//수의계약 제외
+						return true;
+					}
+				});
+				me.set("codes.compTypFilterCcd", filtered);
+				me.set("rfxData.comp_typ_ccd", (filtered.length === 0) ? "" : filtered[0].data);
+				
+				//rfx-config
+				if(!UT.isEmpty(param.is_view_config)) {
+					me.set("isViewConfig", true);
+				} else {
+					me.set("isViewConfig", false);
+				}
+				
+				if(UT.isNotEmpty(param.rfx_uuid)) {
+					// key 존재 시 조회
+					me.findAuctionDetail(param.rfx_uuid);
+				} else if(!UT.isEmpty(param.is_config) && param.is_config) {
+					var rfxInfo = UT.copy(param.rfxInfo);
+					
+					//RFx 목적
+					var newCodes = me.codes.rfxPurpCcd.filter(function(code) {
+						if(code.data !== 'UPRCCNTR_PURC') {
+							return true;
+						}
+					});
+					me.set("codes.rfxPurpFilterCcd", newCodes);
+					
+					if(!UT.isEmpty(rfxInfo.oorg_cd)) {
+						me.set("rfxData.oorg_cd", rfxInfo.oorg_cd);
+					}
+					me.set("rfxData.rfx_typ_ccd", rfxInfo.rfx_typ_ccd);
+					me.set("rfxData.rfx_tit", rfxInfo.rfx_tit);
+					me.set("rfxData.purc_typ_ccd", rfxInfo.purc_typ_ccd);
+					me.set("rfxData.rfx_purp_ccd", rfxInfo.rfx_purp_ccd);
+					me.set("rfxData.comp_typ_ccd", rfxInfo.comp_typ_ccd);
+					me.set("rfxData.rauc_typ_ccd", rfxInfo.rauc_typ_ccd);
+					me.set("rfxData.item_slctn_typ_ccd", rfxInfo.item_slctn_typ_ccd);
+					me.set("rfxData.domovrs_div_ccd", rfxInfo.domovrs_div_ccd);
+					me.set("rfxData.cur_ccd", rfxInfo.cur_ccd);
+					me.set("rfxData.pymtmeth_ccd", rfxInfo.pymtmeth_ccd);
+					me.set("rfxData.dlvymeth_ccd", rfxInfo.dlvymeth_ccd);
+					
+					if(UT.isNotEmpty(param.pr_item_list) && UT.isArray(param.pr_item_list)) {
+						me.set("rfxData.auto_ext_use_yn", rfxInfo.auto_ext_use_yn);
+						me.set("rfxData.has_no_cd_item", rfxInfo.has_no_cd_item);
+						me.set("rfxData.has_pr_item_yn", rfxInfo.has_pr_item_yn);
+						me.set("rfxData.rauc_subm_min_unit_amt", rfxInfo.rauc_subm_min_unit_amt);
+						me.set("rfxData.rfx_rnd", rfxInfo.rfx_rnd);
+						me.set("rfxData.trgprc_use_yn", rfxInfo.trgprc_use_yn);
+
+						var auctionItems = UT.copy(param.pr_item_list);
+						me.$.itemGridPanel.getDataProvider().addItems(auctionItems);
+					}else if(UT.isNotEmpty(param.upcr_item_list) && UT.isArray(param.upcr_item_list)) {
+						me.set("rfxData.auto_ext_use_yn", rfxInfo.auto_ext_use_yn);
+						me.set("rfxData.has_no_cd_item", rfxInfo.has_no_cd_item);
+						me.set("rfxData.has_upcr_item_yn", rfxInfo.has_upcr_item_yn);
+						me.set("rfxData.rauc_subm_min_unit_amt", rfxInfo.rauc_subm_min_unit_amt);
+						me.set("rfxData.rfx_rnd", rfxInfo.rfx_rnd);
+						me.set("rfxData.trgprc_use_yn", rfxInfo.trgprc_use_yn);
+
+						var auctionItems = UT.copy(param.upcr_item_list);
+						me.$.itemGridPanel.getDataProvider().addItems(auctionItems);
+					} else {
+						me.set("rfxData.is_new", true);
+						me.set("rfxData.has_pr_item_yn", "N");
+						me.set("rfxData.has_upcr_item_yn", "N");
+					}
+					
+					me.resetPeriod();
+					
+					me.applyFormula();
+					me.set('loadCompleted', true);
+				} else if(UT.isNotEmpty(param.rfi_uuid)) {
+					me.findDefaultDataByRfiItems(param);
+				} else if(UT.isNotEmpty(param.rfx_req_rcpt_uuids) && UT.isArray(param.rfx_req_rcpt_uuids)) {
+					me.findDefaultDataByReqItems(param.rfx_req_rcpt_uuids);
+				} else {
+					//RFx 목적
+					var newCodes = me.codes.rfxPurpCcd.filter(function(code) {
+						if(code.data !== 'UPRCCNTR_PURC') {
+							return true;
+						}
+					});
+					me.set("codes.rfxPurpFilterCcd", newCodes);
+					
+					me.set("rfxData.is_new", true);
+					me.set("rfxData.rfx_purp_ccd", (newCodes.length === 0) ? "" : newCodes[0].data);
+					me.set("rfxData.has_pr_item_yn", "N");
+					me.set("rfxData.has_upcr_item_yn", "N");
+					
+					me.resetPeriod();
+					
+					me.applyFormula();
+					me.set('loadCompleted', true);
+				}
+			},
+			resetPeriod: function() {
+				var me = this;
+				
+				var nowDate = new Date();
+				
+				var today = UT.copy(nowDate);
+				today.setHours(0, 0, 0, 0);
+				
+				var startDt = UT.copy(today);
+				var closeDt = UT.copy(today);
+				
+				var hour = nowDate.getHours();
+				if(hour == 23) {
+					startDt.setDate(today.getDate() + 1);
+					hour = 0;
+				} else {
+					hour++;
+				}
+				closeDt.setDate(startDt.getDate() + 7);
+				
+				me.set("rfxData.rfx_st_dttm", startDt); //역경매 시작일
+				me.set("rfxData.rfx_st_dttm_hour", hour);
+				me.set("rfxData.rfx_st_dttm_min", 0);
+				me.set("rfxData.rfx_clsg_dttm", closeDt); //역경매 마감일 : 일주일 뒤 오후 6시로 설정(SNINEQA-274)
+				me.set("rfxData.rfx_clsg_dttm_hour", 18);
+				me.set("rfxData.rfx_clsg_dttm_min", 0);
+			},
+			
+			/**************************************************
+			 * validation 설정
+			 **************************************************/
+			// 1. 역경매 기간 validator설정
+			rfxStartDtValidator: function(value) {
+				var me = this;
+				var rfxData = me.get("rfxData");
+				
+				var rfxStartTime = UT.toTime(rfxData.rfx_st_dttm);
+				var nowDate = new Date();
+				
+				if(rfxStartTime === null || rfxStartTime <= nowDate.getTime()) {
+					return me.translate("STD.E1013", null, me.translate("역경매 시작 일시"), me.translate("현재 일시"));
+				}
+				return true;
+			},
+			rfxCloseDtValidator: function(value) {
+				var me = this;
+				var rfxData = me.get("rfxData");
+				
+				var rfxStartTime = UT.toTime(rfxData.rfx_st_dttm);
+				var rfxCloseTime = UT.toTime(rfxData.rfx_clsg_dttm);
+				
+				if(rfxCloseTime === null || rfxStartTime >= rfxCloseTime) {
+					return me.translate("STD.E1013", null, me.translate("역경매 종료 일시"), me.translate("역경매 시작 일시"));
+				}
+				return true;
+			},
+			// 2. 자동 연장 여부 validator
+			autoExtTimeValidator: function(value) {
+				var me = this;
+				
+				if(UT.isEmpty(value) || isNaN(value) || (UT.isNumber(value) && value < 1)) {
+					return me.translate("STD.E0000");
+				}
+				return true;
+			},
+			// 3. 그리드 데이터 length 확인
+			checkRows: function(saveType) {
+				var me = this;
+				
+				// PR 없이 생성한 경우, 품목 중복체크
+				if((!me.formula("hasPrItem")  && !me.formula("hasUpcrItem")) && me.hasDupItems()) {
+					// 중복된 '{0}'(이)가 존재합니다.
+					var msg = me.translate("STD.E1042", null, me.translate("품목 정보"))
+							+ "<br/>[" + me.translate("항번") + "] " + me.dupLnos.toString();
+					UT.alert(msg, null, true);
+					return false;
+				}
+				
+				if(saveType !== "tempSave") {
+					var itemProvider = me.$.itemGridPanel.getDataProvider();
+					if(itemProvider.getItemSize() < 1) {
+						UT.alert("STD.PR1002");	//"품목 정보가 없습니다."
+						return false;
+					}
+					
+					var compTypCcd = me.get("rfxData.comp_typ_ccd");
+					var vdProvider = me.$.vdGridPanel.getDataProvider();
+					if(compTypCcd === "PRICNTR" && vdProvider.getItemSize() !== 1) {			//경쟁 유형(C) : 수의
+						UT.alert("STD.RFX1009");	//"경쟁 방식이 수의계약일 경우 하나의 협력사만 지정이 가능합니다. 협력사수를 확인하여주세요."
+						return false;
+					} else if(compTypCcd === "CBID" && vdProvider.getItemSize() < 1) {	//경쟁 유형(N) : 지명
+						UT.alert("STD.RFX1018");	//"업체를 한개이상 선택하세요."
+						return false;
+					}
+				}
+				return true;
+			},
+			// 품목 중복체크
+			hasDupItems: function() {
+				var me           = this,
+					itemProvider = me.$.itemGridPanel.getDataProvider(),
+					items        = itemProvider.getItems(),
+					len          = items.length;
+				if(len > 1) {
+					// 중복체크 대상 컬럼
+					var cols = ["item_nm", "item_spec", "uom_ccd"];
+					if(me.formula("showMTColumn")) {
+						cols.push("req_dlvy_dt", "dlvy_plc");
+					} else if(me.formula("showCTColumn")) {
+						cols.push("const_st_dt", "const_exp_dt", "dlvy_plc");
+					}
+					// 두 row 데이터 중복체크
+					var isEquals = function(row1, row2, cols) {
+						var eq = true;
+						for(var i = 0, colsLen = cols.length; i < colsLen; i++) {
+							var col = cols[i];
+							if(row1[col] !== row2[col]) {
+								eq = false;
+								break;
+							}
+						}
+						return eq;
+					};
+					// 중복체크
+					var hasDup = false, dupLnos = [];
+					for(var i = 0; i < len - 1; i++) {
+						var item = items[i];
+						for(var j = i + 1; j < len; j++) {
+							var compItem = items[j];
+							if(isEquals(item, compItem, cols)) {
+								hasDup = true;
+								if(dupLnos.indexOf(item["rfx_lno"]) === -1) {
+									dupLnos.push(item["rfx_lno"]);
+								}
+								dupLnos.push(compItem["rfx_lno"]);
+							}
+						}
+						if(hasDup) {
+							break;
+						}	// item 기준으로 중복되는 compItem들을 dupLnos에 담음 (item도 포함)
+					}
+					me.dupLnos = dupLnos;
+					return hasDup;
+				}
+				return false;
+			},
+			// 4. grid validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me    = this,
+					value = data[dataField];
+				
+				// 요청 납품 일자/공사 시작 일자/공사 종료 일자
+				if(["req_dlvy_dt", "const_st_dt", "const_exp_dt"].indexOf(dataField) > -1) {
+					var geDate = new Date();
+					geDate.setHours(0, 0, 0, 0);
+					
+					var geDateCompare = function(compare, value) {
+						if(UT.isEmpty(value)) {
+							return true;
+						}
+						var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+						var compareValue = UT.toTime(compare);
+						
+						if(value === null || compareValue === null) {
+							return me.translate("STD.E0000");
+						}
+						if(value < compareValue) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return me.translate("STD.E1013", null, me.translate(headerText), UT.formatDate(compareValue));
+						}
+						return true;
+					};
+					
+					if(dataField === "const_exp_dt") {
+						geDate = UT.toDate(data["const_st_dt"]);
+					}
+					return geDateCompare(geDate, value);
+					
+					// 수량/RFX 요청 단가/RFX 목표 단가
+				} else if(["rfx_qty", "rfx_req_uprc", "rfx_trg_uprc"].indexOf(dataField) > -1) {
+					// 목표단가는 목표가 설정시에만 입력필수, 수량/요청단가는 항상 입력필수
+					var required = (dataField === "rfx_trg_uprc") ? me.formula("showTgtPriceColumn") : true;
+					
+					// 필수일 경우만 0과 비교 (필수 체크)
+					if(required && (new BigNumber(value || 0)).isZero()) {
+						return me.translate("STD.E1008", null, me.translate(headerText), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					
+					// 값이 있을 때만 validate (항상 필수가 아니므로)
+					if(UT.isNotEmpty(value)) {
+						var formatterName, dtlCd;
+						if(dataField === "rfx_qty") {
+							// UOM 존재 시 단위별 수량 포맷유형, UOM 미존재 시 기본 수량 포맷유형
+							formatterName = "qty";
+							dtlCd = data["uom_ccd"];
+						} else {
+							formatterName = "amt";
+							dtlCd = me.get("rfxData.cur_ccd");
+						}
+						if(!CCPrecManager.validate(formatterName, value, dtlCd)) {
+							return me.translate("STD.E1021", null, CCPrecManager.validateInfo(formatterName).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+						}
+					}
+				} else if(dataField === "item_spec") {
+					// 구매품목유형: 미등록(무코드) 인 경우 품목 규격 필수 입력
+					if(data["item_cd_crn_typ_ccd"] === "CDLS" && UT.isEmpty(value)) {
+						// '{0}'은(는) 필수 입력 항목입니다.
+						return me.translate("STD.E1001", null, me.translate(headerText));
+					}
+				}
+				return true;
+			},
+			isValid: function() {
+				var me = this;
+				
+				var rfxData = UT.convertDayHourMinToDt(me.rfxData);
+				me.set("rfxData", rfxData);
+				
+				//일반 정보 체크
+				if(!me.validate('auctionInfo')) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				//자동 연장 여부 시
+				if(me.rfxData.auto_ext_use_yn === "Y") {
+					//자동연장 체크
+					if(!me.validate('autoExtTime')) {
+						UT.alert("STD.E0000");
+						return false;
+					}
+				}
+				
+				//역경매기간 체크
+				if(!me.validate('rfxStartDt') || !me.validate('rfxCloseDt')) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				//그리드 validator 함수 호출
+				if(!me.$.itemGridPanel.validate()) {
+					UT.alert("STD.N1102");
+					return false;
+				}
+				if(!me.$.vdGridPanel.validate()) {
+					UT.alert("STD.RFX1083");
+					return false;
+				}
+				
+				return true;
+			},
+			
+			/**************************************************
+			 * 버튼 이벤트 및 상세 조회
+			 **************************************************/
+			// 역경매 상세 조회
+			findAuctionDetail: function(id) {
+				var me = this;
+				
+				me.$.findAuction.body = {rfx_uuid: id};
+				
+				UT.request(me.$.findAuction);
+			},
+			// 역경매 상세 조회 후 handler
+			completeFindAuction: function(el, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				// 조회된 데이터 셋팅
+				var rfxData = UT.convertDtToDayHourMin(lastResponse.rfxData);	//date convert
+				me.set("rfxData", rfxData);
+				
+				me.$.itemGridPanel.setDataProvider(lastResponse.auctionItems);	//품목 정보 그리드 셋팅
+				me.$.vdGridPanel.setDataProvider(lastResponse.auctionVendors);	//협력사 정보 그리드 셋팅
+				
+				// 데이터 셋팅 후 처리
+				me.applyFormula();
+				me.set('loadCompleted', true);
+			},
+			
+			findDefaultDataByReqItems: function(rfxReqRcptUuids) {
+				var me = this;
+				
+				me.$.findRfxDefaultDataByReqItemIds.body = {rfx_req_rcpt_uuids: rfxReqRcptUuids};
+				UT.request(me.$.findRfxDefaultDataByReqItemIds, function(e, res) {
+					var result = res.response;
+					result.domovrs_div_ccd = me.get("rfxData.domovrs_div_ccd");
+					result.comp_typ_ccd = me.get("rfxData.comp_typ_ccd");
+					result.item_slctn_typ_ccd = me.get("rfxData.item_slctn_typ_ccd");
+					result.rauc_typ_ccd = me.get("rfxData.rauc_typ_ccd");
+					
+					me.set("rfxData", result);
+					
+					me.resetPeriod();
+					
+					var auctionItems = result.auctionItems;
+					var rfxTitle = auctionItems[0].item_nm;
+					if(auctionItems.length > 1) {
+						//{0} 외 {1}건
+						rfxTitle = me.translate("STD.N3100", null, rfxTitle, auctionItems.length - 1);
+					}
+					me.set("rfxData.rfx_tit", rfxTitle);
+					
+					me.$.itemGridPanel.getDataProvider().addItems(auctionItems);
+					
+					me.applyFormula();
+					me.set('loadCompleted', true);
+				});
+			},
+			// RFI로 부터 넘어온 정보 조회
+			findDefaultDataByRfiItems: function(param) {
+				var me = this;
+				
+				me.$.findRfxDefaultDataByRfiId.body = {
+					rfi_uuid: param.rfi_uuid,
+					rfx_req_rcpt_uuids: param.rfx_req_rcpt_uuids
+				};
+				UT.request(me.$.findRfxDefaultDataByRfiId, function(e, res) {
+					var result = res.response;
+					result.domovrs_div_ccd = me.get("rfxData.domovrs_div_ccd");
+					result.comp_typ_ccd = me.get("rfxData.comp_typ_ccd");
+					result.item_slctn_typ_ccd = me.get("rfxData.item_slctn_typ_ccd");
+					result.rauc_typ_ccd = me.get("rfxData.rauc_typ_ccd");
+					
+					me.set("rfxData", result);
+					
+					me.resetPeriod();
+					
+					var rfiData = result.rfiData;
+					var auctionItems = result.auctionItems;
+					var rfiVendors = result.rfiVendors;
+					
+					var rfxTitle = rfiData.rfi_tit;
+					if(auctionItems.length > 1) {
+						//{0} 외 {1}건
+						rfxTitle = me.translate("STD.N3100", null, rfxTitle, auctionItems.length - 1);
+					}
+					me.set("rfxData.rfx_tit", rfxTitle);
+					me.set("rfxData.rfi_uuid", rfiData.rfi_uuid);
+					
+					me.$.itemGridPanel.getDataProvider().addItems(auctionItems);
+					me.$.vdGridPanel.getDataProvider().addItems(rfiVendors);
+					
+					me.applyFormula();
+					me.set('loadCompleted', true);
+				});
+			},
+			// 저장 버튼 클릭시
+			onTempSave: function() {
+				var me = this;
+				
+				if(!me.isValid()) {
+					return;
+				}
+				if(!me.checkRows("tempSave")) {
+					return;
+				}
+				me.onSave('tempSave');
+			},
+			// 협력사 전송 버튼 클릭시
+			onDirectAuctionQta: function() {
+				var me = this;
+				
+				if(!me.isValid()) {
+					return;
+				}
+				if(!me.checkRows("directAuctionQta")) {
+					return;
+				}
+				
+				UT.confirm("STD.N1110", function() {	//"협력사에게 발신하시겠습니까?"
+					me.onSave('directAuctionQta');
+				});
+			},
+			// 협력사 전송 완료시 호출되는 handler
+			completeDirectAuctionQta: function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					UT.alert("STD.RFX1050");									//"협력사로 발신이 완료되었습니다."
+					me.findAuctionDetail(lastResponse.resultData.rfx_uuid);	//상세조회
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 결재 요청 버튼 클릭시
+			onReqApproval: function() {
+				var me = this;
+				
+				if(!me.isValid()) {
+					return;
+				}
+				if(!me.checkRows("approval")) {
+					return;
+				}
+				
+				UT.confirm("STD.PR1007", function() {	//"결재요청 하시겠습니까?"
+					me.onSave('approval');
+				});
+			},
+			// 삭제 버튼 클릭시
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {	//"삭제 하시겠습니까?"
+					UT.request(me.$.deleteAuction);
+				});
+			},
+			// 삭제 후 Handler
+			completeDeleteAuction: function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				if(lastResponse.resultStatus === "S") {
+					UT.alert("STD.N2500");	//"삭제하였습니다."
+					me.onClose();
+					
+				} else if(lastResponse.resultStatus === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findAuctionDetail(me.get("rfxData.rfx_uuid"));
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 저장
+			onSave: function(saveType) {
+				var me = this;
+				
+				me.set('rfxData.saveType', saveType);
+				me.set("rfxData.auto_ext_poss_wd", 0);
+				
+				Promise.all([me.$.upload_in.upload(), me.$.upload_out.upload()]).then(function() {
+					var rfxData = me.rfxData;
+					var itemProvider = me.$.itemGridPanel.getDataProvider();
+					var vdProvider = me.$.vdGridPanel.getDataProvider();
+					
+					me.$.saveAuction.body = {
+						rfxData: rfxData,
+						insertAuctionItems: itemProvider.getNewItems(),
+						updateAuctionItems: itemProvider.getUpdateItems(),
+						deleteAuctionItems: itemProvider.getRemoveItems(),
+						insertAuctionVendors: vdProvider.getNewItems(),
+						updateAuctionVendors: vdProvider.getUpdateItems(),
+						deleteAuctionVendors: vdProvider.getRemoveItems(),
+						prItemIds: UT.getArrayValuesByKey(itemProvider.getItems(), "pr_item_uuid"),
+						upcrItemIds: UT.getArrayValuesByKey(itemProvider.getItems(), "upcr_item_uuid")
+					};
+					UT.request(me.$.saveAuction);
+				});
+			},
+			// 저장 완료후 handler
+			completeSaveAuction: function(el, res) {
+				var me = this;
+				var lastResponse = res.response,
+					status       = lastResponse.resultStatus;
+				
+				if(status === "S") {
+					var rfxId = lastResponse.resultData.rfx_uuid;
+					
+					var saveType = me.rfxData.saveType;
+					if(saveType === 'tempSave') {				// 1. 저장
+						UT.completeAlert();						//"저장하였습니다."
+						me.findAuctionDetail(rfxId);				//상세 조회
+					} else if(saveType === 'approval') {		// 2. 결재상신
+						me.findAuctionDetail(rfxId);				//상세 조회
+						me.showPopupApproval(rfxId);				//결재요청 팝업 호출
+					} else if(saveType == 'directAuctionQta') {	// 3. 협력사 전송
+						me.directAuctionQta(rfxId);					//즉시 협력사 전송 처리
+					}
+				} else if(status === "PR_ITEM_STS_ERR") {
+					var resultData     = lastResponse.resultData,
+						invalidPrItems = resultData.invalid_datas || [],
+						notExistIds    = resultData.not_exist_ids || [];
+					
+					// STD.E9400 : "유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다."
+					var msg = me.translate("STD.E9400");
+					
+					invalidPrItems.forEach(function(invalidPrItem) {
+						// [구매요청 번호 : {0}, 항번 : {1}] 은(는) '{2}' 상태입니다.
+						msg += "<br/>" + me.translate("STD.PR1035", null, invalidPrItem.pr_no, invalidPrItem.pr_lno, invalidPrItem.pr_prog_sts_nm);
+					});
+					
+					if(notExistIds.length > 0) {
+						var checkedRows = me.$.itemGridPanel.getDataProvider().selectionCheckedItems();
+						notExistIds.forEach(function(notExistId) {
+							var notExistItem = null;
+							checkedRows.forEach(function(row) {
+								if(row.pr_item_uuid === notExistId) {
+									notExistItem = row;
+								}
+							});
+							if(notExistItem) {
+								// [구매요청 번호 : {0}, 항번 : {1}] 은(는) 삭제되었거나 존재하지 않는 데이터입니다.
+								msg += "<br/>" + me.translate("STD.PR1037", null, notExistItem.pr_no, notExistItem.pr_lno);
+							}
+						});
+					}
+					UT.alert(msg, null, true)
+				} else if(status === "UPCR_ITEM_STS_ERR") {
+					var resultData     = lastResponse.resultData,
+						invalidPrItems = resultData.invalid_datas || [],
+						notExistIds    = resultData.not_exist_ids || [];
+
+					// STD.E9400 : "유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다."
+					var msg = me.translate("STD.E9400");
+
+					invalidPrItems.forEach(function(invalidPrItem) {
+						// [단가계약요청번호 : {0}, 항번 : {1}] 은(는) '{2}' 상태입니다.
+						msg += "<br/>" + me.translate("STD.UPCR0002", null, invalidPrItem.upcr_no, invalidPrItem.upcr_lno, invalidPrItem.upcr_prog_sts_nm);
+					});
+
+					if(notExistIds.length > 0) {
+						var checkedRows = me.$.itemGridPanel.getDataProvider().selectionCheckedItems();
+						notExistIds.forEach(function(notExistId) {
+							var notExistItem = null;
+							checkedRows.forEach(function(row) {
+								if(row.upcr_item_uuid === notExistId) {
+									notExistItem = row;
+								}
+							});
+							if(notExistItem) {
+								// [단가계약요청번호 : {0}, 항번 : {1}] 은(는) 삭제되었거나 존재하지 않는 데이터입니다.
+								msg += "<br/>" + me.translate("STD.UPCR0001", null, notExistItem.upcr_no, notExistItem.upcr_lno);
+							}
+						});
+					}
+					UT.alert(msg, null, true);
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					
+					if(UT.isNotEmpty(me.get("rfxData.rfx_uuid"))) {
+						me.findAuctionDetail(me.get("rfxData.rfx_uuid"));
+					}
+				} else if(status === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 결재 작성 팝업 호출 (저장 후 호출)
+			showPopupApproval: function(id) {
+				var me = this;
+				
+				// 결재팝업 호출
+				UT.popupApproval(me, {
+							task_uuid: id, apvl_typ_ccd: me.apvlTypCcd, apvl_tit: me.get("rfxData.rfx_tit"),
+							appData: me.get("rfxData"),
+							appAmt: me.get("rfxData.rfq_amt")
+						},
+						// savedCallback (결재 팝업에서 이벤트 처리후 실행되는 callback 함수 내용을 정의한다.)
+						function(sts) {
+							if(sts === "P") {	// 결재상신 시
+								me.onClose();
+							} else {			// 결재 저장 시
+								me.findAuctionDetail(id);
+							}
+						});
+			},
+			// 협력사 전송 (저장 후 호출)
+			directAuctionQta: function(rfxId) {
+				var me = this;
+				
+				if(UT.isEmpty(me.get("rfxData.rfx_uuid"))) {
+					me.set("rfxData.rfx_uuid", rfxId);
+				}
+				
+				me.$.directAuctionQta.body = {
+					rfx_uuid: rfxId
+				};
+				
+				UT.request(me.$.directAuctionQta);
+			},
+			// 역경매 결과 상세 보기
+			onShowResultDetail: function() {
+				var me = this;
+				
+				me.fire("show-result-detail", {rfx_uuid: me.get("rfxData.rfx_uuid")});
+			},
+			// 닫기 버튼 클릭시
+			onClose: function() {
+				var me = this;
+				
+				me.clearData();
+				me.fire('close');
+			},
+			// 데이터 초기화
+			clearData: function() {
+				var me = this;
+				
+				me.set('loadCompleted', false);
+				
+				//properties 초기화 grid provider 초기화
+				me.reset();
+			},
+			
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick: function(event) {
+				var me = this;
+				var data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "img_purc_grp" && me.formula('editable')) {			//구매그룹일 경우
+					me.rowIndex = item.rowIndex;
+					me.showJobPopup();
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					me.showItemContractHistory(data["item_cd"]);
+				} else if(item.dataField === "pr_no") {
+					me.fire('show-pr-detail', {pr_uuid: data.pr_uuid, pageType: "VIEW"});
+				} else if(item.dataField === "upcr_no") {
+					me.fire('show-upcr-detail', {upcr_uuid: data.upcr_uuid, pageType: "VIEW"});
+				} else if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					//현재 row 인덱스를 담아둔다.
+					me.rowIndex = item.rowIndex;
+					
+					me.showDetailSpec(data, provider);
+				}
+			},
+			onVdItemClick: function(event) {
+				var me = this;
+				
+				var data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "img_multrnd_xcept_rsn") {
+					me.set("selectedVdItemIndexes", [item.rowIndex]);
+					
+					if(data["multrnd_subj_xcept_yn"] === "Y") {
+						me.$.dialog_multrnd_xcept_rsn_text.value = data.multrnd_xcept_rsn;
+						me.$.dialog_multrnd_xcept_rsn.show();
+					}
+				}
+			},
+			onConvertSbmtYn: function(rowIndex, dataField, data) {
+				// 이전차수 제출여부
+				if(dataField === "sbmt_yn") {
+					return UT.isEmpty(data["rfx_bid_uuid"]) ? "N" : "Y";
+				}
+			},
+			// 그리드 item-style-function
+			onItemStyleFn: function(data, item) {
+				var me       = this,
+					styleObj = {};
+				
+				if(item.dataField === "item_spec" && me.onItemEditableFn(data, item)) {
+					styleObj = {
+						iconLocation: "leftSide",
+						iconOffset: 0,
+						iconPadding: 0,
+						paddingLeft: 0,
+						paddingTop: 0,
+						iconUrl: "bower_components/sc-grid/resources/img/icon_required.png"
+					};
+				}
+				return styleObj;
+			},
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				// 제외 여부 : "Y" 인 협력사만 아이콘 보이도록 함
+				if(item.dataField === "img_multrnd_xcept_rsn" && data["multrnd_subj_xcept_yn"] === "Y") {
+					return "link";
+					// 품목 규격 상세 : 무코드 품목인 경우만 아이콘 보이도록 함
+				} else if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					return "link";
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			onVdGridImageChangeFn: function(data, item) {
+				// 제외 여부 : "Y" 인 협력사만 아이콘 보이도록 함
+				if(item.dataField === "img_multrnd_xcept_rsn" && data["multrnd_subj_xcept_yn"] === "Y") {
+					return "link";
+				}
+				return null;
+			},
+			// grid item edit end 이벤트
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+				
+				me.rowIndex = item.rowIndex;
+				
+				// 구매그룹
+				if(item.dataField === 'purc_grp_nm') {
+					provider.setItemAt(item.rowIndex, {purc_grp_cd: ''});
+					
+					if(UT.isNotEmpty(newValue)) {
+						me.showJobPopup({'purc_grp_nm': newValue}, true);
+					}
+					
+					// UOM/수량/RFX 요청 단가
+				} else if(["uom_ccd", "rfx_qty", "rfx_req_uprc"].indexOf(item.dataField) > -1) {
+					var cur_ccd = me.get("rfxData.cur_ccd"),
+						unit    = data["uom_ccd"],
+						qty     = data["rfx_qty"] || 0,
+						price   = data["rfx_req_uprc"] || 0;
+					
+					// UOM/수량 변경 시
+					if(item.dataField === "uom_ccd") {
+						// 수량 소수점처리
+						qty = CCPrecManager.format("qty", qty, unit);
+					}
+					
+					// 금액
+					var amt = CCPrecManager.format("amt", (new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), cur_ccd);
+					
+					provider.setItemAt(item.rowIndex, {
+						"rfx_qty": qty,
+						"rfq_amt": amt
+					});
+				}
+			},
+			// grid column item-editable-function
+			onItemEditableFn: function(data, item) {
+				if(item.dataField === "req_dlvy_dt" || item.dataField === "const_st_dt" || item.dataField === "const_exp_dt") {
+					return this.formula('editable');
+					
+				} else if(item.dataField === "rfx_qty") {
+					return this.formula('firstRoundEditable') && UT.isEmpty(data.pr_item_uuid);
+					
+				} else if(["item_nm", "item_spec"].indexOf(item.dataField) > -1) {
+					return this.formula("noCdItemAddable") && (data["item_cd_crn_typ_ccd"] === "CDLS");
+					
+				} else {
+					return this.formula('firstRoundEditable');
+				}
+			},
+			// grid column editor-regex-function
+			onRegexFn: function(data, item) {
+				var me        = this,
+					dataField = item.dataField;
+				
+				// 수량
+				if(dataField === "rfx_qty") {
+					return CCPrecManager.regex("qty", data["uom_ccd"]);
+					
+					// RFX 요청 단가/RFX 목표 단가
+				} else if(["rfx_req_uprc", "rfx_trg_uprc"].indexOf(dataField) > -1) {
+					return CCPrecManager.regex("price", me.get("rfxData.cur_ccd"));
+				}
+			},
+			// 금액 합계
+			onAmtAggregateFn: function(dataField, datas) {
+				var me = this;
+				var result = new BigNumber('0');
+				
+				for(var i = 0; i < datas.length; ++i) {
+					result = result.plus(new BigNumber(datas[i][dataField] || 0));
+				}
+				
+				var value   = result.toFixed(),
+					cur_ccd = me.get("rfxData.cur_ccd");
+				
+				me.set("rfxData.rfq_amt", CCPrecManager.format("amt", value, cur_ccd));
+				return value;
+			},
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber,
+			// 구매그룹 팝업 호출
+			showJobPopup: function(param, autoComplete) {
+				var me = this;
+				
+				var defaultParam = {
+					co_cd: me.codes.param.co_cd,
+					purc_grp_typ_ccd: me.codes.param.purc_grp_typ_ccd
+				};
+				if(UT.isObject(param)) {
+					for(var keys in param) {
+						defaultParam[keys] = param[keys];
+					}
+				}
+				
+				var jobPopup = me.createJobPopup();
+				jobPopup.show();
+				jobPopup.getWindowContent().load({
+					singleSelect: true,
+					defaultParam: defaultParam,
+					autoComplete: autoComplete
+				});
+			},
+			// 구매그룹 팝업 생성
+			createJobPopup: function() {
+				var me = this;
+				
+				return UT.popup("ep-job-list", me, 780, 650, {
+					'selected-items': function(popup, e) {
+						var result   = e.detail,
+							selected = result[0];
+						
+						var provider = me.$.itemGridPanel.getDataProvider();
+						provider.setItemAt(me.rowIndex, {
+							'purc_grp_cd': selected.purc_grp_cd,
+							'purc_grp_nm': selected.disp_purc_grp_nm
+						});
+						me.$.itemGridPanel.applyFocus();
+						popup.close();
+					}
+				}, {titleText: me.translate("구매 그룹 검색")});
+			},
+			getNewItemLno: function(provider) {
+				var me = this;
+				
+				var maxNo = 10;
+				if(provider.getItemSize() > 0) {
+					var allRows = provider.getItems();
+					
+					var maxRow = allRows.reduce(function(a, b) {
+						if(!a.rfx_lno) {
+							a.rfx_lno = 0;
+						}
+						if(!b.rfx_lno) {
+							b.rfx_lno = 0;
+						}
+						return (a.rfx_lno > b.rfx_lno) ? a : b;
+					});
+					
+					maxNo = parseInt(maxRow.rfx_lno, 10) + 10;
+				}
+				return maxNo;
+			},
+			// 무코드품목추가 버튼 클릭 시
+			onAddNoCdItem: function() {
+				var me = this;
+				
+				var rfxData = me.get("rfxData");
+				var provider = me.$.itemGridPanel.getDataProvider();
+				var itemLno = me.getNewItemLno(provider);
+				var defaultUnit = me.codes.uomCcd.length > 0 ? me.codes.uomCcd[0].data : null;
+				
+				var addRow = {
+					rfx_lno: itemLno,
+					oorg_cd: rfxData.oorg_cd,	//운영조직
+					purc_typ_ccd: rfxData.purc_typ_ccd,		//구매 유형
+					rfx_purp_ccd: rfxData.rfx_purp_ccd,
+					cur_ccd: rfxData.cur_ccd,
+					uom_ccd: defaultUnit,
+					rfx_req_uprc: 0,
+					rfq_amt: 0,
+					rfx_qty: 1,
+					auto_po_yn: "N",
+					slctn_qty: 0,
+					item_cd_crn_typ_ccd: 'CDLS'							//구매품목유형: 미등록
+				};
+				provider.addItem(addRow);
+				me.set("rfxData.has_no_cd_item", "Y");
+				me.applyFormula("hasNoCdItem");
+			},
+			// 품목 추가 버튼 클릭시
+			onShowPrCateItemPopup: function() {
+				var me = this;
+				
+				if(!me.rfxData.oorg_cd) {
+					UT.alert("STD.N3400"); //"운영조직을 선택하세요."
+					return false;
+				}
+				
+				var param = {
+					oorg_cd: me.rfxData.oorg_cd,
+					purc_grp_typ_ccd: me.codes.param.purc_grp_typ_ccd
+				};
+				
+				UT.popupItemSearch(me, param, function(selectedItems) {
+					// 품목정보 리스트 추가
+					me.onAddItemList(selectedItems);
+				});
+			},
+			// 품목정보 리스트 추가
+			onAddItemList: function(selectedList) {
+				var me = this;
+				
+				if(selectedList.length > 0) {
+					var rfxData = me.rfxData;
+					var provider = me.$.itemGridPanel.getDataProvider();
+					var itemLno = me.getNewItemLno(provider);
+					
+					for(var i = 0; i < selectedList.length; i++) {
+						var selected = selectedList[i];
+						
+						var addRow = {
+							rfx_lno: itemLno,
+							oorg_cd: rfxData.oorg_cd,	//운영조직
+							purc_typ_ccd: rfxData.purc_typ_ccd,		//구매 유형
+							disp_item_cd: selected.item_cd,
+							item_cd: selected.item_cd,			//품목 코드
+							item_nm: selected.item_nm,			//품목 코드
+							item_spec: selected.item_spec,				//품목 규격
+							uom_ccd: selected.bas_uom_ccd,		//UOM (기본단위)
+							sg_cd: selected.sg_cd,			    //소싱그룹코드
+							purc_grp_cd: selected.purc_grp_cd,		//구매그룹코드
+							purc_grp_nm: selected.purc_grp_nm,		//구매그룹명
+							rfx_purp_ccd: rfxData.rfx_purp_ccd,
+							cur_ccd: selected.cur_ccd || rfxData.cur_ccd,
+							rfx_req_uprc: selected.rfx_item_subm_uprc || 0,
+							rfq_amt: selected.rfx_item_subm_uprc || 0,
+							rfx_qty: 1,
+							auto_po_yn: selected.auto_po_yn,
+							slctn_qty: 0,
+							item_cd_crn_typ_ccd: 'ITEM_CD'							//구매품목유형: 등록
+						};
+						provider.addItem(addRow);
+						itemLno += 10;
+					}
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			// 일괄 적용 버튼 클릭시
+			onAllApplyBtn: function() {
+				var me = this;
+				
+				var provider = me.$.itemGridPanel.getDataProvider();
+				var selectedIndexes = provider.selectionCheckedIndexes();
+				
+				if(selectedIndexes.length > 0) {
+					me.showPopupAllApply(selectedIndexes);
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			// 일괄 적용 팝업 호출
+			showPopupAllApply: function(rowIndexes) {
+				var me = this;
+				me.rowIndexes = rowIndexes;
+				
+				var param = {
+					purc_grp_typ_ccd: me.codes.param.purc_grp_typ_ccd,
+					purc_typ_ccd: me.rfxData.purc_typ_ccd,
+					pr_purp_ccd: me.rfxData.rfx_purp_ccd,
+					hiddenField: {"gr_chr": true}
+				};
+				var width = ((me.rfxData.purc_typ_ccd === "QTY") ? 450 : 450);
+				var height = 400;
+				
+				var applyPopup = UT.popup("ep-apply", me, width, height, {
+					'all-apply-items': function(popup, e) {
+						me.onAllApplyList(e.detail);	//그리드에 일괄적용
+						popup.close();
+					},
+				}, {titleText: "일괄 적용"});
+				applyPopup.show();
+				applyPopup.getWindowContent().load(param);
+			},
+			// 선택된 row에 일괄적용
+			onAllApplyList: function(applyValues) {
+				var me = this;
+				
+				var rowIndexes = me.rowIndexes;
+				var provider = me.$.itemGridPanel.getDataProvider();
+				
+				var cur_ccd = me.get("rfxData.cur_ccd");
+				provider.setItemAtBatch(rowIndexes, function(index, row) { //index: rowIndex, data: row데이터
+					var unit = applyValues["uom_ccd"] || row["uom_ccd"];
+					var price = applyValues["pr_price"] || row["rfx_req_uprc"] || 0;
+					var qty = applyValues["rfx_qty"] || row["rfx_qty"] || 0;
+					
+					var result = UT.copy(applyValues);
+					
+					// 수량 일괄적용 데이터 존재 시
+					if(applyValues["rfx_qty"]) {
+						// 수량 소수점처리
+						qty = CCPrecManager.format("qty", qty, unit);
+						result["rfx_qty"] = qty;
+					}
+					
+					// 단가 일괄적용 데이터 존재 시
+					if(applyValues["pr_price"]) {
+						// 단가 소수점처리
+						price = CCPrecManager.format("price", price, cur_ccd);
+						result["rfx_req_uprc"] = price;
+						delete result["pr_price"];
+					}
+					
+					// 금액 계산
+					var amt = (new BigNumber(qty)).mul(new BigNumber(price)).toFixed();
+					// 금액 소수점처리
+					result["rfq_amt"] = CCPrecManager.format("amt", amt, cur_ccd);
+					
+					return result;
+				});
+				
+			},
+			// 품목정보 삭제 버튼 클릭 시
+			onDeleteAuctionItem: function() {
+				var me = this;
+				
+				var provider = me.$.itemGridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+						me.set("rfxData.has_no_cd_item", (provider.filterItem({item_cd_crn_typ_ccd: "CDLS"}) != null) ? "Y" : "N");
+						me.applyFormula("hasNoCdItem");
+					});
+				}
+			},
+			// 협력사 추가 버튼 클릭시
+			onShowPopupVendor: function() {
+				var me = this;
+				
+				if(!me.rfxData.oorg_cd) {
+					UT.alert("STD.N3400");	//"운영조직을 선택하세요."
+					return false;
+				}
+				
+				var vdProvider = me.$.vdGridPanel.getDataProvider();
+				var singleSelectFlag = (me.rfxData.comp_typ_ccd === "PRICNTR");
+				if(singleSelectFlag && vdProvider.getItemSize() > 0) {
+					UT.alert("STD.RFX1012");	//"수의계약은 하나의 협력사만 지정이 가능합니다."
+					return false;
+				}
+				
+				var itemProvider = me.$.itemGridPanel.getDataProvider(),
+					itemRows     = itemProvider.getItems();
+				var itemSGUniqueList = itemRows.reduce(function(a, b) {
+					if(!UT.isEmpty(b.sg_cd) && a.indexOf(b.sg_cd) < 0) {
+						a.push(b.sg_cd);
+					}
+					return a;
+				}, []);
+				
+				var defaultParam = {
+					co_cd: me.codes.param.co_cd,
+					oorg_cd: me.rfxData.oorg_cd,
+					conn_typ_ccd: "POEO",
+					task_typ_ccd: "RX", //RFX 담당자 정보 조회
+					item_sgs: itemSGUniqueList,
+					obd_job_type_code : "R_AUCTION" // 온보딩 유형
+				};
+				
+				var vendorPopup = UT.popup("ep-vendor-list", me, "65%", "95%", {
+					'selected-items': function(popup, e) {
+						var selectedList = e.detail;
+						
+						if(singleSelectFlag) {
+							var selected = selectedList[0];
+							
+							var addRow = {
+								vd_cd: selected.vd_cd,
+								erp_vd_cd: selected.erp_vd_cd,
+								disp_vd_cd: selected.disp_vd_cd,
+								vd_nm: selected.disp_vd_nm,
+								vd_pic_uuid: selected.chr_id,
+								vd_pic_nm: selected.chr_nm,
+								vd_chr_mobile: selected.chr_mobile,
+								vd_pic_eml: selected.chr_email,
+								vd_pic_tel: selected.chr_phone_no,
+								multrnd_subj_xcept_yn: "N"
+							};
+							if(vdProvider.filterItem({vd_cd: selected.vd_cd}) === null) {
+								vdProvider.addItem(addRow);
+							} else {
+								UT.alert("STD.N1900");	//"중복 데이터가 있습니다."
+							}
+						} else {
+							me.addVdList(selectedList);
+						}
+					}
+				}, {maximizable: true, titleText: "협력사 검색"});
+				vendorPopup.show();
+				vendorPopup.getWindowContent().load({'singleSelect': singleSelectFlag, 'defaultParam': defaultParam});
+			},
+			// 협력사 리스트 추가
+			addVdList: function(selectedList) {
+				var me = this;
+				
+				var provider = me.$.vdGridPanel.getDataProvider();
+				
+				var dupCnt = 0;
+				if(selectedList.length > 0) {
+					for(var i = 0; i < selectedList.length; i++) {
+						var selected = selectedList[i];
+						
+						if(provider.filterItem({vd_cd: selected.vd_cd}) === null) {
+							var addRow = {
+								vd_cd: selected.vd_cd,
+								erp_vd_cd: selected.erp_vd_cd,
+								disp_vd_cd: selected.disp_vd_cd,
+								vd_nm: selected.disp_vd_nm,
+								vd_pic_uuid: selected.chr_id,
+								vd_pic_nm: selected.chr_nm,
+								vd_chr_mobile: selected.chr_mobile,
+								vd_pic_eml: selected.chr_email,
+								vd_pic_tel: selected.chr_phone_no
+							};
+							provider.addItem(addRow);
+						} else {
+							dupCnt++;
+						}
+					}
+					
+					if(dupCnt > 0) {
+						UT.alert(me.translate("STD.N2010", null, dupCnt), null, true); // "중복 데이터 {0}건 제외 후 추가하였습니다."
+					}
+				} else {
+					UT.alert("STD.N1600"); // "선택된 항목이 없습니다."
+				}
+			},
+			// 협력사 삭제 버튼 클릭시
+			onDeleteAuctionVendor: function() {
+				var me = this;
+				
+				var provider = me.$.vdGridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					var submitQtaVds = [];
+					// multi-round 작성중이면 이전 제출업체는 삭제 불가함(협력사 제외로 해야함)
+					if(me.formula("isMultiRound")) {
+						for(var i = 0; i < checked.length; i++) {
+							var vd = checked[i];
+							if(UT.isNotEmpty(vd.rfx_bid_uuid)) {
+								submitQtaVds.push(vd.disp_vd_cd);
+							}
+						}
+					}
+					if(submitQtaVds.length > 0) {
+						//이전 차수의 견적 제출업체는 삭제할 수 없습니다.<br/>
+						//해당 업체들은 "제외"를 진행하여 대상에서 제외할 수 있습니다.<br/>
+						//[협력사 코드 : {0}]
+						UT.alert(me.translate("STD.RFX1080", null, submitQtaVds.toString()), null, true);
+						return;
+					} else {
+						UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+							provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+						});
+					}
+				}
+			},
+			// 협력사 제외 버튼 클릭 시 (멀티라운드시 견적 대상제외 가능)
+			onExcVendor: function() {
+				var me = this;
+				
+				var provider = me.$.vdGridPanel.getDataProvider();
+				var selectedIndexes = provider.selectionCheckedIndexes();
+				
+				if(selectedIndexes.length > 0) {
+					me.set("selectedVdItemIndexes", selectedIndexes);
+					me.$.dialog_multrnd_xcept_rsn.show();
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			// 제외 사유 dialog 입력 버튼 클릭시
+			onExcCause: function() {
+				var me = this;
+				var multrnd_xcept_rsn_text = me.$.dialog_multrnd_xcept_rsn_text.value;
+				
+				var provider = me.$.vdGridPanel.getDataProvider();
+				var selectedIndexes = me.get("selectedVdItemIndexes");
+				
+				provider.setItemAtBatch(selectedIndexes, function(index, data) { //index: rowIndex, data: row데이터
+					return {
+						'multrnd_subj_xcept_yn': 'Y',
+						'multrnd_xcept_rsn': multrnd_xcept_rsn_text
+					};
+				});
+				
+				UT.alert("STD.RFX1052");
+				me.onDialogClose();
+			},
+			// dialog 닫기 버튼 클릭 시
+			onDialogClose: function() {
+				var me = this;
+				
+				me.set("selectedVdItemIndexes", []);
+				me.$.dialog_multrnd_xcept_rsn_text.value = "";
+				me.$.dialog_multrnd_xcept_rsn.close();
+			},
+			// 제외취소
+			onCancelExcVendor: function() {
+				var me = this;
+				
+				var provider = me.$.vdGridPanel.getDataProvider();
+				var selectedIndexes = provider.selectionCheckedIndexes();
+				
+				if(selectedIndexes.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					provider.setItemAtBatch(selectedIndexes, function(index, data) { //index: rowIndex, data: row데이터
+						return {
+							'multrnd_subj_xcept_yn': 'N',
+							'multrnd_xcept_rsn': null
+						};
+					});
+					
+				}
+			},
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data, provider) {
+				var me = this;
+				
+				var readonly = !me.formula('noCdItemAddable');
+				var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 240 : 260), {
+					"clear-dtl-spec": function(popup, e) {
+						provider.setItemAt(me.rowIndex, {
+							"item_spec_dtl": null
+						});
+						popup.close();
+					},
+					"apply-dtl-spec": function(popup, e) {
+						var dtlSpec = e.detail.item_spec_dtl;
+						
+						provider.setItemAt(me.rowIndex, {
+							"item_spec_dtl": dtlSpec
+						});
+						popup.close();
+					}
+				});
+				popup.show();
+				popup.getWindowContent().load(data, readonly);
+			},
+			// 품목 별 계약 및 발주 이력 조회
+			showItemContractHistory: function(itemCd) {
+				var me = this;
+
+				var itemHistoryPopup = UT.popup("ep-item-perform", me, "90%", "80%", null, {titleText : I18N.translate("품목 정보")});
+				itemHistoryPopup.show();
+				itemHistoryPopup.getWindowContent().load({item_cd: itemCd});
+			},
+			changeDomOvrsDivCcd: function(changeItem) {
+				if(UT.isNotEmpty(changeItem)) {
+					var pymtmethCcd;
+					var dlvymethCcd;
+					if(changeItem === "DOM") {
+						pymtmethCcd = this.get("codes.domPymtmethCcds");
+						dlvymethCcd = this.get("codes.domDlvymethCcds");
+					} else if(changeItem === "OVS") {
+						pymtmethCcd = this.get("codes.ovsPymtmethCcds");
+						dlvymethCcd = this.get("codes.ovsDlvymethCcds");
+					}
+					
+					this.set("codes.pymtmethCcd", pymtmethCcd);
+					this.set("codes.dlvymethCcd", dlvymethCcd);
+				}
+			},
+			initCommonCodeSettingForPymtDlvyMeth: function(){
+				var me = this;
+				var pymtmethAttrCcds = me.get("codes.pymtmethAttrCcds");
+				var domPymtnethCcds = pymtmethAttrCcds.filter(function(code){
+					return code.cstr_cnd_val !== "OVS"
+				});
+				var ovsPymtnethCcds = pymtmethAttrCcds.filter(function(code){
+					return code.cstr_cnd_val !== "DOM"
+				});
+				
+				var dlvymethAttrCcds = me.get("codes.dlvymethAttrCcds");
+				var domDlvymethCcds = dlvymethAttrCcds.filter(function(code){
+					return code.cstr_cnd_val !== "OVS"
+				});
+				var ovsDlvymethCcds = dlvymethAttrCcds.filter(function(code){
+					return code.cstr_cnd_val !== "DOM"
+				});
+				
+				var domovrsdivCcds = me.get("codes.domovrsDivCcd");
+				var domovrsDivFilters = domovrsdivCcds.filter(function(code) {
+					return code.data !== 'DOMOVS';
+				});
+				
+				var defaultPymtmethCcds = domovrsdivCcds[0].data === "DOM" ? domPymtnethCcds : ovsPymtnethCcds;
+				var defaultDlvymethCcds = domovrsdivCcds[0].data === "DOM" ? domDlvymethCcds : ovsDlvymethCcds;
+				me.set("codes.domPymtmethCcds", domPymtnethCcds);
+				me.set("codes.ovsPymtmethCcds", ovsPymtnethCcds);
+				me.set("codes.domDlvymethCcds", domDlvymethCcds);
+				me.set("codes.ovsDlvymethCcds", ovsDlvymethCcds);
+				me.set("codes.domovrsDivCcd", domovrsDivFilters);
+				me.set("codes.pymtmethCcd", defaultPymtmethCcds);
+				me.set("codes.dlvymethCcd", defaultDlvymethCcds);
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,234 @@
+<sc-link rel="import" href="es-rfx-receipt-cntr.html"></sc-link>
+
+<dom-module id="ep-rfx-receipt-uprccntr">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findListUprccntr"
+				 url="findListUprccntr.do"
+				 body="{{rfxReqRcptData}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<sc-ajax id="findListRfxReqRcptQta"
+				 url="findListRfxReqRcptQta.do"
+				 body="{{rfxReqRcptData}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<!-- 코드 조회 -->
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 공통코드 : 통화-->
+				<sc-code code="C004" value="{{codes.commCurCd}}"></sc-code>
+				<!-- RFX 후속업무 요청상태 -->
+				<sc-code code="P249" value="{{codes.reqStsCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-page-title-bar title-text="품목 정보">
+			<sc-button text="닫기" on-click="onClose" auth-s></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="품목 코드"></sc-label>
+				<sc-textarea-field value="{{rfxReqRcptData.item_cd}}" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="품목 명"></sc-label>
+				<sc-textarea-field value="{{rfxReqRcptData.disp_item_nm}}" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset column-span="2">
+				<sc-label text="품목 규격"></sc-label>
+				<sc-textarea-field value="{{rfxReqRcptData.item_spec}}" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<sc-grid id="gridPanel" class="flex" editable="false" use-dummy="false" use-state="false" use-selection="[[!formula('isQta')]]" selection-mode="radio"
+				 data-provider="{{resultList}}" aggregate="true"
+				 on-item-click="onItemClick">
+			<cc-grid-toolbar title-text="단가 정보">
+				<sc-button text="선택" on-click="onSelect" hidden="[[formula('isQta')]]" auth-s></sc-button>
+				<sc-button text="적용" on-click="onApply" hidden="[[!formula('isQtaEditable')]]" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="cntr_no" header-text="계약 번호" width="100"></sc-data-column>
+				<sc-data-column data-field="purc_cntr_item_lno" header-text="계약 항번" width="70"></sc-data-column>
+				<sc-data-column data-field="vd_cd" header-text="협력사 코드" width="100"></sc-data-column>
+				<sc-data-column data-field="disp_vd_nm" header-text="협력사 명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="uom_ccd" header-text="UOM" width="70"></sc-data-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" text-align="center" editable="false" display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="uprccntr_uprc" header-text="계약 단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+				
+				<sc-data-column data-field="qta_no" header-text="쿼터 번호" width="120" visible="[[formula('isQta')]]"></sc-data-column>
+				<sc-data-column data-field="qtarate" header-text="쿼터율" width="70" visible="[[formula('isQta')]]" format-type="percent" aggregate="true" aggregate-format="percent" aggregate-function="onAggregateFunction"></sc-data-column>
+				<sc-data-column data-field="aloc_qty" header-text="배분 수량" width="80" text-align="right" data-type="number" format-type="qty" visible="[[formula('isQta')]]"></sc-data-column>
+				<sc-data-column data-field="moq" header-text="최소 주문 수량(MOQ)" width="130" text-align="right" data-type="number" format-type="number" visible="[[formula('isQta')]]"></sc-data-column>
+				<sc-data-column data-field="ctq" header-text="포장 수량 단위(CTQ)" width="130" text-align="right" data-type="number" format-type="number" visible="[[formula('isQta')]]"></sc-data-column>
+				<sc-data-column data-field="dlvy_ldtm" header-text="리드타임(LT)" width="90" text-align="right" data-type="number" format-type="integer" visible="[[formula('isQta')]]"></sc-data-column>
+				
+				<sc-group-column header-text="후속업무 요청 정보" width="220" visible="[[formula('isConfirm')]]">
+					<sc-data-column data-field="nxt_prcs_no" header-text="후속 업무 번호" width="120" text-align="center" editable="false" style-name="link"></sc-data-column>
+					<sc-combobox-column data-field="req_sts_ccd" header-text="요청 상태" width="100" text-align="center" editable="false"
+										display-field="label" value-field="data" items="{{codes.reqStsCcd}}"></sc-combobox-column>
+				</sc-group-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="cntr_uuid"></sc-grid-field>
+				<sc-grid-field data-field="cntr_revno"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_uuid"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_info_uuid"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_item_uuid"></sc-grid-field>
+				<sc-grid-field data-field="qta_item_uuid"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-rfx-receipt-uprccntr",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {};
+					}
+				},
+				rfxReqRcptData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			formulas: {
+				editable: function() {
+					return !this.formula("isConfirm");
+				},
+				isConfirm: function() {
+					return this.rfxReqRcptData.cntr_cnfd_yn === "Y";
+				},
+				isQta: function() {
+					return this.rfxReqRcptData.qta_yn === "Y";
+				},
+				isQtaEditable: function() {
+					return this.formula("isQta") && this.formula("editable");
+				}
+			},
+			
+			load: function(rfxReqRcptData) {
+				var me = this;
+				me.set("rfxReqRcptData", rfxReqRcptData);
+				me.applyFormula();
+				
+				if(rfxReqRcptData.qta_yn === "Y" && rfxReqRcptData.cntr_cnfd_yn === "Y") {
+					UT.request(me.$.findListRfxReqRcptQta);
+				} else {
+					UT.request(me.$.findListUprccntr);
+				}
+			},
+			
+			onSelect: function() {
+				var me = this;
+				var checkedItems = me.$.gridPanel.getDataProvider().selectionCheckedItems();
+				
+				if(checkedItems.length === 0) {
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+				me.fire("select-item", checkedItems[0]);
+			},
+			
+			onApply: function() {
+				var me = this;
+				if(!me.applyValidate()) {
+					return;
+				}
+				
+				var items = me.$.gridPanel.getDataProvider().getItems();
+				var qtaItems = items.filter(function(item) {
+					if(UT.isNotEmpty(item.qtarate)) {
+						return true;
+					} else {
+						return false;
+					}
+				});
+				me.fire("apply-item", qtaItems);
+			},
+			
+			applyValidate: function() {
+				var me = this;
+				var items = me.$.gridPanel.getDataProvider().getItems();
+				
+				var totalQtaRate = new BigNumber(0);
+				for(var i = 0; i < items.length; i++) {
+					var item = items[i];
+					totalQtaRate = totalQtaRate.plus(item.qtarate || 0);
+				}
+				if(totalQtaRate.comparedTo(100) !== 0) {
+					UT.alert("STD.PR1053");
+					return false;
+				}
+				return true;
+			},
+			
+			onAggregateFunction: function(dataField, datas) {
+				var me = this;
+				if(datas.length === 0) {
+					return;
+				}
+				var sumQtarate = new BigNumber(0);
+				for(var i = 0; i < datas.length; i++) {
+					var data = datas[i];
+					sumQtarate = sumQtarate.plus(data.qtarate || 0);
+				}
+				return Number(sumQtarate);
+			},
+			
+			// grid item-click 이벤트
+			onItemClick: function(event) {
+				var me       = this,
+					data     = event.detail.data,
+					item     = event.detail.item,
+					rowIndex = event.detail.item.rowIndex, // 선택된 행의 번호
+					provider = event.detail.provider;
+				
+				if(item.dataField === "nxt_prcs_no" && UT.isNotEmpty(data[item.dataField])) {
+					me.showNxtPrcsReq(data);
+				}
+			},
+			
+			showNxtPrcsReq: function(data) {
+				var me = this;
+				var popup = UT.popup("es-rfx-receipt-cntr", me, "90%", "90%", {
+					'reload': function(popup, e) {
+						me.onFindList();
+					},
+					'close': function(popup, e) {
+						popup.close();
+					}
+				}, {titleText: "계약 정보", closable: false, menuId: "PRO20110"});
+				popup.show();
+				popup.getWindowContent().load({
+					rfx_nxt_prcs_req_uuid: data.rfx_nxt_prcs_req_uuid
+				});
+			},
+			
+			onClose: function() {
+				this.fire("close");
+			}
+		})
+	</script>
+</dom-module>

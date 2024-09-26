@@ -1,0 +1,217 @@
+<dom-module id="ep-rfx-compare-doc">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-code-group init>
+			<sc-code code="P211" value="{{codes.compTypCcd}}"></sc-code>
+			<sc-code code="P002" value="{{codes.itemSlctnTypCcd}}"></sc-code>
+		</sc-code-group>
+		<div class="vspace-10"></div>
+		
+		<table class="tb-form">
+			<colgroup>
+				<col style="width:120px">
+				<col>
+				<col style="width:120px">
+				<col>
+			</colgroup>
+			<tr>
+				<th>
+					<sc-label text="RFX 번호/진행차수"></sc-label>
+				</th>
+				<td>
+					<div class="field-box" style="width:100%">
+						<sc-text-field class="w-150" value="[[rfxInfo.rfx_no]]" readonly></sc-text-field>
+						<span style="margin:0 5px">&#47;</span>
+						<sc-text-field class="w-50 align-right" value="[[rfxInfo.rfx_rnd]]" readonly></sc-text-field>
+						<span style="margin-left:5px"></span>
+					</div>
+				</td>
+				<th>
+					<sc-label text="작성자 명"></sc-label>
+				</th>
+				<td>
+					<sc-text-field value="[[rfxInfo.usr_nm]]" readonly></sc-text-field>
+				</td>
+			</tr>
+			<tr>
+				<th>
+					<sc-label text="경쟁 유형"></sc-label>
+				</th>
+				<td>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.compTypCcd}}" value="{{rfxInfo.comp_typ_ccd}}" readonly></sc-combobox-field>
+				</td>
+				<th>
+					<sc-label text="품목 선정 유형"></sc-label>
+				</th>
+				<td>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.itemSlctnTypCcd}}" value="{{rfxInfo.item_slctn_typ_ccd}}" readonly></sc-combobox-field>
+				</td>
+			</tr>
+			<tr>
+				<th>
+					<sc-label text="RFX 품목 수"></sc-label>
+				</th>
+				<td>
+					<sc-text-field value="[[rfxInfo.rfx_item_cnt]]" readonly></sc-text-field>
+				</td>
+				<th>
+					<sc-label text="환산 RFX 투찰 금액"></sc-label>
+				</th>
+				<td>
+					<sc-text-field value="[[rfxInfo.exch_rfx_bid_amt]]" format-typ="amt" readonly></sc-text-field>
+				</td>
+			</tr>
+		</table>
+		
+		<sc-grid id="gridPanel" collapsible="false" class="flex" use-dummy="false"
+				 editable="false"
+				 use-state="false"
+				 header-height="40"
+				 use-selection="false">
+			<cc-grid-toolbar></cc-grid-toolbar>
+			<sc-grid-columns>
+				<!-- 동적컬럼 생성 -->
+			</sc-grid-columns>
+		</sc-grid>
+		
+		<template id="case1">
+			<sc-grid-columns id="case1Columns">
+				<sc-data-column data-field="desc" header-text="내역" width="130" text-align="left" item-style-function="onItemStyleFn"></sc-data-column>
+			</sc-grid-columns>
+		</template>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-rfx-compare-doc',
+			
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							compTypCcd: [],
+							itemSlctnTypCcd: []
+						}
+					}
+				},
+				rfxInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [
+							{name: this.translate("협력사 명"), key: "vd_nm"},
+							{name: "환산 RFX 투찰 금액", key: "exch_rfx_bid_amt"},
+							{name: "견적 유효일", key: "rfx_bid_eff_day"}, // 견적 유효일 - 제출일
+							{name: "비고", key: "rmk"}
+						];
+					}
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("rfxInfo", data);
+				
+				me.buildDynamicColumns(data.rfxBids);
+			},
+			
+			buildDynamicColumns: function(result) {
+				var me             = this,
+					defaultColumns = UT.templateColumns(me, '#case1', '#case1Columns');
+				
+				for(var i = 0, len = result.length; i < len; i++) {
+					var item         = result[i],
+						text         = item.slctn_rank === 1 ? "선정 (" + item.slctn_rank + '순위)' : item.slctn_rank + '순위',
+						vendorColumn = me.createDataColumn(text, item.vd_cd, 150, "right");
+					
+					if(item.slctn_rank === 1) {
+						me.set("rfxInfo.exch_rfx_bid_amt", SCFormatter.format("amt", item.exch_rfx_bid_amt));
+					}
+					// 로우 생성
+					me.createRowData(item);
+					defaultColumns.push(vendorColumn);
+					
+				}
+				
+				me.$.gridPanel.setColumns(defaultColumns);
+				me.$.gridPanel.setDataProvider(me.resultList);
+				
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var styleObj = {};
+				
+				if(item.dataField === "desc") {
+					styleObj.fontWeight = "bold";
+					styleObj.align = "center";
+				} else if(data.key === "vd_nm") {
+					styleObj.align = "center";
+				}
+				
+				return styleObj;
+			},
+			
+			createRowData: function(item) {
+				var me = this, list = me.resultList;
+				for(var i = 0, len = list.length; i < len; i++) {
+					var rowData    = list[i],
+						key        = rowData.key,
+						columnData = item[key];
+					
+					rowData['desc'] = rowData.name;
+					
+					switch(key) {
+						case "exch_rfx_bid_amt":
+							columnData = SCFormatter.format("amt", CCPrecManager.format("amt", columnData, rowData.cur_ccd));
+							break;
+						default :
+							break;
+					}
+					rowData[item.vd_cd] = columnData;
+				}
+			},
+			
+			setGroupColumnWidth: function(groupColumn) {
+				var width = 0;
+				for(var i = 0; i < groupColumn.children.length; i++) {
+					width += groupColumn.children[i].width;
+				}
+				groupColumn.width = Math.max(width, groupColumn.width || 0);
+			},
+			
+			createGroupColumn: function(headerText) {
+				var grpCol = document.createElement("sc-group-column");
+				grpCol.headerText = headerText;
+				grpCol.i18nDisabled = true;
+				return grpCol;
+			},
+			
+			createDataColumn: function(headerText, dataField, width, textAlign) {
+				var col = document.createElement("sc-data-column");
+				col.headerText = headerText;
+				col.dataField = dataField;
+				col.width = width;
+				col.textAlign = textAlign;
+				col.i18nDisabled = true;
+				col.itemStyleFunction = "onItemStyleFn";
+				return col;
+			},
+			
+			behaviors: [
+				Polymer.Templatizer
+			]
+			
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,168 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 결재 이력 detail
+	** @Author 			: sykim
+	** @Create Date 	: 2024.03.21
+	******************************************************************************************
+-->
+
+<sc-link rel="import" href="../shared/ep-vendor-po-poss-reg-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-management-group-reg-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-management-group-reg-cancel-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-main-info-change-req-apvl.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-vendor-po-limit-req-apvl.html"></sc-link>
+
+<dom-module id="es-vendor-approval-history-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+            
+        }
+    </style>
+    
+    <template>
+		<!-- 조회 -->
+		<sc-ajax id="findBasicVendorHistrecInfo" url="findBasicVendorHistrecInfo.do" body="{{searchParam}}"></sc-ajax>
+		
+		<cc-page-title-bar hidden="[[isPopup]]">
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<ep-vendor-po-poss-reg-req-apvl id="poPossRegReqDetail" hidden="[[!formula('isPoPossVdRegReq')]]"></ep-vendor-po-poss-reg-req-apvl><!-- 발주 협력사 등록 요청 -->
+		<ep-vendor-management-group-reg-req-apvl id="vmgRegReqDetail" hidden="[[!formula('isVmgRegReq')]]"></ep-vendor-management-group-reg-req-apvl><!-- 협력사관리그룹 등록 요청 -->
+		<ep-vendor-management-group-reg-cancel-req-apvl id="vmgRegCnclReqDetail" hidden="[[!formula('isVmgRegCnclReq')]]"></ep-vendor-management-group-reg-cancel-req-apvl><!-- 협력사관리그룹 등록 취소 요청 -->
+		<ep-vendor-main-info-change-req-apvl id="mainInfoChgDetail" hidden="[[!formula('isMainInfoChgReq')]]"></ep-vendor-main-info-change-req-apvl><!-- 주요 정보 변경 요청 -->
+		<ep-vendor-po-limit-req-apvl id="poLimitReqDetail" hidden="[[!formula('isPoLmtReq')]]"></ep-vendor-po-limit-req-apvl><!-- 발주 제한 요청 -->
+    </template>
+	
+    <script>
+        Polymer({
+            is: "es-vendor-approval-history-detail",
+            
+            properties:  {
+                searchParam: {
+                    type: Object,
+                    value: function(){
+                    	return{};
+                    }
+                },
+				chgTypCcd: {
+					type: String,
+					value: ""
+				},
+				isPopup: {
+					type: Boolean,
+					value: false
+				}
+            },
+			
+			formulas: {
+				isPoPossVdRegReq: function() {
+					var me = this;
+					var chgTypCcd = me.get("chgTypCcd");
+					return chgTypCcd === "PO_POSS_VD_REG_REQ";
+				},
+				isVmgRegReq: function() {
+					var me = this;
+					var chgTypCcd = me.get("chgTypCcd");
+					return chgTypCcd === "VMG_REG_REQ";
+				},
+				isVmgRegCnclReq: function() {
+					var me = this;
+					var chgTypCcd = me.get("chgTypCcd");
+					return chgTypCcd === "VMG_REG_CNCL_REQ";
+				},
+				isMainInfoChgReq: function() {
+					var me = this;
+					var chgTypCcd = me.get("chgTypCcd");
+					return chgTypCcd === "MAIN_INFO_CHG_REQ";
+				},
+				isPoLmtReq: function() {
+					var me = this;
+					var chgTypCcd = me.get("chgTypCcd");
+					return chgTypCcd === "PO_LMT_REQ";
+				}
+			},
+			
+			load: function(data){
+				var me = this;
+				
+				// 초기화
+				me.set("chgTypCcd", "");
+				me.set("searchParam", data); // vd_mst_chg_histrec_uuid, oorg_cd
+				me.applyFormula();
+				
+				UT.request(me.$.findBasicVendorHistrecInfo, function(e, res){
+					var result = res.response;
+					
+					if(UT.isEmpty(result)) {
+						UT.alert("STD.E9999"); // 오류가 발생하였습니다.\n관리자에게 문의하세요
+						me.fire("close");
+					} else {
+						var chgTypCcd = result.chg_typ_ccd;
+						me.set("chgTypCcd", chgTypCcd);
+						
+						result.oorg_cd = me.get("searchParam.oorg_cd");
+						result.view = true;
+						
+						if (chgTypCcd === "PO_POSS_VD_REG_REQ") {
+							// 발주 협력사 등록 요청
+							me.showPoPossRegReqApvlPopup(result);
+						} else if (chgTypCcd === "VMG_REG_REQ") {
+							// 협력사관리그룹 등록 요청
+							me.showVmgRegReqPopup(result);
+						} else if (chgTypCcd === "VMG_REG_CNCL_REQ") {
+							// 협력사관리그룹 등록 취소 요청
+							me.showVmgRegCnclReqPopup(result);
+						} else if (chgTypCcd === "MAIN_INFO_CHG_REQ") {
+							// 주요 정보 변경 요청
+							me.showMainInfoChgReqApvlPopup(result);
+						} else if (chgTypCcd === "PO_LMT_REQ") {
+							// 발주 제한 요청
+							me.showPoLmtReqApvlPopup(result);
+						}
+					}
+					
+					me.applyFormula();
+				});
+			},
+			
+            /* 발주 협력사 등록 요청 팝업 */
+            showPoPossRegReqApvlPopup: function(data){
+            	var me = this;
+                me.$.poPossRegReqDetail.load(data);
+            },
+			
+			/* 발주 협력사 등록 요청 팝업 */
+			showVmgRegReqPopup: function(data){
+				var me = this;
+				me.$.vmgRegReqDetail.load(data);
+			},
+			
+			/* 발주 협력사 등록 요청 팝업 */
+			showVmgRegCnclReqPopup: function(data){
+				var me = this;
+				me.$.vmgRegCnclReqDetail.load(data);
+			},
+			
+			/* 주요 정보 변경 요청 팝업 */
+			showMainInfoChgReqApvlPopup: function(data){
+				var me = this;
+				me.$.mainInfoChgDetail.load(data);
+			},
+			
+			/* 주요 정보 변경 요청 팝업 */
+			showPoLmtReqApvlPopup: function(data){
+				var me = this;
+				me.$.poLimitReqDetail.load(data);
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+        });
+    </script>
+
+</dom-module>

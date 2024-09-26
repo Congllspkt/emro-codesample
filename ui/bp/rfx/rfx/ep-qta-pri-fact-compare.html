@@ -1,0 +1,233 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="ep-qta-pri-fact-compare">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-code-group>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+		</sc-code-group>
+		
+		<sc-ajax id="findListPriceFactorCompare"
+				 url="findListRfxBidItemPriceFactorCompare.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar title-text="CostStructure(RFX) 비교">
+			</cc-page-title-bar>
+			
+			<sc-grid id="gridPanel" collapsible="false" class="flex" use-dummy="false"
+					 locked-column-count="{{lockedColumnCount}}"
+					 aggregate="false" aggregate-group="true" aggregate-group-columns='["rfx_lno"]'
+					 editable="false"
+					 use-state="false"
+					 use-selection="false"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<!-- 동적컬럼 생성 -->
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="rfx_item_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="costfact_cd"></sc-grid-field>
+					<sc-grid-field	data-field="costfact_uom_ccd"></sc-grid-field>
+					<sc-grid-field	data-field="prc_yn"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec_dtl"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<!-- 기본컬럼 -->
+		<template id="defaultColumnsTemplate">
+			<sc-grid-columns id="defaultColumns">
+				<sc-data-column		data-field="rfx_lno"	header-text="RFX 항번"			width="100"	text-align="center"	></sc-data-column>
+				<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"		width="100"	text-align="center"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+				<sc-data-column		data-field="item_nm"		header-text="품목 명"		width="150"	text-align="left"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+				<sc-data-column		data-field="item_spec"			header-text="품목 규격"			width="250"	text-align="left"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+				<sc-image-column	data-field="img_item_spec_dtl"	header-text="품목 규격 상세"		width="60"	text-align="center"	mergeable="true"	merge-based-field="rfx_lno"
+									image-change-function="onImageChangeFn"></sc-image-column>
+				<sc-combobox-column	data-field="uom_ccd"		header-text="UOM"			width="60"	text-align="center"	mergeable="true"	merge-based-field="rfx_lno"
+									display-field="data"		value-field="data"			items="{{codes.uomCcd}}"></sc-combobox-column>
+				<sc-data-column		data-field="costfact_nm"		header-text="CostFactor 명"	width="200"	text-align="left"></sc-data-column>
+			</sc-grid-columns>
+		</template>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-qta-pri-fact-compare',
+			
+			behaviors: [
+				Polymer.Templatizer
+			],
+			
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {
+							rfx_uuid: ""
+						}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							uomCcd: []
+						}
+					},
+					reset: false
+				},
+				lockedColumnCount: {
+					type: Object,
+					value: function() {
+						return 7;
+					}
+				},
+				titleText:{
+                    type: String,
+					value: 'CostStructure(RFX) 비교'
+				}
+			},
+			initialized: function() {
+			
+			},
+			load: function(param) {
+				var me = this;
+				
+				me.set("searchParam", param);
+				
+				me.findListPriceFactorCompare();
+			},
+			findListPriceFactorCompare: function() {
+				var me = this;
+				
+				UT.request(me.$.findListPriceFactorCompare, function(e, res) {
+					var result = res.response;
+					me.buildDynamicColumns(result.qtaVendors, result.qtaFactors);
+				});
+			},
+			buildDynamicColumns: function(qtaVendors, factors) {
+				var me = this;
+				
+				// 기본 컬럼
+				var gridColumns = UT.templateColumns(this, '#defaultColumnsTemplate', '#defaultColumns');
+				
+				// 미등록 품목(무코드 품목) 존재하지 않는 경우 품목 규격 상세 컬럼 필요없음
+				if(me.get("searchParam.has_no_cd_item") !== "Y") {
+					var idx = -1;
+					for(var i = 0, len = gridColumns.length; i < len; i++) {
+						var col = gridColumns[i];
+						if(col.dataset.field === "img_item_spec_dtl") {
+							idx = i;
+							break;
+						}
+					}
+					if(idx > -1) {
+						gridColumns.splice(idx, 1);
+						me.set("lockedColumnCount", me.lockedColumnCount - 1);
+					}
+				}
+				
+				// 제출업체 별 그룹컬럼 생성
+				if(UT.isNotEmpty(qtaVendors)) {
+					for(var i = 0; i < qtaVendors.length; i++) {
+						var qtaVendor = qtaVendors[i], vdCd = qtaVendor.vd_cd, vdNm = qtaVendor.vd_nm;
+						
+						var groupColumn = document.createElement("sc-group-column");
+						groupColumn.headerText = vdNm + "(" + vdCd + ")";
+						groupColumn.i18nDisabled = true;
+						groupColumn.width = 550;
+						
+						var qtyCol = me.createNumberColumn("CostFactor 제출 수량", "costfact_subm_qty_" + vdCd, 150, "integer");
+						groupColumn.appendChild(qtyCol);
+						
+						var priceCol = me.createNumberColumn("CostFactor 제출 단가", "costfact_subm_uprc_" + vdCd, 150, "price");
+						priceCol.aggregateTitle = "합계";
+						groupColumn.appendChild(priceCol);
+						
+						var amtCol = me.createNumberColumn("CostFactor 제출 금액", "costfact_subm_amt_" + vdCd, 150, "amt");
+						amtCol.aggregateFunction = "onAmtAggregateFn";
+						amtCol.aggregateFormat = "amt";
+						groupColumn.appendChild(amtCol);
+						
+						var remCol = me.createDataColumn("비고", "rmk_" + vdCd, 150, "left");
+						groupColumn.appendChild(remCol);
+						
+						gridColumns.push(groupColumn);
+					}
+				}
+				me.$.gridPanel.setColumns(gridColumns);
+				
+				for(var j = 0; j < factors.length; j++) {
+					var factor     = factors[j],
+						qtaFactors = factor.qtaItemPriceFactors;
+					
+					if(UT.isNotEmpty(qtaFactors)) {
+						for(var k = 0; k < qtaFactors.length; k++) {
+							var qtaFactor = qtaFactors[k],
+								vdCd      = qtaFactor.vd_cd;
+							
+							factor["costfact_subm_qty_" + vdCd] = qtaFactor.costfact_subm_qty;
+							factor["costfact_subm_uprc_" + vdCd] = qtaFactor.costfact_subm_uprc;
+							factor["costfact_subm_amt_" + vdCd] = qtaFactor.costfact_subm_amt;
+							factor["rmk_" + vdCd] = qtaFactor.rmk;
+						}
+					}
+				}
+				me.$.gridPanel.setDataProvider(factors);
+			},
+			createDataColumn: function(headerText, dataField, width, textAlign) {
+				var col = document.createElement("sc-data-column");
+				col.headerText = headerText;
+				col.dataField = dataField;
+				col.width = width;
+				col.textAlign = textAlign;
+				return col;
+			},
+			createNumberColumn: function(headerText, dataField, width, formatType) {
+				var col = this.createDataColumn(headerText, dataField, width, "right");
+				col.dataType = "number";
+				col.formatType = formatType;
+				return col;
+			},
+			// aggregate function
+			onAmtAggregateFn: UT.plusBigNumber,
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			// 그리드 item-click event
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data, provider) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+		});
+	</script>
+</dom-module>

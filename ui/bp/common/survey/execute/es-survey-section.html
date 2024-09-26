@@ -1,0 +1,158 @@
+<sc-link rel="import" href="es-survey-question.html"></sc-link>
+
+<dom-module id="es-survey-section">
+	<style>
+		:host {
+			display: block;
+			padding: 0px;
+			box-sizing: border-box;
+		}
+	</style>
+	<template>
+		<div class="title">[[formula('numberView')]][[languageParse(section.surv_sect_nm)]]</div>
+		<div id="questionForms"></div>
+		
+		<es-survey-question hidden></es-survey-question>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-section",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {};
+					}
+				},
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				section: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				number: {
+					type: String
+				},
+				editable: {
+					type: Object,
+					value: function() {
+						return true;
+					}
+				}
+			},
+			formulas: {
+				numberView: function() {
+					var me = this;
+					var survey = me.survey;
+					return survey.qn_no_dspy_yn === "Y" ? this.number + ". " : "";
+				}
+			},
+			
+			languageParse: function(str) {
+				return SCLanguageManager.parse(str);
+			},
+			
+			load: function(section) {
+				var me = this;
+				me.set("section", section);
+				me.addExplain(section);
+				
+				var questions = section.questions || [];
+				for(var i = 0; i < questions.length; i++) {
+					var question = questions[i];
+					me.addQuestion(me, question, i + 1);
+				}
+				me.applyFormula();
+			},
+			
+			addExplain: function(section) {
+				var me = this;
+				var expln = SCLanguageManager.parse(section.surv_sect_expln);
+				var content = expln.replace(/\n/g, '<br>');
+				if(!content) {
+					return;
+				}
+				
+				var questionForm = me.$.questionForms;
+				var explainForm = document.createElement('div');
+				explainForm.classList.add("explain");
+				
+				me.insertBefore(explainForm, questionForm);
+				explainForm.innerHTML = content;
+			},
+			
+			addQuestion: function(sectionForm, question, number) {
+				var me = this;
+				var questionForms = me.$.questionForms;
+				
+				var questionForm = document.createElement("es-survey-question");
+				questionForm.set("codes", me.codes);
+				questionForm.set("editable", me.editable);
+				questionForm.set("survey", me.get("survey"));
+				questionForm.set("number", number);
+				
+				Polymer.dom(questionForms).appendChild(questionForm);
+				Polymer.dom.flush();
+				
+				questionForm.load({
+					sectionForm: sectionForm,
+					question: question
+				});
+			},
+			
+			validator: function() {
+				var me = this;
+				var questionForms = me.$.questionForms;
+				var childrens = questionForms.children;
+				
+				var childrenValidate = true;
+				for(var i = 0; i < childrens.length; i++) {
+					if(childrens[i].is === "es-survey-question") {
+						if(!childrens[i].validator()) {
+							childrenValidate = false;
+							break;
+						}
+					}
+				}
+				if(!childrenValidate) {
+					/*UT.alert("STD.E0000");*/
+					return false;
+				}
+				
+				return true;
+			},
+			
+			get getValue() {
+				var me = this;
+				var questionForms = me.$.questionForms;
+				var childrens = questionForms.children;
+				
+				var values = [];
+				for(var i = 0; i < childrens.length; i++) {
+					if(childrens[i].is === "es-survey-question") {
+						var childrenValue = childrens[i].getValue;
+						if(UT.isEmpty(childrenValue)) {
+							continue;
+						}
+						if(Array.isArray(childrenValue)) {
+							for(var j = 0; j < childrenValue.length; j++) {
+								values.push(childrenValue[j]);
+							}
+						} else {
+							values.push(childrenValue);
+						}
+					}
+				}
+				return values;
+			},
+		})
+	</script>
+</dom-module>

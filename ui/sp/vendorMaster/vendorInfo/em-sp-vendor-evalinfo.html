@@ -1,0 +1,122 @@
+<dom-module id="em-sp-vendor-evalinfo">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+		<!-- 평가리스트 조회 -->
+		<sc-ajax id="findVendorEvalInfoList"
+				 url="findVendorEvalInfoList.do"
+				 body="{{searchParam}}"
+				 last-response="{{evalInfoList}}"
+				 on-response="completeFindVendorEvalInfoList">
+		</sc-ajax>
+		
+		<!-- 공통코드조회 -->
+		<sc-request-group init>
+			<sc-code-group id = "codes" init>
+				<sc-code code="R704" value="{{codes.evalTaskTypCcd}}" ></sc-code> <!-- 평가 업무 유형 -->
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindList">
+			<cc-fieldset>
+				<sc-label text="평가 업무 유형"></sc-label>
+				<sc-multi-combobox-field display-field="label" value-field="data" required="true" placeholder="선택없음" enable-check-all="true"
+										 items="{{codes.evalTaskTypCcd}}" value="{{searchParam.eval_task_typ_ccd}}" selected-all="true">
+				</sc-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field value="{{searchParam.eval_nm}}" on-enter="onFindList"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" editable="true" use-selection="false" use-state="false"
+				 data-provider="{{evalInfoList}}">
+			<cc-grid-toolbar></cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column	data-field="eval_yr"	header-text="평가 연도"	width="80"	></sc-data-column>
+				<sc-combobox-column data-field="eval_task_typ_ccd" header-text="평가 업무 유형" width="120" text-align="center" items="{{codes.evalTaskTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column	data-field="eval_nm"	header-text="평가 명"	width="500"	text-align="left"></sc-data-column>
+				<sc-data-column	data-field="eval_sc"	header-text="평가 점수"	width="100"	text-align="right" data-type="number" format-type="srmScore"></sc-data-column>
+				<sc-data-column	data-field="eval_grd_nm"	header-text="평가 등급"	width="100"></sc-data-column>
+			</sc-grid-columns>
+		</sc-grid>
+    </template>
+    
+    <script>
+    Polymer({
+    	is: "em-sp-vendor-evalinfo",
+    	
+    	properties: {
+			searchParam: {
+    			type: Object,
+    			value: function(){return{};}
+    		},
+    		codes:{
+    			type: Object,
+    			value: function(){
+    			    return {
+						evalTaskTypCcd: []
+    			    };
+    			},
+    			reset: false
+    		},
+			evalInfoList:{
+    		    type:Array,
+                value: function(){return[];}
+			}
+    	},
+
+    	initialized: function(){
+    		this.load();	
+    	},
+    	
+		load: function(){
+			var me = this;
+			var vd_cd = SCSessionManager.userDetails.userInfo.vd_cd;
+			me.set("searchParam.vd_cd", vd_cd);
+		},
+		
+		//조회
+		onFindList: function(){
+			var me = this;
+				data = me.get("searchParam");
+			
+			if(!me.validate()){
+				UT.alert("STD.E0000");
+				return;
+			}
+			me.$.findVendorEvalInfoList.body = data;
+			UT.request(me.$.findVendorEvalInfoList);
+		},
+		
+		completeFindVendorEvalInfoList: function(e, res){
+			var me = this;
+			var result = res.response;
+			if(result.resultStatus == "S"){
+				var resultData = result.resultData;
+				var evalList = [];
+				var selectedEvalTaskList = me.searchParam.eval_task_typ_ccd;
+				selectedEvalTaskList.forEach(function(evalTask){
+					if(evalTask == "OE"){
+						evalList = evalList.concat(resultData.obdEvalList);
+					} else if(evalTask == "PE"){
+						evalList = evalList.concat(resultData.pfmcEvalList);
+					}
+				})
+				
+				me.set("evalInfoList", evalList);
+			} else {
+				UT.alert("STD.E9999");
+				return;
+			}
+		}
+    });
+    </script>
+
+</dom-module>

@@ -1,0 +1,696 @@
+<dom-module id="ep-procedure-code-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 프로시저목록 조회 -->
+		<sc-ajax id="findListProcedureCode"
+				 url="findListProcedureCode.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListProcedureCode">
+		</sc-ajax>
+		
+		<!-- 프로시저목록 저장 -->
+		<sc-ajax id="saveListProcedureCode"
+				 url="saveListProcedureCode.do"
+				 on-response="completeSaveListProcedureCode">
+		</sc-ajax>
+		
+		<!-- 프로시저목록 삭제 -->
+		<sc-ajax id="deleteListProcedureCode"
+				 url="deleteListProcedureCode.do"
+				 on-response="completeDeleteListProcedureCode">
+		</sc-ajax>
+		
+		<!-- 파라미터목록 조회 -->
+		<sc-ajax id="findListParameterCode"
+				 url="findListParameterCode.do"
+				 body="{{parameterList.param}}"
+				 on-response="completeFindListParameterCode">
+		</sc-ajax>
+		
+		<!-- 파라미터목록 저장 -->
+		<sc-ajax id="saveListParameterCode"
+				 url="saveListParameterCode.do"
+				 on-response="completeSaveListParameterCode">
+		</sc-ajax>
+		
+		<!-- 파라미터목록 삭제 -->
+		<sc-ajax id="deleteListParameterCode"
+				 url="deleteListParameterCode.do"
+				 on-response="completeDeleteListParameterCode">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<div class="vbox flex">
+			<cc-search-condition-panel on-search="onSearch" auth-r>
+				<cc-fieldset>
+					<sc-label text="Procedure 명"></sc-label>
+					<sc-text-field value="{{searchParam.prcr_nm}}" max-length="60" on-enter="onSearch"></sc-text-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<!-- 프로시저 Grid -->
+			<sc-grid id="gridPrcrPanel" editable="[[formula('editable')]]" class="flex" data-provider="{{procedureCodeList}}" on-item-click="onPrcrDataCellClicked"
+					 row-style-function="onPrcrRowStyle" selection-able-function="selectionAblePrcrFn">
+				<cc-grid-toolbar title-text="[[titleTextPrcr]]">
+					<sc-button text="추가" 			on-click="onAddPrcr" 		hidden="[[!formula('editable')]]" auth-s></sc-button>
+					<sc-button text="저장" 			on-click="onSavePrcr" 		hidden="[[!formula('editable')]]" auth-s></sc-button>
+					<sc-button text="삭제" 			on-click="onDeletePrcr" 	hidden="[[!formula('editable')]]" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column	data-field="prcr_cd"		header-text="Procedure 코드"	width="200"    text-align="center"
+									editable="false"			readonly="true"				style-name="link"></sc-data-column>
+					<sc-group-column header-text="Procedure 명"    	width="200"			hide-child-headers="true"  >
+						<sc-data-column	data-field="prcr_nm"   width="170"         text-align="center"	text-case="upper"
+										editable="true"				required="true"		item-editable-function="onPrcrEditableFn"></sc-data-column>
+						<sc-image-column data-field="btn_select"	editabl="false"		width="30"
+										 singular-source="ui/assets/img/grid/ico_grd_select.png"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column	data-field="rmk"   			header-text="비고"    		width="250"    text-align="left"
+									editable="true"				required="false"			item-editable-function="onPrcrEditableFn"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field  data-field="calc_use_yn" ></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<div class="vbox flex-4">
+			<!-- 파라미터 Grid -->
+			<sc-grid id="gridParmPanel" editable="[[!formula('isParmEditable')]]" class="flex" data-provider="{{parameterCodeList}}"
+					 row-style-function="onParmRowStyle" selection-able-function="selectionAbleParmFn"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar title-text="[[titleTextParm]]" i18n-disabled>
+					<sc-button text="추가"			on-Click="onAddParm"		hidden="[[formula('isParmEditable')]]" auth-s></sc-button>
+					<sc-button text="저장"			on-Click="onSaveParm"		hidden="[[formula('isParmEditable')]]" auth-s></sc-button>
+					<sc-button text="삭제"			on-Click="onDeleteParm"		hidden="[[formula('isParmEditable')]]" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column	data-field="parm_cd"		header-text="파라미터 코드"	width="200"    	text-align="center"
+									editable="false"			readonly="true"></sc-data-column>
+					<sc-checkbox-column data-field="prcr_cd_yn" header-text="사용 여부"		width="80"    	text-align="center"
+										editable="true"			readonly="true"				item-editable-function="onParmSelectionableFn"></sc-checkbox-column>
+					<sc-data-column	data-field="parm_nm"   		header-text="파라미터 명"    	width="200"    	text-align="center"	text-case="upper"
+									editable="true"				required="true"				item-editable-function="onParmEditableFn"				item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column	data-field="ord"   			header-text="순서"    		width="80"    	text-align="center"	data-type="number"	format-type="integer"
+									editable="true"				min-value="0"				data-type="number"></sc-data-column>
+					<sc-data-column	data-field="rmk"   			header-text="비고"    		width="250"    	text-align="left"
+									editable="true"				required="false"			item-editable-function="onParmEditableFn"	item-style-function="onItemStyleFunction"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field  data-field="prcr_cd_yn" ></sc-grid-field>
+					<sc-grid-field  data-field="prcr_use_yn" ></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-procedure-code-list",
+			properties: {
+				titleTextPrcr: {
+					type: String,
+					value: "Procedure"
+				},
+				titleTextParm: {
+					type: String,
+					value: "Parameter"
+				},
+				// 조회 조건 Object
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				// 프로시저 목록
+				procedureCodeList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				// 프로시저파라미터 목록
+				parameterCodeList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				// 파라미터 목록
+				parameterList: {
+					type: Object,
+					value: function() {
+						return {
+							param : {},
+							result : {}
+						};
+					}
+				},
+				autoComplete: {
+					type: Boolean,
+					value: false
+				},
+				isEditMode : {
+					type: Boolean,
+					value : false
+				},
+				isParmEdit : {
+					type : Boolean,
+					value : true
+				}
+			},
+			
+			behaviors:[
+				Polymer.CCAutocompleteBehavior
+			],
+			
+			formulas : {
+				editable : function(){
+					return this.isEditMode;
+				},
+				isParmEditable : function() {
+					return this.isEditMode && !this.isParmEdit;
+				}
+			},
+			
+			initialized: function() {
+			
+			},
+			
+			getAjaxUrl: function() {
+				var me = this;
+				return me.$.findListProcedureCode.url;
+			},
+			
+			clearData : function() {
+				var me = this;
+				
+				me.set("searchParam", me.getPropertyInfo("searchParam").value());
+				me.$.gridPrcrPanel.getDataProvider().removeAll();
+			},
+			
+			load : function(options){
+				var me = this,
+					options = options || {};
+				me.set("titleTextParm", me.translate("Parameter"));
+				me.set("autoComplete", UT.isBoolean(options.autoComplete) ? options.autoComplete : false);
+				if(UT.isObject(options.defaultParam)) {
+					me.set("searchParam", options.defaultParam);
+					me.set("isEditMode", options.defaultParam.isEditMode);
+				}
+				me.applyFormula();
+				me.onSearch();
+			},
+			
+			/**
+			 * 프로시저 Grid Cell Click
+			 */
+			onPrcrDataCellClicked: function(e){
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item,
+					provider = e.detail.provider;
+					
+				// 신규 row 제외
+				if(provider.getItemState(item.rowIndex) == "created") {
+					return;
+				}
+				
+				if(item.dataField === "prcr_cd") {
+					me.set("parameterList.param", data);
+					me.onSearchParameter();
+				}
+				
+				if(item.dataField === "btn_select"){
+					// 프로시저 바로선택
+					me.fire("selected-items",[data]);
+					me.onCloseWindow();
+				}
+				
+				if(data['calc_use_yn'] === 'Y') {
+					me.set("isParmEdit", false);
+				} else {
+					me.set("isParmEdit", true);
+				}
+			},
+
+			/**
+			 * 파라미터 Grid 조회
+			 * 프로시저 Grid > 프로시저 코드 클릭
+			 */
+			onSearchParameter: function() {
+				var me = this;
+				me.set("titleTextParm", me.translate("Parameter"));
+				UT.request(me.$.findListParameterCode);
+			},
+			
+			/**
+			 * 파라미터 Grid 조회 callback
+			 */
+			completeFindListParameterCode : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				var prcrCd = me.get("parameterList.param").prcr_cd;
+				var prcrNm = me.get("parameterList.param").prcr_nm;
+				if(prcrCd != null && prcrNm != null) {
+					var titleTextParm = me.get("titleTextParm") + ' [' + prcrCd + ' : ' + prcrNm + '] ';
+				}
+				
+				me.set("parameterCodeList", result);
+				me.set("titleTextParm", titleTextParm);
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 프로시저 추가버튼 클릭
+			 */
+			onAddPrcr : function() {
+				var me = this;
+				// grid 신규 행 추가
+				me.$.gridPrcrPanel.getDataProvider().addItemAt(0);
+			},
+			
+			/**
+			 * (프로시저 Grid)삭제버튼 클릭
+			 */
+			onDeletePrcr : function(){
+				var me = this;
+				var grid = me.$.gridPrcrPanel,
+					provider = grid.getDataProvider();
+				var checked = provider.selectionCheckedItems(),
+					inserts = provider.getNewItems(),
+					deletes = provider.removeItems();
+				
+				if(UT.isEmpty(checked)){
+					return UT.alert("STD.N1600");	// 선택된 항목이 없습니다.
+				}
+				
+				for(var i = 0, len = checked.length; i < len; i++) {
+					var checkedItem = checked[i];
+					deletes.push(checkedItem);
+				};
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					// 신규 행 삭제
+					if(inserts.length > 0) {
+						provider.removeItems(true, true);
+					}
+					
+					if(deletes.length > 0) {
+						me.$.deleteListProcedureCode.body = {
+							deleteList: deletes
+						};
+						UT.request(me.$.deleteListProcedureCode);
+					}
+				});
+			},
+			
+			/**
+			 * (프로시저 Grid)저장버튼 클릭
+			 */
+			onSavePrcr : function() {
+				var me = this;
+				var provider = me.$.gridPrcrPanel.getDataProvider();
+				var created = provider.getNewItems(),
+					updated = provider.getUpdateItems();
+				
+				// 데이터 유효성 확인
+				if(!me.validate()){
+					UT.alert("STD.E0000");	// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					return;
+				}
+				
+				if(created.length + updated.length === 0){
+					UT.alert("STD.N1700");    // 변경된 내용이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() {	// 저장 하시겠습니까?
+					me.$.saveListProcedureCode.set("body", {
+						insertList : created,
+						updateList : updated
+					});
+					
+					UT.request(me.$.saveListProcedureCode);
+				});
+			},
+			
+			/**
+			 * 파라미터 추가버튼 클릭
+			 */
+			onAddParm : function() {
+				var me = this;
+				// grid 신규 행 추가
+				me.$.gridParmPanel.getDataProvider().addItemAt(0);
+			},
+			
+			/**
+			 * (파라미터 Grid)저장버튼 클릭
+			 */
+			onSaveParm : function() {
+				var me = this;
+				var provider = me.$.gridParmPanel.getDataProvider();
+				var created = provider.getNewItems(),
+					updated = provider.getUpdateItems();
+				
+				// 프로시저-파라미터에 저장할 파라미터(사용여부 'Y'인 rows)
+				var prcrParmList = provider.filterItems({'prcr_cd_yn' : 'Y'});
+				var prcrCd = me.get("parameterList.param").prcr_cd;	// 선택된 프로시저 코드
+				
+				// 데이터 유효성 확인
+				if(!me.validate()){
+					UT.alert("STD.E0000");	// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+					return;
+				}
+				
+				// 순서(ord) 입력여부 확인
+				for(var i = 0, len = prcrParmList.length; i < len; i++) {
+					var prcrParm = prcrParmList[i];
+					if(prcrParm.ord == null) {
+						UT.alert("STD.SRM1331"); // 파라미터의 순서를 입력하세요.
+						return;
+					}
+				}
+				
+				// 체크된 파라미터의 순서 list
+				var ordList = prcrParmList.map(function(prcrParm){
+					return prcrParm.ord;
+				});
+				
+				if(ordList.length > 0) {
+					// 파라미터 순서 중복 체크
+					var dupCheck = isDuplicate(ordList);
+					if(dupCheck) {
+						UT.alert("STD.SRM1330"); // 파라미터의 순서는 중복 등록이 불가능합니다.
+						return;
+					}
+					function isDuplicate(ordList)  {
+						const isDup = ordList.some(function(x) {
+							return ordList.indexOf(x) !== ordList.lastIndexOf(x);
+						});
+						return isDup;
+					}
+					// 2023.10.03 파라미터의 순서가 중복되지만 않으면 ASC으로 순서 구할수 있기 때문에
+					// 1부터 입력 체크 => 제외
+					// 증가 단위 1 체크 => 제외
+					
+					//ordList.sort();
+					// if(ordList[0] != 1) {
+					// 	UT.alert("STD.SRM1329"); // 파라미터의 순서를 1부터 입력해주세요.
+					// 	return;
+					// }
+					
+					// 파라미터 순서 등차체크(공차 1)
+					// var diff = 1;
+					// var tolCheck = isTolerance(ordList, diff);
+					// if(!tolCheck) {
+					// 	UT.alert("STD.SRM1328"); // 파라미터의 순서를 정확하게 입력해주세요.
+					// 	return;
+					// }
+					function isTolerance(ordList, diff) {
+						for(var i=0; i<ordList.length-1; i++) {
+							if(ordList[i+1] - ordList[i] != diff) {
+								return false;
+							}
+						}
+						return true;
+					}
+				}
+				
+				UT.confirm("STD.N1200", function() {	// 저장 하시겠습니까?
+					me.$.saveListParameterCode.set("body", {
+						insertList   : created,
+						updateList   : updated,
+						prcrCd	     : prcrCd,
+						prcrParmList : prcrParmList
+					});
+					UT.request(me.$.saveListParameterCode);
+				});
+			},
+			
+			/**
+			 * (파라미터 Grid)삭제버튼 클릭
+			 */
+			onDeleteParm : function() {
+				var me = this;
+				var grid = me.$.gridParmPanel,
+					provider = grid.getDataProvider();
+				var checked = provider.selectionCheckedItems(),
+					inserts = provider.getNewItems(),
+					deletes = provider.removeItems();
+				
+				if(UT.isEmpty(checked)){
+					return UT.alert("STD.N1600");	// 선택된 항목이 없습니다.
+				}
+				
+				for(var i = 0, len = checked.length; i < len; i++) {
+					var checkedItem = checked[i];
+					if(checkedItem.prcr_use_yn === 'Y'){  // 파라미터가 프로시저에서 사용중인 경우
+						UT.alert(me.translate("STD.SRM1332")); // 프로시저에 적용된 파라미터는 삭제할 수 없습니다.
+						return;
+					}
+					deletes.push(checkedItem);
+				};
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					// 신규 행 삭제
+					if(inserts.length > 0) {
+						provider.removeItems(true, true);
+					}
+					
+					if(deletes.length > 0) {
+						me.$.deleteListParameterCode.body = {
+							deleteList : deletes
+						};
+						UT.request(me.$.deleteListParameterCode);
+					}
+				});
+			},
+			
+			/**
+			 * 닫기버튼 클릭
+			 */
+			onCloseWindow : function() {
+				var me = this;
+				
+				me.clearData();
+				me.fire("close");
+			},
+			
+			/**
+			 * 프로시저목록 조회
+			 */
+			onSearch : function() {
+				var me = this;
+				// 그리드 조회
+				UT.request(me.$.findListProcedureCode);
+			},
+			
+			/**
+			 * 프로시저목록 조회 callback
+			 */
+			completeFindListProcedureCode : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				me.set("procedureCodeList", result);
+				me.initParmList();
+			},
+			
+			/**
+			 * 파라미터 Grid 초기화
+			 */
+			initParmList : function() {
+				var me = this;
+				me.$.gridParmPanel.getDataProvider().removeAll();
+			},
+			
+			/**
+			 * 프로시저목록 저장 callback
+			 */
+			completeSaveListProcedureCode : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						me.onSearch();
+					});
+				} else if(result.resultStatus === "D") {
+					UT.alert("STD.SRM1327"); // 프로시저명은 중복 등록이 불가능합니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 프로시저목록 삭제 callback
+			 */
+			completeDeleteListProcedureCode : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert("삭제", function() {
+						me.onSearch();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 파라미터목록 저장 callback
+			 */
+			completeSaveListParameterCode : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						me.onSearchParameter();
+					});
+				} else if(result.resultStatus === "D") {
+					UT.alert("STD.SRM1326"); // 파라미터명은 중복 등록이 불가능합니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 파라미터목록 삭제 callback
+			 */
+			completeDeleteListParameterCode : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert("삭제", function() {
+						me.onSearchParameter();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/**
+			 * 프로시저 Grid(프로시저명, 비고) 수정가능여부
+			 */
+			onPrcrEditableFn : function(data, item) {
+				var me = this;
+				if(data['calc_use_yn'] === 'Y') {
+					me.onPrcrRowStyle(data);
+					return false;
+				}
+				return true;
+			},
+			
+			/**
+			 * 파라미터 Grid(파라미터명, 비고) 수정가능여부
+			 */
+			onParmEditableFn : function(data, item) {
+				var me = this;
+				if(data['prcr_use_yn'] === 'Y') {
+					me.onPrcrRowStyle(data);
+					return false;
+				}
+				return true;
+			},
+			
+			/**
+			 * 파라미터 Grid(사용여부) 선택가능여부
+			 */
+			onParmSelectionableFn : function(data, item) {
+				var me = this;
+				if(data['parm_cd'] == null) {
+					return false;
+				}
+				return true;
+			},
+			
+			/**
+			 * 프로시저 Grid row 배경색
+			 */
+			onPrcrRowStyle : function(data){
+				// 계산항목에서 사용중인 경우
+				if(data['calc_use_yn'] === 'Y'){
+					return {
+						"background" : "#E0E0E0"	// Grey color
+					};
+				}
+			},
+			
+			onParmRowStyle : function(data) {
+				var me = this;
+				var prcrInfo = me.get("parameterList.param");
+				if(prcrInfo.calc_use_yn === 'Y') {
+					return {
+						"background" : "#E0E0E0"	// Grey color
+					};
+				}
+			},
+			
+			/**
+			 * 파라미터 Grid column 배경색
+			 */
+			onItemStyleFunction : function(data, item) {
+				// data(파라미터)가 프로시저에서 사용중인 경우 파라미터명/비고 수정 불가
+				if(data.prcr_use_yn === 'Y') {
+					return { "background" : "#E0E0E0" };
+				}
+			},
+			
+			/**
+			 * 프로시저 선택 가능여부
+			 */
+			selectionAblePrcrFn : function(data) {
+				// 계산항목에서 사용중인 프로시저인 경우 체크박스 비활성화(삭제 불가)
+				if(data['calc_use_yn'] === 'Y') {
+					return false;
+				}
+				return true;
+			},
+			
+			/**
+			 * 파라미터 선택 가능여부
+			 */
+			selectionAbleParmFn : function(data) {
+				// 프로시저에서 사용중인 파라미터인 경우 체크박스 비활성화(삭제 불가)
+				var me = this;
+				var param = me.get("parameterList.param");
+				
+				if(data['prcr_use_yn'] === 'Y' || param.calc_use_yn === 'Y') {
+					return false;
+				}
+				return true;
+			},
+			
+			/**
+			 * 파라미터 Grid 사용여부 Cell Click 후
+			 */
+			onItemEditEnd : function(e) {
+				var data = e.detail.data,
+					item = e.detail.item,
+					provider = e.detail.provider;
+				
+				// 사용여부 클릭시 Y->N인 경우 순서(ord) 기존입력값 삭제
+				if(item.dataField === 'prcr_cd_yn') {
+					if(data.prcr_cd_yn === 'N') {
+						provider.setItemAt(item.rowIndex, { ord : null });
+					}
+				}
+			}
+			
+		});
+	</script>
+
+</dom-module>

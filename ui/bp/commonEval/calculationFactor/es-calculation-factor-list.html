@@ -1,0 +1,230 @@
+<sc-link rel="import" href="es-calculation-factor-detail.html"></sc-link>
+
+<dom-module id="es-calculation-factor-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-code-group init>
+			<!-- 데이터 수집 방법 공통코드 조회 -->
+			<sc-code code="R800" value="{{codes.R800}}" ></sc-code>
+		</sc-code-group>
+		
+		<!-- 계산항목 목록 조회 -->
+		<sc-ajax id="findListCalcFactor"
+				 url="findListCalcFactor.do"
+				 body="{{searchParam}}"
+				 last-response="{{calcFactorList}}">
+		</sc-ajax>
+		
+		<!-- 계산항목 목록 삭제 -->
+		<sc-ajax id="deleteListCalcFactor"
+				 url="deleteListCalcFactor.do"
+				 on-response="onDeleteResultHandler">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		<div class="vbox flex">
+			<cc-sub-title-bar  title-text="계산항목 목록"></cc-sub-title-bar>
+			<cc-search-condition-panel on-search="onSearch" auth-r>
+				<cc-fieldset>
+					<sc-label text="계산항목 명"></sc-label>
+					<sc-text-field value="{{searchParam.calcfact_nm}}" max-length="60" on-enter="onSearch" ></sc-text-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<sc-grid id="gridPanel" class="flex" data-provider="{{calcFactorList}}" on-item-click="onDataCellClicked" use-state="false" >
+				<cc-grid-toolbar>
+					<sc-button text="추가" 	on-click="onAddCalcFactor" 		auth-s></sc-button>
+					<sc-button text="삭제" 			on-click="onDeleteCalcFactor" 	auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="calcfact_nm"    		header-text="계산항목 명"   		width="200"		text-align="left" 	style-name="link"></sc-data-column>
+					<sc-data-column data-field="dat_unit"       		header-text="데이터 단위"    		width="80" 		text-align="center"></sc-data-column>
+					<sc-combobox-column data-field="dat_collmeth_ccd"   header-text="데이터 수집 방법"    	width="150" 		text-align="center"
+										display-field="label" 			value-field="data"				items="{{codes.R800}}"></sc-combobox-column>
+					<sc-data-column data-field="rmk"        			header-text="비고"      			width="250"     text-align="left"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="fact_use_yn"></sc-grid-field><!-- 평가항목 사용여부 -->
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-calculation-factor-list",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							R800: [],           // 데이터 수집 방법
+							R801: []           	// 값 수집 유형
+						};
+					}
+				},
+				// 조회조건 Object
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				// 계산항목목록
+				calcFactorList: {
+					type: Array,
+					value: function(){
+						return [];
+					}
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			// gridView의 onDataCellClicked 이벤트 처리
+			onDataCellClicked: function(grid, cell) {
+				var me = this,
+					detail = event.detail,
+					data = detail.data,
+					item = detail.item,
+					provider = detail.provider
+					rowIndex = detail.rowIndex;
+				
+				// 계산항목명 click
+				if (item.dataField === "calcfact_nm") {
+					var param = UT.copy(data);
+					me.fire("load-detail", param);
+				}
+			},
+			
+			/**
+			 * SRM 운영조직 combo 변경 처리
+			 */
+			onChangeOperOrgCombo: function(e) {
+				var me = this;
+				var selectedItem = e.detail.selectedItem;
+				
+				if(selectedItem){
+					me.set("searchParam.org_nm", selectedItem.org_nm);
+				}else{
+					me.set("searchParam.org_nm", "");
+				}
+			},
+			
+			/**
+			 * 계산항목 추가 버튼 클릭
+			 */
+			onAddCalcFactor: function() {
+				var me = this;
+				
+				if(!me.validate()){
+					return UT.alert("STD.E0000");
+				}
+				var searchParam = me.get("searchParam");
+				me.fire("load-detail", searchParam);
+			},
+			
+			/**
+			 * 실적항목 상세 팝업 호출
+			 */
+			openPopupRecordFactor: function(param) {
+				var me = this;
+				
+				// 실적항목 그룹정보 팝업을 호출한다.
+				var recordFactorPopup = UT.popup('ep-recordfactor-detail', me, 600, 400, {
+					"complete-save" : function(popup, e) {
+						me.onSearch();
+						popup.close();
+					}
+				});
+				recordFactorPopup.show();
+				recordFactorPopup.getWindowContent().load(param);
+			},
+			
+			/**
+			 * 계산항목 목록 조회
+			 */
+			onSearch: function() {
+				var me = this;
+				if(!me.validate()){
+					return UT.alert("STD.E0000");	//유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+				};
+				me.fire("clear-detail");
+				UT.request(me.$.findListCalcFactor);
+			},
+			
+			/**
+			 * 계약항목 상세정보 저장 후 자동 조회
+			 */
+			searchAferSave : function(param){
+				var me = this;
+				UT.request(me.$.findListCalcFactor, function(){
+					if(param.rec_fact_id){
+						me.fire("load-detail", param);
+					}else{
+						me.fire("clear-detail");
+					}
+				});
+			},
+			
+			/**
+			 * 계산항목 목록 삭제
+			 */
+			onDeleteCalcFactor: function(){
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length > 0) {
+					var message = "STD.N1300";  // 삭제하시겠습니까?
+					var deletes = [];
+					
+					for(var i = 0, len = checked.length; i < len; i++) {
+						var checkedItem = checked[i];
+						// if(checkedItem.modr_id !== SCSessionManager.currentUser.usr_id){ // 현재 세션 사용자와 작성자가 다른경우
+						// 	UT.alert("STD.SRM1084");	// 다른 사용자가 등록한 항목은 삭제할 수 없습니다.
+						// 	return;
+						// }
+						if(checkedItem.fact_use_yn === 'Y'){  // 계산항목이 평가항목에서 사용중인 경우
+							UT.alert(me.translate("STD.SRM1085", null, checkedItem.calcfact_nm), null, true);	// [ {0} ] 계산항목은 평가항목 계산식에 적용되어 삭제할 수 없습니다.
+							return;
+						}
+						deletes.push(checkedItem);
+					};
+					
+					UT.confirm(message, function(btn) {
+						me.$.deleteListCalcFactor.set("body",{
+							deleteList : deletes
+						});
+						UT.request(me.$.deleteListCalcFactor);
+					});
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+				}
+			},
+			
+			/**
+			 * 계산항목 목록 삭제 callback
+			 */
+			onDeleteResultHandler: function(e, res) {
+				var me = this,
+					response = res.response;
+				
+				if(response.resultStatus === 'S') {
+					UT.completeAlert("삭제", function() {
+						me.onSearch();
+					});
+				}
+				
+			}
+		});
+	</script>
+
+</dom-module>

@@ -1,0 +1,266 @@
+<sc-link rel="import" href="./ep-cntr-clause-detail.html"></sc-link>
+
+<dom-module id="ep-cntr-clause-add">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 저장 -->
+		<sc-ajax id="saveCntrClause"
+				 url="saveCntrClause.do"
+				 body="{{tmpInfo}}"
+				 on-response="completeSaveCntrClause"></sc-ajax>
+		
+		<sc-request-group id="codes" init>
+			<!-- 공통코드 조회 -->
+			<sc-code-group>
+				<!--			<sc-code code="D006" value="{{codes.datTypCcd}}"></sc-code>&lt;!&ndash; D006 : 데이터 타입 &ndash;&gt;-->
+				<sc-code code="D012" value="{{codes.htmlInpTagCcd}}"></sc-code><!-- D012 : HTML 입력 태그 -->
+				<sc-code code="D019" value="{{codes.grpClCcd}}"></sc-code><!-- D019 : 조항 그룹 -->
+			</sc-code-group>
+			
+			<sc-ajax
+					id="findCommonCodeAttrCdList"
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.datTypCcd.param}}"
+					last-response="{{codes.dat_typ_ccd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="저장" on-click="onSave" auth-s></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel column="1">
+			<cc-fieldset >
+				<sc-label text="조항 그룹"></sc-label>
+				<sc-combobox-field value="{{tmpInfo.cl_grp_ccd}}" items="{{codes.grpClCcd}}" display-field="label" value-field="data" placeholder="선택" required="true"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="계약 조항 명"></sc-label>
+				<sc-text-field value="{{tmpInfo.cntr_cl_nm}}" max-length="50" required="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="데이터 유형"></sc-label>
+				<sc-combobox-field selected-index="0" id="datTypCcd" value="{{tmpInfo.dat_typ_ccd}}" items="{{codes.dat_typ_ccd}}" display-field="label" value-field="data" required="true" placeholder="선택"
+								   on-select="onSelectDatTypCcd" ></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="기본 입력값 상세"></sc-label>
+				<sc-text-field value="{{tmpInfo.dflt_val}}" max-length="1000" hidden="[[!formula('isTextType')]]"></sc-text-field>
+				<sc-trigger-field trigger-cls="field-search" on-trigger-click="popupClauseDetail" hidden="[[!formula('isTemplateType')]]"></sc-trigger-field>
+				<sc-date-field value="{{tmpInfo.dflt_val_date}}" string-date="true" required="false" hidden="[[!formula('isDateType')]]"></sc-date-field>
+				<sc-checkbox-field input-value="{{tmpInfo.dflt_val_checkbox}}" hidden="[[!formula('isCheckBoxType')]]"
+								   checked-value="Y" un-checked-value="N" ></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="사용 여부"></sc-label>
+				<sc-checkbox-field input-value="{{tmpInfo.use_yn}}" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="수정 가능 여부"></sc-label>
+				<sc-checkbox-field input-value="{{tmpInfo.mod_poss_yn}}" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="필수 여부"></sc-label>
+				<sc-checkbox-field input-value="{{tmpInfo.mand_yn}}" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset >
+				<sc-label text="앨리어스"></sc-label>
+				<cc-label-tooltip text="계약조항과 데이터를 연결하기 위한 key"></cc-label-tooltip>
+				<sc-text-field value="{{tmpInfo.cntr_cl_aka}}" max-length="30"></sc-text-field>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'ep-cntr-clause-add',
+			properties:{
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							datTypCcd: {
+								param: {
+									ccd: 'D006',
+									cstr_cnd_cd: 'IS_DATE'
+								}
+							},
+							// datTypCcd: [],
+							htmlInpTagCcd: [],
+							grpClCcd: []
+						}
+					}
+				},
+				tmpInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isDateType : function() {
+					var inputWriteType = this.get("inputWriteType");
+					
+					if(inputWriteType === "date"){
+						return true;
+					}else{
+						return false;
+					}
+				},
+				
+				isTemplateType: function() {
+					var inputWriteType = this.get("inputWriteType");
+					if(inputWriteType === "template"){
+						return true;
+					}else{
+						return false;
+					}
+				},
+				
+				isTextType: function() {
+					var inputWriteType = this.get("inputWriteType");
+					
+					if(inputWriteType === "text"){
+						return true;
+					}else{
+						return false;
+					}
+				},
+				
+				isCheckBoxType: function() {
+					var inputWriteType = this.get("inputWriteType");
+					
+					if(inputWriteType === "checkbox"){
+						return true;
+					}else{
+						return false;
+					}
+				},
+				
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.load();
+			},
+			
+			load: function() {
+				var me = this;
+				me.reset();
+				
+				me.set("tmpInfo.dat_typ_ccd", "STR");
+				me.onCheckDatTypCcd("STR");
+				
+				me.set("tmpInfo.use_yn", "Y");
+				me.set("tmpInfo.mod_poss_yn", "Y");
+				me.set("tmpInfo.mand_yn", "Y");
+				
+				me.applyFormula();
+			},
+			
+			/* 저장 */
+			onSave: function() {
+				var me = this;
+				
+				if(!me.validate()) {
+					UT.alert("STD.E0000");	// 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() {	// 저장 하시겠습니까?
+					if( me.get("inputWriteType") === "checkbox" ){
+						me.set("tmpInfo.dflt_val", me.get("tmpInfo.dflt_val_checkbox"));
+					}else if( me.get("inputWriteType") === "date" ){
+						me.set("tmpInfo.dflt_val", me.get("tmpInfo.dflt_val_date"));
+					}
+					
+					
+					UT.request(me.$.saveCntrClause);
+				});
+			},
+			
+			completeSaveCntrClause: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if (result.resultStatus === "S") {
+					UT.alert("STD.N1500", function() { // 요청이 완료되었습니다.
+						me.fire("save");
+					});
+				} else if (result.resultStatus === "U") {
+					UT.alert(me.translate("STD.E1042",null,me.translate("계약 조항 명")),null,true); // 중복된 '{0}'(이)가 존재합니다.
+				} else if (result.resultStatus === "D") {
+					UT.alert(me.translate("STD.E1042",null,me.translate("앨리어스")),null,true); // 중복된 '{0}'(이)가 존재합니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 입력값 상세보기 팝업 */
+			popupClauseDetail: function() {
+				var me = this;
+				var tmpInfo = me.get("tmpInfo");
+				var height = tmpInfo.dat_typ_ccd === "TMPL"? "750" : "400";
+				
+				var clauseDetailPopup = UT.popup("ep-cntr-clause-detail", me, "1000", height, {
+					"save": function(popup, e) {
+						if(tmpInfo.dat_typ_ccd === "TMPL") {
+							me.set("tmpInfo.dyn_tmpl_cont", e.detail.dyn_tmpl_cont);
+						} else {
+							me.set("tmpInfo.dflt_val", e.detail.dflt_val);
+						}
+						popup.close();
+					}
+				}, {titleText: "기본 입력값 상세", alwaysNew:true});
+				
+				clauseDetailPopup.show();
+				clauseDetailPopup.getWindowContent().load(tmpInfo);
+			},
+			
+			onSelectDatTypCcd: function(e) {
+				var me = this;
+				var selectedItem = e.detail.selectedItem;
+				
+				var dateYn = selectedItem.cstr_cnd_val;
+				var datTypCcd = me.get("tmpInfo.dat_typ_ccd");
+				
+				if( dateYn === "Y" ){
+					me.set("inputWriteType","date");
+					datTypCcd = "DATE";
+				}
+				
+				me.onCheckDatTypCcd(datTypCcd);
+				
+				me.set("tmpInfo.dflt_val","");
+				me.set("tmpInfo.dflt_val_checkbox","");
+				me.set("tmpInfo.dflt_val_date","");
+				
+				me.applyFormula();
+			},
+			onCheckDatTypCcd: function(datTypCcd){
+				var me = this;
+				
+				if( datTypCcd === "STR" || datTypCcd === "NUMC" ) {
+					me.set("inputWriteType","text");
+				}else if( datTypCcd === "CHECK" ){
+					me.set("inputWriteType","checkbox");
+				}else if( datTypCcd === "DSCRT" || datTypCcd === "TMPL" ){
+					me.set("inputWriteType","template");
+				}else if( datTypCcd === "DATE"){
+					me.set("inputWriteType","date");
+				}
+				
+			}
+		});
+	</script>
+</dom-module>

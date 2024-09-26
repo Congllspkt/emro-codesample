@@ -1,0 +1,486 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-eval">
+	<select id="findRfx" resultType="map">
+		SELECT RFX_UUID
+		     , RFX_STS_CCD
+		  FROM RFX
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findListEvalTmpl" resultType="map">
+		SELECT EVALTMPL_UUID
+		     , EVAL_TASK_TYP_CCD
+		     , EVALTMPL_CD
+		     , EVALTMPL_NM
+		     , RMK
+		  FROM EVALTMPL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVAL_TASK_TYP_CCD = #{p.eval_task_typ_ccd}
+		   AND CNFD_YN = 'Y'
+		   AND STS != 'D'
+		 ORDER BY REG_DTTM DESC
+	</select>
+	<select id="findListPreNonPriRfxDetail" resultType="map">
+		SELECT T.*
+		  FROM (
+		        SELECT RFX_NPEFACT_SETUP.NPEFACT_UUID
+		             , RFX_NPEFACT_SETUP.EVALTR_TYP_CCD
+		             , RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		             , EVALTMPL.EVALTMPL_NM
+		             , RFX.COMPREVAL_PASS_SC
+		             , RFX.RFX_UUID
+		             , RFX.RFX_NO
+		             , RFX.RFX_RND
+		             , RFX.RFX_TIT
+		             , RFX.REG_DTTM
+		             , RANK() OVER(PARTITION BY RFX.RFX_NO ORDER BY RFX.REG_DTTM DESC) AS IS_RANK
+		          FROM RFX_NPEFACT_SETUP
+		         INNER JOIN RFX
+		            ON RFX.TEN_ID = RFX_NPEFACT_SETUP.TEN_ID
+		           AND RFX.RFX_UUID = RFX_NPEFACT_SETUP.RFX_UUID
+		         INNER JOIN EVALTMPL
+		            ON EVALTMPL.TEN_ID = RFX_NPEFACT_SETUP.TEN_ID
+		           AND EVALTMPL.EVALTMPL_UUID = RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		         WHERE RFX.TEN_ID = #{g.tenant}
+		           AND RFX.RFX_UUID != #{p.rfx_uuid}
+		           AND RFX_NPEFACT_SETUP.EVALTMPL_UUID IS NOT NULL  ) T
+		 WHERE T.IS_RANK = 1
+		 ORDER BY T.REG_DTTM DESC
+	</select>
+	<select id="findRfxNpeFactSetup" resultType="map">
+		SELECT RFX_NPEFACT_SETUP.TEN_ID
+		     , RFX_NPEFACT_SETUP.NPEFACT_UUID
+		     , RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		     , RFX_NPEFACT_SETUP.RFX_UUID
+		     , RFX_NPEFACT_SETUP.EVALTR_TYP_CCD
+		     , RFX_NPEFACT_SETUP.PASS_SC
+		     , RFX_NPEFACT_SETUP.CNFD_YN
+		     , RFX_NPEFACT_SETUP.USE_YN
+		     , RFX_NPEFACT_SETUP.RMK
+		     , RFX_NPEFACT_SETUP.STS
+		     , RFX_NPEFACT_SETUP.REGR_ID
+		     , RFX_NPEFACT_SETUP.REG_DTTM
+		     , RFX_NPEFACT_SETUP.MODR_ID
+		     , RFX_NPEFACT_SETUP.MOD_DTTM
+		  FROM RFX_NPEFACT_SETUP
+		 WHERE RFX_NPEFACT_SETUP.TEN_ID = #{g.tenant}
+		   AND RFX_NPEFACT_SETUP.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findListRfxNpeFactEvaltr" resultType="map">
+		SELECT RFX_NPEFACT_EVALTR.TEN_ID
+		     , RFX_NPEFACT_EVALTR.NPEFACT_UUID
+		     , RFX_NPEFACT_EVALTR.RFX_UUID
+		     , RFX_NPEFACT_EVALTR.EVAL_PIC_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS DISP_EVAL_PIC_NM
+		     , RFX_NPEFACT_EVALTR.DEPT_CD
+		     , RFX_NPEFACT_EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+		     , RFX_NPEFACT_EVALTR.EML_SND_USE_YN
+		     , RFX_NPEFACT_EVALTR.RMK
+		     , RFX_NPEFACT_EVALTR.STS
+		     , RFX_NPEFACT_EVALTR.REGR_ID
+		     , RFX_NPEFACT_EVALTR.REG_DTTM
+		     , RFX_NPEFACT_EVALTR.MODR_ID
+		     , RFX_NPEFACT_EVALTR.MOD_DTTM
+		  FROM RFX_NPEFACT_EVALTR
+		 INNER JOIN USR
+		    ON USR.TEN_ID = RFX_NPEFACT_EVALTR.TEN_ID
+		   AND USR.USR_ID = RFX_NPEFACT_EVALTR.EVAL_PIC_ID
+		 WHERE RFX_NPEFACT_EVALTR.TEN_ID = #{g.tenant}
+		   AND RFX_NPEFACT_EVALTR.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<delete id="deleteRfxNpeFactEvaltrByRfx">
+		DELETE
+		  FROM RFX_NPEFACT_EVALTR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</delete>
+	<delete id="clearRfxNpeFactSetupByRfx">
+		UPDATE RFX_NPEFACT_SETUP
+		   SET PASS_SC = null
+		     , EVALTMPL_UUID = null
+		     , EVALTR_TYP_CCD = null
+		     , CNFD_YN = 'N'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</delete>
+	<insert id="insertRfxNpeFactSetup">
+		INSERT INTO RFX_NPEFACT_SETUP (
+			TEN_ID
+			, NPEFACT_UUID
+			, RFX_UUID
+			, EVALTMPL_UUID
+			, EVALTR_TYP_CCD
+			, CNFD_YN
+			, USE_YN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.npefact_uuid}
+			, #{p.rfx_uuid}
+			, #{p.evaltmpl_uuid}
+			, #{p.evaltr_typ_ccd}
+			, #{p.cnfd_yn}
+			, 'Y'
+			, null
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateRfxNpeFactSetup">
+		UPDATE RFX_NPEFACT_SETUP
+		   SET EVALTR_TYP_CCD = #{p.evaltr_typ_ccd}
+		     , CNFD_YN = #{p.cnfd_yn}
+		     , EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID = #{p.npefact_uuid}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+	<insert id="insertRfxNpeFactEvaltr">
+		INSERT INTO RFX_NPEFACT_EVALTR (
+			TEN_ID
+			, NPEFACT_UUID
+			, EVAL_PIC_ID
+			, RFX_UUID
+			, DEPT_CD
+			, EML_SND_USE_YN
+			, RMK
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, EVALFACT_EVALTR_AUTHTY_CCD
+		) VALUES (
+			#{g.tenant}
+			, #{p.npefact_uuid}
+			, #{p.eval_pic_id}
+			, #{p.rfx_uuid}
+			, #{p.dept_cd}
+			, #{p.eml_snd_use_yn}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{p.evalfact_evaltr_authty_ccd}
+		)
+	</insert>
+	<update id="updateRfxNpeFactEvaltr">
+		UPDATE RFX_NPEFACT_EVALTR
+		   SET EVALFACT_EVALTR_AUTHTY_CCD = #{p.evalfact_evaltr_authty_ccd}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID = #{p.npefact_uuid}
+		   AND EVAL_PIC_ID = #{p.eval_pic_id}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+	<delete id="deleteRfxNpeFactEvaltr">
+		DELETE
+		  FROM RFX_NPEFACT_EVALTR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID = #{p.npefact_uuid}
+		   AND EVAL_PIC_ID = #{p.eval_pic_id}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</delete>
+	<update id="updateEvalSubjResUuid">
+		UPDATE RFX_BID
+		   SET EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+	</update>
+	<update id="updateEvalSubjEvaltrResUuid">
+		UPDATE RFX_BID_EVALTR
+		   SET EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+		     , EVAL_STS_CCD = 'WTG'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_BID_UUID = #{p.rfx_bid_uuid}
+		   AND EVAL_PIC_ID = #{p.eval_pic_id}
+	</update>
+	<select id="findListNpePerform" resultType="map">
+		SELECT MAX(RFX.OORG_CD) AS OORG_CD
+		     , MAX(RFX.RFX_UUID) AS RFX_UUID
+		     , MAX(RFX.RFX_NO) AS RFX_NO
+		     , MAX(RFX.RFX_RND) AS RFX_RND
+		     , MAX(RFX.RFX_TIT) AS RFX_TIT
+		     , MAX(RFX.PURC_TYP_CCD) AS PURC_TYP_CCD
+		     , MAX(RFX.NPE_STS_CCD) AS NPE_STS_CCD
+		     , MAX(EVALTMPL.EVALTMPL_NM) AS EVALTMPL_NM
+		     , COUNT(RFX_BID.RFX_BID_UUID) AS TARGET_CNT
+		     , SUM(CASE WHEN RFX_BID_EVALTR.EVAL_STS_CCD = 'SUBM' THEN 1
+		                ELSE 0
+		            END) AS SUBM_CNT
+		     , SUM(CASE WHEN RFX_BID_EVALTR.EVAL_STS_CCD != 'SUBM' THEN 1
+		                ELSE 0
+		            END) AS WTG_CNT
+		  FROM RFX
+		 INNER JOIN RFX_NPEFACT_SETUP
+		    ON RFX_NPEFACT_SETUP.TEN_ID = RFX.TEN_ID
+		   AND RFX_NPEFACT_SETUP.RFX_UUID = RFX.RFX_UUID
+		 INNER JOIN EVALTMPL
+		    ON EVALTMPL.TEN_ID = RFX_NPEFACT_SETUP.TEN_ID
+		   AND EVALTMPL.EVALTMPL_UUID = RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		 INNER JOIN RFX_BID_EVALTR
+		    ON RFX_BID_EVALTR.TEN_ID = RFX.TEN_ID
+		   AND RFX_BID_EVALTR.RFX_UUID = RFX.RFX_UUID
+		 INNER JOIN RFX_BID
+		    ON RFX_BID.TEN_ID = RFX_BID_EVALTR.TEN_ID
+		   AND RFX_BID.RFX_BID_UUID = RFX_BID_EVALTR.RFX_BID_UUID
+		   AND RFX_BID.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.STS != 'D'
+		   AND RFX.RFX_TYP_CCD = 'RFP'
+		   AND RFX.NPE_STS_CCD IS NOT NULL  AND RFX_BID_EVALTR.EVAL_PIC_ID = #{g.username}
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM'
+		   <if test="p.npe_sts_ccd != null">
+		       AND RFX.NPE_STS_CCD = #{p.npe_sts_ccd}
+		   </if>
+		   <if test="p.from_rfx_crn_dt != null">
+		       AND RFX.RFX_CRN_DT &gt;= #{p.from_rfx_crn_dt}
+		   </if>
+		   <if test="p.to_rfx_crn_dt != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_crn_dt,1)"/>
+		       AND RFX.RFX_CRN_DT <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.rfx_tit != null and p.rfx_tit != ''">
+		       <bind name="rfxTitPattern" value="'%' + p.rfx_tit + '%'"/>
+		       AND UPPER(RFX.RFX_TIT) LIKE UPPER(#{rfxTitPattern})
+		   </if>
+		   <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND RFX.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.purc_typ_ccd != null">
+		       AND RFX.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_nos != null and p.rfx_nos.size() != 0">
+		           AND UPPER(RFX.RFX_NO) IN
+		           <foreach close=")" collection="p.rfx_nos" item="rfx_no" open="(" separator=",">
+		               #{rfx_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_no != null and p.rfx_no != ''">
+		               <bind name="namePattern" value="'%' + p.rfx_no + '%'"/>
+		               AND UPPER(RFX.RFX_NO) LIKE UPPER(#{namePattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.eval_sts_ccd != null and p.eval_sts_ccd != ''">
+		       AND RFX_BID_EVALTR.EVAL_STS_CCD = #{p.eval_sts_ccd}
+		   </if>
+		 GROUP BY RFX.OORG_CD, RFX.RFX_UUID, RFX.RFX_NO, RFX.RFX_RND, RFX.RFX_TIT, RFX.PURC_TYP_CCD, RFX.NPE_STS_CCD, EVALTMPL.EVALTMPL_NM
+		 ORDER BY RFX.RFX_NO DESC, RFX.RFX_RND DESC
+	</select>
+	<select id="findRfxNpeEvalInfo" resultType="map">
+		SELECT RFX.TEN_ID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.OORG_CD
+		     , RFX.NPE_STS_CCD
+		     , 'NPE' AS EVAL_TASK_TYP_CCD
+		     , RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		     , RFX_NPEFACT_SETUP.EVALTR_TYP_CCD
+		     , RFX_NPEFACT_SETUP.RMK
+		  FROM RFX
+		 INNER JOIN RFX_NPEFACT_SETUP
+		    ON RFX_NPEFACT_SETUP.TEN_ID = RFX.TEN_ID
+		   AND RFX_NPEFACT_SETUP.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findNpeEvalSubjectInfo" resultType="map">
+		SELECT RFX_BID.TEN_ID
+		     , RFX_BID.RFX_UUID
+		     , RFX_BID.RFX_BID_UUID
+		     , RFX_BID.EVAL_SUBJ_RES_UUID
+			 , RFX_BID_EVALTR.EVAL_PIC_ID
+		     , RFX_BID_EVALTR.EVAL_PIC_ID AS EVALTR_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS DISP_EVAL_PIC_NM
+		     , RFX_BID_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID
+		     , RFX_BID_EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+		     , RFX_BID_EVALTR.EVAL_STS_CCD
+		     <if test="p.isBeforeOpen == null or !p.isBeforeOpen">
+		         , CASE WHEN RFX_BID_EVALTR.EVAL_STS_CCD = 'SUBM' THEN RFX_BID_EVALTR.EVALTR_SC
+		                ELSE NULL
+		            END AS EVALTR_SC
+		     </if>
+		     , 'NPE' AS EVAL_TASK_TYP_CCD
+		     , 'SURV' AS EVALDOC_LYT_TYP_CCD
+		     , RFX_NPEFACT_SETUP.EVALTMPL_UUID
+		     , CASE WHEN VD.VD_CD IS NULL OR VD.VD_CD = '' THEN VD.ERP_VD_CD
+		            ELSE VD.VD_CD
+		        END AS DISP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS DISP_VD_NM
+		  FROM RFX_BID
+		 INNER JOIN VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD = RFX_BID.VD_CD
+		 INNER JOIN RFX_BID_EVALTR
+		    ON RFX_BID_EVALTR.TEN_ID = RFX_BID.TEN_ID
+		   AND RFX_BID_EVALTR.RFX_BID_UUID = RFX_BID.RFX_BID_UUID
+		 INNER JOIN USR
+		    ON USR.TEN_ID = RFX_BID_EVALTR.TEN_ID
+		   AND USR.USR_ID = RFX_BID_EVALTR.EVAL_PIC_ID
+		 INNER JOIN RFX_NPEFACT_SETUP
+		    ON RFX_NPEFACT_SETUP.TEN_ID = RFX_BID.TEN_ID
+		   AND RFX_NPEFACT_SETUP.RFX_UUID = RFX_BID.RFX_UUID
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+		   AND RFX_BID.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_BID.EVAL_SUBJ_RES_UUID IS NOT NULL  AND RFX_BID_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID IS NOT NULL <if test="p.isMonitor == null or !p.isMonitor">
+		       AND RFX_BID_EVALTR.EVAL_PIC_ID = #{g.username}
+		   </if>
+		   <if test="p.vd_cd != null and p.vd_cd != ''">
+		       AND (UPPER(VD.VD_CD) = UPPER(#{p.vd_cd}) OR UPPER(VD.ERP_VD_CD) = UPPER(#{p.vd_cd}))
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != ''">
+		       <bind name="vdNmPattern" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNmPattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNmPattern}))
+		   </if>
+		   <if test="p.eval_sts_ccd != null and p.eval_sts_ccd != ''">
+		       AND RFX_BID_EVALTR.EVAL_STS_CCD = #{p.eval_sts_ccd}
+		   </if>
+		   <if test="p.evaltr_nm != null and p.evaltr_nm != ''">
+		       <bind name="usrNmPattern" value="'%' + p.evaltr_nm + '%'"/>
+		       AND (UPPER(USR.USR_NM) LIKE UPPER(#{usrNmPattern}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{usrNmPattern}))
+		   </if>
+		 ORDER BY RFX_BID.VD_CD, RFX_BID_EVALTR.EVAL_PIC_ID
+	</select>
+	<update id="updateEvaltrScore">
+		UPDATE RFX_BID_EVALTR
+		   SET EVALTR_SC = #{p.evaltr_sc}
+		     , EVAL_STS_CCD = #{p.eval_sts_ccd}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+	</update>
+	<update id="updateEvalTargetScore">
+		UPDATE RFX_BID
+		   SET NPE_AVG_SC = #{p.eval_sc}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+	</update>
+	<select id="validateNpeEvalComplete" resultType="boolean">
+		SELECT CASE WHEN COUNT(RFX_BID_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID) = 0 THEN 1
+		            ELSE 0
+		        END
+		  FROM RFX_BID_EVALTR
+		 WHERE RFX_BID_EVALTR.TEN_ID = #{g.tenant}
+		   AND RFX_BID_EVALTR.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_BID_EVALTR.EVAL_STS_CCD != 'SUBM'
+	</select>
+	<update id="updateCompleteNpeEval">
+		UPDATE RFX
+		   SET NPE_STS_CCD = 'EVAL_ED'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+	<select id="findListTargetVendorByRfxUuid" resultType="map">
+		SELECT RFX_BID.EVAL_SUBJ_RES_UUID
+		     , VD.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS DISP_VD_NM
+		  FROM RFX_BID
+		 INNER JOIN VD
+		    ON VD.TEN_ID = RFX_BID.TEN_ID
+		   AND VD.VD_CD = RFX_BID.VD_CD
+		 WHERE RFX_BID.TEN_ID = #{g.tenant}
+		   AND RFX_BID.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_BID.EVAL_SUBJ_RES_UUID IS NOT NULL  ORDER BY RFX_BID.NPE_AVG_SC DESC
+	</select>
+	<update id="saveMappingEvaltmplUuidByNpeFact">
+		UPDATE RFX_NPEFACT_SETUP
+		   SET EVALTMPL_UUID = #{p.evaltmpl_uuid}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID = #{p.npefact_uuid}
+	</update>
+	<update id="updateConfirmRfxNpeFact">
+		UPDATE RFX_NPEFACT_SETUP
+		   SET CNFD_YN = #{p.cnfd_yn}
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID = #{p.npefact_uuid}
+	</update>
+	<select id="countRfxEvalempl" resultType="int">
+		SELECT COUNT(NPEFACT_UUID)
+		  FROM RFX_NPEFACT_SETUP
+		 WHERE TEN_ID = #{g.tenant}
+		   AND NPEFACT_UUID != #{p.npefact_uuid}
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</select>
+	<delete id="deleteRfxNpeFactSetup">
+		DELETE
+		  FROM RFX_NPEFACT_SETUP
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</delete>
+    <select id="findNpeEvalByEvalSubjEvaltrResId" resultType="map">
+    /* rfx-eval.findNpeEvalByEvalSubjEvaltrResId : 평가대상 평가자 아이디로 npe eval 정보 확인 (workplace link 용)*/
+    SELECT RFX.RFX_UUID
+         , RFX.NPE_STS_CCD
+         , RFX.RFX_NO
+         , RFX.RFX_RND
+         , RFX.RFX_STS_CCD
+         , RBID_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID
+         , RBID_EVALTR.RFX_BID_UUID
+         , RBID_EVALTR.EVAL_PIC_ID
+      FROM RFX_BID_EVALTR RBID_EVALTR
+     INNER JOIN RFX
+        ON RBID_EVALTR.TEN_ID = RFX.TEN_ID
+       AND RBID_EVALTR.RFX_UUID = RFX.RFX_UUID
+     WHERE RBID_EVALTR.TEN_ID = #{g.tenant}
+       AND RBID_EVALTR.EVAL_SUBJ_EVALTR_RES_UUID = #{p.eval_subj_evaltr_res_uuid}
+      AND RBID_EVALTR.STS != 'D'
+    </select>
+	<select id="findEvalTmplStsInNpeEvalSht" resultType="String">
+		/* rfx-eval.findEvalTmplStsInNpeEvalSht: 평가템플릿 상태값 조회 - 비가격평가 평가시트 */
+		SELECT STS
+		FROM RFX_NPEFACT_SETUP
+		WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+			AND NPEFACT_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+</mapper>

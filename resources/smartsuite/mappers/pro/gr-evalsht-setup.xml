@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="gr-evalsht-setup">
+	<select id="findListGrEvalsht" resultType="map">
+		SELECT GR_EVALSHT.TEN_ID                  /* 테넌트 아이디 */
+		     , GR_EVALSHT.GR_EVALSHT_UUID         /* 입고 평가시트 UUID */
+		     , GR_EVALSHT.EVALSHT_CD              /* 평가시트 코드 */
+		     , GR_EVALSHT.EVALSHT_NM              /* 평가시트 명 */
+		     , GR_EVALSHT.EFCT_ST_DT              /* 유효 시작 일자 */
+		     , GR_EVALSHT.EFCT_EXP_DT             /* 유효 만료 일자 */
+		     , GR_EVALSHT.GEG_UUID                /* 심사 그룹 아이디 */
+		     , GEG.GEG_NM
+		     , GR_EVALSHT.CNFD_YN                 /* 확정 여부 */
+		     , GR_EVALSHT.RMK
+		     , GR_EVALSHT.STS
+		     , GR_EVALSHT.REGR_ID
+		     , GR_EVALSHT.REG_DTTM
+		     , GR_EVALSHT.MODR_ID
+		     , USR.USR_NM AS MOD_NM
+		     , GR_EVALSHT.MOD_DTTM
+		  FROM GR_EVALSHT GR_EVALSHT
+		 INNER JOIN GEG GEG
+		    ON GEG.TEN_ID = GR_EVALSHT.TEN_ID
+		   AND GEG.GEG_UUID = GR_EVALSHT.GEG_UUID
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = GR_EVALSHT.TEN_ID
+		   AND USR.USR_ID = GR_EVALSHT.MODR_ID
+		 WHERE GR_EVALSHT.TEN_ID  = #{g.tenant}
+		   AND GR_EVALSHT.STS    != 'D'
+		   AND GEG.OORG_CD = #{p.oorg_cd}
+		   <if test="p.evalsht_nm != null and p.evalsht_nm != ''">
+		       <bind name="evalshtNm" value="'%' + p.evalsht_nm+ '%'"/>
+		       AND UPPER(GR_EVALSHT.EVALSHT_NM) LIKE UPPER(#{evalshtNm})
+		   </if>
+		 ORDER BY GR_EVALSHT.MOD_DTTM DESC
+	</select>
+	<select id="findListGrEvalshtHis" resultType="map">
+		SELECT GR_EVALSHT.TEN_ID                  /* 테넌트 아이디 */
+		     , GR_EVALSHT.GR_EVALSHT_UUID         /* 입고 평가시트 UUID */
+		     , GR_EVALSHT.EVALSHT_CD              /* 평가시트 코드 */
+		     , GR_EVALSHT.EVALSHT_NM              /* 평가시트 명 */
+		     , GR_EVALSHT.EFCT_ST_DT              /* 유효 시작 일자 */
+		     , GR_EVALSHT.EFCT_EXP_DT             /* 유효 만료 일자 */
+		     , GR_EVALSHT.GEG_UUID                /* 심사 그룹 아이디 */
+		     , GR_EVALSHT.CNFD_YN                 /* 확정 여부 */
+		     , GR_EVALSHT.RMK
+		     , GR_EVALSHT.STS
+		     , GR_EVALSHT.REGR_ID
+		     , GR_EVALSHT.REG_DTTM
+		     , GR_EVALSHT.MODR_ID
+		     , GR_EVALSHT.MOD_DTTM
+		     , CASE WHEN (RANK() OVER (ORDER BY GR_EVALSHT.MOD_DTTM DESC, GR_EVALSHT.EFCT_EXP_DT DESC, GR_EVALSHT.EFCT_ST_DT DESC)) = '1' THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT  /* 최신 평가시트 */
+		  FROM GR_EVALSHT GR_EVALSHT    /* GR_EVALSHT : 입고 평가시트 */
+		 WHERE GR_EVALSHT.TEN_ID    = #{g.tenant}
+		   AND GR_EVALSHT.GEG_UUID  = #{p.geg_uuid}
+		   AND GR_EVALSHT.STS       != 'D'
+		 ORDER BY GR_EVALSHT.MOD_DTTM DESC, GR_EVALSHT.EFCT_EXP_DT DESC, GR_EVALSHT.EFCT_ST_DT DESC
+	</select>
+	<select id="findGrEvalshtInfo" resultType="map">
+		SELECT GR_EVALSHT.TEN_ID                  /* 테넌트 아이디 */
+		     , GR_EVALSHT.GR_EVALSHT_UUID         /* 입고 평가시트 UUID */
+		     , GR_EVALSHT.EVALSHT_CD              /* 평가시트 코드 */
+		     , GR_EVALSHT.EVALSHT_NM              /* 평가시트 명 */
+		     , GR_EVALSHT.EFCT_ST_DT              /* 유효 시작 일자 */
+		     , GR_EVALSHT.EFCT_EXP_DT             /* 유효 만료 일자 */
+		     , GR_EVALSHT.GEG_UUID                /* 심사 그룹 아이디 */
+		     , GR_EVALSHT.CNFD_YN                 /* 확정 여부 */
+		     , GR_EVALSHT.RMK
+		     , GR_EVALSHT.STS
+		     , GR_EVALSHT.REGR_ID
+		     , GR_EVALSHT.REG_DTTM
+		     , GR_EVALSHT.MODR_ID
+		     , GR_EVALSHT.MOD_DTTM
+		     , CASE WHEN GR_EVALSHT.GR_EVALSHT_UUID = CRNT_SHT.GR_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT  /* 최신 평가시트 */
+		  FROM GR_EVALSHT GR_EVALSHT    /* GR_EVALSHT : 입고 평가시트 */
+		  LEFT OUTER JOIN (
+		                   SELECT TEN_ID, GEG_UUID, GR_EVALSHT_UUID, CURRENT_EVALSHT_RANK
+		                     FROM (
+		                           SELECT TEN_ID, GEG_UUID, GR_EVALSHT_UUID, RANK() OVER (ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC) AS CURRENT_EVALSHT_RANK
+		                             FROM GR_EVALSHT
+		                            WHERE TEN_ID    = #{g.tenant}
+		                              AND STS != 'D'
+		                              AND GEG_UUID = #{p.geg_uuid}
+		                          ) x
+		                    WHERE CURRENT_EVALSHT_RANK = 1
+		                  ) CRNT_SHT
+		    ON CRNT_SHT.TEN_ID = GR_EVALSHT.TEN_ID
+		   AND CRNT_SHT.GEG_UUID = GR_EVALSHT.GEG_UUID
+		 WHERE GR_EVALSHT.TEN_ID    = #{g.tenant}
+		   AND GR_EVALSHT.GR_EVALSHT_UUID  = #{p.gr_evalsht_uuid}
+		   AND GR_EVALSHT.STS              != 'D'
+	</select>
+	<select id="findGrEvalshtInfoPrcs" resultType="map">
+		SELECT DTLCD.TEN_ID                           /* 시스템 아이디 */
+		     , DTLCD.CCD                              /* 그룹 코드 */
+		     , DTLCD.DTLCD         AS PRCS_CCD        /* 프로세스 공통코드 */
+		     , DTLCD_MULTLANG.DTLCD_NM    AS PRCS_CCD_NM  /* 상세 코드 명 */
+		     , GR_EVALSHT_PRCS.GR_EVALSHT_PRCS_UUID   /* 입고 평가시트 프로세스 UUID */
+		     , GR_EVALSHT_PRCS.GR_EVALSHT_UUID        /* 입고 평가시트 UUID */
+		     , GR_EVALSHT_PRCS.EVALTMPL_UUID
+		     , GR_EVALSHT_PRCS.PRE_EVALTMPL_UUID
+		     , GR_EVALSHT_PRCS.EVALFACT_AUTHTY_PIC_YN
+		     , GR_EVALSHT_PRCS.EVALDOC_LYT_TYP_CCD    /* 평가문서 레이아웃 유형 공통코드 */
+		     , GR_EVALSHT_PRCS.EVALTR_TYP_CCD AS EVALTR_TYP_CCD    /* 평가자 유형 */
+		     , GR_EVALSHT_PRCS.PRCS_SORT              /* 절차 순서 */
+		     , GR_EVALSHT_PRCS.PRCS_WGT               /* 가중치 */
+		     , CASE WHEN GR_EVALSHT_PRCS.PRCS_CCD IS NULL OR GR_EVALSHT_PRCS.PRCS_CCD = '' THEN 'N' ELSE 'Y' END AS APPLICATION_YN   /* 적용 여부 */
+		     , GR_EVALSHT.CNFD_YN                     /* 입고 평가시트 확정 여부 */
+		  FROM DTLCD DTLCD
+		  LEFT OUTER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD.TEN_ID     = DTLCD_MULTLANG.TEN_ID
+		   AND DTLCD.CCD        = DTLCD_MULTLANG.CCD
+		   AND DTLCD.DTLCD      = DTLCD_MULTLANG.DTLCD
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		  LEFT OUTER JOIN GR_EVALSHT_PRCS GR_EVALSHT_PRCS   /* GR_EVALSHT_PRCS : 입고 평가시트 프로세스 */
+		    ON GR_EVALSHT_PRCS.TEN_ID     = DTLCD.TEN_ID
+		   AND GR_EVALSHT_PRCS.PRCS_CCD   = DTLCD.DTLCD
+		   AND GR_EVALSHT_PRCS.GR_EVALSHT_UUID  = #{p.gr_evalsht_uuid}
+		   AND GR_EVALSHT_PRCS.STS       != 'D'
+		  LEFT OUTER JOIN GR_EVALSHT GR_EVALSHT   /* GR_EVALSHT : 입고 평가시트 */
+		    ON GR_EVALSHT.TEN_ID      = GR_EVALSHT_PRCS.TEN_ID
+		   AND GR_EVALSHT.GR_EVALSHT_UUID = GR_EVALSHT_PRCS.GR_EVALSHT_UUID
+		   AND GR_EVALSHT.STS        != 'D'
+		 WHERE DTLCD.TEN_ID     = #{g.tenant}
+		   AND DTLCD.CCD        = 'P238'
+		   AND DTLCD.USE_YN     = 'Y'
+		   AND DTLCD.STS       != 'D'
+		 ORDER BY DTLCD.DTLCD_SORT
+		        , DTLCD.DTLCD
+	</select>
+	<insert id="insertGrEvalsht">
+		INSERT INTO GR_EVALSHT (
+			TEN_ID                   /* 테넌트 아이디 */
+			, GR_EVALSHT_UUID        /* 입고 평가시트 UUID */
+			, EVALSHT_CD             /* 평가시트 코드 */
+			, EVALSHT_NM             /* 평가시트 명 */
+			, EFCT_ST_DT             /* 유효 시작 일자 */
+			, EFCT_EXP_DT            /* 유효 만료 일자 */
+			, GEG_UUID               /* 입고평가그룹 아이디 */
+			, CNFD_YN                /* 확정 여부 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gr_evalsht_uuid}   /* 입고 평가시트 UUID */
+			, #{p.evalsht_cd}        /* 평가시트 코드 */
+			, #{p.evalsht_nm}        /* 평가시트 명 */
+			, #{p.efct_st_dt}        /* 유효 시작 일자 */
+			, #{p.efct_exp_dt}       /* 유효 만료 일자 */
+			, #{p.geg_uuid}          /* 입고평가그룹 아이디 */
+			, #{p.cnfd_yn}           /* 확정 여부 */
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGrEvalsht">
+		UPDATE GR_EVALSHT        /* 입고 평가시트 */
+		   SET EVALSHT_NM   = #{p.evalsht_nm}            /* 평가시트 명 */
+		     , EFCT_ST_DT   = #{p.efct_st_dt}            /* 유효 시작 일자 */
+		     , EFCT_EXP_DT  = #{p.efct_exp_dt}           /* 유효 만료 일자 */
+		     , CNFD_YN      = #{p.cnfd_yn}               /* 확정 여부 */
+		     , STS          = 'U'                        /* 상태 */
+		     , MODR_ID      = #{g.username}              /* 수정자 아이디 */
+		     , MOD_DTTM     = #{g.now}                   /* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}                      /* 시스템 아이디 */
+		   AND GR_EVALSHT_UUID = #{p.gr_evalsht_uuid}    /* 입고 평가시트 UUID */
+	</update>
+	<insert id="insertGrEvalshtPrcs">
+		INSERT INTO GR_EVALSHT_PRCS (
+			TEN_ID                        /* 테넌트 아이디 */
+			, GR_EVALSHT_PRCS_UUID        /* 입고 평가시트 프로세스 UUID */
+			, GR_EVALSHT_UUID             /* 입고 평가시트 UUID */
+			, GEG_UUID
+			, PRCS_CCD                    /* 프로세스 공통코드 */
+			, PRCS_WGT                    /* 가중치 */
+			, PRCS_SORT                   /* 절차 순서 */
+			, EVALFACT_AUTHTY_PIC_YN
+			, EVALDOC_LYT_TYP_CCD         /* 평가 Layout 유형 */
+			, EVALTR_TYP_CCD         /* 평가자 유형 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.gr_evalsht_prcs_uuid}     /* 입고 평가시트 프로세스 UUID */
+			, #{p.gr_evalsht_uuid}          /* 입고 평가시트 UUID */
+			, #{p.geg_uuid}
+			, #{p.prcs_ccd}                 /* 프로세스 공통코드 */
+			, #{p.prcs_wgt}                 /* 가중치 */
+			, #{p.prcs_sort}                /* 절차 순서 */
+			, 'N'
+			, 'SURV'                        /* 평가 Layout 유형: 기본값 서베이 */
+			, (
+			   SELECT T.DTLCD
+			     FROM (
+			           SELECT DTLCD.DTLCD
+			                , RANK() OVER(ORDER BY DTLCD_SORT DESC) AS IS_RANK
+			             FROM DTLCD
+			            INNER JOIN CCD_CSTR_CND_VAL
+			               ON CCD_CSTR_CND_VAL.TEN_ID = DTLCD.TEN_ID
+			              AND CCD_CSTR_CND_VAL.CCD  = DTLCD.CCD
+			              AND CCD_CSTR_CND_VAL.DTLCD = DTLCD.DTLCD
+			            WHERE DTLCD.TEN_ID = #{g.tenant}
+			              AND DTLCD.CCD    = 'P240'
+			              AND CCD_CSTR_CND_VAL.CSTR_CND_VAL = #{p.prcs_ccd}
+			          ) T
+			    WHERE T.IS_RANK = 1
+			  )
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGrEvalshtPrcs">
+		UPDATE GR_EVALSHT_PRCS
+		   SET PRCS_SORT           = #{p.prcs_sort}           /* 절차 순서 */
+		     , PRCS_WGT            = #{p.prcs_wgt}            /* 가중치 */
+		     , EVALTR_TYP_CCD = #{p.evaltr_typ_ccd} /* 평가자 유형 */
+		     , EVALFACT_AUTHTY_PIC_YN = #{p.evalfact_authty_pic_yn}
+		     , EVALDOC_LYT_TYP_CCD = #{p.evaldoc_lyt_typ_ccd} /* 평가문서 레이아웃 유형 공통코드 */
+		     , EVALTMPL_UUID       = #{p.evaltmpl_uuid}       /* 평가템플릿 UUID */
+		     , STS                 = #{p.sts}                 /* 상태 */
+		     , MODR_ID             = #{g.username}            /* 수정자 아이디 */
+		     , MOD_DTTM            = #{g.now}                 /* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}                             /* 시스템 아이디 */
+		   AND GR_EVALSHT_PRCS_UUID = #{p.gr_evalsht_prcs_uuid} /* 입고평가그룹 UUID */
+	</update>
+	<insert id="copyGrEvalsht">
+		INSERT INTO GR_EVALSHT (
+			TEN_ID                   /* 테넌트 아이디 */
+			, GR_EVALSHT_UUID         /* 온보딩 평가시트 UUID */
+			, EVALSHT_CD               /* 평가시트 코드 */
+			, EVALSHT_NM               /* 평가시트 명 */
+			, EFCT_ST_DT               /* 유효 시작 일자 */
+			, EFCT_EXP_DT              /* 유효 만료 일자 */
+			, GEG_UUID                 /* 심사 그룹 아이디 */
+			, CNFD_YN                  /* 확정 여부 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		)
+		SELECT #{g.tenant}
+		     , #{p.new_gr_evalsht_uuid} /* 온보딩 평가시트 UUID */
+		     , #{p.evalsht_cd}          /* 평가시트 코드 */
+		     , CONCAT('VerionUp_', EVALSHT_NM)  /* 평가시트 명 */
+		     , EFCT_ST_DT               /* 유효 시작 일자 */
+		     , EFCT_EXP_DT              /* 유효 만료 일자 */
+		     , #{p.geg_uuid}            /* 심사 그룹 아이디 */
+		     , 'N'                      /* 확정 여부 */
+		     , 'C'
+		     , RMK
+		     , #{g.username}
+		     , #{g.now}
+		     , #{g.username}
+		     , #{g.now}
+		  FROM GR_EVALSHT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_UUID = #{p.gr_evalsht_uuid}
+	</insert>
+	<insert id="copyGrEvalshtPrcs">
+		INSERT INTO GR_EVALSHT_PRCS (
+			TEN_ID                     /* 테넌트 아이디 */
+			, GR_EVALSHT_PRCS_UUID     /* 입고 평가시트 프로세스 UUID */
+			, GR_EVALSHT_UUID          /* 입고 평가시트 UUID */
+			, EVALTMPL_UUID            /* 평가템플릿 UUID */
+			, PRCS_CCD                 /* 프로세스 공통코드 */
+			, PRCS_WGT                 /* 가중치 */
+			, EVALFACT_AUTHTY_PIC_YN
+			, EVALDOC_LYT_TYP_CCD      /* 평가문서 레이아웃 유형 공통코드 */
+			, EVALTR_TYP_CCD      /* 평가자 유형 */
+			, PRCS_SORT                /* 절차 순서 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		)
+		SELECT #{g.tenant}
+		     , #{p.new_gr_evalsht_prcs_uuid}    /* 입고 평가시트 프로세스 UUID */
+		     , #{p.new_gr_evalsht_uuid}         /* 입고 평가시트 UUID */
+		     , EVALTMPL_UUID                    /* 평가템플릿 UUID */
+		     , PRCS_CCD                         /* 프로세스 공통코드 */
+		     , PRCS_WGT                         /* 가중치 */
+		     , EVALFACT_AUTHTY_PIC_YN
+		     , EVALDOC_LYT_TYP_CCD              /* 평가문서 레이아웃 유형 공통코드 */
+		     , EVALTR_TYP_CCD              /* 평가자 유형 */
+		     , PRCS_SORT                        /* 절차 순서 */
+		     , 'C'
+		     , RMK
+		     , #{g.username}
+		     , #{g.now}
+		     , #{g.username}
+		     , #{g.now}
+		  FROM GR_EVALSHT_PRCS
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_PRCS_UUID = #{p.gr_evalsht_prcs_uuid}
+		   AND STS != 'D'
+	</insert>
+	<insert id="copyListGrFactChrGrpEvaltr">
+		INSERT INTO GR_EVALSHT_PRCS_EVALTR (
+			TEN_ID                        /* 테넌트 아이디 */
+			, GR_EVALSHT_PRCS_EVALTR_UUID /* 입고 평가시트 프로세스 평가자 UUID */
+			, GR_EVALSHT_PRCS_UUID        /* 입고 평가시트 프로세스 UUID */
+			, EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+			, EVALTR_ID                   /* 평가자 아이디 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		)
+		SELECT #{g.tenant}
+			 , RANDOMUUID()  , #{p.new_gr_evalsht_prcs_uuid}         /* 입고 평가시트 프로세스 UUID */
+		     , EVALFACT_EVALTR_AUTHTY_CCD            /* 평가항목 평가자 권한 공통코드 */
+		     , EVALTR_ID                             /* 평가자 아이디 */
+		     , 'C'
+		     , RMK
+		     , #{g.username}
+		     , #{g.now}
+		     , #{g.username}
+		     , #{g.now}
+		  FROM GR_EVALSHT_PRCS_EVALTR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_PRCS_UUID = #{p.gr_evalsht_prcs_uuid}
+		   AND STS != 'D'
+	</insert>
+	<update id="updateGrEvalshtStsByDelete">
+		UPDATE GR_EVALSHT /* 온보딩 평가시트 */
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_UUID = #{p.gr_evalsht_uuid} /* 입고 평가시트 UUID */
+	</update>
+	<update id="updateEvaltrByDelete">
+		UPDATE GR_EVALSHT_PRCS_EVALTR          /* 입고 평가시트 프로세스 평가자 */
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}         /* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}             /* 수정 일시 */
+		 WHERE TEN_ID = #{g.tenant}                             /* 테넌트 아이디 */
+		   AND GR_EVALSHT_PRCS_UUID = #{p.gr_evalsht_prcs_uuid} /* 입고 평가시트 프로세스 UUID */
+	</update>
+	<insert id="insertGrEvalshtPrcsEvaltr">
+		INSERT INTO GR_EVALSHT_PRCS_EVALTR (
+			TEN_ID                        /* 테넌트 아이디 */
+			, GR_EVALSHT_PRCS_EVALTR_UUID /* 입고 평가시트 프로세스 평가자 UUID */
+			, GR_EVALSHT_PRCS_UUID        /* 입고 평가시트 프로세스 UUID */
+			, EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+			, EVALTR_ID                   /* 평가자 아이디 */
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{g.uuid}                          /* 입고 평가시트 프로세스 평가자 UUID */
+			, #{p.gr_evalsht_prcs_uuid}          /* 입고 평가시트 프로세스 UUID */
+			, #{p.evalfact_evaltr_authty_ccd}    /* 평가항목 평가자 권한 공통코드 */
+			, #{p.evaltr_id}                     /* 평가자 아이디 */
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateGrEvalshtPrcsEvaltr">
+		UPDATE GR_EVALSHT_PRCS_EVALTR        /* 입고 평가시트 프로세스 평가자 */
+		   SET MODR_ID                     = #{g.username}                    /* 수정자 아이디 */
+		     , MOD_DTTM                    = #{g.now}                         /* 수정 일시 */
+		     , STS                         = 'U'                              /* 상태 */
+		     , EVALFACT_EVALTR_AUTHTY_CCD  = #{p.evalfact_evaltr_authty_ccd}  /* 평가항목 평가자 권한 공통코드 */
+		 WHERE TEN_ID = #{g.tenant}                                           /* 시스템 아이디 */
+		   AND GR_EVALSHT_PRCS_EVALTR_UUID = #{p.gr_evalsht_prcs_evaltr_uuid} /* 입고 평가시트 프로세스 평가자 UUID */
+	</update>
+	<update id="updateGrEvalshtPrcsEvaltrByDelete">
+		UPDATE GR_EVALSHT_PRCS_EVALTR
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_PRCS_EVALTR_UUID = #{p.gr_evalsht_prcs_evaltr_uuid} /* 입고 평가시트 프로세스 평가자 UUID */
+	</update>
+	<select id="findListEvaltmplUuidOfGrEvalshtPrcses" resultType="string">
+		SELECT GR_EVALSHT_PRCS.EVALTMPL_UUID
+		  FROM GR_EVALSHT_PRCS GR_EVALSHT_PRCS   /* GR_EVALSHT_PRCS : 입고 평가시트 프로세스 */
+		 WHERE GR_EVALSHT_PRCS.TEN_ID     = #{g.tenant}
+		   AND GR_EVALSHT_PRCS.GR_EVALSHT_UUID  = #{p.gr_evalsht_uuid}
+		   AND GR_EVALSHT_PRCS.STS       != 'D'
+	</select>
+	<update id="updatePrevGrEvalsht">
+		UPDATE GR_EVALSHT        /* 입고 평가시트 */
+		   SET MODR_ID               = #{g.username}              /* 수정자 아이디 */
+		     , MOD_DTTM              = #{g.now}                   /* 수정 일시 */
+		     , STS                   = 'U'                        /* 상태 */
+			 , EFCT_EXP_DT           = CASE WHEN #{p.cnfd_yn} = 'Y' THEN
+									    #{p.efct_st_dt} ELSE #{p.efct_exp_dt}  END  /* 유효 만료 일자 */
+		 WHERE TEN_ID = #{g.tenant}                              /* 시스템 아이디 */
+		   AND GR_EVALSHT_UUID = #{p.prev_gr_evalsht_uuid}       /* 이전 입고 평가시트 UUID */
+	</update>
+	<update id="updatePrevEvaltmplUuidGrEvalshtPrcs">
+		UPDATE GR_EVALSHT_PRCS        /* 입고 평가시트 프로세스 */
+		   SET MODR_ID               = #{g.username}              /* 수정자 아이디 */
+		     , MOD_DTTM              = #{g.now}                   /* 수정 일시 */
+		     , PRE_EVALTMPL_UUID   = CASE WHEN #{p.cnfd_yn} = 'Y' THEN NULL ELSE PRE_EVALTMPL_UUID END  /* 이전 평가템플릿 UUID */
+		 WHERE TEN_ID = #{g.tenant}                              /* 시스템 아이디 */
+		   AND GR_EVALSHT_UUID = #{p.gr_evalsht_uuid}            /* 입고 평가시트 UUID */
+		   AND STS != 'D'
+	</update>
+	<update id="updateCnfdYnGrEvalsht">
+		UPDATE GR_EVALSHT        /* 입고 평가시트 */
+		   SET MODR_ID  = #{g.username}             /* 수정자 아이디 */
+		     , MOD_DTTM = #{g.now}                  /* 수정 일시 */
+		     , STS      = 'U'                       /* 상태 */
+		     , CNFD_YN  = #{p.cnfd_yn}              /* 확정 여부 */
+		 WHERE TEN_ID = #{g.tenant}                              /* 시스템 아이디 */
+		   AND GR_EVALSHT_UUID = #{p.gr_evalsht_uuid}            /* 입고 평가시트 UUID */
+	</update>
+	<insert id="copyGrEvalshtPrcsEvaltrByDefaultGemgQlyPic">
+		INSERT INTO GR_EVALSHT_PRCS_EVALTR (
+			TEN_ID
+			, GR_EVALSHT_PRCS_EVALTR_UUID
+			, GR_EVALSHT_PRCS_UUID
+			, EVALFACT_EVALTR_AUTHTY_CCD
+			, EVALTR_ID
+			, REGR_ID
+			, REG_DTTM
+		)
+		SELECT GEMG_QLY_PIC.TEN_ID
+			 , RANDOMUUID()  , #{p.gr_evalsht_prcs_uuid}
+		     , 'ALL'
+		     , GEMG_QLY_PIC.EVALTR_ID
+		     , #{g.username}
+		     , #{g.now}
+		  FROM GEG_GEMG
+		 INNER JOIN GEMG_QLY_PIC
+		    ON GEMG_QLY_PIC.TEN_ID = GEG_GEMG.TEN_ID
+		   AND GEMG_QLY_PIC.GEMG_UUID = GEG_GEMG.GEMG_UUID
+		 WHERE GEG_GEMG.TEN_ID = #{g.tenant}
+		   AND GEG_GEMG.GEG_UUID = #{p.geg_uuid}
+	</insert>
+	<select id="findListGrEvalshtPrcsEvaltr" resultType="map">
+		SELECT GR_EVALSHT_PRCS_EVALTR.GR_EVALSHT_PRCS_EVALTR_UUID
+		     , GR_EVALSHT_PRCS_EVALTR.GR_EVALSHT_PRCS_UUID
+		     , GR_EVALSHT_PRCS_EVALTR.EVALFACT_EVALTR_AUTHTY_CCD
+		     , GR_EVALSHT_PRCS_EVALTR.EVALTR_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS DISP_EVALTR_NM
+		     , DEPT.DEPT_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS DISP_DEPT_NM
+		  FROM GR_EVALSHT_PRCS_EVALTR
+		 INNER JOIN USR
+		    ON USR.TEN_ID = GR_EVALSHT_PRCS_EVALTR.TEN_ID
+		   AND USR.USR_ID = GR_EVALSHT_PRCS_EVALTR.EVALTR_ID
+		  LEFT OUTER JOIN DEPT
+		    ON DEPT.TEN_ID = USR.TEN_ID
+		   AND DEPT.DEPT_CD = USR.DEPT_CD
+		 WHERE GR_EVALSHT_PRCS_EVALTR.TEN_ID = #{g.tenant}
+		   AND GR_EVALSHT_PRCS_EVALTR.GR_EVALSHT_PRCS_UUID = #{p.gr_evalsht_prcs_uuid}
+		   AND GR_EVALSHT_PRCS_EVALTR.STS != 'D'
+	</select>
+	<update id="saveMappingEvaltmplUuidToGrEvalshtPrcs">
+		UPDATE GR_EVALSHT_PRCS        /* 입고 평가시트 프로세스 */
+		   SET MODR_ID                    = #{g.username}                    /* 수정자 아이디 */
+		     , MOD_DTTM                   = #{g.now}                         /* 수정 일시 */
+		     , STS                        = #{p.sts}                         /* 상태 */
+		     , EVALTMPL_UUID              = #{p.evaltmpl_uuid}               /* 평가템플릿 UUID */
+		 WHERE TEN_ID                     = #{g.tenant}                      /* 시스템 아이디 */
+		   AND GR_EVALSHT_PRCS_UUID      = #{p.work_evaltmpl_uuid}           /* 입고평가그룹 UUID */
+	</update>
+	<select id="findEvalTmplStsInGeEvalSht" resultType="String">
+		/* gr-evalsht-setup.findEvalTmplStsInGeEvalSht: 평가템플릿 상태값 조회 - 입고/기성평가 평가시트 */
+		SELECT STS
+		FROM GR_EVALSHT_PRCS
+		WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+			AND GR_EVALSHT_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+</mapper>

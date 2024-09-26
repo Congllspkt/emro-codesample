@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-attribute-group">
+    <select id="findListAttributeGroup" resultType="map">
+        /* item-attribute-group.findListAttributeGroup : 속성그룹 목록을 조회 */
+        SELECT
+            GRP.IATTR_GRP_CD                                     /*속성 그룹 코드*/
+            , GRP.IATTR_GRP_NM                                     /*속성 그룹 명*/
+            , GRP.IATTR_GRP_NM_EN                                  /*속성 그룹 영문 명*/
+            , GRP.IATTR_GRP_EXPLN                                   /*속성 그룹 설명*/
+            , GRP.SCR_DSPY_ORD                                        /*화면 순서*/
+            , GRP.USE_YN                                          /*사용 여부*/
+            , (
+                CASE WHEN GRP.ASGD_IATTR_CNT IS NULL
+                    THEN 0
+                    ELSE GRP.ASGD_IATTR_CNT
+                END
+            ) AS ASGD_IATTR_CNT  /*배정 속성 수*/
+            , (
+                CASE WHEN GRP.ASGD_ITEMCAT_CNT IS NULL
+                    THEN 0
+                    ELSE GRP.ASGD_ITEMCAT_CNT
+                END
+            ) AS ASGD_ITEMCAT_CNT   /*사용 분류 수*/
+            , GRP.REGR_ID                                          /*등록자 아이디*/
+            , GRP.REG_DTTM                                          /*등록 일시*/
+        FROM IATTR_GRP GRP
+        WHERE GRP.TEN_ID = #{g.tenant}
+        <if test="p.iattr_grp_cd != null and p.iattr_grp_cd != &quot;&quot;">
+            <bind name="attrGrpCdPattern" value="'%' + p.iattr_grp_cd + '%'"/>
+            AND UPPER(GRP.IATTR_GRP_CD) LIKE UPPER(#{attrGrpCdPattern})
+        </if>
+        <if test="p.iattr_grp_nm != null and p.iattr_grp_nm != &quot;&quot;">
+            <bind name="attrGrpNmPattern" value="'%' + p.iattr_grp_nm + '%'"/>
+            AND (UPPER(GRP.IATTR_GRP_NM) LIKE UPPER(#{attrGrpNmPattern}) OR UPPER(GRP.IATTR_GRP_NM_EN) LIKE UPPER(#{attrGrpNmPattern}))
+        </if>
+        <if test="p.iattr_nm != null and p.iattr_nm != &quot;&quot;">
+            <bind name="attrNmPattern" value="&quot;%&quot; + p.iattr_nm + &quot;%&quot;"/>
+            AND GRP.IATTR_GRP_CD IN ( 
+                SELECT
+                    GRPG.IATTR_GRP_CD
+                FROM IATTR_GRPG GRPG
+                INNER JOIN IATTR IATTR
+                ON GRPG.TEN_ID  = IATTR.TEN_ID
+                AND GRPG.IATTR_CD = IATTR.IATTR_CD
+                WHERE GRPG.TEN_ID  = #{g.tenant}
+                AND UPPER(IATTR.IATTR_NM) LIKE UPPER(#{attrNmPattern})
+            )
+        </if>
+        AND GRP.STS != 'D'
+        ORDER BY GRP.SCR_DSPY_ORD, GRP.IATTR_GRP_CD DESC
+    </select>
+    <delete id="deleteItemCategoryItemAttributeByAttributeGroup">
+        /* item-attribute-group.deleteItemCategoryItemAttributeByAttributeGroup : 품목분류 속성 Mapping 삭제 */
+        DELETE FROM ITEMCAT_IATTR
+        WHERE IATTR_CD IN (
+            SELECT
+                IATTR_CD
+            FROM IATTR_GRPG
+            WHERE TEN_ID      = #{g.tenant}
+            AND IATTR_GRP_CD  = #{p.iattr_grp_cd}
+        )
+    </delete>
+    <delete id="deleteInfoItemAttributeGrouping">
+        /* item-attribute-group.deleteInfoItemAttributeGrouping */
+        DELETE FROM IATTR_GRPG
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+    </delete>
+    <delete id="deleteInfoItemAttributeGroup">
+        /* item-attribute-group.deleteInfoItemAttributeGroup */
+        DELETE FROM IATTR_GRP
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+    </delete>
+    <select id="findInfoAttributeGroup" resultType="map">
+        /* item-attribute-group.findInfoAttributeGroup : 속성 그룹 정보 단건 조회 */
+        SELECT
+            GRP.IATTR_GRP_CD                                     /*속성 그룹 코드*/
+            , GRP.IATTR_GRP_NM                                     /*속성 그룹 명*/
+            , GRP.IATTR_GRP_NM_EN                                  /*속성 그룹 영문 명*/
+            , GRP.IATTR_GRP_EXPLN                                   /*속성 그룹 설명*/
+            , GRP.SCR_DSPY_ORD                                        /*화면 순서*/
+            , GRP.USE_YN                                          /*사용 여부*/
+            , (
+                CASE WHEN GRP.ASGD_IATTR_CNT IS NULL
+                    THEN 0
+                    ELSE GRP.ASGD_IATTR_CNT
+                END
+            ) AS ASGD_IATTR_CNT  /*배정 속성 수*/
+            , (
+                CASE WHEN GRP.ASGD_ITEMCAT_CNT IS NULL
+                    THEN 0
+                    ELSE GRP.ASGD_IATTR_CNT
+                END
+            ) AS ASGD_ITEMCAT_CNT   /*사용 분류 수*/
+            , GRP.REGR_ID                                          /*등록자 아이디*/
+            , GRP.REG_DTTM                                          /*등록 일시*/
+        FROM IATTR_GRP GRP
+        WHERE GRP.TEN_ID = #{g.tenant}
+        AND GRP.IATTR_GRP_CD = #{p.iattr_grp_cd}
+        AND GRP.STS != 'D'
+    </select>
+    <insert id="insertInfoItemAttributeGroup">
+        /* item-attribute-group.insertInfoItemAttributeGroup : 속성그룹정보 INSERT */
+        INSERT INTO IATTR_GRP  (
+            TEN_ID           /*시스템 아이디 */
+            , REGR_ID           /*등록자 아이디 */
+            , REG_DTTM           /*등록 일시 */
+            , IATTR_GRP_CD      /*속성 그룹 코드 */
+            , IATTR_GRP_NM      /*속성 그룹 명 */
+            , IATTR_GRP_NM_EN   /*속성 그룹 영문 명 */
+            , IATTR_GRP_EXPLN    /*속성 그룹 설명 */
+            , SCR_DSPY_ORD         /*화면 순서 */
+            , USE_YN           /*사용 여부 */
+            , ASGD_IATTR_CNT    /*배정 속성 수 */
+            , ASGD_ITEMCAT_CNT     /*사용 분류 수 */
+            , STS
+        )  VALUES (
+            #{g.tenant}
+            , #{g.username}
+            , #{g.now}
+            , #{p.iattr_grp_cd}
+            , #{p.iattr_grp_nm}
+            , #{p.iattr_grp_nm_en}
+            , #{p.iattr_grp_expln}
+            , CAST(#{p.scr_dspy_ord} AS FLOAT  )
+            , #{p.use_yn}
+            , CAST(#{p.asgd_iattr_cnt} AS INT)
+            , CAST(#{p.asgd_itemcat_cnt} AS INT)
+            , 'C'
+        )
+    </insert>
+    <select id="findListAssignedAttributeGroup" resultType="map">
+        /* item-attribute-group.findListAssignedAttributeGroup : 속성 그룹 배정 속성 항목 조회 */
+        SELECT
+            GRPG.IATTR_GRP_CD            /*속성 그룹*/
+            , GRPG.IATTR_CD                /*속성 코드*/
+            , IATTR.IATTR_NM                /*속성 명*/
+            , IATTR.IATTR_NM_EN                /*속성 명 영문*/
+            , GRPG.IATTR_UUID                /*속성 일련번호*/
+            , GRPG.ASGD_IATTR_NM           /*배정 속성 명*/
+            , GRPG.IATTR_UOM_USE_YN		       /*속성 유형 */
+            , GRPG.DFLT_VAL                /*기본  값*/
+            , GRPG.DAT_TYP_CCD               /*데이터 유형*/
+            , GRPG.INP_VAL_LEN               /*데이터 길이*/
+            , IATTR.LOV_INP_VAL         /*입력값 목록*/
+            , IATTR.INP_VAL_ST    /*입력값 범위 시작*/
+            , IATTR.INP_VAL_ED      /*입력값 범위 종료*/
+            , GRPG.MAND_YN                /*필수 여부*/
+            , (SELECT
+                   COUNT(*)
+                FROM ITEMCAT_IATTR ITEMCAT
+                WHERE ITEMCAT.TEN_ID = GRPG.TEN_ID
+                AND ITEMCAT.IATTR_GRP_CD = GRPG.IATTR_GRP_CD
+                AND ITEMCAT.IATTR_CD = GRPG.IATTR_CD
+                AND ITEMCAT.IATTR_UUID = GRPG.IATTR_UUID
+                AND ITEMCAT.STS != 'D'
+            ) AS ASGD_ITEMCAT_CNT
+        FROM IATTR_GRPG GRPG
+        LEFT OUTER JOIN (
+            SELECT
+                TEN_ID
+                , IATTR_GRP_CD
+                , IATTR_CD
+                , IATTR_UUID
+                , COUNT(1) AS TOT_CNT
+                , SUM( CASE WHEN IATTR_INP_VAL IS NULL  THEN 0
+                            ELSE 1
+                        END
+                ) AS USE_CNT
+            FROM ITEM_IATTR
+            WHERE TEN_ID = #{g.tenant}
+            AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+            AND STS != 'D'
+            GROUP BY TEN_ID, IATTR_GRP_CD, IATTR_CD, IATTR_UUID
+        ) IIATTR
+        ON GRPG.TEN_ID      = IIATTR.TEN_ID
+        AND GRPG.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+        AND GRPG.IATTR_CD     = IIATTR.IATTR_CD
+        AND GRPG.IATTR_UUID     = IIATTR.IATTR_UUID
+        INNER JOIN IATTR IATTR
+        ON GRPG.TEN_ID  = IATTR.TEN_ID
+        AND GRPG.IATTR_CD = IATTR.IATTR_CD
+        AND IATTR.STS != 'D'
+        INNER JOIN IATTR_GRP GRP
+        ON GRPG.TEN_ID = GRP.TEN_ID
+        AND GRPG.IATTR_GRP_CD = GRP.IATTR_GRP_CD
+        AND GRP.STS != 'D'
+        WHERE GRPG.TEN_ID = #{g.tenant}
+        AND GRPG.IATTR_GRP_CD = #{p.iattr_grp_cd}
+        AND GRPG.STS != 'D'
+        ORDER BY GRPG.IATTR_CD
+    </select>
+    <delete id="deleteInfoItemCategoryAttribute">
+        /* item-attribute-group.deleteInfoItemCategoryAttribute */
+        DELETE FROM ITEMCAT_IATTR
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+        AND IATTR_CD = #{p.iattr_cd}
+        AND IATTR_UUID = #{p.iattr_uuid}
+    </delete>
+    <delete id="deleteInfoItemCategoryGrouping">
+        /* item-attribute-group.deleteInfoItemCategoryGrouping : 속성 그룹 배정 속성 저장 DELETE */
+        DELETE FROM IATTR_GRPG
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+        AND IATTR_CD = #{p.iattr_cd}
+        AND IATTR_UUID = #{p.iattr_uuid}
+    </delete>
+    <update id="updateItemAttributeGrouping">
+        /* item-attribute-group.updateItemAttributeGrouping : 속성 그룹 배정 속성 저장 UPDATE */
+        UPDATE IATTR_GRPG SET
+            ASGD_IATTR_NM       = #{p.asgd_iattr_nm}                 /*배정 속성 명*/
+            , ASGD_IATTR_NM_EN  = #{p.asgd_iattr_nm_en}              /*배정 속성 영문 명*/
+            , IATTR_UOM_USE_YN  = #{p.iattr_uom_use_yn}                     /*속성 유형*/
+            , MAND_YN           = #{p.mand_yn}                      /*필수 여부*/
+            , DAT_TYP_CCD       = #{p.dat_typ_ccd}                     /*데이터 유형*/
+            , INP_VAL_LEN       = CAST(#{p.inp_val_len} AS FLOAT  )/*데이터 길이*/
+            , DFLT_VAL          = #{p.dflt_val}                      /*기본  값*/
+            , LIST_SHOW_YN      = #{p.list_show_yn}                 /*목록 VIEW 여부*/
+        WHERE TEN_ID        = #{g.tenant}
+        AND IATTR_GRP_CD   = #{p.iattr_grp_cd}
+        AND IATTR_CD       = #{p.iattr_cd}
+        AND IATTR_UUID       = #{p.iattr_uuid}
+    </update>
+    <insert id="insertItemAttributeGrouping">
+        /* item-attribute-group.insertItemAttributeGrouping : 속성 그룹 배정 속성 INSERT */
+        INSERT INTO IATTR_GRPG (
+            TEN_ID          /*시스템 아이디*/
+            , IATTR_GRP_CD     /*속성 그룹*/
+            , IATTR_CD         /*속성 코드*/
+            , IATTR_UUID         /*속성 일련번호*/
+            , ASGD_IATTR_NM    /*배정 속성 명*/
+            , ASGD_IATTR_NM_EN /*배정 속성 영문 명*/
+            , IATTR_UOM_USE_YN        /*속성 유형*/
+            , MAND_YN         /*필수 여부*/
+            , DAT_TYP_CCD        /*데이터 유형*/
+            , INP_VAL_LEN        /*데이터 길이*/
+            , DFLT_VAL         /*기본  값*/
+            , LIST_SHOW_YN    /*목록 VIEW 여부*/
+            , STS
+            , REGR_ID          /*등록자 아이디*/
+            , REG_DTTM          /*등록 일시*/
+        ) VALUES (
+            #{g.tenant}
+            , #{p.iattr_grp_cd}
+            , #{p.iattr_cd}
+            , #{p.iattr_uuid}
+            , #{p.asgd_iattr_nm}
+            , #{p.asgd_iattr_nm_en}
+            , #{p.iattr_uom_use_yn}
+            , #{p.mand_yn}
+            , #{p.dat_typ_ccd}
+            , CAST(#{p.inp_val_len} AS FLOAT  )
+            , #{p.dflt_val}
+            , #{p.list_show_yn}
+            , 'C'
+            , #{g.username}
+            , #{g.now}
+        )
+    </insert>
+    <update id="updateInfoItemAttributeGroup">
+        /* item-attribute-group.updateInfoItemAttributeGroup :  속성그룹정보 UPDATE */
+        UPDATE IATTR_GRP SET
+            IATTR_GRP_NM        = #{p.iattr_grp_nm}  		            /*속성 그룹 명*/
+            , IATTR_GRP_NM_EN   = #{p.iattr_grp_nm_en}	                /*속성 그룹 영문 명*/
+            , IATTR_GRP_EXPLN   = #{p.iattr_grp_expln} 	                /*속성 그룹 설명*/
+            , SCR_DSPY_ORD      = CAST(#{p.scr_dspy_ord} AS FLOAT  )/*화면 순서*/
+            , USE_YN            = #{p.use_yn}        	                /*사용 여부*/
+            , ASGD_IATTR_CNT    = CAST(#{p.asgd_iattr_cnt} AS INT) 	/*배정 속성 수*/
+            , ASGD_ITEMCAT_CNT  = CAST(#{p.asgd_itemcat_cnt} AS INT)    	/*사용 분류 수*/
+            , STS               = 'U'
+        WHERE TEN_ID            = #{g.tenant}
+        AND IATTR_GRP_CD        = #{p.iattr_grp_cd}
+    </update>
+    <select id="findComboAttrGrpAsgn" resultType="map">
+        /* item-attribute-group.findComboAttrGrpAsgn : 품목속성그룹 배정 속성 항목 추가할 때 사용하는 팝업의 조회조건에 들어가는 combobox item */
+        SELECT
+            GRP.IATTR_GRP_CD                                     /*속성 그룹 코드*/
+            , GRP.IATTR_GRP_NM                                     /*속성 그룹 명*/
+            , GRP.IATTR_GRP_NM_EN                                  /*속성 그룹 영문 명*/
+            , CASE WHEN 'en_US' = #{g.locale} THEN GRP.IATTR_GRP_NM_EN
+                    ELSE GRP.IATTR_GRP_NM
+                END DISP_IATTR_GRP_NM
+            , GRP.IATTR_GRP_EXPLN                                   /*속성 그룹 설명*/
+            , GRP.SCR_DSPY_ORD                                        /*화면 순서*/
+            , GRP.USE_YN                                          /*사용 여부*/
+        FROM IATTR_GRP GRP
+        WHERE GRP.TEN_ID = #{g.tenant}
+        AND GRP.USE_YN = 'Y'
+        AND GRP.STS != 'D'
+        ORDER BY GRP.SCR_DSPY_ORD
+    </select>
+    <select id="findListAttrGrpAsgn" resultType="map">
+        /* item-attribute-group.findListAttrGrpAsgn : 품목속성그룹 배정 속성 항목 추가할 때 사용하는 팝업 조회 */
+        SELECT
+            GRPG.IATTR_GRP_CD            /*속성 그룹*/
+            , GRPG.IATTR_CD                /*속성 코드*/
+            , GRPG.IATTR_UUID                /*속성 일련번호*/
+            , GRPG.ASGD_IATTR_NM           /*배정 속성 명*/
+            , GRPG.ASGD_IATTR_NM_EN        /*배정 속성 영문 명*/
+            , GRPG.ASGD_IATTR_NM
+            , GRPG.IATTR_UOM_USE_YN               /*속성 유형*/
+            , GRPG.MAND_YN                /*필수 여부*/
+            , GRPG.DAT_TYP_CCD               /*데이터 유형*/
+            , GRPG.INP_VAL_LEN               /*데이터 길이*/
+            , IATTR.LOV_INP_VAL         /*입력값 목록*/
+            , IATTR.INP_VAL_ST    /*입력값 범위 시작*/
+            , IATTR.INP_VAL_ED      /*입력값 범위 종료*/
+            , GRPG.DFLT_VAL                /*기본  값*/
+            , GRPG.LIST_SHOW_YN           /*목록 VIEW 여부*/
+            , GRPG.REG_DTTM                 /*등록 일시*/
+            , IIATTR.USE_CNT
+            , IIATTR.TOT_CNT
+            , IATTR.IATTR_NM
+            , IATTR.IATTR_NM_EN
+            , GRP.SCR_DSPY_ORD
+            , GRP.IATTR_GRP_NM
+        FROM IATTR_GRPG GRPG
+        LEFT OUTER JOIN (
+            SELECT
+                TEN_ID
+                , IATTR_GRP_CD
+                , IATTR_CD
+                , IATTR_UUID
+                , COUNT(1) AS TOT_CNT
+                , SUM( CASE WHEN IATTR_INP_VAL IS NULL  THEN 0
+                            ELSE 1
+                        END ) AS USE_CNT
+            FROM ITEM_IATTR
+            WHERE TEN_ID      = #{g.tenant}
+                <if test="p.iattr_grp_cd != null and p.iattr_grp_cd != &quot;&quot;">
+                    AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+                </if>
+            AND STS != 'D'
+            GROUP BY TEN_ID
+            , IATTR_GRP_CD
+            , IATTR_CD
+            , IATTR_UUID
+            ) IIATTR
+        ON IIATTR.TEN_ID      = GRPG.TEN_ID
+        AND IIATTR.IATTR_GRP_CD = GRPG.IATTR_GRP_CD
+        AND IIATTR.IATTR_CD     = GRPG.IATTR_CD
+        AND IIATTR.IATTR_UUID     = GRPG.IATTR_UUID
+        INNER JOIN IATTR IATTR
+        ON IATTR.TEN_ID  = GRPG.TEN_ID
+        AND IATTR.IATTR_CD = GRPG.IATTR_CD
+        AND IATTR.STS != 'D'
+        INNER JOIN IATTR_GRP GRP
+        ON GRP.TEN_ID = GRPG.TEN_ID
+        AND GRP.IATTR_GRP_CD = GRPG.IATTR_GRP_CD
+        AND GRP.STS != 'D'
+        WHERE GRPG.TEN_ID      = #{g.tenant}
+            <if test="p.iattr_grp_cd != null and p.iattr_grp_cd != &quot;&quot;">
+                AND GRPG.IATTR_GRP_CD = #{p.iattr_grp_cd}
+            </if>
+            <if test="p.iattr_cd != null and p.iattr_cd != &quot;&quot;">
+                AND GRPG.IATTR_CD     = #{p.iattr_cd}
+            </if>
+            <if test="p.iattr_uuid != null and p.iattr_uuid != &quot;&quot;">
+                AND GRPG.IATTR_UUID     = #{p.iattr_uuid}
+            </if>
+        AND GRPG.STS      != 'D'
+        ORDER BY GRP.SCR_DSPY_ORD, GRPG.IATTR_UUID
+    </select>
+</mapper>

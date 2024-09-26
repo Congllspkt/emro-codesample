@@ -1,0 +1,557 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="pfmc-evalsht-setup">
+	<select id="findListPfmcEvalsht" resultType="map">
+    /* pfmc-evalsht-setup.findListPfmcEvalsht: 퍼포먼스 평가시트 목록 조회 */
+        SELECT PE.TEN_ID                  /* 테넌트 아이디 */
+             , PE.PFMC_EVALSHT_UUID       /* 퍼포먼스 평가시트 UUID */
+             , PE.EVALTMPL_UUID           /* 평가템플릿 UUID */
+             , PE.EVALSHT_CD              /* 평가시트 코드 */
+             , PE.EVALSHT_NM              /* 평가시트 명 */
+             , PE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , PE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , PE.PEG_UUID                /* 심사 그룹 아이디 */
+             , P.PEG_NM
+             , PE.EVALTR_TYP_CCD          /* 평가자 유형 */
+             , PE.EVALDOC_LYT_TYP_CCD     /* 평가문서 레이아웃 유형 공통코드 */
+             , PE.SLFCK_SUBJ_YN           /* 자체점검 대상 여부 */
+             , PE.CNFD_YN                 /* 확정 여부 */
+             , PE.RMK
+             , PE.STS
+             , PE.REGR_ID
+             , PE.REG_DTTM
+             , PE.MODR_ID
+             , U.USR_NM AS MOD_NM
+             , PE.MOD_DTTM
+          FROM PFMC_EVALSHT PE    /* PE : 퍼포먼스 평가시트 */
+         INNER JOIN PEG P
+            ON P.TEN_ID = PE.TEN_ID
+           AND P.PEG_UUID = PE.PEG_UUID
+          LEFT OUTER JOIN USR U
+            ON U.TEN_ID = PE.TEN_ID
+           AND U.USR_ID = PE.MODR_ID
+         WHERE PE.TEN_ID    = #{g.tenant}
+           AND PE.STS      != 'D'
+           AND P.OORG_CD    = #{p.oorg_cd}
+         <if test="p.evalsht_nm != null and p.evalsht_nm != ''">
+           <bind name="evalshtNm" value="'%' + p.evalsht_nm+ '%'"/>
+           AND UPPER(PE.EVALSHT_NM) LIKE UPPER(#{evalshtNm})
+         </if>
+        ORDER BY PE.MOD_DTTM DESC
+    </select>
+    <!-- 퍼포먼스 평가시트 조회 -->
+    <select id="findPfmcEvalshtInfo" resultType="map">
+        /* pfmc-evalsht-setup.findPfmcEvalshtInfo: 퍼포먼스 평가시트 조회 */
+        SELECT PE.TEN_ID                  /* 테넌트 아이디 */
+             , PE.PFMC_EVALSHT_UUID       /* 퍼포먼스 평가시트 UUID */
+             , PE.EVALTMPL_UUID           /* 평가템플릿 UUID */
+             , PE.PRE_EVALTMPL_UUID      /* 이전 평가템플릿 UUID */
+             , PE.EVALSHT_CD              /* 평가시트 코드 */
+             , PE.EVALSHT_NM              /* 평가시트 명 */
+             , PE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , PE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , PE.PEG_UUID                /* 심사 그룹 아이디 */
+             , PE.EVALTR_TYP_CCD          /* 평가자 유형 */
+             , PE.EVALDOC_LYT_TYP_CCD     /* 평가문서 레이아웃 유형 공통코드 */
+             , PE.SLFCK_SUBJ_YN           /* 자체점검 대상 여부 */
+             , PE.CNFD_YN                 /* 확정 여부 */
+             , PE.RMK
+             , PE.STS
+             , PE.REGR_ID
+             , PE.REG_DTTM
+             , PE.MODR_ID
+             , PE.MOD_DTTM
+             , CASE WHEN PE.PFMC_EVALSHT_UUID = CRNT_SHT.PFMC_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT  /* 최신 평가시트 */
+          FROM PFMC_EVALSHT PE    /* PE : 퍼포먼스 평가시트 */
+          LEFT OUTER JOIN (
+                     SELECT TEN_ID, PEG_UUID, PFMC_EVALSHT_UUID, CURRENT_EVALSHT_RANK
+                       FROM (
+                               SELECT TEN_ID, PEG_UUID, PFMC_EVALSHT_UUID, RANK() OVER (ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC) AS CURRENT_EVALSHT_RANK
+                                 FROM PFMC_EVALSHT
+                                WHERE TEN_ID    = #{g.tenant}
+                                  AND STS != 'D'
+                                  AND PEG_UUID = #{p.peg_uuid}
+                            ) x
+                      WHERE CURRENT_EVALSHT_RANK = 1
+                          ) CRNT_SHT
+            ON CRNT_SHT.TEN_ID = PE.TEN_ID
+           AND CRNT_SHT.PEG_UUID = PE.PEG_UUID
+         WHERE PE.TEN_ID    = #{g.tenant}
+           AND PE.PFMC_EVALSHT_UUID  = #{p.pfmc_evalsht_uuid}
+           AND PE.STS              != 'D'
+    </select>
+    <!-- 퍼포먼스 평가시트 저장 (Insert) -->
+    <insert id="insertPfmcEvalsht">
+        /* pfmc-evalsht-setup.insertPfmcEvalsht : 퍼포먼스 평가시트 저장 */
+        INSERT INTO PFMC_EVALSHT        /* 퍼포먼스 평가시트  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                   /* 테넌트 아이디 */
+            , PFMC_EVALSHT_UUID        /* 퍼포먼스 평가시트 UUID */
+            , EVALSHT_CD               /* 평가시트 코드 */
+            , EVALSHT_NM               /* 평가시트 명 */
+            , EFCT_ST_DT               /* 유효 시작 일자 */
+            , EFCT_EXP_DT              /* 유효 만료 일자 */
+            , PEG_UUID                 /* 심사 그룹 아이디 */
+            , EVALTR_TYP_CCD           /* 평가자 유형 */
+            , EVALDOC_LYT_TYP_CCD      /* 평가문서 레이아웃 유형 공통코드 */
+	        , SLFCK_SUBJ_YN            /* 자체점검 대상 여부 */
+            , CNFD_YN                  /* 확정 여부 */
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.pfmc_evalsht_uuid}        /* 퍼포먼스 평가시트 UUID */
+            , #{p.evalsht_cd}               /* 평가시트 코드 */
+            , #{p.evalsht_nm}               /* 평가시트 명 */
+            , #{p.efct_st_dt}               /* 유효 시작 일자 */
+            , #{p.efct_exp_dt}              /* 유효 만료 일자 */
+            , #{p.peg_uuid}                 /* 심사 그룹 아이디 */
+            , #{p.evaltr_typ_ccd}           /* 평가자 유형 */
+            , #{p.evaldoc_lyt_typ_ccd}      /* 평가문서 레이아웃 유형 공통코드 */
+	        , #{p.slfck_subj_yn}            /* 자체점검 대상 여부 */
+            , #{p.cnfd_yn}                  /* 확정 여부 */
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 퍼포먼스 평가시트 수정 -->
+    <update id="updatePfmcEvalsht">
+        /* pfmc-evalsht-setup.updatePfmcEvalsht : 퍼포먼스 평가시트 수정 */
+        UPDATE PFMC_EVALSHT        /* 퍼포먼스 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID               = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM               = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , EVALSHT_NM           = #{p.evalsht_nm}            /* 평가시트 명 */
+            , EFCT_ST_DT           = #{p.efct_st_dt}            /* 유효 시작 일자 */
+            , EFCT_EXP_DT          = #{p.efct_exp_dt}           /* 유효 만료 일자 */
+            , EVALTR_TYP_CCD       = #{p.evaltr_typ_ccd}        /* 평가자 유형 */
+            , EVALDOC_LYT_TYP_CCD  = #{p.evaldoc_lyt_typ_ccd}   /* 평가문서 레이아웃 유형 공통코드 */
+	        , SLFCK_SUBJ_YN        = #{p.slfck_subj_yn}         /* 자체점검 대상 여부 */
+            , CNFD_YN              = #{p.cnfd_yn}               /* 확정 여부 */
+            , EVALTMPL_UUID        = #{p.evaltmpl_uuid}         /* 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID = #{g.tenant}                              /* 시스템 아이디 */
+        AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}            /* 퍼포먼스 평가시트 UUID */
+    </update>
+    <update id="updatePrevPfmcEvalsht">
+        /* pfmc-evalsht-setup.updatePrevPfmcEvalsht : 이전 퍼포먼스 평가시트 확정 */
+        UPDATE PFMC_EVALSHT        /* 온보딩 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID               = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM              = #{g.now}                   /* 수정 일시 */
+            , STS                   = 'U'                        /* 상태 */
+            , EFCT_EXP_DT           = CASE WHEN #{p.cnfd_yn} = 'Y' THEN #{p.efct_st_dt} ELSE #{p.efct_exp_dt} END  /* 유효 만료 일자 */ </trim>
+        WHERE TEN_ID = #{g.tenant}                              /* 시스템 아이디 */
+          AND PFMC_EVALSHT_UUID = #{p.prev_pfmc_evalsht_uuid}       /* 이전 퍼포먼스 평가시트 UUID */
+    </update>
+	<update id="updateCnfdYnPfmcEvalsht">
+        /* pfmc-evalsht-setup.updateCnfdYnPfmcEvalsht : 퍼포먼스 평가시트 확정 */
+        UPDATE PFMC_EVALSHT        /* 퍼포먼스 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID              = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM             = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , CNFD_YN              = #{p.cnfd_yn}               /* 확정 여부 */
+            , PRE_EVALTMPL_UUID   = CASE WHEN #{p.cnfd_yn} = 'Y' THEN NULL ELSE PRE_EVALTMPL_UUID END  /* 이전 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID               = #{g.tenant}                /* 시스템 아이디 */
+          AND PFMC_EVALSHT_UUID    = #{p.pfmc_evalsht_uuid}     /* 퍼포먼스 평가시트 UUID */
+    </update>
+    <!-- 퍼포먼스 시트 삭제 상태 변경 (sts = 'D')-->
+    <update id="updatePfmcEvalshtStsByDelete">
+        /* pfmc-evalsht-setup.updatePfmcEvalshtStsByDelete : 퍼포먼스 시트 삭제(STS = 'D') */
+        UPDATE PFMC_EVALSHT                  /* 퍼포먼스 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}        /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}                     /* 퍼포먼스평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 퍼포먼스 평가시트 조회 -->
+    <select id="findListPfmcEvalshtHis" resultType="map">
+        /* pfmc-evalsht-setup.findListPfmcEvalshtHis: 퍼포먼스 평가시트 조회 */
+        SELECT PE.TEN_ID                  /* 테넌트 아이디 */
+             , PE.PFMC_EVALSHT_UUID       /* 퍼포먼스 평가시트 UUID */
+             , PE.EVALTMPL_UUID           /* 평가템플릿 UUID */
+             , PE.PRE_EVALTMPL_UUID      /* 이전 평가템플릿 UUID */
+             , PE.EVALSHT_CD              /* 평가시트 코드 */
+             , PE.EVALSHT_NM              /* 평가시트 명 */
+             , PE.EFCT_ST_DT              /* 유효 시작 일자 */
+             , PE.EFCT_EXP_DT             /* 유효 만료 일자 */
+             , PE.PEG_UUID                /* 심사 그룹 아이디 */
+             , PE.EVALTR_TYP_CCD          /* 평가자 유형 */
+             , PE.EVALDOC_LYT_TYP_CCD     /* 평가문서 레이아웃 유형 공통코드 */
+	         , PE.SLFCK_SUBJ_YN           /* 자체점검 대상 여부 */
+             , PE.CNFD_YN                 /* 확정 여부 */
+             , PE.RMK
+             , PE.STS
+             , PE.REGR_ID
+             , PE.REG_DTTM
+             , PE.MODR_ID
+             , PE.MOD_DTTM
+             , CASE WHEN (RANK() OVER (ORDER BY PE.MOD_DTTM DESC, PE.EFCT_EXP_DT DESC, PE.EFCT_ST_DT DESC)) = '1' THEN 'Y' ELSE 'N' END AS CURRENT_EVALSHT  /* 최신 평가시트 */
+             , CASE WHEN PE.PFMC_EVALSHT_UUID = EFCT_SHT.PFMC_EVALSHT_UUID THEN 'Y' ELSE 'N' END AS EFFECTIVE_EVALSHT  /* 유효한 평가시트 */
+        FROM PFMC_EVALSHT PE    /* PE : 퍼포먼스 평가시트 */
+        LEFT OUTER JOIN (
+                  SELECT PFMCSHT.*
+                       , ROW_NUMBER() OVER(PARTITION BY PFMCSHT.PEG_UUID ORDER BY MOD_DTTM DESC) RK
+                    FROM PFMC_EVALSHT PFMCSHT
+                   WHERE PFMCSHT.TEN_ID = #{g.tenant}
+                     AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(PFMCSHT.EFCT_ST_DT, 'YYYYMMDD')
+                     AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(PFMCSHT.EFCT_EXP_DT, 'YYYYMMDD')  AND PFMCSHT.CNFD_YN ='Y'
+                     AND PFMCSHT.STS != 'D'
+            ) EFCT_SHT          /* 퍼포먼스 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+           ON PE.TEN_ID = EFCT_SHT.TEN_ID
+          AND PE.PEG_UUID = EFCT_SHT.PEG_UUID
+          AND EFCT_SHT.RK = 1
+        WHERE PE.TEN_ID    = #{g.tenant}
+          AND PE.PEG_UUID  = #{p.peg_uuid}
+          AND PE.STS       != 'D'
+        ORDER BY PE.REG_DTTM DESC, PE.MOD_DTTM DESC, PE.EFCT_EXP_DT DESC, PE.EFCT_ST_DT DESC
+    </select>
+    <select id="findListFactChrGrpEvaltr" resultType="Map">
+        /* pfmc-evalsht-setup.findListFactChrGrpEvaltr : 퍼포먼스 평가시트 평가자 조회 */
+        SELECT EE.TEN_ID
+             , EE.EVALSHT_EVALTR_UUID
+             , EE.PFMC_EVALSHT_UUID
+             , EE.EVALFACT_EVALTR_AUTHTY_CCD
+             , EE.EVALTR_ID
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN U.USR_NM
+                    ELSE U.USR_NM_EN
+                END AS EVALTR_NM
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN D.DEPT_NM
+                    ELSE D.DEPT_NM_EN
+                END AS DEPT_NM
+             , EE.STS
+             , EE.REGR_ID
+             , EE.REG_DTTM
+             , EE.MODR_ID
+             , EE.MOD_DTTM
+        FROM EVALSHT_EVALTR EE
+        LEFT OUTER JOIN USR U
+          ON U.TEN_ID = EE.TEN_ID
+         AND U.USR_ID = EE.EVALTR_ID
+         AND U.STS != 'D'
+        LEFT OUTER JOIN DEPT D
+          ON U.TEN_ID     = D.TEN_ID
+         AND U.DEPT_CD    = D.DEPT_CD
+         AND U.STS != 'D'
+        WHERE EE.TEN_ID = #{g.tenant}
+          AND EE.PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}
+          AND EE.STS != 'D'
+    </select>
+	<select id="findListPegVmgUuid" resultType="string">
+        /* peg-setup.findListPegVmgUuid: 퍼포먼스평가그룹 - 협력사관리그룹 아이디 목록 조회 */
+        SELECT PVMG.VMG_OORG_UUID        /* 협력사관리그룹 운영조직 UUID */
+        FROM PEG_VMG PVMG   /* PVMG : 퍼포먼스평가그룹 협력사관리그룹 */
+       WHERE PVMG.TEN_ID              = #{g.tenant}
+         AND PVMG.PEG_UUID            = #{p.peg_uuid}
+         AND PVMG.STS                != 'D'
+    </select>
+    <!-- 평가시트 평가자 삭제 (sts = 'D')-->
+    <update id="updateEvaltrByDelete">
+        /* pfmc-evalsht-setup.updateEvaltrByDelete : 평가시트 평가자 삭제(STS = 'D') */
+        UPDATE EVALSHT_EVALTR            /*  평가시트 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}         /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}   /* 퍼포먼스 평가시트 UUID */
+        </trim>
+    </update>
+    <!-- 평가시트 평가항목별 평가자 저장 (Insert) -->
+    <insert id="insertFactChrGrpEvaltr">
+        /* pfmc-evalsht-setup.insertFactChrGrpEvaltr : 평가시트 평가항목별 평가자 저장 */
+        INSERT INTO EVALSHT_EVALTR        /*  평가시트 평가자 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                      /* 테넌트 아이디 */
+            , EVALSHT_EVALTR_UUID         /* 평가시트 평가자 UUID */
+            , PFMC_EVALSHT_UUID           /* 퍼포먼스 평가시트 UUID */
+            , EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+            , EVALTR_ID                   /* 평가자 아이디 */
+            , STS
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{g.uuid}                          /* 평가시트 평가자 UUID */
+            , #{p.pfmc_evalsht_uuid}             /* 퍼포먼스 평가시트 UUID */
+            , #{p.evalfact_evaltr_authty_ccd}    /* 평가항목 평가자 권한 공통코드 */
+            , #{p.evaltr_id}                     /* 평가자 아이디 */
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+        </trim>
+    </insert>
+    <!-- 평가시트 평가항목별 평가자 수정 -->
+    <update id="updateFactChrGrpEvaltr">
+        /* pfmc-evalsht-setup.updateFactChrGrpEvaltr : 평가시트 평가항목별 평가자 수정 */
+        UPDATE EVALSHT_EVALTR        /*  평가시트 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID                     = #{g.username}                    /* 수정자 아이디 */
+            , MOD_DTTM                    = #{g.now}                         /* 수정 일시 */
+            , STS                         = 'U'                              /* 상태 */
+            , EVALFACT_EVALTR_AUTHTY_CCD  = #{p.evalfact_evaltr_authty_ccd}  /* 평가항목 평가자 권한 공통코드 */
+        </trim>
+        WHERE TEN_ID = #{g.tenant}                                           /* 시스템 아이디 */
+        AND EVALSHT_EVALTR_UUID = #{p.evalsht_evaltr_uuid}                   /* 평가시트 평가자 UUID  */
+    </update>
+    <!-- 평가시트 평가항목별 평가자 삭제 (sts = 'D')-->
+    <update id="updateFactChrGrpEvaltrByDelete">
+        /* pfmc-evalsht-setup.updateFactChrGrpEvaltrByDelete : 평가시트 평가자 삭제(STS = 'D') */
+        UPDATE EVALSHT_EVALTR            /*  평가시트 평가자 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS = 'D'
+            , MODR_ID = #{g.username}         /* 수정자 아이디 */
+            , MOD_DTTM = #{g.now}             /* 수정 일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+            AND EVALSHT_EVALTR_UUID = #{p.evalsht_evaltr_uuid}   /* 평가시트 평가자 UUID */
+        </trim>
+    </update>
+	<!-- 퍼포먼스 평가시트 자가진단 대상 삭제 (delete)-->
+	<delete id="deletePfmcSlfckSubj">
+		/* pfmc-evalsht-setup.deletePfmcSlfckSubj : 퍼포먼스 평가시트 자가진단 대상 삭제(delete) */
+		DELETE FROM EVALSHT_SLFCK_EVALFACT            /* 평가시트 자가진단 대상 */
+		WHERE TEN_ID = #{g.tenant}                         /* 테넌트 아이디 */
+		  AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}   /* 퍼포먼스 평가시트 UUID */
+		<if test="p.evaltmpl_evalfact_uuid != null and p.evaltmpl_evalfact_uuid != ''">
+		  AND EVALTMPL_EVALFACT_UUID = #{p.evaltmpl_evalfact_uuid}   /* 평가템플릿 평가항목 UUID */
+		</if>
+	</delete>
+	<!-- 퍼포먼스 평가시트 자가진단 대상 저장 (Insert) -->
+	<insert id="insertPfmcSlfckSubj">
+		/* pfmc-evalsht-setup.insertPfmcSlfckSubj : 퍼포먼스 평가시트 자가진단 대상 저장 */
+		INSERT INTO EVALSHT_SLFCK_EVALFACT        /* 평가시트 자가진단 대상 */
+		<trim prefix="(" prefixOverrides="," suffix=")">
+			  TEN_ID                      /* 테넌트 아이디 */
+			, PFMC_EVALSHT_UUID
+			, EVALTMPL_EVALFACT_UUID
+			, STS
+			, RMK
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		</trim>
+		<trim prefix="VALUES (" prefixOverrides="," suffix=")">
+			  #{g.tenant}
+			, #{p.pfmc_evalsht_uuid}             /* 퍼포먼스 평가시트 UUID */
+			, #{p.evaltmpl_evalfact_uuid}        /* 평가템플릿 평가항목 UUID */
+			, 'C'
+			, #{p.rmk}
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		</trim>
+	</insert>
+	<select id="findEvalTmplUseYnInPfmcEvalSht" resultType="String">
+	/* pfmc-evalsht-setup.findEvalTmplUseYnInPfmcEvalSht: 평가템플릿 사용여부 조회 - 퍼포먼스 평가시트 */
+		SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END
+		  FROM PFMC_EVALSHT
+		 WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		   AND PFMC_EVALSHT_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND evaltmpl_uuid = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+	<select id="findEvalTmplStsInPfmcEvalSht" resultType="String">
+	/* pfmc-evalsht-setup.findEvalTmplStsInPfmcEvalSht: 평가템플릿 상태값 조회 - 퍼포먼스 평가시트 */
+		SELECT STS
+		  FROM PFMC_EVALSHT
+		 WHERE TEN_ID = #{g.tenant}
+		<if test="p.work_evaltmpl_uuid != null and p.work_evaltmpl_uuid != ''">
+		   AND PFMC_EVALSHT_UUID != #{p.work_evaltmpl_uuid}
+		</if>
+		<choose>
+			<when test="p.deleteList != null and p.deleteList.size() &gt; 0">
+				AND EVALTMPL_UUID IN
+				<foreach close=")" collection="p.deleteList" item="item" open="(" separator=",">
+					#{item.evaltmpl_uuid}
+				</foreach>
+			</when>
+			<when test="p.evaltmpl_uuid != null and p.evaltmpl_uuid != ''">
+				AND evaltmpl_uuid = #{p.evaltmpl_uuid}
+			</when>
+			<otherwise>
+				AND 1 = 0
+			</otherwise>
+		</choose>
+	</select>
+	<select id="checkPfmcEvalShtConfirmYnByEvalTmpl" resultType="String">
+	/* pfmc-evalsht-setup.checkPfmcEvalShtConfirmYnByEvalTmpl: 퍼포먼스 평가시트 확정여부 조회 */
+		SELECT CASE WHEN SUM(CASE WHEN CNFD_YN = 'Y' THEN 1 ELSE 0 END) IS NULL THEN 'Y' /* 평가템플릿이 적용된 평가시트가 존재하지 않음 -&gt; 확정 가능 */
+		            WHEN SUM(CASE WHEN CNFD_YN = 'Y' THEN 1 ELSE 0 END) = 0 THEN 'N'
+		            ELSE 'Y' END AS CNFD_YN
+		  FROM PFMC_EVALSHT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND STS != 'D'
+		   AND EVALTMPL_UUID = #{p.evaltmpl_uuid}
+	</select>
+    <insert id="copyPfmcEvalsht">
+	    /* pfmc-evalsht-setup.copyPfmcEvalsht : 퍼포먼스 평가시트 copy */
+	    INSERT INTO PFMC_EVALSHT /* 퍼포먼스 평가시트 */
+	    (
+	             TEN_ID /* 테넌트 아이디 */
+	           , PFMC_EVALSHT_UUID /* 퍼포먼스 평가시트 UUID */
+	           , EVALTMPL_UUID
+	           , EVALSHT_CD /* 평가시트 코드 */
+	           , EVALSHT_NM /* 평가시트 명 */
+	           , EFCT_ST_DT /* 유효 시작 일자 */
+	           , EFCT_EXP_DT /* 유효 만료 일자 */
+	           , PEG_UUID /* 심사 그룹 아이디 */
+	           , EVALTR_TYP_CCD /* 평가자 유형 */
+	           , EVALDOC_LYT_TYP_CCD /* 평가문서 레이아웃 유형 공통코드 */
+	           , SLFCK_SUBJ_YN /* 자체점검 대상 여부 */
+	           , CNFD_YN /* 확정 여부 */
+	           , STS
+	           , RMK
+	           , REGR_ID
+	           , REG_DTTM
+	           , MODR_ID
+	           , MOD_DTTM
+	    ) SELECT #{g.tenant}
+               , #{p.new_pfmc_evalsht_uuid}             /* 퍼포먼스 평가시트 UUID */
+	           , EVALTMPL_UUID
+               , #{p.evalsht_cd}          /* 평가시트 코드 */
+               , CONCAT('VerionUp_', EVALSHT_NM)  /* 평가시트 명 */
+               , EFCT_ST_DT               /* 유효 시작 일자 */
+                , TO_DATE('29991231', 'YYYYMMDD') AS EFCT_EXP_DT              /* 유효 만료 일자 */  , #{p.peg_uuid}            /* 심사 그룹 아이디 */
+               , EVALTR_TYP_CCD           /* 평가자 유형 */
+               , EVALDOC_LYT_TYP_CCD      /* 평가문서 레이아웃 유형 공통코드 */
+	           , SLFCK_SUBJ_YN            /* 자체점검 대상 여부 */
+               , 'N'                      /* 확정 여부 */
+               , 'C'
+               , RMK
+               , #{g.username}
+               , #{g.now}
+               , #{g.username}
+               , #{g.now}
+            FROM PFMC_EVALSHT
+	       WHERE TEN_ID = #{g.tenant}
+	         AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}
+    </insert>
+	<insert id="copyListPfmcSlfckSubj">
+		/* pfmc-evalsht-setup.copyListPfmcSlfckSubj : 퍼포먼스 평가시트 자가진단 대상 copy */
+		INSERT INTO EVALSHT_SLFCK_EVALFACT        /* 평가시트 자가진단 대상 */
+		(
+			     TEN_ID                      /* 테넌트 아이디 */
+			   , PFMC_EVALSHT_UUID
+			   , EVALTMPL_EVALFACT_UUID
+			   , STS
+			   , RMK
+			   , REGR_ID
+			   , REG_DTTM
+			   , MODR_ID
+			   , MOD_DTTM
+		) SELECT #{g.tenant}
+			   , #{p.new_pfmc_evalsht_uuid}    /* 퍼포먼스 평가시트 UUID */
+			   , EVALTMPL_EVALFACT_UUID        /* 평가템플릿 평가항목 UUID */
+			   , 'C'
+			   , RMK
+			   , #{g.username}
+			   , #{g.now}
+			   , #{g.username}
+			   , #{g.now}
+		    FROM EVALSHT_SLFCK_EVALFACT
+	       WHERE TEN_ID = #{g.tenant}
+	         AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}
+		     AND STS != 'D'
+	</insert>
+    <insert id="copyListPfmcFactChrGrpEvaltr">
+        /* pfmc-evalsht-setup.copyListPfmcFactChrGrpEvaltr : 평가시트 평가항목별 평가자 copy */
+        INSERT INTO EVALSHT_EVALTR        /*  평가시트 평가자 */
+        (
+                 TEN_ID                      /* 테넌트 아이디 */
+               , EVALSHT_EVALTR_UUID         /* 평가시트 평가자 UUID */
+               , PFMC_EVALSHT_UUID           /* 퍼포먼스 평가시트 UUID */
+               , EVALFACT_EVALTR_AUTHTY_CCD  /* 평가항목 평가자 권한 공통코드 */
+               , EVALTR_ID                   /* 평가자 아이디 */
+               , STS
+               , RMK
+               , REGR_ID
+               , REG_DTTM
+               , MODR_ID
+               , MOD_DTTM
+        ) SELECT #{g.tenant}
+               , RANDOMUUID                  /* 평가시트 평가자 UUID */  , #{p.new_pfmc_evalsht_uuid}    /* 퍼포먼스 평가시트 UUID */
+               , EVALFACT_EVALTR_AUTHTY_CCD    /* 평가항목 평가자 권한 공통코드 */
+               , EVALTR_ID                     /* 평가자 아이디 */
+               , 'C'
+               , RMK
+               , #{g.username}
+               , #{g.now}
+               , #{g.username}
+               , #{g.now}
+            FROM EVALSHT_EVALTR
+	       WHERE TEN_ID = #{g.tenant}
+	         AND PFMC_EVALSHT_UUID = #{p.pfmc_evalsht_uuid}
+             AND STS != 'D'
+    </insert>
+	<update id="saveMappingEvaltmplUuidToPfmcEvalsht">
+        /* pfmc-evalsht-setup.saveMappingEvaltmplUuidToPfmcEvalsht : 퍼포먼스 평가시트 - 평가템플릿 매핑 */
+        UPDATE PFMC_EVALSHT        /* 퍼포먼스 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID              = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM             = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , PRE_EVALTMPL_UUID   = CASE WHEN PRE_EVALTMPL_UUID IS NULL OR PRE_EVALTMPL_UUID = '' THEN EVALTMPL_UUID ELSE PRE_EVALTMPL_UUID END  /* 이전 평가템플릿 UUID */
+            , EVALTMPL_UUID        = #{p.evaltmpl_uuid}         /* 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID               = #{g.tenant}                /* 시스템 아이디 */
+          AND PFMC_EVALSHT_UUID    = #{p.work_evaltmpl_uuid}     /* 퍼포먼스 평가시트 UUID */
+    </update>
+    <update id="saveMappingOrgnPfmcEvaltmplUuidToPfmcEvalsht">
+        /* pfmc-evalsht-setup.saveMappingOrgnPfmcEvaltmplUuidToPfmcEvalsht : 퍼포먼스 평가시트 - 수정 전 원본 평가템플릿 매핑 */
+        UPDATE PFMC_EVALSHT        /* 퍼포먼스 평가시트 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID              = #{g.username}              /* 수정자 아이디 */
+            , MOD_DTTM             = #{g.now}                   /* 수정 일시 */
+            , STS                  = 'U'                        /* 상태 */
+            , PRE_EVALTMPL_UUID   = #{p.pre_evaltmpl_uuid}    /* 이전 평가템플릿 UUID */
+            , EVALTMPL_UUID        = PRE_EVALTMPL_UUID         /* 평가템플릿 UUID */
+        </trim>
+        WHERE TEN_ID               = #{g.tenant}                /* 시스템 아이디 */
+          AND PFMC_EVALSHT_UUID    = #{p.work_evaltmpl_uuid}     /* 퍼포먼스 평가시트 UUID */
+    </update>
+</mapper>

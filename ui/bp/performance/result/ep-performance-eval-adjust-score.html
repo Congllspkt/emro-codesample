@@ -1,0 +1,210 @@
+<!--
+    ******************************************************************************************
+    ** @Program-name    : 평가결과 조정
+    ** @Description     : 평가결과 점수를 조정합니다.
+    ** @Author          : yjjeong
+    ** @Create Date     : 2017.06.27
+    ** @History         : 2017.06.27 yjjeong 최초작성
+    ******************************************************************************************
+-->
+<dom-module id="ep-performance-eval-adjust-score">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		 -->
+		<sc-ajax id="findPeSubjResAdjInfo"
+				 url="findPeSubjResAdjInfo.do"
+				 body="{{searchParam}}"
+				 last-response="{{peSubjResAdjInfo}}">
+		</sc-ajax>
+		
+		<sc-ajax id="savePeSubjResAdjInfo"
+				 url="savePeSubjResAdjInfo.do"
+				 body="{{peSubjResAdjInfo}}"
+				 on-response="saveResultHandler">
+		</sc-ajax>
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar>
+			<sc-button text="저장" auth-s on-click="onSave"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex">
+			<cc-form-panel id="peInfoPanel" validation-group="peSubjResAdjInfo">
+			<cc-fieldset column-span="2">
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field value="{{peSubjResAdjInfo.eval_nm}}" readOnly="true" ></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사 명"></sc-label>
+				<sc-text-field value="{{peSubjResAdjInfo.display_vd_nm}}" readOnly="true" ></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="소싱그룹 명"></sc-label>
+				<sc-text-field value="{{peSubjResAdjInfo.display_vmg_nm}}" readOnly="true" ></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="조정 평가 점수"></sc-label>
+				<sc-number-field id="eval_sc" value="{{peSubjResAdjInfo.eval_sc}}" input-cover="true" format-type="srmScore" format-type="srmScore" required="[[formula('isEditable')]]"  readonly="[[!formula('isEditable')]]"
+								 min-value="0" max-value="100" max-length="5" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="원본 평가 점수"></sc-label>
+				<sc-number-field value="{{peSubjResAdjInfo.ini_eval_sc}}" format-type="srmScore" readOnly="true"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+					<sc-label text="조정 평가 등급"></sc-label>
+						<sc-text-field value="{{peSubjResAdjInfo.eval_grd_cd}}" readOnly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+					<sc-label text="원본 평가 등급"></sc-label>
+						<sc-text-field value="{{peSubjResAdjInfo.ini_eval_grd_cd}}" readOnly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+						<sc-label text="조정자"></sc-label>
+						<sc-text-field value="{{peSubjResAdjInfo.adj_usr_nm}}" readOnly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="조정 일자"></sc-label>
+				<sc-date-field value="{{peSubjResAdjInfo.adj_dt}}" string-date="true" readOnly="true"></sc-date-field>
+			</cc-fieldset>
+			<cc-fieldset column-span="2">
+				<sc-label text="조정 사유"></sc-label>
+						<sc-textarea-field value="{{peSubjResAdjInfo.adj_rsn}}" class="h-150" max-length="1000" required="[[formula('isEditable')]]"  readonly="[[!formula('isEditable')]]"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="upload" class="h-200" value="{{peSubjResAdjInfo.athg_uuid}}" editable="[[formula('isEditable')]]"></sc-upload>
+			</cc-fieldset>
+			</cc-form-panel>
+		</div>
+	</template>
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is : 'ep-performance-eval-adjust-score',
+			
+			properties : {
+				titleText:{
+					type: String,
+					value: "평가 결과 조정"
+				},
+				
+				//평가정보
+				searchParam:{
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				// 평가결과 정보 Object
+				peInfo : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				},
+				peSubjResAdjInfo : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				}
+			},
+			formulas : {
+				isEditable : function() {
+					return UT.isNotEmpty(this.peInfo) && this.peInfo.editable === true;
+				}
+			},
+			/**
+			 * 최초 호출
+			 */
+			initialized : function(){
+				var me = this;
+				me.$.eval_sc.regex = CCPrecManager.regex("srmScore");
+			},
+			
+			/**
+			 * 전달 받은 parameter setting
+			 */
+			load : function(param) {
+				var me = this;
+				me.set("searchParam",{
+					pe_uuid : param.pe_uuid,
+					pe_subj_res_uuid  : param.pe_subj_res_uuid
+				});
+				me.set("peInfo", {
+					pe_sts_ccd : param.pe_sts_ccd,
+					editable : param.editable
+				});
+				me.onSearch();
+			},
+			
+			/**
+			 * 조회
+			 */
+			onSearch: function() {
+				var me = this;
+				
+				UT.request(me.$.findPeSubjResAdjInfo);
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 저장
+			 */
+			onSave : function() {
+				var me = this;
+				
+				if(!me.validate("peSubjResAdjInfo")){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() {
+					me.set("peSubjResAdjInfo.re_calc","Y")
+					me.$.upload.upload().then(function(){
+						UT.request(me.$.savePeSubjResAdjInfo);
+					});
+				});
+			},
+			
+			/**
+			 * 저장 후 처리
+			 */
+			saveResultHandler : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if (UT.isObject(result) && result.resultStatus === "S") {
+					//저장성공
+					UT.completeAlert("저장", function(){
+						me.fire("complete-save");
+						me.onSearch();
+					});
+				}else{
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+				
+			}
+			
+		});
+	</script>
+</dom-module>

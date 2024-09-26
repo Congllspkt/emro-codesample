@@ -1,0 +1,201 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 운영조직 사용자-부서 검색 자동 완성 text field 커스텀 태그
+	** @Description		: 특정 운영조직에 속한 내부 사용자를 검색한다. (Base: cc-user-dept-search)
+	** @Author 			: swnam
+	** @Create Date 	: 2024.06.10
+	******************************************************************************************
+-->
+<sc-link rel="import" href="ep-user-by-operorg-list.html"></sc-link>
+
+<dom-module id="cc-user-dept-by-operorg-search">
+	<style>
+		:host {
+			display: inline-flex;
+			width : 100%;
+		}
+	</style>
+	<template>
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<sc-text-field class$="[[valueClass]] value-field"
+					   placeholder="[[valuePlaceholder]]"
+					   disabled="[[disabled]]"
+					   required="[[required]]"
+					   readonly="[[readonly]]"
+					   value="{{value}}"
+					   on-enter="onFindUser"
+					   on-keydown="onKeyDown"
+					   maxLength="200">
+		</sc-text-field>
+		<div class="hspace-5" hidden="[[hideTrigger]]"></div>
+		<sc-trigger-field trigger-cls="field-search" on-trigger-click="onShowPopupFindUser" disabled="[[disabledTrigger]]" hide-trigger="[[hideTrigger]]"></sc-trigger-field>
+		<div class="hspace-5"></div>
+		<sc-text-field value="{{resultValueId}}"   readonly="true" class$="[[resultIdClass]]"   placeholder="[[resultIdPlaceholder]]"></sc-text-field>
+		<div class="hspace-5"></div>
+		<sc-text-field value="{{resultValueDept}}" readonly="true" class$="[[resultDeptClass]]" placeholder="[[resultDeptPlaceholder]]"></sc-text-field>
+	</template>
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: 'cc-user-dept-by-operorg-search',
+			
+			behaviors: [
+				Polymer.CCSearchFieldBehavior
+			],
+			
+			properties: {
+				resultValueId: {
+					type: Object,
+					notify: true
+				},
+				
+				resultValueDept: {
+					type: Object,
+					notify: true
+				},
+				
+				// value Field
+				valueField: {
+					type: String,
+					value: "usr_nm"
+				},
+				
+				valueFieldEn: {
+					type: String,
+					value: "usr_nm_en"
+				},
+				
+				// result-Value Field
+				resultIdField: {
+					type: String,
+					value: "usr_id"
+				},
+				
+				// result-Value Field
+				resultDeptField: {
+					type: String,
+					value: "dept_nm"
+				},
+				
+				// Value Placeholder
+				valuePlaceholder: {
+					type: String,
+					value: ""
+				},
+				
+				resultIdClass: {
+					type: String,
+				},
+				
+				resultDeptClass: {
+					type: String,
+				},
+				
+				noClose: {
+					type: Boolean,
+					value: false
+				},
+				
+				oorgCd: {
+					type: String,
+					value: ""
+				}
+			},
+			
+			attached: function() {
+				if(!this._attachedCalled) {
+					this._attachedCalled = true;
+					// 한 번만 호출되도록 로직 작성
+					
+					var me = this;
+					var target = me.querySelector(".value-field");
+					if (target) {
+						target.addEventListener("mousedown", function(e) {
+							if (event.button === 2 || event.which === 3) {
+								me.clearFlag = true;
+							}
+						});
+					}
+				}
+			},
+			
+			// Field ValueChanged
+			valueChanged: function () {
+				if (this.clearFlag) {
+					this.set("resultValueId", "");
+					this.set("resultValueDept", "");
+				}
+				this.clearFlag = false;
+			},
+			
+			// text-field 검색
+			onFindUser: function() {
+				var me = this;
+				
+				if (!me.readonly) {
+					//사용자검색 팝업을 호출한다.
+					var operationOrgUserPopup = me.createOperOrgUserPopup();
+					operationOrgUserPopup.show();
+					operationOrgUserPopup.getWindowContent().load({
+						singleSelect: true,
+						autoComplete: true,
+						operorgDisabled: true,
+						defaultParam: {
+							usr_nm: me.value,
+							oorg_cd: me.get("oorgCd")
+						},
+					});
+				}
+			},
+			
+			// 검색 버튼 클릭
+			onShowPopupFindUser: function() {
+				var me = this;
+				// 운영조직별 사용자 검색 팝업을 호출한다.
+				var operationOrgUserPopup = me.createOperOrgUserPopup();
+				operationOrgUserPopup.show();
+				operationOrgUserPopup.getWindowContent().load({
+					singleSelect: true,
+					operorgDisabled: true,
+					defaultParam: {
+						usr_nm: me.value,
+						oorg_cd: me.get("oorgCd")
+					},
+				});
+			},
+			
+			// Popup 생성
+			createOperOrgUserPopup: function() {
+				var me = this;
+				
+				return UT.popup('ep-user-by-operorg-list', me, 1000, 600, {
+					'selected-items': function(popup, e) {
+						var result = e.detail[0];
+						
+						if (result) {
+							me.clearFlag = false;
+							if (UT.multiLocaleCheck()) {
+								me.set("value", result[me.valueFieldEn]); // 코드 명 영문
+							} else {
+								me.set("value", result[me.valueField]); // 코드 명
+							}
+							
+							me.set("resultValueId", result[me.resultIdField]);
+							me.set("resultValueDept", result[me.resultDeptField]);
+							me.fire("result", result);
+						}
+						popup.close();
+					}
+				});
+			},
+		});
+	</script>
+</dom-module>

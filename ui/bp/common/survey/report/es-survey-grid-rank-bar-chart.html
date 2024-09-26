@@ -1,0 +1,180 @@
+<script type="text/javascript" src="/ui/lib/echarts/echarts.min.js"></script>
+
+<dom-module id="es-survey-grid-rank-bar-chart">
+	<template>
+		<cc-sub-title-bar title-text="[[question.disp_surv_qn_nm]]"></cc-sub-title-bar>
+		<div id="answers" class="vbox">
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-grid-rank-bar-chart",
+			
+			behaviors: [
+				Polymer.SCResizableBehavior
+			],
+			
+			properties: {
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				question: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				echartList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				
+				option: {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: '',
+								subtext: '',
+								left: 'left'
+							},
+							tooltip: {
+								trigger: 'item'
+							},
+							legend: {
+								orient: 'vertical',
+								left: 'right'
+							},
+							dataset: {
+								dimensions: [],
+								source: []
+							},
+							xAxis: {
+								type: 'category'
+							},
+							yAxis: {
+								type: 'value',
+								interval: 1
+							},
+							series: []
+						};
+					}
+				},
+			},
+			
+			listeners: {
+				'sc-resize': '_onResize',
+			},
+			
+			load: function() {
+				var me = this;
+				var question = me.question;
+				
+				var childQuestions = question.questions || [];
+				for(var i = 0; i < childQuestions.length; i++) {
+					var childQuestion = childQuestions[i];
+					me.loadQuestion(childQuestion);
+				}
+			},
+			
+			loadQuestion: function(childQuestion) {
+				var me = this;
+				var answersForm = me.$.answers;
+				
+				var div = document.createElement("div");
+				div.classList.add("vbox");
+				div.style.marginLeft = "10px";
+				
+				var subTitle = document.createElement("cc-sub-title-bar");
+				subTitle.titleText = childQuestion.disp_surv_qn_nm;
+				div.appendChild(subTitle);
+				answersForm.appendChild(div);
+				
+				me.loadChart(div, childQuestion);
+			},
+			
+			loadChart: function(div, childQuestion) {
+				var me = this;
+				var question = me.question;
+				var option = me.option;
+				var answers = question.answers;
+				
+				var answerMap = {};
+				var dimensions = ['product'];
+				for(var i = 0; i < answers.length; i++) {
+					var answer = answers[i];
+					answerMap[answer.surv_ans_opt_uuid] = answer;
+					dimensions.push(answer.disp_opt_nm);
+				}
+				option.dataset.dimensions = dimensions;
+				
+				var sources = [];
+				var maxSelCnt = question.max_sel_cnt;
+				var selectedAnswers = childQuestion.selectedAnswers || [];
+				for(var i = 0; i < maxSelCnt; i++) {
+					var source = {
+						product: me.translate("{0} 순위", null, i + 1)
+					};
+					
+					var selectedRankList = selectedAnswers.filter(function(item) {
+						return item.surv_ans_opt_rank === i + 1;
+					});
+					var selectedRankMap = {};
+					for(var j = 0; j < selectedRankList.length; j++) {
+						var selectedRank = selectedRankList[j];
+						selectedRankMap[selectedRank.surv_ans_opt_uuid] = selectedRank.value;
+					}
+					for(var key in answerMap) {
+						if(answerMap.hasOwnProperty(key)) {
+							if(UT.isEmpty(selectedRankMap[key])) {
+								source[answerMap[key].disp_opt_nm] = 0;
+							} else {
+								source[answerMap[key].disp_opt_nm] = selectedRankMap[key];
+							}
+						}
+					}
+					sources.push(source);
+				}
+				option.dataset.source = sources;
+				
+				var series = [];
+				for(var i = 0; i < dimensions.length - 1; i++) {
+					series.push({
+						type: 'bar'
+					});
+				}
+				option.series = series;
+				
+				var chartMain = document.createElement("div");
+				chartMain.style.height = "300px";
+				chartMain.style.width = "100%";
+				div.appendChild(chartMain);
+				
+				var echart = echarts.init(chartMain);
+				echart.resize();
+				echart.setOption(option);
+				
+				var echartList = me.echartList;
+				echartList.push(echart);
+			},
+			
+			_onResize: function() {
+				this.debounce('_debounceGridResize', this._doContentElementResize, 200);
+			},
+			_doContentElementResize: function() {
+				var me = this;
+				var echarts = me.echartList;
+				for(var i = 0; i < echarts.length; i++) {
+					echarts[i].resize();
+				}
+			},
+		})
+	</script>
+</dom-module>

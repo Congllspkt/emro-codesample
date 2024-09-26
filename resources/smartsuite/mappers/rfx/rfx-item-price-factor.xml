@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-item-price-factor">
+	<select id="searchRfxItemWithPriceGroup" resultType="map">
+		/* rfx-price-factor.searchRfxItemWithPriceGroup : RFx품목 별 가격군 연결 조회 */
+		SELECT RFX_ITEM.RFX_ITEM_UUID
+		     , RFX_ITEM.RFX_LNO
+		     , RFX_ITEM.OORG_CD
+		     , RFX_ITEM.PURC_TYP_CCD
+		     , RFX_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFX_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFX_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFX_ITEM.ITEM_CD
+		     , RFX_ITEM.ITEM_NM
+		     , RFX_ITEM.ITEM_NM_EN
+		     , RFX_ITEM.ITEM_SPEC
+		     , RFX_ITEM.ITEM_SPEC_DTL
+		     , RFX_ITEM.UOM_CCD
+		     , RFX_ITEM.RFX_QTY
+		     , T.COSTFACT_GRP_CD
+		     , T.COSTFACT_GRP_NM
+		     , T.COSTSTR_PURC_TYP_CCD
+		     , T.ITEM_GRP_NM
+		  FROM RFX_ITEM RFX_ITEM
+		  LEFT OUTER JOIN (
+		                   SELECT RFX_ITEM_COSTFACT.TEN_ID
+		                        , COSTFACT_GRP.OORG_CD
+		                        , RFX_ITEM_COSTFACT.RFX_ITEM_UUID
+		                        , RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		                        , COSTFACT_GRP.COSTFACT_GRP_NM
+		                        , RFX_ITEM_COSTFACT.COSTSTR_PURC_TYP_CCD
+		                        , DTLCD.DTLCD_NM  AS ITEM_GRP_NM
+		                     FROM RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		                    INNER JOIN COSTFACT_GRP COSTFACT_GRP
+		                       ON COSTFACT_GRP.TEN_ID         = RFX_ITEM_COSTFACT.TEN_ID
+		                      AND COSTFACT_GRP.COSTFACT_GRP_CD = RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		                      AND COSTFACT_GRP.STS           != 'D'
+		                    INNER JOIN (
+		                                SELECT DTLCD.TEN_ID
+		                                     , DTLCD.DTLCD
+		                                     , DTLCD_MULTLANG.DTLCD_NM
+		                                  FROM DTLCD DTLCD
+		                                 INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		                                    ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		                                   AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		                                   AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		                                   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		                                 WHERE DTLCD.TEN_ID = #{g.tenant}
+		                                   AND DTLCD.CCD    = 'C023'
+		                                   AND DTLCD.USE_YN = 'Y'
+		                                   AND DTLCD.STS   != 'D'
+		                               ) DTLCD
+		                       ON DTLCD.TEN_ID = COSTFACT_GRP.TEN_ID
+		                      AND DTLCD.DTLCD  = COSTFACT_GRP.COSTSTR_PURC_TYP_CCD
+		                    GROUP BY RFX_ITEM_COSTFACT.TEN_ID
+		                           , COSTFACT_GRP.OORG_CD
+		                           , RFX_ITEM_COSTFACT.RFX_ITEM_UUID
+		                           , RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		                           , COSTFACT_GRP.COSTFACT_GRP_NM
+		                           , RFX_ITEM_COSTFACT.COSTSTR_PURC_TYP_CCD
+		                           , DTLCD.DTLCD_NM
+		                  ) T
+		    ON T.TEN_ID        = RFX_ITEM.TEN_ID
+		   AND T.OORG_CD       = RFX_ITEM.OORG_CD
+		   AND T.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFX_ITEM.RFX_LNO AS INT)
+	</select>
+	<select id="searchPriceGroupByItemGrpTyp" resultType="map">
+		/* rfx-price-factor.searchPriceGroupByItemGrpTyp: 품목군에 따른 가격군 목록 조회 */
+		SELECT COSTFACT_GRP.TEN_ID
+		     , COSTFACT_GRP.OORG_CD
+		     , COSTFACT_GRP.COSTFACT_GRP_CD
+		     , COSTFACT_GRP.COSTFACT_GRP_NM
+		     , COSTFACT_GRP.COSTSTR_PURC_TYP_CCD
+		     , T.DTLCD_NM AS ITEM_GRP_NM
+		  FROM COSTFACT_GRP COSTFACT_GRP
+		 INNER JOIN (
+		             SELECT DTLCD.TEN_ID
+		                  , DTLCD.DTLCD
+		                  , DTLCD_MULTLANG.DTLCD_NM
+		               FROM DTLCD DTLCD
+		              INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		                 ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		                AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		                AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		                AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		              WHERE DTLCD.TEN_ID = #{g.tenant}
+		                AND DTLCD.CCD    = 'C023'
+		                AND DTLCD.USE_YN = 'Y'
+		                AND DTLCD.STS   != 'D'
+		            ) T
+		    ON T.TEN_ID = COSTFACT_GRP.TEN_ID
+		   AND T.DTLCD  = COSTFACT_GRP.COSTSTR_PURC_TYP_CCD
+		 WHERE COSTFACT_GRP.TEN_ID  = #{g.tenant}
+		   AND COSTFACT_GRP.OORG_CD = #{p.oorg_cd}
+		   AND COSTFACT_GRP.COSTSTR_PURC_TYP_CCD = #{p.coststr_purc_typ_ccd}
+		   AND COSTFACT_GRP.STS    != 'D'
+		 ORDER BY COSTFACT_GRP.COSTFACT_GRP_CD
+	</select>
+	<select id="searchPriceFactorByRfxItem" resultType="map">
+		/* rfx-price-factor.searchPriceFactorByRfxItem: 원가구성항목 목록과 RFx 품목 연결 정보 */
+		SELECT COSTFACT.TEN_ID
+		     , COSTFACT.OORG_CD
+		     , COSTFACT.COSTFACT_CD
+		     , COSTFACT.PAR_COSTFACT_CD
+		     , COSTFACT.COSTFACT_NM
+		     , COSTFACT.COSTFACT_LVL
+		     , COSTFACT.PRC_YN
+		     , COSTFACT_GRP.COSTSTR_PURC_TYP_CCD
+		     , COSTFACT_GRPG.COSTFACT_GRP_CD
+		     , CASE WHEN RFX_ITEM_COSTFACT.COSTFACT_CD IS NOT NULL  THEN 'Y'
+		            ELSE 'N'
+		        END AS SELECT_YN /* CostFactor 설정여부*/
+		  FROM COSTFACT COSTFACT /* PFHD : PriceFactor 테이블 (PFMP에서 상위노드들을 찾아야 하지만) */
+		  LEFT OUTER JOIN COSTFACT_GRPG COSTFACT_GRPG  /* PFMP : 가격군-PriceFactor 매핑정보 테이블 : 단말노드만 저장되어있음 */
+		    ON COSTFACT_GRPG.TEN_ID         = COSTFACT.TEN_ID
+		   AND COSTFACT_GRPG.OORG_CD        = COSTFACT.OORG_CD
+		   AND COSTFACT_GRPG.COSTFACT_CD     = COSTFACT.COSTFACT_CD
+		   AND COSTFACT_GRPG.COSTFACT_GRP_CD = #{p.costfact_grp_cd}
+		   AND COSTFACT_GRPG.STS           != 'D'
+		  LEFT OUTER JOIN COSTFACT_GRP COSTFACT_GRP  /* PFDT : 가격군 테이블 */
+		    ON COSTFACT_GRP.TEN_ID         = COSTFACT_GRPG.TEN_ID
+		   AND COSTFACT_GRP.OORG_CD        = COSTFACT_GRPG.OORG_CD
+		   AND COSTFACT_GRP.COSTFACT_GRP_CD = COSTFACT_GRPG.COSTFACT_GRP_CD
+		   AND COSTFACT_GRP.STS           != 'D'
+		  LEFT OUTER JOIN RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT  /* RQTC : 견적요청 원가구성항목설정 테이블 */
+		    ON RFX_ITEM_COSTFACT.TEN_ID        = COSTFACT_GRPG.TEN_ID
+		   AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = #{p.rfx_item_uuid}
+		   AND RFX_ITEM_COSTFACT.COSTFACT_CD    = COSTFACT_GRPG.COSTFACT_CD
+		   AND RFX_ITEM_COSTFACT.COSTSTR_PURC_TYP_CCD = COSTFACT_GRP.COSTSTR_PURC_TYP_CCD
+		   AND RFX_ITEM_COSTFACT.COSTFACT_GRP_CD = COSTFACT_GRPG.COSTFACT_GRP_CD
+		 WHERE COSTFACT.TEN_ID  = #{g.tenant}
+		   AND COSTFACT.OORG_CD = #{p.oorg_cd}
+		   AND COSTFACT.USE_YN  = 'Y'
+		   AND COSTFACT.STS    != 'D'
+		 ORDER BY COSTFACT.COSTFACT_LVL, COSTFACT.COSTFACT_CD
+	</select>
+	<insert id="insertPriceFactor">
+		/* rfx-price-factor.insertPriceFactor */
+		INSERT INTO RFX_ITEM_COSTFACT (
+			TEN_ID
+			, RFX_ITEM_UUID
+			, COSTFACT_CD
+			, COSTSTR_PURC_TYP_CCD
+			, COSTFACT_GRP_CD
+			, COSTFACT_UOM_CCD
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_item_uuid}
+			, #{p.costfact_cd}
+			, #{p.coststr_purc_typ_ccd}
+			, #{p.costfact_grp_cd}
+			, #{p.costfact_uom_ccd}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<delete id="deletePriceFactorByRfxItem">
+		/* rfx-price-factor.deleteRfxItemPriceFactor */
+		DELETE
+		  FROM RFX_ITEM_COSTFACT
+		 WHERE TEN_ID        = #{g.tenant}
+		   AND RFX_ITEM_UUID = #{p.rfx_item_uuid}
+		   <if test="p.costfact_cd != null and p.costfact_cd != ''">
+		       AND COSTFACT_CD = #{p.costfact_cd}
+		   </if>
+	</delete>
+	<delete id="deletePriceFactorByRfx">
+		/* rfx-price-factor.deletePriceFactorByRfx */
+		DELETE
+		  FROM RFX_ITEM_COSTFACT
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_ITEM_UUID IN (
+		                         SELECT RFX_ITEM_UUID
+		                           FROM RFX_ITEM
+		                          WHERE TEN_ID   = #{g.tenant}
+		                            AND RFX_UUID = #{p.rfx_uuid}
+		                            AND STS     != 'D'
+		                        )
+	</delete>
+	<select id="checkRfxItemNotMappedPriFact" resultType="java.lang.Integer">
+		/* rfx-price-factor.checkRfxItemNotMappedPriFact */
+		SELECT COUNT(RFX_ITEM.RFX_ITEM_UUID)
+		  FROM RFX_ITEM RFX_ITEM
+		 WHERE RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFX_ITEM.RFX_UUID = #{p}
+		   AND RFX_ITEM.STS     != 'D'
+		   AND NOT EXISTS (
+		                   SELECT 1
+		                     FROM RFX_ITEM_COSTFACT RFX_ITEM_COSTFACT
+		                    WHERE RFX_ITEM_COSTFACT.TEN_ID        = RFX_ITEM.TEN_ID
+		                      AND RFX_ITEM_COSTFACT.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		                      AND RFX_ITEM_COSTFACT.STS          != 'D'
+		                  )
+	</select>
+	<insert id="copyRfxItemPriceFactors">
+		/* rfx-price-factor.copyRfxItemPriceFactors */
+		INSERT INTO RFX_ITEM_COSTFACT (
+			TEN_ID
+			, RFX_ITEM_UUID
+			, COSTFACT_CD
+			, COSTSTR_PURC_TYP_CCD
+			, COSTFACT_GRP_CD
+			, COSTFACT_UOM_CCD
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		)
+		SELECT TGT_RFX_ITEM.TEN_ID
+		     , TGT_RFX_ITEM.RFX_ITEM_UUID
+		     , SRC_RFX_ITEM_COSTFACT.COSTFACT_CD
+		     , SRC_RFX_ITEM_COSTFACT.COSTSTR_PURC_TYP_CCD
+		     , SRC_RFX_ITEM_COSTFACT.COSTFACT_GRP_CD
+		     , SRC_RFX_ITEM_COSTFACT.COSTFACT_UOM_CCD
+		     , 'C'
+		     , #{g.username}
+		     , #{g.now}
+		     , #{g.username}
+		     , #{g.now}
+		  FROM RFX_ITEM TGT_RFX_ITEM
+		 INNER JOIN RFX_ITEM SRC_RFX_ITEM
+		    ON SRC_RFX_ITEM.TEN_ID       = TGT_RFX_ITEM.TEN_ID
+		   AND SRC_RFX_ITEM.RFX_UUID     = #{p.src_rfx_uuid}
+		   AND SRC_RFX_ITEM.RFX_LNO = TGT_RFX_ITEM.RFX_LNO
+		   AND SRC_RFX_ITEM.STS         != 'D'
+		 INNER JOIN RFX_ITEM_COSTFACT SRC_RFX_ITEM_COSTFACT
+		    ON SRC_RFX_ITEM_COSTFACT.TEN_ID        = SRC_RFX_ITEM.TEN_ID
+		   AND SRC_RFX_ITEM_COSTFACT.RFX_ITEM_UUID = SRC_RFX_ITEM.RFX_ITEM_UUID
+		   AND SRC_RFX_ITEM_COSTFACT.STS          != 'D'
+		 WHERE TGT_RFX_ITEM.TEN_ID   = #{g.tenant}
+		   AND TGT_RFX_ITEM.RFX_UUID = #{p.tgt_rfx_uuid}
+	</insert>
+</mapper>

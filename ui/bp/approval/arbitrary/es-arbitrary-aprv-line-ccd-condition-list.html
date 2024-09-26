@@ -1,0 +1,288 @@
+<sc-link rel="import" href="ep-arbitrary-aprv-line-condition-list.html"></sc-link>
+
+<dom-module id="es-arbitrary-aprv-line-ccd-condition-list">
+
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+
+        <sc-ajax id="searchList" url="selectListArbitraryAprvLineConditionCcd.do" body="{{searchParam}}" on-response="completeSearchList"> <!-- 목록 조회 -->
+        </sc-ajax>
+
+        <sc-ajax id="factorList" url="selectListArbitraryDetailFactor.do" body="{{searchParam}}" on-response="completeFactorList"> <!-- 그리드 항목 목록 조회 -->
+        </sc-ajax>
+
+        <sc-ajax id="defaultFactor" url="selectDefaultArbitraryDetailFactor.do" body="{{searchParam}}" on-response="completeFactorList"> <!-- 그리드 Default 항목 조회 -->
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <sc-grid id="datagrid"
+                 use-state="false"
+                 use-selection="false"
+                 on-item-click="onItemClick"
+                 class="flex">
+
+            <cc-grid-toolbar title-text="[[titleText]]" i18n-disabled>
+            </cc-grid-toolbar>
+
+            <sc-grid-columns>
+            </sc-grid-columns>
+
+            <sc-grid-fields>
+                <sc-grid-field data-field="children" data-type="text"></sc-grid-field>
+                <sc-grid-field data-field="dapvl_uuid"     data-type="text"></sc-grid-field>
+                <sc-grid-field data-field="dapvl_tbl_id"     data-type="text"></sc-grid-field>
+                <sc-grid-field data-field="dapvl_apvlln_id" data-type="text"></sc-grid-field>
+                <sc-grid-field data-field="dapvl_lno_uuid"    data-type="text"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-arbitrary-aprv-line-ccd-condition-list",
+            properties: {
+                headerData: { // 선택된 헤더
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                searchParam: { // 조회 조건
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                titleText: {
+                    type: String,
+                    value: ""
+                }
+            },
+
+            observers: ["changedHeaderData(headerData._force_edit_yn)"],
+
+            changedHeaderData: function() {
+                var me = this;
+                me.applyFormula();
+            },
+
+            formulas: {
+                isEditable: function() {
+                    var me = this;
+                    if (UT.isNotEmpty(me.get("searchParam.dapvl_uuid")) && UT.isNotEmpty(me.get("searchParam.dapvl_tbl_id")) && UT.isNotEmpty(me.get("searchParam.dapvl_apvlln_id"))) {
+                        return me.headerData.dapvl_crn_sts_ccd === "CRNG" || me.formula("isForceEditable");
+                    } else {
+                        return false;
+                    }
+                },
+                isForceEditable: function() {
+                    var me = this;
+                    return me.get("headerData.dapvl_crn_sts_ccd") === "CNFD" && me.get("headerData.ended_yn") === "N" && me.get("headerData._force_edit_yn") === "Y";
+                }
+            },
+
+            initialized: function() {
+                var me = this;
+
+                me.set("titleText", me.translate("전결 업무 유형 대상"));
+                me.applyFormula();
+            },
+
+            load: function(param) {
+                var me = this;
+                var titleText = me.translate("전결 업무 상세 지정");
+                me.set("searchParam", Object.assign({}, param, {org_yn: 'N'}));
+                me.applyFormula();
+                me.onFactorList();
+            },
+
+            clear: function() {
+                var me = this;
+                me.set("searchParam", {});
+                me.set("titleText", me.translate("전결 업무 상세 지정"));
+                me.$.datagrid.setColumns([]);
+                me.$.datagrid.setDataProvider([]);
+                me.applyFormula();
+            },
+
+            // 테이블항목 목록조회
+            onFactorList: function() {
+                var me = this;
+                UT.request(me.$.factorList);
+            },
+
+            // 테이블항목 목록조회 완료
+            completeFactorList: function (e, res) {
+                var me = this;
+                var factors = res.response;
+
+                if(UT.isEmpty(factors)) {
+                    UT.request(me.$.defaultFactor)
+                } else {
+                    me.set("factors", factors);
+                    var columns = [];
+                    var grp =  document.createElement("sc-group-column");
+                    grp.headerText = me.translate("전결 업무 유형");
+                    grp.width = 150 + (150 * (factors.length));
+
+                    var keyCol = document.createElement("sc-data-column");
+                    keyCol.dataField = "link";
+                    keyCol.styleName = "link";
+                    keyCol.headerText = me.translate("결재선");
+                    keyCol.textAlign = "center";
+                    keyCol.width = 150;
+                    grp.appendChild(keyCol);
+
+                    var nmCol = document.createElement("sc-data-column");
+                    nmCol.dataField = "name";
+                    nmCol.headerText = me.translate("업무");
+                    nmCol.textAlign = "left";
+                    nmCol.width = (150 * (factors.length));
+                    grp.appendChild(nmCol);
+                    columns.push(grp);
+
+
+
+                    // var cntGrp =  document.createElement("sc-group-column");
+                    // cntGrp.headerText = me.translate("결재선");
+                    // cntGrp.width = 300;
+
+                    var apvllnCntCol = document.createElement("sc-data-column");
+                    apvllnCntCol.dataField = "apvlln_cnt";
+                    apvllnCntCol.headerText = me.translate("결재선 개수");
+                    apvllnCntCol.textAlign = "center";
+                    apvllnCntCol.width = 150;
+                    // cntGrp.appendChild(apvllnCntCol);
+                    columns.push(apvllnCntCol);
+
+                    var apvllnInpvarsCntCol = document.createElement("sc-data-column");
+                    apvllnInpvarsCntCol.dataField = "apvlln_inpvars_cnt";
+                    apvllnInpvarsCntCol.headerText = me.translate("결재선 조직 지정 개수");
+                    apvllnInpvarsCntCol.textAlign = "center";
+                    apvllnInpvarsCntCol.width = 170;
+                    // cntGrp.appendChild(apvllnInpvarsCntCol);
+                    columns.push(apvllnInpvarsCntCol);
+
+                    // for (var i = 0, len = factors.length; i < len; i++) {
+                    //     var grp = document.createElement("sc-group-column");
+                    //     grp.headerText = factors[i].dapvl_cnd_inpvar_nm;
+                    //     grp.width = 100;
+                    //
+                    //     var keyCol = document.createElement("sc-data-column");
+                    //     keyCol.dataField = factors[i].dapvl_cnd_inpvar_uuid + "-key";
+                    //     keyCol.headerText = me.translate("Key");
+                    //     keyCol.textAlign = "left";
+                    //     keyCol.width = 100;
+                    //     grp.appendChild(keyCol);
+                    //
+                    //     if (UT.isNotEmpty(factors[i].parm_nm)) {
+                    //         var nmCol = document.createElement("sc-data-column");
+                    //         nmCol.dataField = factors[i].dapvl_cnd_inpvar_uuid + "-nm";
+                    //         nmCol.headerText = me.translate("명");
+                    //         nmCol.textAlign = "left";
+                    //         nmCol.width = 100;
+                    //
+                    //         grp.appendChild(nmCol);
+                    //         grp.width = 200;
+                    //     }
+                    //     columns.push(grp);
+                    // }
+                    me.$.datagrid.setColumns(columns);
+
+                }
+                me.onSearchList();
+
+            },
+
+            // 목록조회
+            onSearchList: function () {
+                var me = this;
+                var sqlFactors = [];
+
+                me.factors.forEach(factor => {
+                    if(factor.dapvl_cnd_inpvar_ccd == "PURCGRP") {
+                        sqlFactors.push(factor);
+                    }
+                });
+                me.set("searchParam", Object.assign({}, me.searchParam, {
+                    dapvl_cnd_inpvar_uuids: me.factors
+                        .filter(factor => factor.dapvl_cnd_inpvar_ccd == "CCD")
+                        .map(factor => factor.dapvl_cnd_inpvar_uuid),
+                    dapvl_cnd_inpvar_sqlFactors: sqlFactors
+                }));
+                UT.request(me.$.searchList);
+            },
+
+            // 목록조회 완료
+            completeSearchList: function (e, res) {
+                var me = this;
+                var result = res.response;
+                var rows = [];
+                // console.log(result);
+                if (UT.isNotEmpty(result)) {
+                    for (var i = 0, ilen = result.length; i < ilen; i++) {
+                        var message = "";
+                        for (var j = 0, jlen = result[i].children.length; j < jlen; j++) {
+                            var field = result[i].children[j];
+                            message += field.parm_nm_val;
+                            if(j != jlen-1) message += " + ";
+                            // var field = result[i].children[j];
+                            // row[field.dapvl_cnd_inpvar_uuid + "-key"] = field.parm_key_val;
+                            // if (UT.isNotEmpty(field.parm_nm_val)) {
+                            //     row[field.dapvl_cnd_inpvar_uuid + "-nm"] = field.parm_nm_val;
+                        }
+
+                        var row = {
+                            dapvl_uuid: result[i].dapvl_uuid,
+                            dapvl_tbl_id: result[i].dapvl_tbl_id,
+                            children: JSON.stringify(result[i].children),
+                            // 다국어 필요
+                            link: me.translate("결재선 설정"),
+                            name: message,
+                            apvlln_cnt: result[i].apvlln_cnt,
+                            apvlln_inpvars_cnt: result[i].apvlln_inpvars_cnt
+                        };
+                        rows.push(row);
+                    }
+                }
+                me.$.datagrid.setDataProvider(rows);
+            },
+
+            onItemClick: function(event){
+                var me = this,
+                    data = event.detail.data,
+                    item = event.detail.item;
+                if(item.dataField === "link") {
+                    me.fire("ccd-selected", data);
+                }
+            },
+
+            validateFixableData: function() {
+                var me = this;
+                var sqlFactors = [];
+
+                me.factors.forEach(factor => {
+                    if(factor.dapvl_cnd_inpvar_ccd == "PURCGRP") {
+                        sqlFactors.push(factor);
+                    }
+                });
+                var data = Object.assign({}, me.searchParam, {
+                    dapvl_cnd_inpvar_uuids: me.factors
+                        .filter(factor => factor.dapvl_cnd_inpvar_ccd == "CCD")
+                        .map(factor => factor.dapvl_cnd_inpvar_uuid),
+                    dapvl_cnd_inpvar_sqlFactors: sqlFactors
+                });
+                me.fire("validate-fixable-data-cond", data)
+            }
+
+        });
+    </script>
+
+</dom-module>

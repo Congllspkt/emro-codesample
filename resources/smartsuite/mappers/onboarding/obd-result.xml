@@ -1,0 +1,569 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="obd-result">
+	<select id="findListCompleteOnboardingEval" resultType="map">
+        /* obd-result.findListCompleteOnboardingEval: 온보딩평가 완료 처리대기 목록 조회 */
+        SELECT O.TEN_ID
+             , O.OE_UUID
+             , O.OORG_CD
+             , O.VD_CD
+             , OV.VD_OORG_UUID
+             , V.ERP_VD_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN V.VD_NM ELSE (CASE WHEN V.VD_NM_EN IS NULL OR V.VD_NM_EN = '' THEN V.VD_NM ELSE V.VD_NM_EN END) END AS VD_NM
+             , OG.OEG_NM
+             , O.OE_PRGS_STS_CCD  /* 진행 상태 */
+			 , O.OE_RES_STS_CCD   /* 온보딩평가 결과 상태 공통코드(E008) */
+             , O.OE_REQ_DT
+             , O.PRCSG_ED_YN
+             , O.OE_ED_DT
+             , NVL((
+               	 	SELECT CASE WHEN PO_POSS_YN IS NULL OR PO_POSS_YN = '' THEN 'N' ELSE PO_POSS_YN END
+				 	FROM VD_OORG  OV
+                 	WHERE OV.TEN_ID     = O.TEN_ID
+                   		AND OV.OORG_CD  = O.OORG_CD
+                   		AND OV.VD_CD    = O.VD_CD
+                    ), 'N') AS PO_POSS_YN  , O.VD_MST_CHG_HISTREC_UUID
+             , VCH.CHG_REQ_STS_CCD
+             , VCH.CHG_TYP_CCD
+           --  , V.VALID_YN
+          FROM OE O
+         INNER JOIN OEG OG ON OG.TEN_ID = O.TEN_ID AND OG.OEG_UUID = O.OEG_UUID
+         INNER JOIN VD V ON V.TEN_ID = O.TEN_ID AND V.VD_CD = O.VD_CD
+         INNER JOIN VD_OORG OV ON OV.TEN_ID = O.TEN_ID AND OV.VD_CD = O.VD_CD AND OV.OORG_CD = O.OORG_CD
+          LEFT OUTER JOIN VD_CHG_HISTREC VCH
+            ON VCH.TEN_ID                  = V.TEN_ID
+           AND VCH.VD_MST_CHG_HISTREC_UUID = O.VD_MST_CHG_HISTREC_UUID
+         WHERE O.TEN_ID      = #{g.tenant}
+           AND O.STS        != 'D'
+           AND OG.STS       != 'D'
+           AND O.PRCSG_ED_YN = 'N'  -- 처리 미종료 건만 조회
+           AND O.OE_PRGS_STS_CCD IN ('EVAL_CMPLD', 'EVAL_CLSG')
+           AND (VCH.CHG_REQ_STS_CCD IS NULL OR VCH.CHG_REQ_STS_CCD = '' OR VCH.CHG_REQ_STS_CCD != 'APVD')  -- '!결재승인' 건만 조회
+         <if test="p.oe_prgs_sts_ccd != null and p.oe_prgs_sts_ccd != ''">
+           AND O.OE_PRGS_STS_CCD = #{p.oe_prgs_sts_ccd}
+         </if>
+         <if test="p.chg_req_sts_ccd != null and p.chg_req_sts_ccd != ''">
+           AND VCH.CHG_REQ_STS_CCD = #{p.chg_req_sts_ccd}
+         </if>
+         <if test="p.vd_cd != null and p.vd_cd != ''">
+           <bind name="vdCodePattern" value="'%' + p.vd_cd + '%'"/>
+           AND UPPER(O.VD_CD) LIKE UPPER(#{vdCodePattern})
+         </if>
+         <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+           <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(V.ERP_VD_CD) LIKE UPPER(#{p_erp_vd_cd})
+         </if>
+         <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+           <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+           AND (UPPER(V.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(V.VD_NM_EN) LIKE UPPER(#{p_vd_nm}))      /* 협력사명 검색조건*/
+         </if>
+         <if test="p.from_date != null and p.from_date != ''">
+           AND O.OE_REQ_DT &gt;= #{p.from_date}
+         </if>
+         <if test="p.to_date != null and p.to_date != ''">
+           AND O.OE_REQ_DT <![CDATA[<=]]> #{p.to_date}
+         </if>
+       <choose>
+         <when test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+           AND O.OORG_CD IN
+                <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+                  #{oorg_cd}
+                </foreach>
+         </when>
+         <otherwise>
+           AND O.OORG_CD IN (SELECT OOPM.OORG_CD
+                                  FROM OORG_USR OOPM
+                                     , OORG OOMG
+                                 WHERE OOPM.TEN_ID       = #{g.tenant}
+                                   AND OOPM.USR_ID       = #{g.username}
+                                   AND OOMG.TEN_ID       = OOPM.TEN_ID
+                                   AND OOMG.OUNIT_CD     = 'EO'
+                                   AND OOMG.OORG_CD      = OOPM.OORG_CD
+                                   AND OOMG.STS         != 'D'
+                               )
+         </otherwise>
+       </choose>
+         ORDER BY O.OE_REQ_DT DESC, O.MOD_DTTM DESC
+    </select>
+	<update id="saveListOnboardingEvalUnRegCompleteOe">
+        /* obd-result.saveListOnboardingEvalUnRegCompleteOe : 온보딩평가 품의 - 미등록완료 저장 */
+        UPDATE OE
+           SET PRCSG_ED_YN    = 'Y'
+         <if test="p.sts != null and p.sts != ''">
+             , STS            = #{p.sts}
+         </if>
+             , MODR_ID        = #{g.username}
+             , MOD_DTTM       = #{g.now}
+         WHERE TEN_ID         = #{g.tenant}
+           AND OE_UUID        = #{p.oe_uuid}
+    </update>
+	<select id="findListOnboardingEvalHistrec" resultType="map">
+		/* obd-result.findListOnboardingEvalHistrec: 온보딩평가 이력 목록 조회 */
+		SELECT O.TEN_ID
+             , O.OE_UUID
+             , O.OORG_CD
+             , O.VD_CD
+             , OV.VD_OORG_UUID
+             , V.ERP_VD_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN V.VD_NM ELSE (CASE WHEN V.VD_NM_EN IS NULL OR V.VD_NM_EN = '' THEN V.VD_NM ELSE V.VD_NM_EN END) END AS VD_NM
+             , OG.OEG_NM
+             , O.OE_PRGS_STS_CCD  /* 진행 상태 */
+			 , O.OE_RES_STS_CCD  /* 온보딩평가 결과 상태 공통코드(E008) */
+             , O.OE_REQ_DT
+             , O.PRCSG_ED_YN
+             , O.OE_ED_DT
+               , NVL((
+               		SELECT CASE WHEN PO_POSS_YN IS NULL OR PO_POSS_YN = '' THEN 'N' ELSE PO_POSS_YN END
+                  	FROM VD_OORG  OV
+                 	WHERE OV.TEN_ID    = O.TEN_ID
+                   		AND OV.OORG_CD = O.OORG_CD
+                   		AND OV.VD_CD   = O.VD_CD
+                 ), 'N') AS PO_POSS_YN  , O.VD_MST_CHG_HISTREC_UUID
+             , VCH.CHG_REQ_STS_CCD
+             , VCH.CHG_TYP_CCD
+           --  , V.VALID_YN
+          FROM OE O
+         INNER JOIN OEG OG ON OG.TEN_ID = O.TEN_ID AND OG.OEG_UUID = O.OEG_UUID
+         INNER JOIN VD V ON V.TEN_ID = O.TEN_ID AND V.VD_CD = O.VD_CD
+         INNER JOIN VD_OORG OV ON OV.TEN_ID = O.TEN_ID AND OV.VD_CD = O.VD_CD AND OV.OORG_CD = O.OORG_CD
+          LEFT OUTER JOIN VD_CHG_HISTREC VCH
+            ON VCH.TEN_ID                  = V.TEN_ID
+           AND VCH.VD_MST_CHG_HISTREC_UUID = O.VD_MST_CHG_HISTREC_UUID
+         WHERE O.TEN_ID      = #{g.tenant}
+           AND O.STS        != 'D'
+           AND OG.STS       != 'D'
+        --   AND OG.USE_YN = 'Y'
+           AND O.PRCSG_ED_YN = 'Y'  -- 처리 종료 건만 조회
+           AND O.OE_PRGS_STS_CCD IN ('EVAL_CMPLD', 'EVAL_CLSG')
+        --   AND (VCH.CHG_REQ_STS_CCD IS NULL OR VCH.CHG_REQ_STS_CCD != 'APVD')  -- '!결재승인' 건만 조회
+         <if test="p.oe_prgs_sts_ccd != null and p.oe_prgs_sts_ccd != ''">
+           AND O.OE_PRGS_STS_CCD = #{p.oe_prgs_sts_ccd}
+         </if>
+         <if test="p.chg_req_sts_ccd != null and p.chg_req_sts_ccd != ''">
+           AND VCH.CHG_REQ_STS_CCD = #{p.chg_req_sts_ccd}
+         </if>
+         <if test="p.vd_cd != null and p.vd_cd != ''">
+           <bind name="vdCodePattern" value="'%' + p.vd_cd + '%'"/>
+           AND UPPER(O.VD_CD) LIKE UPPER(#{vdCodePattern})
+         </if>
+         <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+           <bind name="p_erp_vd_cd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(V.ERP_VD_CD) LIKE UPPER(#{p_erp_vd_cd})
+         </if>
+         <if test="p.vd_nm != null and p.vd_nm != &quot;&quot;">
+           <bind name="p_vd_nm" value="'%' + p.vd_nm + '%'"/>
+           AND (UPPER(V.VD_NM) LIKE UPPER(#{p_vd_nm}) OR UPPER(V.VD_NM_EN) LIKE UPPER(#{p_vd_nm}))      /* 협력사명 검색조건*/
+         </if>
+         <if test="p.from_date != null and p.from_date != ''">
+           AND O.OE_REQ_DT &gt;= #{p.from_date}
+         </if>
+         <if test="p.to_date != null and p.to_date != ''">
+           AND O.OE_REQ_DT <![CDATA[<=]]> #{p.to_date}
+         </if>
+       <choose>
+         <when test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+           AND O.OORG_CD IN
+                <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+                  #{oorg_cd}
+                </foreach>
+         </when>
+         <otherwise>
+           AND O.OORG_CD IN (SELECT OOPM.OORG_CD
+                                  FROM OORG_USR OOPM
+                                     , OORG OOMG
+                                 WHERE OOPM.TEN_ID       = #{g.tenant}
+                                   AND OOPM.USR_ID       = #{g.username}
+                                   AND OOMG.TEN_ID       = OOPM.TEN_ID
+                                   AND OOMG.OUNIT_CD     = 'EO'
+                                   AND OOMG.OORG_CD      = OOPM.OORG_CD
+                                   AND OOMG.STS         != 'D'
+                               )
+         </otherwise>
+       </choose>
+         ORDER BY O.OE_REQ_DT DESC, O.MOD_DTTM DESC
+	</select>
+	<update id="saveOnboardingEvalVendorAprvInfo">
+        /* obd-result.saveOnboardingEvalVendorAprvInfo: 대상 온보딩평가그룹에 협력사 마스터 변경이력 UUID 저장 */
+        UPDATE OE
+           SET VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+             , MODR_ID                 = #{g.username}
+             , MOD_DTTM                = #{g.now}
+         WHERE TEN_ID                  = #{g.tenant}
+           AND OE_UUID                 = #{p.oe_uuid}
+    </update>
+    <update id="saveOnboardingEvalVmgAprvSubj">
+        /* obd-result.saveOnboardingEvalVmgAprvSubj: 등록대상 협력사관리그룹에 결재대상여부 변경 */
+        UPDATE OE_VMG
+           SET APVL_SUBJ_YN = #{p.apvl_subj_yn}
+             , MODR_ID      = #{g.username}
+             , MOD_DTTM     = #{g.now}
+         WHERE TEN_ID       = #{g.tenant}
+           AND OE_VMG_UUID  = #{p.oe_vmg_uuid}
+    </update>
+	<update id="saveOnboardingEvalPrcsPrcsgEnd">
+        /* obd-result.saveOnboardingEvalPrcsPrcsgEnd: 온보딩평가 프로세스 처리완료 */
+        <bind name="now" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+        UPDATE OE_PRCS
+        SET
+			PRE_OE_PRCS_PASS_DT = (CASE WHEN PRE_OE_PRCS_PASS_DT = '' OR PRE_OE_PRCS_PASS_DT IS NULL THEN #{now} ELSE PRE_OE_PRCS_PASS_DT END)
+          , MODR_ID             = #{g.username}
+          , MOD_DTTM            = #{g.now}
+        WHERE TEN_ID  = #{g.tenant}
+      <choose>
+        <when test="p.vd_mst_chg_histrec_uuid != null and p.vd_mst_chg_histrec_uuid != ''">
+          AND OE_UUID = (SELECT OE_UUID FROM OE WHERE VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid})
+        </when>
+        <otherwise>
+          AND OE_UUID = #{p.oe_uuid}
+        </otherwise>
+      </choose>
+    </update>
+	<update id="saveOnboardingEvalPrcsgEnd">
+        /* obd-result.saveOnboardingEvalPrcsgEnd: 온보딩평가 요청 처리완료 */
+        UPDATE OE
+        SET PRCSG_ED_YN = 'Y'
+          , MODR_ID     = #{g.username}
+          , MOD_DTTM    = #{g.now}
+        WHERE TEN_ID                  = #{g.tenant}
+      <choose>
+        <when test="p.vd_mst_chg_histrec_uuid != null and p.vd_mst_chg_histrec_uuid != ''">
+          AND VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+        </when>
+        <otherwise>
+          AND OE_UUID                 = #{p.oe_uuid}
+        </otherwise>
+      </choose>
+    </update>
+	<update id="saveCancelOnboardingEvalVmgAprvSubj">
+        /* obd-result.saveCancelOnboardingEvalVmgAprvSubj: 등록대상 협력사관리그룹에 결재대상 취소 */
+        UPDATE OE_VMG
+           SET APVL_SUBJ_YN = 'N'
+             , MODR_ID      = #{g.username}
+             , MOD_DTTM     = #{g.now}
+         WHERE TEN_ID       = #{g.tenant}
+           AND OE_UUID IN (
+                            SELECT OE_UUID
+                              FROM OE
+                             WHERE TEN_ID                  = #{g.tenant}
+                               AND VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+                          )
+    </update>
+	 <update id="saveCancelOnboardingEvalVendorAprvInfo">
+        /* obd-result.saveCancelOnboardingEvalVendorAprvInfo: 대상 온보딩평가그룹에 협력사 마스터 변경이력 UUID 초기화 */
+        UPDATE OE
+           SET VD_MST_CHG_HISTREC_UUID = NULL
+             , MODR_ID                 = #{g.username}
+             , MOD_DTTM                = #{g.now}
+         WHERE TEN_ID                  = #{g.tenant}
+           AND VD_MST_CHG_HISTREC_UUID = #{p.vd_mst_chg_histrec_uuid}
+    </update>
+	<select id="findVendorObdEvalInfoList" resultType="map">
+		/* obd-result : findVendorObdEvalInfoList : 협력사별 온보딩 평가 결과 리스트 조회 */
+		SELECT
+			 SUBSTR(OP.EVAL_CMPLD_DT, 1, 4) AS EVAL_YR,  'OE' AS EVAL_TASK_TYP_CCD
+		     , CONCAT(CONCAT(OEG.OEG_NM, ' - '), OEP_DTLMULT.DTLCD_NM) AS EVAL_NM
+		     , OP.PRCS_EVAL_SC AS EVAL_SC
+		  FROM EVAL_SUBJ_RES ESR
+		 INNER JOIN OE_PRCS OP ON ESR.TEN_ID = OP.TEN_ID  AND ESR.EVAL_SUBJ_RES_UUID = OP.EVAL_SUBJ_RES_UUID
+		 INNER JOIN OE OE ON OE.TEN_ID = OP.TEN_ID AND OE.OE_UUID = OP.OE_UUID
+		 INNER JOIN VD VD ON VD.TEN_ID = OP.TEN_ID AND VD.VD_CD = OE.VD_CD
+		  LEFT OUTER JOIN OBD_EVALSHT_PRCS OEP ON OEP.TEN_ID = OP.TEN_ID AND OEP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID
+		  LEFT OUTER JOIN DTLCD_MULTLANG OEP_DTLMULT ON OEP_DTLMULT.TEN_ID = OEP.TEN_ID AND OEP_DTLMULT.CCD = 'E916' AND OEP_DTLMULT.DTLCD = OEP.PRCS_CCD AND OEP_DTLMULT.LANG_CCD = #{g.locale}
+		 INNER JOIN OEG OEG ON OEG.TEN_ID = OE.TEN_ID AND OEG.OEG_UUID = OE.OEG_UUID
+		 WHERE OP.TEN_ID          = #{g.tenant}
+		   AND OE.VD_CD           = #{g.vd_cd}
+		   AND OP.OE_PRCS_STS_CCD = 'PRCS_PASS' /* 프로세스 합격 (온보딩평가 프로세스 상태 E007) */
+	   <if test="p.eval_nm != null and p.eval_nm != ''">
+	       <bind name="p_eval_nm" value="'%' + p.eval_nm + '%'"/>
+		   AND CONCAT(CONCAT(OEG.OEG_NM, ' - '), OEP_DTLMULT.DTLCD_NM) LIKE #{p_eval_nm}
+	   </if>
+	     ORDER BY CAST(SUBSTR(OP.EVAL_CMPLD_DT, 1, 4) AS INTEGER) DESC </select>
+	<select id="findListVendorManagementTypeInfo" resultType="map">
+		/* obd-result.findListVendorManagementTypeInfo : 협력사-운영조직 : 협력사관리유형 정보 조회 */
+		SELECT OORG_VMT.TEN_ID,
+		       OORG_VMT.OORG_CD,                  /* 운영 조직 코드*/
+		       CASE WHEN 'ko_KR' = #{g.locale} THEN LORG.LOGIC_ORG_NM ELSE LORG.LOGIC_ORG_NM_EN END AS LOGIC_ORG_NM,
+		       CASE WHEN ORGVD.VD_CD IS NULL OR ORGVD.VD_CD = '' THEN #{p.vd_cd} ELSE ORGVD.VD_CD END AS VD_CD, /* 협력사 코드*/
+		       CASE WHEN ORGVD.OBD_TYP_CCD IS NULL OR ORGVD.OBD_TYP_CCD = '' THEN 'NEW' ELSE ORGVD.OBD_TYP_CCD END AS OBD_TYP_CCD, /* 등록 유형*/
+		       ORGVD.VD_OORG_UUID,          /* 운영조직 협력사 uuid */
+		       VMT.VMT_UUID,                /* 협력사관리유형 uuid */
+		       VMT.VMT_CCD,                 /* 관리유형 코드*/
+		       VMT_DTLMULT.DTLCD_NM AS VMT_NM,
+		       GRPOVG.REGISTERED_VD_VMG,    /* 관리유형에 등록된 관리그룹 수 */
+		       CASE WHEN COALESCE(GRPOVG.REGISTERED_VD_VMG, 0) = 0 THEN 'N' ELSE 'Y' END AS SUPAVL_YN,
+		       GRPOVG.SUPAVL_ST_DT,         /* 공급가능 시작일 */
+		       GRPOVG.SUPAVL_ED_DT          /* 공급가능 종료일 */
+		FROM (SELECT OV.TEN_ID, V.VMT_UUID, O.OORG_CD
+		      FROM OEG O
+			           INNER JOIN OEG_VMG OV
+			                      ON OV.TEN_ID = O.TEN_ID
+				                      AND OV.OEG_UUID = O.OEG_UUID
+				                      AND OV.STS != 'D'
+		               INNER JOIN VMG_OORG VO
+		                          ON VO.TEN_ID = OV.TEN_ID
+		                              AND VO.VMG_OORG_UUID = OV.VMG_OORG_UUID
+		                              AND VO.USE_YN = 'Y'
+		                              AND VO.STS != 'D'
+			           INNER JOIN VMG V
+			                      ON V.TEN_ID = VO.TEN_ID
+				                      AND V.VMG_UUID = VO.VMG_UUID
+				                      AND V.STS != 'D'
+		      WHERE O.TEN_ID = #{g.tenant}
+			    AND O.OORG_CD = #{p.oorg_cd}
+			    AND O.STS != 'D'
+		      GROUP BY OV.TEN_ID, V.VMT_UUID, O.OORG_CD
+		     ) OORG_VMT
+			     INNER JOIN VMT
+			                ON VMT.TEN_ID = OORG_VMT.TEN_ID
+				                AND VMT.VMT_UUID = OORG_VMT.VMT_UUID
+				                AND VMT.STS != 'D'
+			     LEFT OUTER JOIN DTLCD_MULTLANG VMT_DTLMULT ON VMT_DTLMULT.TEN_ID = VMT.TEN_ID AND VMT_DTLMULT.CCD = 'E900' AND VMT_DTLMULT.DTLCD = VMT.VMT_CCD AND VMT_DTLMULT.LANG_CCD = #{g.locale}
+			     INNER JOIN OORG OORG ON OORG.TEN_ID = OORG_VMT.TEN_ID AND OORG.OORG_CD = OORG_VMT.OORG_CD AND OORG.OUNIT_CD = 'EO' AND OORG.STS != 'D'
+			     INNER JOIN LOGIC_ORG LORG ON LORG.TEN_ID = OORG.TEN_ID AND LORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD AND LORG.LOGIC_ORG_CD = OORG.LOGIC_ORG_CD AND LORG.STS != 'D'
+			     LEFT OUTER JOIN VD_OORG ORGVD ON OORG.TEN_ID = ORGVD.TEN_ID AND OORG.OORG_CD = ORGVD.OORG_CD AND ORGVD.VD_CD = #{p.vd_cd}
+			     LEFT OUTER JOIN (SELECT VG.TEN_ID, OVG.VD_OORG_UUID, VG.VMT_UUID, MIN(OVG.SUPAVL_ST_DT) AS SUPAVL_ST_DT, MAX(OVG.SUPAVL_ED_DT) AS SUPAVL_ED_DT
+			                           , SUM(CASE WHEN SUPAVL_YN = 'Y' THEN 1 ELSE 0 END) AS REGISTERED_VD_VMG
+			                      FROM VD_OORG_VMG OVG
+			                               INNER JOIN VMG_OORG VO
+			                                       ON VO.TEN_ID = OVG.TEN_ID
+			                                      AND VO.VMG_OORG_UUID = OVG.VMG_OORG_UUID
+			                                      AND VO.USE_YN = 'Y'
+			                                      AND VO.STS != 'D'
+				                           INNER JOIN VMG VG
+				                                   ON VG.TEN_ID = VO.TEN_ID
+				                                  AND VG.VMG_UUID = VO.VMG_UUID
+			                                      AND VG.STS != 'D'
+			                      WHERE OVG.TEN_ID = #{g.tenant}
+				                    AND OVG.STS != 'D'
+			                      GROUP BY VG.TEN_ID, OVG.VD_OORG_UUID, VG.VMT_UUID
+		) GRPOVG
+			                     ON GRPOVG.TEN_ID = ORGVD.TEN_ID
+				                     AND GRPOVG.VD_OORG_UUID = ORGVD.VD_OORG_UUID
+				                     AND GRPOVG.VMT_UUID = VMT.VMT_UUID
+		WHERE OORG_VMT.TEN_ID = #{g.tenant}
+		  AND OORG.USE_YN = 'Y'
+		  AND LORG.USE_YN = 'Y'
+		  AND VMT.USE_YN ='Y'
+		ORDER BY COALESCE(GRPOVG.REGISTERED_VD_VMG, 0) DESC, VMT.VMT_CCD
+	</select>
+	<select id="findListVendorManagementGroup" resultType="map">
+		/* obd-result.findListVendorManagementGroup 등록 협력사관리그룹 조회 */
+		SELECT OVV.TEN_ID
+			 , OVV.VD_OORG_VMG_UUID
+			 , OVV.VD_OORG_UUID
+			 , VT.VMT_UUID
+		     , OVV.VMG_OORG_UUID
+			 , OV.VD_CD
+			 , OV.OORG_CD
+			 , (
+			SELECT CASE WHEN 'en_US' = #{g.locale} THEN ORG.LOGIC_ORG_NM_EN
+			            ELSE ORG.LOGIC_ORG_NM
+				       END
+			FROM OORG OORG
+				     INNER JOIN LOGIC_ORG ORG
+				                ON ORG.TEN_ID                 = OORG.TEN_ID
+					                AND ORG.LOGIC_ORG_TYP_CCD = OORG.LOGIC_ORG_TYP_CCD
+					                AND ORG.LOGIC_ORG_CD      = OORG.LOGIC_ORG_CD
+					                AND ORG.STS              != 'D'
+			WHERE OORG.TEN_ID  = OV.TEN_ID
+			  AND OORG.OORG_CD = OV.OORG_CD
+		) AS OPER_ORG_NM
+			 , VG.VMG_CD
+			 , VG.VMG_TYP_CCD
+			 , (CASE WHEN 'ko_KR' = #{g.locale} OR VG.VMG_NM_EN IS NULL OR VG.VMG_NM_EN = ''
+				     THEN VG.VMG_NM
+			         ELSE VG.VMG_NM_EN
+			     END) AS VMG_NM
+			 , OVV.SUPAVL_YN
+			 , OVV.SUPAVL_ST_DT
+			 , OVV.SUPAVL_ED_DT
+			 , OVV.RFX_RCMD_SUBJ_YN
+			 , VT.VMT_CCD
+			 , HISTREC.VD_MST_CHG_HISTREC_UUID
+			 , (CASE WHEN HISTREC.VMG_OORG_UUID = VO.VMG_OORG_UUID THEN HISTREC.CHG_REQ_STS_CCD ELSE NULL END) AS CHG_REQ_STS_CCD
+		FROM VD_OORG_VMG OVV
+			     INNER JOIN VD_OORG OV
+			                ON OV.TEN_ID            = OVV.TEN_ID
+				                AND OV.VD_OORG_UUID = OVV.VD_OORG_UUID
+				 LEFT OUTER JOIN VMG_OORG VO
+								 ON VO.TEN_ID = OVV.TEN_ID
+									 AND VO.VMG_OORG_UUID = OVV.VMG_OORG_UUID
+			     LEFT OUTER JOIN VMG VG
+			                     ON VG.TEN_ID        = VO.TEN_ID
+				                     AND VG.VMG_UUID = VO.VMG_UUID
+			     LEFT OUTER JOIN VMT VT
+			                     ON VT.TEN_ID        = VG.TEN_ID
+				                     AND VT.VMT_UUID = VG.VMT_UUID
+			     LEFT OUTER JOIN (SELECT VDH.TEN_ID, VDH.VD_MST_CHG_HISTREC_UUID, VDH.CHG_REQ_STS_CCD, VG.VMT_UUID, VO.VMG_OORG_UUID, VG.VMG_UUID, VDH.VD_CD
+			                      FROM VD_OORG_VMG_CHG_HISTREC OVVCH
+			                               INNER JOIN VMG_OORG VO
+			                                       ON VO.TEN_ID = OVVCH.TEN_ID
+			                                      AND VO.VMG_OORG_UUID = OVVCH.VMG_OORG_UUID
+			                                      AND VO.USE_YN = 'Y'
+			                                      AND VO.STS != 'D'
+				                           INNER JOIN VMG VG
+				                                   ON VG.TEN_ID = VO.TEN_ID
+				                                  AND VG.VMG_UUID = VO.VMG_UUID
+				                                  AND VG.STS != 'D'
+				                           INNER JOIN VD_CHG_HISTREC VDH
+				                                   ON VDH.TEN_ID = OVVCH.TEN_ID
+				                                  AND VDH.VD_MST_CHG_HISTREC_UUID = OVVCH.VD_MST_CHG_HISTREC_UUID
+			                      WHERE VDH.TEN_ID                  = OVVCH.TEN_ID
+				                    AND VDH.CHG_REQ_STS_CCD        != 'APVD'
+				                    AND VDH.CHG_TYP_CCD IN ('VMG_REG_CNCL_REQ')
+				                    AND VDH.VD_MST_CHG_HISTREC_UUID = OVVCH.VD_MST_CHG_HISTREC_UUID
+				                    AND VDH.MOD_SEQNO               = (SELECT MAX(MOD_SEQNO) FROM VD_CHG_HISTREC WHERE TEN_ID = VDH.TEN_ID AND VD_CD = VDH.VD_CD)
+		) HISTREC
+			                     ON HISTREC.TEN_ID = VT.TEN_ID
+			                    AND HISTREC.VMT_UUID = VT.VMT_UUID
+			                    AND HISTREC.VD_CD = OV.VD_CD
+			                    AND HISTREC.VMG_OORG_UUID = VO.VMG_OORG_UUID
+		WHERE OVV.TEN_ID    = #{g.tenant}
+		  AND OV.VD_CD      = #{p.vd_cd}
+		  AND OV.OORG_CD    = #{p.oorg_cd}
+		  AND OVV.SUPAVL_YN = 'Y'
+		  AND VG.STS       != 'D'
+		  AND VT.STS       != 'D'
+		  AND VT.USE_YN     = 'Y'
+		  AND VO.USE_YN     = 'Y'
+		  AND VO.STS        != 'D'
+		ORDER BY VT.VMT_CCD, VG.VMG_CD
+	</select>
+	<select id="findListUnregisteredSgByOeg" resultType="map">
+		/* obd-result.findListUnregisteredSgByOeg : 협력사 운영조직 OEG별 미등록 SG 목록 조회 */
+		WITH  EFCT_OEG AS (
+		    /* 가장 최근에 통과한 온보딩평가(OE)의 OEG를 조회한다. (단, 평가 수행 시 사용한 OEG의 평가 시트가 유효해야 한다.) */
+            SELECT TOT.*
+                 , OES.EFCT_ST_DT
+                 , OES.EFCT_EXP_DT
+              FROM (SELECT OG.TEN_ID
+                         , OG.OEG_UUID
+                         , OG.OEG_CD
+                         , OG.OEG_NM
+                         , O.OE_REQ_DT
+                         , (SELECT MAX(OP.OBD_EVALSHT_UUID) FROM OE_PRCS OP WHERE OP.TEN_ID = O.TEN_ID AND OP.OE_UUID = O.OE_UUID) AS OBD_EVALSHT_UUID /* 통과된 시점의 시트 정보 */
+                         , ROW_NUMBER() OVER(PARTITION BY O.OEG_UUID ORDER BY O.OE_REQ_DT DESC) RK
+                      FROM OEG OG
+                     INNER JOIN OE O
+                        ON O.TEN_ID = OG.TEN_ID
+                       AND O.OEG_UUID = OG.OEG_UUID
+                       AND O.OORG_CD = #{p.oorg_cd}
+                       AND O.VD_CD = #{p.vd_cd}
+                       AND O.STS != 'D'
+                     INNER JOIN VD_CHG_HISTREC VCH
+                        ON VCH.TEN_ID = O.TEN_ID
+                       AND VCH.VD_MST_CHG_HISTREC_UUID = O.VD_MST_CHG_HISTREC_UUID
+                     WHERE OG.TEN_ID = #{g.tenant}
+                       AND OG.STS != 'D'
+                       AND O.PRCSG_ED_YN = 'Y'
+                       AND O.OE_PRGS_STS_CCD IN ('EVAL_CMPLD', 'EVAL_CLSG')
+                       AND VCH.CHG_TYP_CCD IN ('VMG_REG_REQ', 'PO_POSS_VD_REG_REQ')
+                       AND VCH.CHG_REQ_STS_CCD = 'APVD'
+                       /*최신 발주 제한 이후에 통과된 oeg만 평가 없이 vmg 등록 가능한 oeg 대상*/
+                          AND TO_CHAR(VCH.REG_DTTM, 'YYYYMMDDHHMISS') <![CDATA[>=]]> COALESCE((
+                           SELECT TO_CHAR(MAX(MOD_DTTM), 'YYYYMMDDHHMISS')
+                             FROM VD_CHG_HISTREC
+                            WHERE TEN_ID = #{g.tenant}
+                              AND CHG_TYP_CCD = 'PO_LMT_REQ'
+                              AND CHG_REQ_STS_CCD = 'APVD'
+                              AND VD_CD = #{p.vd_cd}
+                          ), '0')  ) TOT
+             INNER JOIN OBD_EVALSHT OES
+  	 	   	    ON OES.TEN_ID = TOT.TEN_ID
+  	 	   	   AND OES.OBD_EVALSHT_UUID = TOT.OBD_EVALSHT_UUID
+             WHERE TOT.RK = 1
+               AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[>=]]> TO_CHAR(OES.EFCT_ST_DT, 'YYYYMMDD')
+               AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(OES.EFCT_EXP_DT, 'YYYYMMDD')  ) /* 온보딩평가그룹별 SG 목록을 조회한다. 단, 온보딩평가 진행 중인 SG는 제외한다. */
+		SELECT EOG.TEN_ID
+		     , EOG.OEG_UUID
+		     , EOG.OEG_CD
+		     , EOG.OEG_NM
+		     , EOG.EFCT_EXP_DT /* 가장 최근에 진행한 온보딩평가그룹의 유효 만료 일자 */
+		     , VT.VMT_CCD
+		     , VG.VMG_UUID
+		     , VG.VMG_CD
+		     , (CASE WHEN 'ko_KR' = #{g.locale} OR VG.VMG_NM_EN IS NULL OR VG.VMG_NM_EN = ''
+		             THEN VG.VMG_NM
+		             ELSE VG.VMG_NM_EN
+		         END) AS VMG_NM
+		     , VORGVGCH.VD_MST_CHG_HISTREC_UUID
+		     , VORGVGCH.CHG_REQ_STS_CCD
+		  FROM OEG_VMG OGVG
+		 INNER JOIN EFCT_OEG EOG
+		    ON EOG.TEN_ID = OGVG.TEN_ID
+		   AND EOG.OEG_UUID = OGVG.OEG_UUID
+	     INNER JOIN VMG_OORG VGORG
+		    ON VGORG.TEN_ID = OGVG.TEN_ID
+		   AND VGORG.VMG_OORG_UUID = OGVG.VMG_OORG_UUID
+		   AND VGORG.USE_YN = 'Y'
+		   AND VGORG.STS != 'D'
+		 INNER JOIN VMG VG
+		    ON VG.TEN_ID = VGORG.TEN_ID
+		   AND VG.VMG_UUID = VGORG.VMG_UUID
+		   AND VG.STS != 'D'
+		 INNER JOIN VMT VT
+		    ON VT.TEN_ID = VG.TEN_ID
+		   AND VT.VMT_UUID = VG.VMT_UUID
+		   AND VT.USE_YN = 'Y'
+		   AND VT.STS != 'D'
+		  LEFT OUTER JOIN (SELECT VORGVGCH.TEN_ID /* 협력사 운영조직 소싱그룹 SG 등록 요청 결재 상태를 조회한다. */
+		                        , VORGVGCH.VD_MST_CHG_HISTREC_UUID
+		                        , VGORG.VMG_OORG_UUID
+		                        , VGORG.VMG_UUID
+		                        , VG.VMT_UUID
+		                        , VCH.VD_CD
+		                        , VCH.CHG_REQ_STS_CCD
+		                     FROM VD_OORG_VMG_CHG_HISTREC VORGVGCH
+		                    INNER JOIN VMG_OORG VGORG
+		                       ON VGORG.TEN_ID = VORGVGCH.TEN_ID
+		                      AND VGORG.VMG_OORG_UUID = VORGVGCH.VMG_OORG_UUID
+		                      AND VGORG.USE_YN = 'Y'
+		                      AND VGORG.STS != 'D'
+		                    INNER JOIN VMG VG
+		                       ON VG.TEN_ID = VGORG.TEN_ID
+		                      AND VG.VMG_UUID = VGORG.VMG_UUID
+		                      AND VG.STS != 'D'
+		                    INNER JOIN VD_CHG_HISTREC VCH
+		                       ON VCH.TEN_ID = VORGVGCH.TEN_ID
+		                      AND VCH.VD_MST_CHG_HISTREC_UUID = VORGVGCH.VD_MST_CHG_HISTREC_UUID
+		                      AND VCH.VD_CD = #{p.vd_cd}
+		                    WHERE VGORG.TEN_ID = #{g.tenant}
+		                      AND VCH.CHG_REQ_STS_CCD != 'APVD'
+		                      AND VCH.CHG_TYP_CCD = 'VMG_REG_REQ'
+		                  ) VORGVGCH
+		    ON VORGVGCH.TEN_ID = VGORG.TEN_ID
+		   AND VORGVGCH.VMG_OORG_UUID = VGORG.VMG_OORG_UUID
+		   AND VORGVGCH.VMT_UUID = VT.VMT_UUID
+		 WHERE OGVG.TEN_ID = #{g.tenant}
+		   AND OGVG.STS != 'D'
+		   AND NOT EXISTS (SELECT 1 /* 거래가능 SG는 제외한다. */
+		                     FROM VD_OORG_VMG VORGVG
+		                    INNER JOIN VD_OORG VORG
+		                       ON VORG.TEN_ID = VORGVG.TEN_ID
+		                      AND VORG.VD_OORG_UUID = VORGVG.VD_OORG_UUID
+		                      AND VORG.STS != 'D'
+		                    WHERE VORGVG.TEN_ID = OGVG.TEN_ID
+		                      AND VORGVG.VMG_OORG_UUID = OGVG.VMG_OORG_UUID
+		                      AND VORGVG.SUPAVL_YN = 'Y'
+		                      AND VORGVG.STS != 'D'
+		                      AND VORG.OORG_CD = #{p.oorg_cd}
+		                      AND VORG.VD_CD = #{p.vd_cd}
+		                      AND VORG.PO_POSS_YN = 'Y'
+		                  )
+		   AND NOT EXISTS (SELECT 1 /* 평가 진행 중인 SG는 제외한다. */
+		                     FROM OE_VMG OVG
+		                    INNER JOIN OE O
+		                       ON O.TEN_ID = OVG.TEN_ID
+		                      AND O.OE_UUID = OVG.OE_UUID
+		                      AND O.STS != 'D'
+		                    WHERE OVG.TEN_ID = OGVG.TEN_ID
+		                      AND OVG.VMG_OORG_UUID = OGVG.VMG_OORG_UUID
+		                      AND OVG.STS != 'D'
+		                      AND O.PRCSG_ED_YN != 'Y'
+		                      AND O.OORG_CD = #{p.oorg_cd}
+		                      AND O.VD_CD = #{p.vd_cd}
+		                   )
+		 ORDER BY EOG.OEG_CD, EOG.EFCT_EXP_DT
+	</select>
+</mapper>

@@ -1,0 +1,202 @@
+<dom-module id="ep-template-diff">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 검토요청 템플릿 비교 정보 조회 -->
+		<sc-ajax id="findReqReviewTmplDiff"
+				url="findReqReviewTmplDiff.do"
+				body="{{paramData}}"
+				on-response="completeFindTmplDiff">
+		</sc-ajax>
+		<!-- 템플릿 변경 내용 저장 -->
+		<sc-ajax id="saveTmplCont"
+				url="saveReqReviewTmplCont.do"
+				on-response="completeSaveTmplCont">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="비교" on-click="onDiffAndEdit" id="diffAndEditBtn" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<sc-doc-comprsn id="scDocComprsn" on-diff-end="onSave"></sc-doc-comprsn>
+	</template>
+
+	<script>
+		Polymer({
+			is: "ep-template-diff",
+			properties: {
+				titleText:{
+					type: String,
+					value: "템플릿 비교"
+				},
+				paramData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				doc1: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				doc2: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				isEditMode: {
+					type: Object,
+					value: function () {
+						return false;
+					}
+				},
+				isNew: {
+					type: Object,
+					value: function () {
+						return false;
+					}
+				}
+			},
+			
+			formulas : {
+				editable: function() {
+					return (this.get("paramData.editable") || false);
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("paramData", param);
+				UT.request(me.$.findReqReviewTmplDiff);
+			},
+			
+			completeFindTmplDiff: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					var data1 = {}; // 원본 템플릿 정보
+					data1.description = "<div>원본 템플릿 (템플릿 명: " + me.get("paramData.orig_tmpl_nm") + ")</div>";
+					data1.content = result.resultData.origCont;
+					
+					var data2 = {}; // 비교 템플릿 정보
+					data2.description = "<div>검토 요청 템플릿</div>";
+					data2.content = result.resultData.reqRvCont;
+					
+					me.set("doc1", data1);
+					me.set("doc2", data2);
+					me.set("isNew", result.resultData.isNew);
+					me.loadContents();
+					me.applyFormula();
+				} else {
+					UT.alert("STD.E9999");
+					me.onClose();
+				}
+			},
+			
+			loadContents: function() {
+				var me = this;
+				var params = {
+					usrId: SCSessionManager.userDetails.userInfo.usr_id, //코멘트 작성자
+					usrNm: SCSessionManager.userDetails.userInfo.usr_nm, //코멘트 작성자
+					doc1: me.get("doc1"), //원본 content
+					doc2: me.get("doc2"), //비교대상 content
+					uiSettings: {
+						disableRadioDiffmode: false, //[비교 단위] 라디오 그룹 disable 여부
+						disableCheckCase: false,	 //[비교 항목] 대소문자 체크박스 disable 여부
+						disableCheckBr: false,	   //[비교 항목] 줄바꿈 체크박스 disable 여부
+						disableResultCombobox: true	  //[비교 결과] 콤보박스 disable 여부
+					},
+					diffmode: 'word',  //[비교 단위] (word or char)
+					useCheckCase: true,//[비교 항목] 대소문자
+					useCheckBr: true,  //[비교 항목] 줄바꿈
+					useCommentButton: false, //	[비교 결과 리스트] 코멘트 버튼 사용 유무
+					commentPlaceholder: '내용을 입력하세요',
+					useDev: true, //style 비교결과를 상세하게 출력 유무
+					//STYLE 비교 항목
+					extractStyleList: ['color', 'font-weight', 'text-decoration-line', 'background-color', 'font-size', 'font-style', 'font-family', 'vertical-align']
+				};
+				
+				me.$.scDocComprsn.initDiff(params); //초기화
+				
+				if(me.formula("editable") && me.get("isNew")) {
+					me.onEditMode();
+				} else {
+					me.onDiffMode();
+				}
+			},
+			
+			onDiffAndEdit: function() {
+				var me = this;
+				if(me.get("isEditMode")) {
+					me.onDiffMode();
+				} else {
+					me.onEditMode();
+				}
+			},
+			
+			onDiffMode: function() {
+				var me = this;
+				me.$.scDocComprsn.startDiffMode();
+				me.isEditMode = false;
+				me.$.diffAndEditBtn.text = "수정";
+			},
+			
+			onEditMode: function() {
+				var me = this;
+				me.$.scDocComprsn.startEditMode();
+				me.isEditMode = true;
+				me.$.diffAndEditBtn.text = "비교";
+			},
+			
+			onSave: function(e) {
+				var me = this;
+				if(me.formula("editable") && e.detail.status === true) {
+					var resultData = me.$.scDocComprsn.exportData(); // 비교 결과 출력
+					var origData = UT.copy(me.get("paramData"));
+					
+					me.$.saveTmplCont.body = {
+						tmpl_typ_ccd: origData.tmpl_typ_ccd,
+						cntrdoc_lgl_rv_tmpl_uuid: origData.cntrdoc_lgl_rv_tmpl_uuid,
+						orig_tmpl_cont: me.get("doc1.content"),
+						lgl_rv_tmpl_cont: resultData.doc2.content,
+						lgl_rv_tmpl_res: encodeURIComponent(JSON.stringify(resultData.result)),
+						lgl_rv_subj_yn: UT.isEmpty(resultData.result.exportChangeList) ? "N" : "Y"
+					};
+					UT.request(me.$.saveTmplCont);
+				}
+			},
+			
+			completeSaveTmplCont: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					//UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+					me.fire("complete-save");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+		});
+	</script>
+</dom-module>

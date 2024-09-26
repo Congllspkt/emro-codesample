@@ -1,0 +1,208 @@
+<sc-link rel="import" href="ep-license-list.html"></sc-link>
+<dom-module id="ep-vendor-licenseinfo">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+
+        <!-- 면허정보 조회 -->
+        <sc-ajax id="findListLicenseInfo"
+                 url="findListLicenseInfo.do"
+                 body="{{searchParam}}"
+                 last-response="{{resultList}}" >
+        </sc-ajax>
+
+        <!-- 면허정보 저장 -->
+        <sc-ajax id="saveListLicenseInfo"
+                 url="saveListLicenseInfo.do"
+                 on-response="completeSaveListLicenseInfo">
+        </sc-ajax>
+
+        <!-- 면허정보 삭제 -->
+        <sc-ajax id="deleteListLicenseInfo"
+                 url="deleteListLicenseInfo.do"
+                 on-response="completeDeleteListLicenseInfo">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-vs"></cc-auth-checker>
+
+        <sc-grid id="licenseInfoPanel" class="flex" editable="true" data-provider="{{resultList}}" use-dummy="true">
+            <cc-grid-toolbar title-text="면허정보">
+                <sc-button text="면허자격검색" on-click="showLicenseTypPopup" auth-vs></sc-button>
+                <sc-button text="삭제" on-click="onDeleteLicenseInfo" auth-vs></sc-button>
+                <sc-button text="저장" on-click="onSaveLicenseInfo" auth-vs></sc-button>
+            </cc-grid-toolbar>
+            <sc-grid-columns id="licenseInfoGridColumns">
+                <sc-data-column	data-field="license_nm" header-text="면허종류" width="300" text-align="left" required="true" editable="false" ></sc-data-column>
+                <sc-data-column	data-field="etc_license_nm"	header-text="기타면허명"	width="300"	text-align="left" editable="true" max-length="70"></sc-data-column>
+                <sc-data-column	data-field="cons_ablt_eval_amt"	header-text="시공능력평가액(원)"	text-align="right" width="150"	format-type="amt" editable="true" max-length="18"></sc-data-column>
+                <sc-data-column	data-field="lo_lmt_amt"	header-text="하한한도액(원)"	width="150"	 text-align="right" editable="true" format-type="amt" max-length="18"></sc-data-column>
+                <sc-data-column	data-field="license_reg_no"	header-text="면허(등록)번호"	text-align="center" width="100"	max-length="18" editable="true"></sc-data-column>
+                <sc-date-column	data-field="license_reg_dt"	header-text="면허(등록)일자"	width="100"	text-align="center"  editable="true" ></sc-date-column>
+                <sc-date-column	data-field="expire_date"	header-text="면허만료일자"	width="100"	text-align="center"  editable="true"  ></sc-date-column>
+                <sc-data-column	data-field="license_reg_office"	header-text="면허(등록)관청"	width="150"	text-align="center"  editable="true"	max-length="20"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field	data-field="vd_cd"	></sc-grid-field>
+                <sc-grid-field	data-field="license_typ" ></sc-grid-field>
+                <sc-grid-field	data-field="license_cd"	></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+
+    </template>
+    <script>
+
+        Polymer({
+            is: "ep-vendor-licenseinfo",
+
+            properties: {
+                searchParam : {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+
+                resultList : {
+                    type : Array,
+                    value : function() {
+                        return [];
+                    }
+                },
+
+            },
+
+            load: function(data){
+                var me = this;
+                me.set("searchParam.vd_cd", data.vd_cd);
+                UT.request(me.$.findListLicenseInfo);
+            },
+
+            // 면허자격 검색
+            showLicenseTypPopup : function() {
+                var me = this;
+
+                var licenseTypPopup = UT.popup("ep-license-list", me, 650, 500, {
+                    'selected-items' : function(popup, e) {
+                        me.onAddLicenseList(e.detail);
+                        popup.close();
+                    }
+                }, {titleText : "면허종류검색"});
+                licenseTypPopup.show();
+            },
+
+            // 면허자격 선택 시
+            onAddLicenseList : function(selectedItems) {
+                var me = this,
+                    provider = me.$.licenseInfoPanel.getDataProvider(),
+                    targetItems = provider.getItems(),
+                    dupCnt = 0;
+
+                if(selectedItems.length === 0){
+                    UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+                    return;
+                }
+
+                for (var i = 0; i < selectedItems.length; i++) {
+                    var exist = false;
+
+                    for (var j = 0; j < targetItems.length; j++) {
+                        var licenseCd = targetItems[j].license_typ;
+
+                        // 키 값을 비교해서 데이터 존재여부 체크
+                        if (licenseCd == selectedItems[i].license_typ) {
+                            exist = true;
+                            dupCnt++;
+                            break;
+                        }
+                    }
+
+                    // 그리드에 존재하지 않는 데이터만 그리드에 신규 추가한다.
+                    if (!exist) {
+                        // 그리드 신규행 추가
+                        provider.addItem({
+                            license_typ : selectedItems[i].license_typ, // 면허자격코드
+                            license_nm : selectedItems[i].license_nm, // 면허자격명
+                            vd_cd : me.searchParam.vd_cd // 업체코드
+                        });
+                    }
+                }
+
+                if (dupCnt > 0) {
+                    UT.alert(me.translate("STD.N2010",null,dupCnt),null,true); // 중복 데이터 {0}건 제외 후 추가하였습니다
+                }
+            },
+
+            // 면허정보 저장
+            onSaveLicenseInfo: function(){
+                var me = this,
+                    licenseNewList = [],
+                    licenseUpdateList = [];
+
+                UT.confirm("STD.N1200", function() {
+                    var provider = me.$.licenseInfoPanel.getDataProvider();
+                    licenseNewList = provider.getNewItems();
+                    licenseUpdateList = provider.getUpdateItems();
+
+                    me.$.saveListLicenseInfo.body = {
+                        insertList: licenseNewList,
+                        updateList: licenseUpdateList
+                    };
+                    UT.request(me.$.saveListLicenseInfo);
+                });
+            },
+
+            // 면허정보 저장 완료
+            completeSaveListLicenseInfo : function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(result.result_status === "S"){
+					UT.completeAlert("저장", function() {
+						me.fire("change-profile");
+						UT.request(me.$.findListLicenseInfo);
+					});
+                }
+            },
+
+            // 면허정보 삭제
+            onDeleteLicenseInfo: function(){
+                var me = this,
+                    provider = me.$.licenseInfoPanel.getDataProvider();
+                var checked = provider.selectionCheckedIndexes();
+                if (checked.length === 0) {
+                    UT.alert("STD.N1600"); // "선택된 항목이 없습니다",
+                    return;
+                }
+
+                UT.confirm("STD.N1300", function() { // "삭제 하시겠습니까?"
+                    var deleted = provider.removeItems(true);
+                    if(deleted.length > 0) {
+                        me.$.deleteListLicenseInfo.body = {
+                            deleteList: deleted
+                        };
+                        UT.request(me.$.deleteListLicenseInfo);
+                    }
+                });
+            },
+
+            // 면허정보 삭제 완료
+            completeDeleteListLicenseInfo : function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(result.result_status === 'S'){
+					UT.completeAlert("삭제", function() {
+						me.fire("change-profile");
+						UT.request(me.$.findListLicenseInfo);
+					});
+                }
+            }
+
+
+        });
+    </script>
+
+</dom-module>

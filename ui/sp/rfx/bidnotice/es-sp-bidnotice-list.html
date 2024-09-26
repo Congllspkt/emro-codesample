@@ -1,0 +1,342 @@
+<sc-link rel="import" href="ep-sp-bidnotice-cancel.html"></sc-link>
+
+<dom-module id="es-sp-bidnotice-list">
+<!-- 
+/**
+ *
+ *	@description : 
+ *  <pre>
+ * </pre>
+ * @author : emro
+ * @FileName : 
+ * @Since 2021. 5. 18.
+ * @변경이력 : [2021. 5. 18.] emro 최초작성
+ */
+-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findListSpBidNoti"
+				 url="findListSpBidNoti.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-ajax
+					id="findCommonCodeAttrCdList"
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.param}}"
+					last-response="{{codes.notiProgStss}}">
+			</sc-ajax>
+			<!-- 코드 조회 code group-->
+			<sc-code-group id="codes">
+				<!-- 경쟁 유형 -->
+				<sc-code code="P216" value="{{codes.compTypCcd}}"></sc-code>
+				<!-- 심사결과 -->
+				<sc-code code="P219" value="{{codes.evalRstCd}}"></sc-code>
+				<!-- 유형 -->
+				<sc-code code="P221" value="{{codes.rfxPrentcTypCcd}}"></sc-code>
+				<!-- 생성 유형-->
+				<sc-code code="P215" value="{{codes.rfxPrentcCrnTypCcd}}"></sc-code>
+				<!-- 제출상태 -->
+				<sc-code code="P223" value="{{codes.sbmtStsCd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		<div class="vbox flex">
+			<cc-page-title-bar></cc-page-title-bar>
+
+			<cc-search-condition-panel on-search="onFindList" on-enter="onFindList" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cds}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="전체">
+					</cc-sp-operorg-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="시작 일시"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_prentc_st_dttm}}" to-value="{{searchParam.to_rfx_prentc_st_dttm}}" default-from-value="-1M" default-to-value="0d" string-date="false" required="true">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="경쟁 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.compTypCcd}}" value="{{searchParam.comp_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 사전공고 번호"></sc-label>
+					<cc-multi-text-field value="{{searchParam.rfx_prentc_no}}" multi-value="{{searchParam.rfx_prentc_nos}}" on-enter="onFindList" title="RFX 사전공고 번호"></cc-multi-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{searchParam.rfx_prentc_tit}}" on-enter="onFindList"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="상태"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.notiProgStss}}" value="{{searchParam.rfx_prentc_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 사전공고 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfxPrentcTypCcd}}" value="{{searchParam.rfx_prentc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<!-- 그리드 -->
+			<sc-grid id="gridPanel" class="flex" data-provider="{{resultList}}" 
+					 selection-mode="radio"
+					 use-state="false"
+					 editable="false"
+					 use-dummy="false"
+					 cursor-function="cursorFunction"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="참가신청" on-click="onRegBid" auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="oorg_cd"	header-text="운영조직"	width="170"	text-align="center"	display-field="logic_org_nm"		value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_prentc_sts_ccd"	header-text="상태"		width="100"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.notiProgStss}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="afp_subm_sts_ccd"		header-text="참가신청 제출 상태"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.sbmtStsCd}}" item-style-function="onItemStyleFn"></sc-combobox-column>
+					<sc-combobox-column	data-field="ptcp_qualeval_res_ccd"		header-text="평가 결과"		width="80"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.evalRstCd}}"></sc-combobox-column>
+					<sc-image-column	data-field="img_disqual"	header-text="참가 부적격 사유"	width="120"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="rfx_prentc_typ_ccd"		header-text="RFX 사전공고 유형"		width="120"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.rfxPrentcTypCcd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_prentc_crn_typ_ccd"		header-text="생성 유형"		width="100"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.rfxPrentcCrnTypCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_prentc_no"		header-text="RFX 사전공고 번호"		width="120"	text-align="center"	style-name="link"></sc-data-column>
+					<sc-data-column		data-field="rfx_prentc_rnd"		header-text="진행차수"		width="60"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="rfx_prentc_tit"		header-text="제목"		width="250"	text-align="left"	></sc-data-column>
+					<sc-combobox-column	data-field="comp_typ_ccd"	header-text="경쟁 유형"		width="100"	text-align="center"	display-field="label"		value-field="data"			items="{{codes.compTypCcd}}"></sc-combobox-column>
+					<sc-group-column	hide-child-headers="true"	header-text="취소 사유"		width="80"	text-align="center">
+						<sc-image-column data-field="img_rfx_prentc_crn_typ_ccd"	width="100"	text-align="center"	image-change-function="onImageChangeFn"></sc-image-column>
+					</sc-group-column>
+					<sc-date-column		data-field="rfx_prentc_st_dttm"	header-text="시작 일시"	width="150"	text-align="center"	format-type="datetime"	string-date="false"></sc-date-column>
+					<sc-date-column		data-field="rfx_prentc_clsg_dttm"	header-text="마감 일시"	width="150"	text-align="center"	format-type="datetime"	string-date="false"></sc-date-column>
+					<sc-data-column		data-field="pre_rfx_prentc_no"		header-text="이전 RFX 사전공고 번호"	width="160"	text-align="center"	style-name="link"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field		data-field="rfx_prentc_crn_typ_ccd"						data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="rfx_prentc_ptcp_dq_rsn"			data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="rfx_prentc_afp_uuid"	data-type="text"></sc-grid-field>
+					<sc-grid-field		data-field="pre_rfx_prentc_uuid"				data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+
+		<sc-dialog id="dialog" title-text="참가 부적격 사유" title-align="left" style="width:500px; height:250px" modal="true" draggable="true">
+			<table class="tb-form">
+				<colgroup>
+					<col style="width:80px"></col>
+					<col></col>
+				</colgroup>
+				<tr>
+					<th>
+						<sc-label text="사유"></sc-label>
+					</th>
+					<td>
+						<sc-textarea-field class="h-150" value="{{dialogData.rfx_prentc_ptcp_dq_rsn}}" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-sp-bidnotice-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				dialogData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							compTypCcd: [], //경쟁 유형
+							evalRstCd: [], //심사결과
+							rfxPrentcTypCcd: [], //유형
+							rfxPrentcCrnTypCcd: [], //생성 유형
+							sbmtStsCd: [], //제출상태
+							oorgCd: [],  //운영조직
+							notiProgStss: [], //상태
+							param: {
+								cstr_cnd_cd: "SN_USE_YN",
+								ccd: "P213",
+								cstr_cnd_val: "Y"
+							}
+						};
+					},
+					reset: false
+				}
+			},
+
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				this.load();
+			},
+			// 2. 화면 load
+			load: function() {
+				this.onFindList();
+			},
+
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+
+				if(item.dataField === "img_disqual") {
+					if(!UT.isEmpty(data.rfx_prentc_ptcp_dq_rsn)) {
+						me.onShowDialog(data.rfx_prentc_ptcp_dq_rsn);
+					}
+				} else if(item.dataField === "rfx_prentc_no") {
+					me.fire("show-detail", data);
+				} else if(item.dataField === "pre_rfx_prentc_no") {
+					if(data.rfx_prentc_crn_typ_ccd == "RENTC") {
+						data.rfx_prentc_uuid = data.pre_rfx_prentc_uuid;
+						me.fire("show-detail", data);
+					}
+				} else if(item.dataField === "img_rfx_prentc_crn_typ_ccd") {
+					if(UT.isNotEmpty(data["rfx_prentc_crn_typ_ccd"]) && data["rfx_prentc_crn_typ_ccd"] === "PRENTC_CNCL") {
+						me.onShowCancelBidNotiPopup(data);
+					}
+				} else if(item.dataField === "afp_subm_sts_ccd") {
+					if(data.afp_subm_sts_ccd == "SUBM") {
+						me.fire("show-part-view", data);
+					}
+				}
+			},
+			//취소공고 팝업 호출
+			onShowCancelBidNotiPopup: function(row) {
+				var me = this;
+				var canclePopup = UT.popup('ep-sp-bidnotice-cancel', me, "50%", "600", {
+					"close-popup": function(popup, e) {
+						popup.close();
+					}
+				}, {maximizable: true, titleText: this.translate("취소공고")});
+				canclePopup.show();
+				canclePopup.getWindowContent().load({'defaultParam': row});
+			},
+			// 그리드 컬럼 스타일
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_disqual") {
+					if(!UT.isEmpty(data["ptcp_qualeval_res_ccd"]) && data["ptcp_qualeval_res_ccd"] === "DQ") {
+						return "link";
+					}
+				} else if(item.dataField === "img_rfx_prentc_crn_typ_ccd") {
+					if(UT.isNotEmpty(data["rfx_prentc_crn_typ_ccd"]) && data["rfx_prentc_crn_typ_ccd"] === "PRENTC_CNCL") {
+						return "link";
+					}
+				}
+				return null;
+			},
+			// 검수요청 반려 dialog
+			onShowDialog: function(data) {
+				var me = this;
+				me.set("dialogData.rfx_prentc_ptcp_dq_rsn", data);
+
+				me.$.dialog.show();
+			},
+
+			// 검수요청 반려 dialog 닫기
+			onCloseDialog: function() {
+				var me = this;
+				me.$.dialog.close();
+			},
+
+			// 제출 화면 전환
+			onItemStyleFn: function(data, item) {
+				if(data.afp_subm_sts_ccd == "SUBM") {
+					return {
+						fontWeight: "bold",
+						fontColor: "#0e006f"
+					};
+				}
+			},
+
+			// cursor 변경
+			cursorFunction: function(rowIndex, fieldName, rowObj) {
+				if(fieldName == "afp_subm_sts_ccd" && rowObj.afp_subm_sts_ccd == "SUBM") {
+					return 'pointer';
+				}
+			},
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			// 조회 버튼 클릭시
+			onFindList: function() {
+				var me = this;
+
+				//검색조건의 필수값 체크
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				UT.request(me.$.findListSpBidNoti);
+			},
+			//참가신청 버튼 클릭시
+			onRegBid: function() {
+				var me       = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					selected = provider.selectionCheckedItems();
+
+				if(selected.length == 0) {
+					UT.alert("STD.N1600");//	선택된 항목이 없습니다.
+				} else if(selected.length > 1) {
+					UT.alert("STD.N3700");//	한 개의 항목만 선택해야 합니다.
+				} else {
+					var selectedItem      = selected[0],
+						curDt             = new Date(),
+						rfxPrentcStDttm   = new Date(selectedItem.rfx_prentc_st_dttm),
+						rfxPrentcClsgDttm = new Date(selectedItem.rfx_prentc_clsg_dttm);
+
+					// 참가시작일 체크
+					if(UT.toTime(rfxPrentcStDttm) > UT.toTime(curDt)) {
+						UT.alert("STD.RFX1203"); // "사전공고가 시작되지 않았습니다."
+						return;
+					}
+					// 참가종료일 체크 마감일시
+					else if(UT.toTime(rfxPrentcClsgDttm) < UT.toTime(curDt)) {
+						UT.alert("STD.RFX1204"); // "사전공고가 종료되었습니다."
+						return;
+					}
+
+					//  상태 체크(공고진행 아닐 경우 alert)
+					if('PRENTC_PRGSG' != selectedItem.rfx_prentc_sts_ccd) {
+						UT.alert("STD.RFX1205");//	상태가 "사전공고 진행중" 인 경우에만 가능합니다.
+						return;
+					}
+
+					me.fire("show-part-detail", selectedItem);
+				}
+			}
+		});
+	</script>
+</dom-module>

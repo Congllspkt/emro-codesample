@@ -1,0 +1,802 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="workplace-setup">
+	<resultMap id="workTaskMethodSettingMap" type="smartsuite.config.workplace.vo.WorkTaskMethodSetting">
+		<result column="TEN_ID" property="tenId"/>
+		<result column="WKPLC_DAT_CRN_METH_UUID" property="wkplcMethodId"/>
+		<result column="WKPLC_CLASS_NM" property="wkplcClassNm"/>
+		<result column="WKPLC_METH_NM" property="wkplcMethodNm"/>
+		<result column="TASK_CLASS_NM" property="taskClassNm"/>
+		<result column="TASK_METH_NM" property="taskMethodNm"/>
+	</resultMap>
+	<select id="findListAllSetting" resultMap="workTaskMethodSettingMap">
+	/* workplace-setup.findListAllSetting */
+    SELECT TEN_ID
+         , WKPLC_DAT_CRN_METH_UUID
+         , MAIN_TASK_UUID
+         , WKPLC_CLASS_NM
+         , WKPLC_METH_NM
+         , TASK_CLASS_NM
+         , TASK_METH_NM
+      FROM TASK_METH_WKPLC_METH
+     WHERE TEN_ID = #{p}
+       AND STS != 'D'
+       AND USE_YN ='Y'
+	</select>
+	<select id="findListAllTenant" resultType="map">
+	/* workplace-setup.findListAllTenant */
+    SELECT TEN_ID, SYS_NM
+      FROM TEN
+	</select>
+	<select id="findListMainTaskStatus" resultType="map">
+  	/* workplace-setup.findListMainTaskStatus : main/task status 목록 조회 */
+		SELECT T.* 
+		  FROM 
+			(SELECT TEN_ID
+			     , MAIN_TASK_UUID AS TASK_STS_UUID
+			     , MAIN_TASK_UUID 
+			     , NULL AS DAT_SRC_UUID 
+				 , MAIN_TASK_CD AS TASK_STS_CD  
+				 , 'ROOT' AS UP_TASK_STS_CD
+				 , CASE WHEN 'ko_KR' = #{g.locale} THEN MAIN_TASK_NM ELSE MAIN_TASK_NM_EN END AS TASK_STS_NM
+				 , USR_TYP_CCD
+				 , SORT 
+				 , MAIN_TASK_NM
+			     , MAIN_TASK_NM_EN
+				 , MAIN_TASK_CD 
+			  FROM MAIN_TASK 
+			 WHERE TEN_ID = #{g.tenant}
+			   AND STS     <![CDATA[<>]]>     'D'  
+			UNION
+			SELECT TEN_ID
+				 , TASK_STS_UUID 
+				 , MAIN_TASK_UUID 
+				 , DAT_SRC_UUID 
+				 , TASK_STS_CD
+				 , (SELECT MAIN_TASK_CD FROM MAIN_TASK WHERE MAIN_TASK_UUID = TST.MAIN_TASK_UUID) AS UP_TASK_STS_CD
+				 , CASE WHEN 'ko_KR' = #{g.locale} THEN TASK_STS_NM ELSE TASK_STS_NM_EN END AS TASK_STS_NM
+				 , (SELECT USR_TYP_CCD FROM MAIN_TASK MT WHERE MAIN_TASK_UUID = TST.MAIN_TASK_UUID) AS USR_TYP_CCD
+				 , SORT
+				 , (SELECT MAIN_TASK_NM FROM MAIN_TASK WHERE MAIN_TASK_UUID = TST.MAIN_TASK_UUID) AS MAIN_TASK_NM
+				 , (SELECT MAIN_TASK_NM_EN FROM MAIN_TASK WHERE MAIN_TASK_UUID = TST.MAIN_TASK_UUID) AS MAIN_TASK_NM_EN
+				 , (SELECT MAIN_TASK_CD FROM MAIN_TASK WHERE MAIN_TASK_UUID = TST.MAIN_TASK_UUID) AS MAIN_TASK_CD
+				 FROM TASK_STS TST
+			 WHERE TEN_ID = #{g.tenant}
+			   AND STS     <![CDATA[<>]]>      'D') T
+		<if test="p.usr_typ_ccd != null and p.usr_typ_ccd != ''">
+		WHERE T.USR_TYP_CCD = #{p.usr_typ_ccd}
+		</if>
+			ORDER BY T.USR_TYP_CCD, TO_NUMBER(T.SORT) </select>
+  	<select id="findMainTaskDetail" resultType="map">
+  	/* workplace-setup.findMainTaskDetail : main/task status 상세 조회 */
+	    SELECT MTASK.TEN_ID
+			 , MTASK.MAIN_TASK_UUID 
+			 , MTASK.MAIN_TASK_CD 
+			 , MTASK.MAIN_TASK_NM
+	         , MTASK.MAIN_TASK_NM_EN
+			 , MTASK.USR_TYP_CCD
+			 , MTASK.SORT AS MAIN_TASK_SORT
+			 <if test="p.root_yn != &quot;Y&quot;"> 
+			 , TST.TASK_STS_UUID 
+			 , TST.DAT_SRC_UUID
+			 , TST.TASK_STS_CD
+			 , TST.TASK_STS_NM
+			 , TST.TASK_STS_NM_EN
+			 , TST.TASK_STS_GRP_CCD
+			 , TST.TASK_STS_DTL_CCD
+			 , TST.MENU_CD
+			 , TST.SORT AS TASK_STS_SORT
+			 , TST.CONN_LN_TYP_CCD
+			 , TST.DELAY_NOFN_CRTRA_DCNT
+			 , TST.IMMNT_NOFN_CRTRA_DCNT
+			 , TST.NEW_NOFN_PD_DCNT
+			 , TST.USE_YN
+			 , DTSRC.DAT_SRC_UUID 
+			 , DTSRC.DAT_SRC_LOGIC_NM
+			 , DTSRC.DAT_SRC_PHYC_NM
+			 , MN_LANG.MENU_NM
+			 , CCD.CCD
+			 , CASE WHEN 'ko_KR' = #{g.locale} THEN CCD.CCD_NM
+			 		ELSE NVL(CCD.CCD_NM_EN, CCD.CCD_NM)
+			 	END AS TASK_STS_GRP_NM  , DTL.DTLCD 
+			 , DTL_LANG.DTLCD
+			 , DTL_LANG.DTLCD_NM AS TASK_STS_DTL_NM
+			 </if>
+		  FROM MAIN_TASK MTASK
+		  <if test="p.root_yn != &quot;Y&quot;"> 
+		  LEFT JOIN TASK_STS TST
+		    ON MTASK.TEN_ID = TST.TEN_ID 
+		   AND MTASK.MAIN_TASK_UUID = TST.MAIN_TASK_UUID 
+		  LEFT JOIN DAT_SRC DTSRC 
+		    ON DTSRC.TEN_ID = TST.TEN_ID 
+		   AND DTSRC.DAT_SRC_UUID = TST.DAT_SRC_UUID
+		  LEFT JOIN MENU_MULTLANG MN_LANG 
+		    ON MN_LANG.TEN_ID = TST.TEN_ID 
+		   AND MN_LANG.MENU_CD = TST.MENU_CD 
+		   AND MN_LANG.LANG_CCD = #{g.locale} 
+		 INNER JOIN CCD CCD 
+		    ON CCD.TEN_ID = TST.TEN_ID 
+		   AND CCD.CCD = TST.TASK_STS_GRP_CCD
+		 INNER JOIN DTLCD DTL 
+		    ON DTL.TEN_ID = CCD.TEN_ID 
+		   AND DTL.CCD = CCD.CCD
+		 INNER JOIN DTLCD_MULTLANG DTL_LANG
+		    ON DTL_LANG.TEN_ID = DTL.TEN_ID 
+		   AND DTL_LANG.CCD = DTL.CCD
+		   AND DTL_LANG.DTLCD = DTL.DTLCD
+		   AND DTL_LANG.LANG_CCD = #{g.locale} 
+		   AND DTL_LANG.DTLCD = TST.TASK_STS_DTL_CCD 
+		  </if>
+		 WHERE MTASK.TEN_ID = #{g.tenant}
+		 <choose>
+		   <when test="p.root_yn == &quot;Y&quot;">
+		   AND MTASK.MAIN_TASK_UUID = #{p.main_task_uuid}
+		   </when>
+		   <otherwise>
+		   AND TST.TASK_STS_UUID = #{p.task_sts_uuid} 
+		   </otherwise>
+  		 </choose> 
+  		 	AND MTASK.STS <![CDATA[<>]]> 'D'
+  	</select>
+  	<select id="findListFunc" resultType="map">
+  	/* workplace-setup.findListFunc */
+    SELECT WKMF.MAP_ID
+         , WKMF.WORK_ID
+         , WKMF.MENU_CD
+         , AUML.MENU_NM
+         , WKMF.FUNC_CD
+         , AUMF.FUNC_NM
+      FROM ESTWKMF WKMF
+     INNER JOIN ESAAUML AUML
+        ON AUML.SYS_ID  = WKMF.SYS_ID
+       AND AUML.MENU_CD = WKMF.MENU_CD
+       AND AUML.LANG_CD = #{g.locale}
+     INNER JOIN ESAAUMF AUMF
+        ON AUMF.SYS_ID  = WKMF.SYS_ID
+       AND AUMF.MENU_CD = WKMF.MENU_CD
+       AND AUMF.FUNC_CD = WKMF.FUNC_CD
+     WHERE WKMF.SYS_ID  = #{g.tenant}
+       AND WKMF.WORK_ID = #{p.work_id}
+  	</select>
+  	<insert id="insertMainTask">
+    /* workplace-setup.insertMainTask : main task 저장(등록) */
+	    INSERT INTO MAIN_TASK(
+			TEN_ID 
+		  , MAIN_TASK_UUID 
+		  , MAIN_TASK_CD 
+		  , MAIN_TASK_NM
+		  , MAIN_tASK_NM_EN
+		  , USR_TYP_CCD 
+		  , SORT 
+		  , RMK 
+		  , STS 
+		  , REGR_ID 
+		  , REG_DTTM 
+		  , MODR_ID
+		  , MOD_DTTM
+		) VALUES(
+			#{g.tenant}
+		    , RANDOMUUID()  , #{p.main_task_cd}
+		  , #{p.main_task_nm}
+		  , #{p.main_task_nm_en}
+		  , #{p.usr_typ_ccd}
+		  , #{p.main_task_sort}
+		  , #{p.rmk}
+		  , 'C'
+		  , #{g.username}
+		  , #{g.now}
+		  , #{g.username}
+		  , #{g.now}
+		)
+    </insert>
+    <update id="updateMainTask">
+    /* workplace-setup.updateMainTask : main task 저장(수정) */
+	    UPDATE MAIN_TASK 
+		   SET MAIN_TASK_NM = #{p.main_task_nm}
+		     , MAIN_TASK_NM_EN = #{p.main_task_nm_en}
+		     , USR_TYP_CCD = #{p.usr_typ_ccd}
+		     , SORT = #{p.main_task_sort}
+		     , RMK = #{p.rmk}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND MAIN_TASK_UUID = #{p.main_task_uuid}
+		   AND STS <![CDATA[<>]]> 'D'
+    </update>
+    <insert id="insertTaskStatus">
+    /* workplace-setup.insertTaskStatus : task status 저장(등록) */
+    	INSERT INTO TASK_STS(
+			TEN_ID 
+		  , TASK_STS_UUID
+		  , MAIN_TASK_UUID
+		  , DAT_SRC_UUID
+		  , TASK_STS_CD
+		  , TASK_STS_NM
+		  , TASK_STS_NM_EN
+		  , TASK_STS_GRP_CCD
+		  , TASK_STS_DTL_CCD
+		  , MENU_CD
+		  , SORT
+		  , CONN_LN_TYP_CCD
+		  , DELAY_NOFN_CRTRA_DCNT
+		  , IMMNT_NOFN_CRTRA_DCNT
+		  , NEW_NOFN_PD_DCNT
+		  , USE_YN
+		  , RMK
+		  , STS 
+		  , REGR_ID
+		  , REG_DTTM
+		  , MODR_ID
+		  , MOD_DTTM
+		) VALUES(
+			#{g.tenant}
+		    , RANDOMUUID()  , #{p.main_task_uuid}
+		  , #{p.dat_src_uuid} 
+		  , #{p.task_sts_cd}
+		  , #{p.task_sts_nm} 
+		  , #{p.task_sts_nm_en}
+		  , #{p.task_sts_grp_ccd}
+		  , #{p.task_sts_dtl_ccd}
+		  , #{p.menu_cd}
+		  , #{p.task_sts_sort}
+		  , #{p.conn_ln_typ_ccd}
+		  , #{p.delay_nofn_crtra_dcnt}
+		  , #{p.immnt_nofn_crtra_dcnt}
+		  , #{p.new_nofn_pd_dcnt}
+		  , #{p.use_yn}
+		  , #{p.rmk}
+		  , 'C' 
+		  , #{g.username}
+		  , #{g.now}
+		  , #{g.username}
+		  , #{g.now}
+		)
+    </insert>
+	<update id="updateTaskStatus">
+	/* workplace-setup.updateTaskStatus : task status 저장(수정) */
+		UPDATE TASK_STS
+		   SET DAT_SRC_UUID = #{p.dat_src_uuid}
+		     , TASK_STS_NM = #{p.task_sts_nm}
+		     , TASK_STS_NM_EN = #{p.task_sts_nm_en}
+		     , TASK_STS_GRP_CCD = #{p.task_sts_grp_ccd}
+		     , TASK_STS_DTL_CCD = #{p.task_sts_dtl_ccd}
+		     , MENU_CD = #{p.menu_cd}
+		     , SORT = #{p.task_sts_sort}
+		     , CONN_LN_TYP_CCD = #{p.conn_ln_typ_ccd}
+		     , DELAY_NOFN_CRTRA_DCNT = #{p.delay_nofn_crtra_dcnt}
+		     , IMMNT_NOFN_CRTRA_DCNT = #{p.immnt_nofn_crtra_dcnt}
+		     , NEW_NOFN_PD_DCNT = #{p.new_nofn_pd_dcnt}
+		     , USE_YN = #{p.use_yn}
+		     , RMK = #{p.rmk}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant} 
+		   AND TASK_STS_UUID = #{p.task_sts_uuid}
+		   AND MAIN_TASK_UUID = #{p.main_task_uuid}
+		   AND STS <![CDATA[<>]]> 'D'
+	</update>    
+	<select id="findListTaskStatusByMainTaskUuid" resultType="map">
+    /* workplace-setup.findListTaskStatusByMainTaskUuid : task status 목록 조회 */
+		SELECT TEN_ID 
+			 , TASK_STS_UUID 
+			 , MAIN_TASK_UUID
+		  FROM TASK_STS 
+		 WHERE TEN_ID = #{g.tenant}
+		   AND MAIN_TASK_UUID = #{p.main_task_uuid}
+		   AND USE_YN = 'Y'
+		   AND STS <![CDATA[<>]]> 'D'
+	</select>
+    <update id="deleteMainTask">
+    /* workplace-setup.deleteMainTask : main task 삭제 */
+	    UPDATE MAIN_TASK 
+	       SET STS = 'D'
+	     WHERE TEN_ID = #{g.tenant} 
+	       AND MAIN_TASK_UUID = #{p.main_task_uuid}
+	       AND STS <![CDATA[<>]]> 'D'
+    </update>
+    <update id="deleteTaskStatusByMainTaskUuid">
+     /* workplace-setup.deleteTaskStatusByMainTaskUuid : task status 삭제 */
+	    UPDATE TASK_STS 
+	       SET STS = 'D'
+	     WHERE TEN_ID = #{g.tenant}
+	       AND MAIN_TASK_UUID = #{p.main_task_uuid}
+	       AND STS <![CDATA[<>]]> 'D'
+     </update>
+     <update id="deleteTaskStatusByTaskStsUuid">
+     /* workplace-setup.deleteTaskStatusByTaskStsUuid : task status 삭제 */
+	    UPDATE TASK_STS 
+	       SET STS = 'D'
+	     WHERE TEN_ID = #{g.tenant}
+	       AND TASK_STS_UUID = #{p.task_sts_uuid}
+	       AND STS <![CDATA[<>]]> 'D'
+     </update>
+    <insert id="insertTaskConfig">
+    /* workplace-setup.insertTaskConfig */
+    INSERT INTO ESTTKCF(
+        SYS_ID
+      , WORK_ID
+      , MENU_CD
+      , GRP_CD
+      , DTL_CD
+      , TICK_TB
+      , TICK_APP_COL
+      , TICK_STS_COL
+      , TIT_TB
+      , TIT_LINK_COL
+      , TIT_COL
+      , CLOSE_TB
+      , CLOSE_COL
+      , CLOSE_LINK_COL
+      , CHR_TYP_CD
+      , CHR_TB
+      , CHR_COL
+      , MNG_TYP_CD
+      , MNG_TB
+      , MNG_COL
+      , FUNC_CD
+      , CLOSE_BAS_DAY
+      , ARR_BAS_DAY
+      , NEW_BAS_DAY
+      , CLOSE_MAIL_TARG_YN
+      , ARR_MAIL_TARG_YN
+      , NEW_MAIL_TARG_YN
+      , MAIL_TRANS_CYCL_CD
+      , TIT_SET_APPLY_YN
+      , CLOSE_SET_APPLY_YN
+      , CHR_SET_APPLY_YN
+      , MNG_SET_APPLY_YN
+    ) VALUES(
+        #{g.tenant}
+      , #{p.work_id}
+      , #{p.menu_cd}
+      , #{p.grp_cd}
+      , #{p.dtl_cd}
+      , #{p.tick_tb}
+      , #{p.tick_app_col}
+      , #{p.tick_sts_col}
+      , #{p.tit_tb}
+      , #{p.tit_link_col}
+      , #{p.tit_col}
+      , #{p.close_tb}
+      , #{p.close_col}
+      , #{p.close_link_col}
+      , #{p.chr_typ_cd}
+      , #{p.chr_tb}
+      , #{p.chr_col}
+      , #{p.mng_typ_cd}
+      , #{p.mng_tb}
+      , #{p.mng_col}
+      , #{p.func_cd}
+      , #{p.close_bas_day}
+      , #{p.arr_bas_day}
+      , #{p.new_bas_day}
+      , #{p.close_mail_targ_yn}
+      , #{p.arr_mail_targ_yn}
+      , #{p.new_mail_targ_yn}
+      , #{p.mail_trans_cycl_cd}
+      , #{p.tit_set_apply_yn}
+      , #{p.close_set_apply_yn}
+      , #{p.chr_set_apply_yn}
+      , #{p.mng_set_apply_yn}
+    )
+    </insert>
+    <update id="updateTaskConfig">
+    /* workplace-setup.updateTaskConfig */
+    UPDATE ESTTKCF
+       SET MENU_CD            = #{p.menu_cd}
+         , GRP_CD             = #{p.grp_cd}
+         , DTL_CD             = #{p.dtl_cd}
+         , TICK_TB            = #{p.tick_tb}
+         , TICK_APP_COL       = #{p.tick_app_col}
+         , TICK_STS_COL       = #{p.tick_sts_col}
+         , TIT_TB             = #{p.tit_tb}
+         , TIT_LINK_COL       = #{p.tit_link_col}
+         , TIT_COL            = #{p.tit_col}
+         , CLOSE_TB           = #{p.close_tb}
+         , CLOSE_COL          = #{p.close_col}
+         , CLOSE_LINK_COL     = #{p.close_link_col}
+         , CHR_TYP_CD         = #{p.chr_typ_cd}
+         , CHR_TB             = #{p.chr_tb}
+         , CHR_COL            = #{p.chr_col}
+         , MNG_TYP_CD         = #{p.mng_typ_cd}
+         , MNG_TB             = #{p.mng_tb}
+         , MNG_COL            = #{p.mng_col}
+         , FUNC_CD            = #{p.func_cd}
+         , CLOSE_BAS_DAY      = #{p.close_bas_day}
+         , ARR_BAS_DAY        = #{p.arr_bas_day}
+         , NEW_BAS_DAY        = #{p.new_bas_day}
+         , CLOSE_MAIL_TARG_YN = #{p.close_mail_targ_yn}
+         , ARR_MAIL_TARG_YN   = #{p.arr_mail_targ_yn}
+         , NEW_MAIL_TARG_YN   = #{p.new_mail_targ_yn}
+         , MAIL_TRANS_CYCL_CD = #{p.mail_trans_cycl_cd}
+         , TIT_SET_APPLY_YN   = #{p.tit_set_apply_yn}
+         , CLOSE_SET_APPLY_YN = #{p.close_set_apply_yn}
+         , CHR_SET_APPLY_YN   = #{p.chr_set_apply_yn}
+         , MNG_SET_APPLY_YN   = #{p.mng_set_apply_yn}
+     WHERE SYS_ID  = #{g.tenant}
+       AND WORK_ID = #{p.work_id}
+    </update>
+    <delete id="deleteTaskConfig">
+    /* workplace-setup.deleteTaskConfig */
+    DELETE FROM ESTTKCF
+     WHERE SYS_ID  = #{g.tenant}
+       AND WORK_ID = #{p.work_id}
+    </delete>
+    <insert id="insertMenuFuncCd">
+    /* workplace-setup.insertMenuFuncCd */
+    INSERT INTO ESTWKMF(
+        SYS_ID
+      , MAP_ID
+      , WORK_ID
+      , MENU_CD
+      , FUNC_CD
+      , REG_ID
+      , REG_DT
+      , MOD_ID
+      , MOD_DT
+    ) VALUES(
+        #{g.tenant}
+      , #{p.map_id}
+      , #{p.work_id}
+      , #{p.menu_cd}
+      , #{p.func_cd}
+      , #{g.username}
+      , #{g.now}
+      , #{g.username}
+      , #{g.now}
+    )
+    </insert>
+    <delete id="deleteMenuFuncCd">
+    /* workplace-setup.deleteMenuFuncCd */
+    DELETE FROM ESTWKMF
+     WHERE SYS_ID = #{g.tenant}
+       AND MAP_ID = #{p.map_id}
+    </delete>
+    <delete id="deleteMenuFuncCdByWorkId">
+    /* workplace-setup.deleteMenuFuncCdByWorkId */
+    DELETE FROM ESTWKMF
+     WHERE SYS_ID = #{g.tenant}
+       AND WORK_ID = #{p.work_id}
+    </delete>
+    <update id="updateMenuFuncCd">
+    /* workplace-setup.updateMenuFuncCd */
+    UPDATE ESTWKMF
+       SET WORK_ID = #{p.work_id}
+         , MENU_CD = #{p.menu_cd}
+         , FUNC_CD = #{p.func_cd}
+         , MOD_ID  = #{g.username}
+         , MOD_DT  = #{g.now}
+     WHERE SYS_ID = #{g.tenant}
+       AND MAP_ID = #{p.map_id} 
+    </update>
+    <select id="findListMenuAct" resultType="map">
+    /* workplace-setup.findListMenuAct : 메뉴 목록 조회 */
+		SELECT MN.TEN_ID 
+		     , MN.MENU_CD 
+		     , MN.PAR_MENU_CD
+		     , MN.MENU_URL 
+		     , MN_LANG.LANG_CCD 
+		     , MN_LANG.MENU_CD 
+		     , MN_LANG.MENU_NM 
+		     , MN_ACT.ACT_CD 
+		     , MN_ACT.ACT_NM 
+		  FROM MENU MN
+		 INNER JOIN MENU_MULTLANG MN_LANG 
+		    ON MN.TEN_ID = MN_LANG.TEN_ID 
+		   AND MN.MENU_CD = MN_LANG.MENU_CD 
+		   AND LANG_CCD = #{g.locale}
+		 INNER JOIN MENU_ACT MN_ACT 
+		    ON MN.TEN_ID = MN_ACT.TEN_ID 
+		   AND MN.MENU_CD = MN_ACT.MENU_CD 
+		 WHERE MN.TEN_ID = #{g.tenant}
+		   AND MN.USE_YN = 'Y'
+		   AND MN.STS <![CDATA[<>]]> 'D'
+		   AND MN_ACT.ACT_CD = 'S'
+		 <if test="p.menu_cd != null and p.menu_cd != ''">
+		 	<bind name="menuCd" value="'%'+p.menu_cd+'%'"/>
+		   AND UPPER(MN_LANG.MENU_CD) LIKE UPPER(#{menuCd})
+		 </if>
+		 <if test="p.menu_nm != null and p.menu_nm != ''">
+		 	<bind name="menuNm" value="'%'+p.menu_nm+'%'"/>
+		   AND UPPER(MN_LANG.MENU_NM) LIKE UPPER(#{menuNm})
+		 </if>
+		 <if test="p.act_nm != null and p.act_nm != ''">
+		 	<bind name="actNm" value="'%'+p.act_nm+'%'"/>
+		   AND UPPER(MN_ACT.ACT_NM) LIKE UPPER(#{actNm})
+		 </if>
+		 ORDER BY MN_ACT.MENU_CD, MN_ACT.ACT_CD
+    </select>
+    <select id="findListStsCode" resultType="map">
+    /* workplace-setup.findListStsCode */
+	    SELECT CCD.TEN_ID        		
+		     , CCD.CCD        			
+		     , CCD.CCD_TYP
+		    , CASE WHEN 'ko_KR' = #{g.locale} THEN CCD.CCD_NM
+		    ELSE NVL(CCD.CCD_NM_EN, CCD.CCD_NM)
+		    END AS CCD_NM            /* 업무 상태 그룹 명*/  , DTL.DTLCD
+		     , DTL_LANG.DTLCD_NM        /* 업무 상태 상세 명 */
+	         , (SELECT DTLCD_NM
+	            FROM DTLCD_MULTLANG
+	            WHERE TEN_ID = DTL_LANG.TEN_ID
+	              AND CCD = DTL_LANG.CCD
+	              AND DTLCD = DTL_LANG.DTLCD
+	              AND LANG_CCD = 'en_US') AS DTLCD_NM_EN /* 업무 상태 상세 영문 명 */
+		  FROM CCD CCD
+		 INNER JOIN DTLCD DTL
+		    ON CCD.TEN_ID = DTL.TEN_ID 
+		   AND CCD.CCD = DTL.CCD 
+		 INNER JOIN DTLCD_MULTLANG DTL_LANG 
+		    ON DTL.TEN_ID = DTL_LANG.TEN_ID 
+		   AND DTL.CCD = DTL_LANG.CCD 
+		   AND DTL.DTLCD = DTL_LANG.DTLCD
+		   AND DTL_LANG.LANG_CCD = 'ko_KR' /* 업무 상태 상세 명 - 한국어 */
+		 WHERE CCD.TEN_ID = #{g.tenant}
+		   AND CCD.USE_YN = 'Y'
+		   AND DTL.USE_YN = 'Y'
+		 <if test="p.ccd != null and p.ccd != ''">
+		 	<bind name="ccd" value="'%'+p.ccd+'%'"/>
+		   AND UPPER(CCD.CCD) LIKE UPPER(#{ccd})
+		 </if>
+         <if test="p.ccd_nm != null and p.ccd_nm != ''">
+		 	<bind name="ccdNm" value="'%'+p.ccd_nm+'%'"/>
+		   AND UPPER(CCD.CCD_NM) LIKE UPPER(#{ccdNm})
+		 </if>
+		 <if test="p.dtlcd != null and p.dtlcd != ''">
+		 	<bind name="dtlCd" value="'%'+p.dtlcd+'%'"/>
+		   AND UPPER(DTL.DTLCD) LIKE UPPER(#{dtlCd})
+		 </if>
+		 <if test="p.dtlcd_nm != null and p.dtlcd_nm != ''">
+		 	<bind name="dtlCdNm" value="'%'+p.dtlcd_nm+'%'"/>
+		   AND UPPER(DTL_LANG.DTLCD_NM) LIKE UPPER(#{dtlCdNm})
+		 </if>
+		 ORDER BY CCD.CCD_TYP, CCD.CCD, DTL.DTLCD 
+    </select>
+    <select id="findListAllMainTask" resultType="map">
+    /* workplace-setup.findListAllMainTask : main task 목록 조회 */
+	    SELECT MTASK.TEN_ID
+			 , MTASK.MAIN_TASK_UUID
+			 , MTASK.MAIN_TASK_CD	AS DATA
+			 , MTASK.MAIN_TASK_NM AS LABEL
+			 , MTASK.USR_TYP_CCD
+		    , '[' || DTLML.DTLCD_NM || '] ' || MTASK.MAIN_TASK_NM AS CODE_LABEL  FROM MAIN_TASK MTASK
+		  LEFT OUTER JOIN DTLCD_MULTLANG DTLML
+		    ON MTASK.TEN_ID = DTLML.TEN_ID
+		   AND DTLML.CCD = 'WRK001'
+		   AND DTLML.LANG_CCD = #{g.locale}
+		   AND DTLML.DTLCD = MTASK.USR_TYP_CCD
+         WHERE MTASK.TEN_ID = #{g.tenant}
+	   	   AND MTASK.STS <![CDATA[<>]]> 'D'
+    </select>
+    <select id="findListWorkplaceAop" resultType="map">
+	/* workplace-setup.findListWorkplaceAop : workplace AOP 목록 조회 */
+	    SELECT WKPLC.TEN_ID
+		 	 , WKPLC.WKPLC_DAT_CRN_METH_UUID 
+		 	 , WKPLC.MAIN_TASK_UUID
+		 	 , WKPLC.TASK_CLASS_NM
+		 	 , WKPLC.TASK_METH_NM
+		 	 , WKPLC.TASK_METH_EXPLN
+		 	 , WKPLC.WKPLC_CLASS_NM
+		 	 , WKPLC.WKPLC_METH_NM
+		 	 , WKPLC.USE_YN 
+			 , WKPLC.STS 
+			 , MTASK.MAIN_TASK_UUID
+			 , MTASK.MAIN_TASK_CD 
+			 , MTASK.MAIN_TASK_NM
+	         , MTASK.USR_TYP_CCD
+		  FROM TASK_METH_WKPLC_METH WKPLC 
+		 INNER JOIN MAIN_TASK MTASK
+		    ON MTASK.TEN_ID = WKPLC.TEN_ID 
+		   AND MTASK.MAIN_TASK_UUID = WKPLC.MAIN_TASK_UUID 
+		 WHERE WKPLC.TEN_ID = #{g.tenant}
+		   AND WKPLC.STS <![CDATA[<>]]> 'D'
+	     <if test="p.main_task_uuid != null and p.main_task_uuid != ''">
+	        AND MTASK.MAIN_TASK_UUID = #{p.main_task_uuid}
+	     </if>
+	     <if test="p.task_class_nm != null and p.task_class_nm != ''">
+	     	<bind name="taskClassNm" value="'%'+p.task_class_nm+'%'"/>
+	        AND UPPER(WKPLC.TASK_CLASS_NM) LIKE UPPER(#{taskClassNm})
+	     </if>
+	     <if test="p.task_meth_nm != null and p.task_meth_nm != ''">
+	     	<bind name="taskMethNm" value="'%'+p.task_meth_nm+'%'"/>
+	        AND UPPER(WKPLC.TASK_METH_NM) LIKE UPPER(#{taskMethNm})
+	     </if>
+	     <if test="p.wkplc_class_nm != null and p.wkplc_class_nm != ''">
+	     	<bind name="wkplcClassNm" value="'%'+p.wkplc_class_nm+'%'"/>
+	        AND UPPER(WKPLC.WKPLC_CLASS_NM) LIKE UPPER(#{wkplcClassNm})
+	     </if>
+	     <if test="p.wkplc_meth_nm != null and p.wkplc_meth_nm != ''">
+	     	<bind name="wkplcMethNm" value="'%'+p.wkplc_meth_nm+'%'"/>
+	        AND UPPER(WKPLC.WKPLC_METH_NM) LIKE UPPER(#{wkplcMethNm})
+	     </if>
+        <if test="p.usr_typ_ccd != null and p.usr_typ_ccd != ''">
+            AND MTASK.USR_TYP_CCD = #{p.usr_typ_ccd}
+        </if>
+	     ORDER BY MTASK.MAIN_TASK_NM ASC, TASK_CLASS_NM ASC
+	</select>
+	<select id="checkDuplicatedWorkplaceAop" resultType="java.lang.Boolean">
+	/* workplace-setup.checkDuplicatedWorkplaceAop : workplace AOP 중복체크 */
+	SELECT COUNT(WKPLC_DAT_CRN_METH_UUID)
+	  FROM TASK_METH_WKPLC_METH
+	 WHERE TEN_ID = #{g.tenant}
+	 <if test="p.wkplc_dat_crn_meth_uuid != null and p.wkplc_dat_crn_meth_uuid != ''">
+	   AND WKPLC_DAT_CRN_METH_UUID <![CDATA[<>]]> #{p.wkplc_dat_crn_meth_uuid}
+	 </if>
+	   AND TASK_CLASS_NM = #{p.task_class_nm}
+	   AND TASK_METH_NM = #{p.task_meth_nm}
+	   AND WKPLC_CLASS_NM = #{p.wkplc_class_nm}
+	   AND WKPLC_METH_NM = #{p.wkplc_meth_nm}
+	   AND STS != 'D'
+	</select>
+	<insert id="insertTaskMethodWkplcMethod">
+	/* workplace-setup.insertTaskMethodWkplcMethod : workplace AOP 저장(신규) */
+		INSERT INTO TASK_METH_WKPLC_METH
+		(  
+			TEN_ID
+		  , WKPLC_DAT_CRN_METH_UUID
+		  , MAIN_TASK_UUID
+		  , TASK_CLASS_NM
+		  , TASK_METH_NM
+		  , TASK_METH_EXPLN
+		  , WKPLC_CLASS_NM
+		  , WKPLC_METH_NM
+		  , USE_YN
+		  , STS 
+		  , REGR_ID
+		  , REG_DTTM
+		  , MODR_ID
+		  , MOD_DTTM
+		)
+		VALUES
+		(
+		    #{g.tenant}
+			, RANDOMUUID()  , #{p.main_task_uuid}
+		  , #{p.task_class_nm}
+		  , #{p.task_meth_nm}
+		  , #{p.task_meth_expln}
+		  , #{p.wkplc_class_nm}
+		  , #{p.wkplc_meth_nm}
+		  , #{p.use_yn}
+		  , 'C'
+		  , #{g.username}
+		  , #{g.now}
+		  , #{g.username}
+		  , #{g.now}
+		)
+	</insert>
+	<update id="updateTaskMethodWkplcMethod">
+	/* workplace-setup.updateTaskMethodWkplcMethod : workplace AOP 저장(수정) */
+		UPDATE TASK_METH_WKPLC_METH
+		   SET TASK_CLASS_NM = #{p.task_class_nm}
+		   	 , TASK_METH_NM = #{p.task_meth_nm}
+		   	 , TASK_METH_EXPLN = #{p.task_meth_expln}
+		   	 , WKPLC_CLASS_NM = #{p.wkplc_class_nm}
+		   	 , WKPLC_METH_NM = #{p.wkplc_meth_nm}
+             , MAIN_TASK_UUID = #{p.main_task_uuid}
+		     , USE_YN = #{p.use_yn}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now} 
+		 WHERE WKPLC_DAT_CRN_METH_UUID = #{p.wkplc_dat_crn_meth_uuid}
+		   AND STS <![CDATA[<>]]> 'D'
+	</update>
+	<update id="deleteTaskMethodWkplcMethod">
+	/* workplace-setup.deleteWorkMethod : workplace AOP 삭제 */
+		UPDATE TASK_METH_WKPLC_METH
+		   SET STS = 'D'
+		 WHERE TEN_ID = #{g.tenant}
+		   AND WKPLC_DAT_CRN_METH_UUID = #{p.wkplc_dat_crn_meth_uuid}
+		   AND STS <![CDATA[<>]]> 'D'
+	</update>
+  	<resultMap id="findListDataSource-resultMap" type="map">
+	    <result column="DAT_SRC_CONT" javaType="string" property="dat_src_cont" typeHandler="stringClob"/>
+	</resultMap>
+  	<select id="findListDataSource" resultMap="findListDataSource-resultMap">
+  	/* workplace-setup.findListDataSource : data source 목록 조회 */
+	  	SELECT DTSRC.TEN_ID 												/* 테넌트 아이디 */
+		     , DTSRC.DAT_SRC_UUID 											/* 데이터 소스 코드 */
+		     , DTSRC.DAT_SRC_LOGIC_NM 										/* 데이터 소스 논리 명 */
+		     , DTSRC.DAT_SRC_PHYC_NM 										/* 데이터 소스 물리 명 */
+		     , DTSRC.REGR_ID 												/* 등록자 아이디 */
+		     , DTSRC.REG_DTTM 												/* 등록 일시 */
+		     , DTSRC.MODR_ID 												/* 수정자 아이디 */
+		     , DTSRC.MOD_DTTM 												/* 수정 일시 */
+		     , (SELECT CASE WHEN COUNT(TST.TASK_STS_UUID) = 0 THEN 'N'
+		     				ELSE 'Y' END
+			      FROM TASK_STS TST 
+			     WHERE TST.TEN_ID = DTSRC.TEN_ID 
+			       AND TST.DAT_SRC_UUID = DTSRC.DAT_SRC_UUID
+			       AND DTSRC.STS <![CDATA[<>]]> 'D') AS TASK_STS_MAPG_YN	/* 업무 상태 매핑 여부 */
+	    	 , DTSRC.DAT_SRC_CONT                                           /* 데이터 소스 내용 */
+	      FROM DAT_SRC DTSRC
+		 WHERE DTSRC.TEN_ID = #{g.tenant}
+   		   AND STS <![CDATA[<>]]> 'D'
+		 <if test="p.dat_src_logic_nm != null and p.dat_src_logic_nm != ''">
+		   <bind name="datSrcLogicNm" value="'%'+p.dat_src_logic_nm+'%'"/>
+		   AND UPPER(DTSRC.DAT_SRC_LOGIC_NM) LIKE UPPER(#{datSrcLogicNm})
+		 </if>
+		 <if test="p.dat_src_phyc_nm != null and p.dat_src_phyc_nm != ''">
+		   <bind name="datSrcPhycNm" value="'%'+p.dat_src_phyc_nm+'%'"/>
+		   AND UPPER(DTSRC.DAT_SRC_PHYC_NM) LIKE UPPER(#{datSrcPhycNm})
+		 </if>
+		 ORDER BY DTSRC.DAT_SRC_UUID
+  	</select>
+  	<update id="deleteDataSource">
+  	/* workplace-setup.deleteDataSource : data source 삭제 */
+	  	UPDATE DAT_SRC
+	  	   SET STS = 'D' 
+	  	 WHERE TEN_ID = #{g.tenant}
+	  	   AND DAT_SRC_UUID = #{p.dat_src_uuid}
+	  	   AND STS <![CDATA[<>]]> 'D'
+  	</update>
+  	<select id="checkDuplicatedDataSource" resultType="java.lang.Boolean">
+  	/* workplace-setup.checkDuplicatedDataSource : data source 중복 체크 */
+	  	SELECT COUNT(DAT_SRC_UUID) 
+		  FROM DAT_SRC
+		 WHERE TEN_ID = #{g.tenant}
+		 <if test="p.dat_src_uuid != null and p.dat_src_uuid != ''">
+		   AND DAT_SRC_UUID <![CDATA[<>]]> #{p.dat_src_uuid} 
+		 </if>
+		   AND DAT_SRC_LOGIC_NM = #{p.dat_src_logic_nm}
+		   AND DAT_SRC_PHYC_NM = #{p.dat_src_phyc_nm}
+		   AND STS <![CDATA[<>]]> 'D'
+  	</select>
+  	<insert id="insertDataSource">
+  	/* workplace-setup.insertDataSource : data source 저장(신규) */
+  		INSERT INTO DAT_SRC(
+			TEN_ID
+		  , DAT_SRC_UUID 
+		  , DAT_SRC_LOGIC_NM 
+		  , DAT_SRC_PHYC_NM 
+		  , RMK
+		  , STS
+		  , REGR_ID
+		  , REG_DTTM 
+		  , MODR_ID 
+		  , MOD_DTTM
+		  , DAT_SRC_CONT
+		)VALUES(
+			#{g.tenant}
+		    , RANDOMUUID()  , #{p.dat_src_logic_nm}
+          , #{p.dat_src_phyc_nm}
+          , #{p.rmk}
+          , 'C'			
+ 		  , #{g.username}
+		  , #{g.now}
+		  , #{g.username}
+		  , #{g.now}
+		  , #{p.dat_src_cont}
+		)
+  	</insert>
+  	<update id="updateDataSource">
+  	/* workplace-setup.updateDataSource : data source 저장(수정) */
+	  	UPDATE DAT_SRC 
+		   SET DAT_SRC_LOGIC_NM = #{p.dat_src_logic_nm}
+		     , DAT_SRC_PHYC_NM = #{p.dat_src_phyc_nm}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		     , DAT_SRC_CONT = #{p.dat_src_cont}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND DAT_SRC_UUID = #{p.dat_src_uuid}
+		   AND STS <![CDATA[<>]]> 'D'
+  	</update>
+  	<select id="findListAllDataSource" resultType="map">
+    /* workplace-setup.findListAllDataSource : data source 목록 조회 */
+	    SELECT TEN_ID 
+		     , DAT_SRC_UUID AS DATA 
+		     , DAT_SRC_LOGIC_NM AS LABEL
+		     , DAT_SRC_PHYC_NM 
+		     , REGR_ID 
+		     , REG_DTTM 
+		     , MODR_ID 
+		     , MOD_DTTM 
+		  FROM DAT_SRC
+		 WHERE TEN_ID = #{g.tenant}
+		   AND STS <![CDATA[<>]]> 'D'
+		 ORDER BY DAT_SRC_UUID  
+    </select>
+</mapper>

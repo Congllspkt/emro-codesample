@@ -1,0 +1,657 @@
+<dom-module id="ep-bpa-item-search-list">
+<!--
+/**
+ *
+ *	@description : 품목 정보 팝업 화면
+ *  <pre>
+ 	@TODO : 모듈 테스트용으로 디자인을 임시로 지정하였습니다.
+ 	레이아웃 변경이필요합니다.
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName :
+ * @Since 2016. 5. 20.
+ */
+-->
+    <style>
+       :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+
+    	<!-- 품목 분류 조회  -->
+        <sc-ajax
+            id="findListCate"
+            url="findListCate.do"
+            body="{{findListCate.param}}"
+            on-response="completeFindListCate">
+        </sc-ajax>
+
+          <!-- 품목 물품 조회 -->
+          <sc-ajax
+            id="findListCateItem"
+            url="findListCateItemAndBpa.do"
+            body="{{findListCateItem.param}}"
+            last-response="{{findListCateItem.result}}">
+        </sc-ajax>
+
+        <!-- 구매-품목 연결 운영조직 조회 -->
+        <sc-ajax id="findListOperationOrganizationByOperationOrganizationLink"
+	        url="findListOperationOrganizationByOperationOrganizationLink.do">
+	    </sc-ajax>
+
+	    <!-- 품목 운영조직 조회 -->
+        <sc-ajax id="findListOperationOrganizationByUser"
+	        url="findListOperationOrganizationByUser.do"
+	        body="IO"
+	        content-type="text/plain">
+	    </sc-ajax>
+
+	    <!-- 나의품목지정 저장 -->
+	    <sc-ajax id="saveMyItemList"
+	    		url="saveMyItemList.do"
+	    		on-response="completeSaveMyItemList">
+	    </sc-ajax>
+        <div class="hbox flex">
+	        <div class="vbox flex-3">
+	        	<cc-sub-title-bar title-text="분류 검색">
+		            <!-- <sc-button text="검색" on-click="onFindItemFromGrid" id ="searchBtn" hidden="{{btnHidden}}"></sc-button>
+           			<sc-button text="다음" on-click="onFindItemFromGrid" id="nextBtn" hidden="{{!btnHidden}}"></sc-button> -->
+	        	</cc-sub-title-bar>
+	        	<cc-search-condition-panel on-search="onFindItemFromGrid">
+		        	<table>
+		        		<colgroup>
+		        			<col style="width:60px">
+		        			<col>
+		        		</colgroup>
+			            <tr>
+			                <th><sc-label text="분류 명"></sc-label></th>
+			                <td>
+			                   <sc-text-field value="{{findListCate.param.itemcat_nm}}" on-keydown="onKeyDown" max-length="200"></sc-text-field>
+			                </td>
+			        </table>
+	        	</cc-search-condition-panel>
+		        <!-- tree Grid -->
+		    	<sc-grid id="treeGridPanel" is-tree="true" class="flex"	use-state="false"	use-selection="false"
+		    								on-item-click="onItemClick">
+		    		<cc-grid-toolbar></cc-grid-toolbar>
+		    		<sc-grid-columns>
+		    			<sc-data-column	data-field="itemcat_nm"	header-text="분류 명"	width="200"	text-align="left"	style-name="link"></sc-data-column>
+		    		</sc-grid-columns>
+		    		<sc-grid-fields>
+		    			<sc-grid-field	data-field="ten_id"	></sc-grid-field>
+						<sc-grid-field	data-field="purc_grp_typ_ccd"	></sc-grid-field>
+						<sc-grid-field	data-field="co_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="use_yn"	></sc-grid-field>
+						<sc-grid-field	data-field="par_itemcat_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_path"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_nm"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_lvl"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="purc_grp_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="purc_grp_typ_ccd"	></sc-grid-field>
+						<sc-grid-field	data-field="purc_grp_nm"	></sc-grid-field>
+						<sc-grid-field	data-field="tree"	></sc-grid-field>
+		    		</sc-grid-fields>
+		    	</sc-grid>
+			</div>
+	        <div class="hspace-10"></div>
+			<div class="vbox flex-7">
+				<cc-sub-title-bar title-text="품목 목록">
+				</cc-sub-title-bar>
+				<cc-search-condition-panel on-search="onFindList">
+					<cc-fieldset>
+								<sc-label text="운영조직"></sc-label>
+								<sc-combobox-field id="operorgcombobox" selected-index="0" label="운영조직" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}" value="{{findListCateItem.param.oorg_cd}}"
+												   placeholder="필수" readonly="[[disabledOperOrgCd]]" reset="false"
+								></sc-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+								<sc-label text="품목 코드"></sc-label>
+								<cc-multi-text-field value="{{findListCateItem.param.item_cd}}" multi-value="{{findListCateItem.param.item_cds}}" max-length="200"	validator-type="nospace" on-enter="onFindList"></cc-multi-text-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="품목 명"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.disp_item_nm}}" on-enter="onFindList" max-length="200" validator-type="nospace"></sc-text-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="품목 규격"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.item_spec}}" on-enter="onFindList" max-length="200"></sc-text-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="품목분류1 명"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_1_cd}}" on-enter="onFindList" max-length="200" readonly="true" hidden="true"></sc-text-field>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_1_nm}}" on-enter="onFindList" max-length="200" readonly="true"></sc-text-field>
+							</cc-fieldset>
+							<cc-fieldset>
+								<sc-label text="품목분류2 명"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_2_cd}}" readonly="true" hidden="true"></sc-text-field>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_2_nm}}" on-enter="onFindList" readonly="true"></sc-text-field>
+							</cc-fieldset>
+							<cc-fieldset>
+								<sc-label text="품목분류3 명"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_3_cd}}" readonly="true" hidden="true"></sc-text-field>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_3_nm}}" on-enter="onFindList" readonly="true"></sc-text-field>
+							</cc-fieldset>
+							<cc-fieldset>
+								<sc-label text="품목분류4 명"></sc-label>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_4_cd}}" readonly="true" hidden="true"></sc-text-field>
+								<sc-text-field value="{{findListCateItem.param.itemcat_lvl_4_nm}}" on-enter="onFindList" readonly="true"></sc-text-field>
+							</cc-fieldset>
+						<cc-fieldset>
+							<sc-label text="제조사"></sc-label>
+							<sc-text-field value="{{findListCateItem.param.mfgr_nm}}" on-enter="onFindList"></sc-text-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="단가계약 품목"></sc-label>
+								<sc-checkbox-field input-value="{{findListCateItem.param.price_cntr_yn}}" checked-value="Y" un-checked-value="N"
+													on-tap="onChangePriceCntrYn"	hidden="[[formula('isCntrNDirectN')]]"></sc-checkbox-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="touchless 품목"></sc-label>
+								<sc-checkbox-field input-value="{{findListCateItem.param.tl_yn}}" checked-value="Y" un-checked-value="N"
+													on-tap="onChangeTLYn"	hidden="[[formula('isCntrNDirectN')]]"></sc-checkbox-field>
+						</cc-fieldset>
+						<cc-fieldset>
+								<sc-label text="나의 품목"></sc-label>
+								<sc-checkbox-field input-value="{{findListCateItem.param.my_item_yn}}" checked-value="Y" un-checked-value="N"
+													on-tap="onChangeMyItemYn"></sc-checkbox-field>
+						</cc-fieldset>
+				</cc-search-condition-panel>
+
+				<sc-grid id="itemGridPanel" class="flex"	use-state="false"	data-provider="{{findListCateItem.result}}"
+						selection-mode="[[formula('selectionMode')]]">
+					<cc-grid-toolbar>
+						<sc-button text="선택" on-click="onSelectedList"></sc-button>
+						<sc-button text="나의 품목 지정" on-click="onAddMyItemList"></sc-button>
+						<sc-button text="나의 품목 해제"	on-click="onDeleteMyItemList"></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column	data-field="disp_item_nm"		header-text="품목 명"			width="250"	text-align="left"	></sc-data-column>
+						<sc-data-column	data-field="item_cd"		header-text="품목 코드"			width="100"	></sc-data-column>
+						<sc-data-column	data-field="sg_cd"			header-text="소싱그룹 코드"		width="100"	></sc-data-column>
+						<sc-data-column	data-field="sg_nm"			header-text="소싱그룹 명"			width="100"	></sc-data-column>
+						<sc-data-column	data-field="uom_ccd"	header-text="UOM"		width="100"	></sc-data-column>
+						<sc-data-column	data-field="item_spec"			header-text="품목 규격"				width="250"	text-align="left"	></sc-data-column>
+						<sc-data-column	data-field="mfgr_nm"		header-text="제조사 명"			width="180"	text-align="left"	></sc-data-column>
+						<sc-data-column	data-field="purc_grp_nm"	header-text="구매 그룹"			width="100"	></sc-data-column>
+					<!--<sc-data-column	data-field="rep_cd_yn"		header-text="대표품목여부"		width="100"	></sc-data-column>-->
+						<sc-date-column	data-field="uprc_efct_st_dt"		header-text="단가계약 시작 일자"	width="130"	visible="[[!formula('isCntrNDirectN')]]"></sc-date-column>
+						<sc-date-column	data-field="uprc_efct_exp_dt"		header-text="단가계약 만료 일자"	width="130"	visible="[[!formula('isCntrNDirectN')]]"></sc-date-column>
+						<sc-data-column	data-field="cur_ccd"			header-text="통화"				width="70"	></sc-data-column>
+						<sc-data-column	data-field="uprccntr_qty"		header-text="수량"				width="50"	text-align="right"
+										data-type="number"			format-type="qty"></sc-data-column>
+						<sc-data-column	data-field="uprccntr_uprc"		header-text="단가"				width="100"	text-align="right"
+										data-type="number"			format-type="amt"				validator-type="price"></sc-data-column>
+						<sc-data-column	data-field="uprccntr_no"		header-text="단가계약 번호"		width="120"	visible="[[!formula('isCntrNDirectN')]]"></sc-data-column>
+						<sc-data-column	data-field="uprccntr_lno"	header-text="항번"				width="80"	visible="[[!formula('isCntrNDirectN')]]" data-type="number"></sc-data-column>
+
+						<sc-data-column	data-field="erp_vd_cd"		header-text="협력사 코드"		width="100"	></sc-data-column>
+						<sc-data-column	data-field="vd_nm"			header-text="협력사 명"			width="180"	text-align="left"	></sc-data-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field	data-field="purc_grp_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="org_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="oorg_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="org_nm"	></sc-grid-field>
+						<sc-grid-field	data-field="purc_grp_typ_ccd"	></sc-grid-field>
+						<sc-grid-field	data-field="co_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_simword"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_lvl_1_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_lvl_2_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_lvl_3_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="itemcat_lvl_4_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="rmk"	></sc-grid-field>
+						<sc-grid-field	data-field="uprccntr_revno"	></sc-grid-field>
+						<sc-grid-field	data-field="uprccntr_item_uuid"	></sc-grid-field>
+						<sc-grid-field	data-field="vd_cd"	></sc-grid-field>
+						<sc-grid-field	data-field="vd_en_nm"	></sc-grid-field>
+						<sc-grid-field	data-field="my_item_yn"></sc-grid-field>
+						<sc-grid-field	data-field="item_nm"></sc-grid-field>
+						<sc-grid-field	data-field="item_nm_en"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+	      </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-bpa-item-search-list',
+            properties: {
+            	titleText : {
+            		type : String,
+            		value : function(){
+            			return this.translate('품목 검색');
+            		}
+            	},
+            	operUnitCd: {
+            		type: String,
+            		value: function(){
+            			return "PO";	// 구매운영단위
+            		}
+            	},
+            	
+            	disabledOperOrgCd: {
+            		type: Boolean,
+            		value: function(){
+            			return false;
+            		}
+            	},
+            	
+                findListCate : {
+                	type : Object,
+                	value : function(){
+                		return {
+                			param : {
+                    			itemcat_cd : '',
+                    			itemcat_nm : ''
+                    		}
+                		};
+                	}
+                },
+                findListCateItem: {
+                    type: Object,
+                    value: function(){
+                    	return {
+                    		param: {},
+                            result: {}
+                    	};
+                    }
+                },
+                codes: {
+                    type: Object,
+                    value: {
+                   		oorgCd :  {}
+                    }
+                },
+             	// 버튼 숨김 여부
+				btnHidden: {
+					type: Boolean,
+					value: function() {
+						return false;
+					}
+				},
+				singleSelect: {
+                    type: Boolean,
+                    value: false
+                }
+            },
+            formulas: {
+            	selectionMode: function(){
+            		var me = this;
+            		return (me.get("singleSelect") ? "radio" : "check");
+            	},
+            	isCntrNDirectN: function(){
+            		//단가계약품목직발주품목 사용안함.
+            		var me = this;
+            		var operUnitCd = me.get("operUnitCd");
+            		return (operUnitCd === "IO");
+            	},
+            	//나의품목 체크
+            	checkMyItem: function(){
+            		var me = this;
+            		return (me.get("findListCateItem.param.my_item_yn") === "Y");
+            	}
+            },
+            //set options
+            setOptions: function(options){
+            	var me = this,provider = me.$.itemGridPanel.getDataProvider();
+            	me.set("singleSelect", UT.isBoolean(options.singleSelect) ? options.singleSelect : false);
+            	if(UT.isNotEmpty(provider)){
+            		provider.removeAll();
+            	}
+            	// 운영조직 콤보를 disable 처리하고, parameter로 받은 값으로 세팅해 준다.
+                me.set("disabledOperOrgCd", UT.isBoolean(options.disabledOperOrgCd) ? options.disabledOperOrgCd : false);
+            },
+            //팝업 로드함수
+            //운영조직과 직무유형을 받는다.
+            load: function(param){
+            	var me = this;
+            	
+            	var currentUser = SCSessionManager.currentUser;
+            	
+            	me.setOptions(param);
+				
+				me.set("findListCate.param", {
+					purc_typ_ccd: param.purc_typ_ccd
+				});
+            	
+            	//load에 필요한 데이타 set
+            	me.set('findListCateItem.param',{
+                    co_cd : currentUser.co_cd,
+                    purc_grp_typ_ccd : param.purc_grp_typ_ccd
+             	});
+            	
+            	// 운영조직(운영단위 콤보 조회시 사용)
+            	if(param.oper_unit_cd){
+            		me.set("operUnitCd", param.oper_unit_cd);
+            	}
+            	
+            	//품목운영에서 검색시 단가계약항목, 직발주품목 안보임.
+            	me.applyFormula();
+            	
+            	//연결된 운영조직 콤보 조회
+            	me.onFindListOperOrgCdByOper(param.oorg_cd);
+            	me.onFindTreeList();
+            },
+            //초기함수
+            initialized: function() {
+            	var me = this;
+            	me.set('btnHidden', false);
+            },
+            //그리드 셀 클릭 이벤트
+            onItemClick: function(event){
+            	var me = this, detail = event.detail,
+            	data = detail.data,
+            	item = detail.item,
+            	fieldName = item.dataField,
+            	itemIndex = item.rowIndex;
+            	
+            	var current = me.$.treeGridPanel.getCurrentCell();
+            	var provider = me.$.treeGridPanel.getDataProvider();
+                if (fieldName === 'itemcat_nm') {
+                	//현재 cell row의 부모 tree data 가져오기
+                    var rows = provider.getAncestorsIndexes(current.nodeIndex) || {};
+                  //현재 cell row의 json data 가져오기
+                    var currentJsonRow = provider.getItemAt(current.nodeIndex);
+                  
+                  var level = currentJsonRow.itemcat_lvl, targetNode = currentJsonRow;
+                  
+                  level = parseInt(level,10);
+                  
+                  var j  = 0;
+                  	//품목 조회 조건  분류 셋팅
+                   for(var i=level ; i > 0 ;i -- ){
+                	   		var tree = rows[j] || 0;
+                        	var parentNode = provider.getItemAt(tree);
+                        	me.set('findListCateItem.param.itemcat_lvl_'+i+'_cd',targetNode.itemcat_cd);
+                            me.set('findListCateItem.param.itemcat_lvl_'+i+'_nm',targetNode.itemcat_nm);
+                            targetNode = parentNode;
+                            j++;
+                     }
+                  
+                   if(level < 4){
+                       for(var i = (level +1) ; i<= 4; i++){
+                    	   me.set('findListCateItem.param.itemcat_lvl_'+i+'_cd','');
+                           me.set('findListCateItem.param.itemcat_lvl_'+i+'_nm','');
+                       }
+                   }
+                }
+            },
+            //트리 그리드 검색
+            searchTreeGridView: function (value){
+            	var me = this,treeGrid = me.$.treeGridPanel;
+            	// 그리드 검색 옵션 설정
+            	var currentCell = treeGrid.getCurrentCell(),
+            		currentIndex = (currentCell === null) ? -1 : currentCell.rowIndex;
+            	
+             	// treeGird 경우 펼쳐진 노드에 대해서만 searchItem 기능 제공
+                // 트리를 모드 펼친 상태로 검색
+                treeGrid.expandAll();
+
+                var node = treeGrid.searchItem("itemcat_nm", value, currentIndex);
+
+                if (UT.isEmpty(node)) {
+                    UT.alert("STD.N2800");
+                    return;
+                }
+            },
+            
+            /**
+            * 트리 그리드 펼침
+            */
+            onExpandAll:function(){
+            	var me = this;
+            	me.$.treeGridPanel.expandAll();
+            },
+            
+            /**
+            * 트리 그리드 접기
+            */
+            onCollapseAll:function(){
+            	var me = this;
+            	me.$.treeGridPanel.collapseAll();
+            },
+            
+            /**
+             * text field 키 입력 처리(Enter 키 입력 Check)
+             */
+            onKeyDown: function (e) {
+                var me = this;
+                
+             	// 버튼 속성 변경
+                if(!e.target.value){
+                	me.btnHidden = false;
+                }
+            	// Enter 키 입력 확인
+                if (e.keyCode === 13) {
+                	// 입력받은 키가 Enter인 경우 트리 목록 아이템 검색 함수 호출
+                	me.onFindItemFromGrid();
+                }
+            },
+			//code 조회  
+            onFindListOperOrgCdByOper : function(oorgCd){
+            	var me = this;
+            	
+            	if(UT.isNotEmpty(oorgCd)) {
+            		var operUnitCd = me.get("operUnitCd"),
+            			ajax = me.$.findListOperationOrganizationByUser;
+            		
+            		// 품목운영단위 기준이 아닌 경우 운영단위 연결 조회
+            		if(operUnitCd !== "IO") {
+	            		var param = {"conn_typ_ccd": operUnitCd + "IO"};
+	            		
+	            		// Source 운영단위 (OORG_MAPG.CONNSRC_OORG_CD)
+	            		if(UT.isArray(oorgCd)) {
+	            			param.oorg_cds = oorgCd;
+	            		} else {
+	                        param.oorg_cd = oorgCd;
+	            		}
+	            		
+	            		ajax = me.$.findListOperationOrganizationByOperationOrganizationLink;
+	            		ajax.body = param;
+            		}
+            		
+            		UT.request(ajax, function(e, res) {
+            			var operOrgCds = res.response;
+                    	me.set("codes.oorgCd", operOrgCds);
+                    	
+                    	// 품목운영단위 기준인 경우 파라미터로 넘어온 oorg_cd값을 세팅해 준다.
+                    	if( operUnitCd === "IO" ) {
+       	            		me.set("findListCateItem.param.oorg_cd", oorgCd);
+                    	} else if(operOrgCds.length > 0) {
+                    		me.set("findListCateItem.param.oorg_cd", operOrgCds[0].oorg_cd);
+                    	}
+            		});
+            	}
+            },
+            
+            //트리 그리드 리스트 조회
+            onFindTreeList : function(){
+            	var me = this;
+            	UT.request(me.$.findListCate);
+            },
+            
+            completeFindListCate: function(e,res){
+            	var me = this;
+            	var result = res.response;
+            	var hier = new CCHierachicalData();
+                var hierachiDatas = hier.HierachyTransformByKey(result, "itemcat_cd", "par_itemcat_cd", "children", "0", null, true);
+                me.$.treeGridPanel.setHierachyDataProvider(hierachiDatas, "children");
+            },
+            
+            //tree grid 데이타 조회
+            onFindItemFromGrid: function(e) {
+				 var me = this;
+                var nameValues = me.get("findListCate.param.itemcat_nm"); // 분류명 필드 값
+                var fields = [];	// 검색 옵션 조건 필드 목록
+                var values = [];	// 검색 옵션 조건 값 목록
+                
+                if(UT.isEmpty(nameValues)){
+	                 //입력 받은 필드/값 없는 경우 return
+                	UT.alert("STD.N2700");
+                	return;
+                }
+               
+	             if(!me.btnHidden){
+	              	me.set('btnHidden', true);
+	             }
+	              
+	             // 트리 그리드 검색
+	             me.searchTreeGridView(nameValues);
+           },
+           
+          	//조회 유효성 검사
+            validateFind : function(){
+            	var me = this;
+            	var flage = true;
+            	var param = me.findListCateItem.param;
+            	if(!me.$.operorgcombobox.validate()){
+            		UT.alert("STD.E0000");
+            		flage = false;
+            		return false;
+            	}else if(UT.isEmpty(param.item_cd) && UT.isEmpty(param.disp_item_nm) && UT.isEmpty(param.item_spec) && UT.isEmpty(param.itemcat_lvl_1_nm) && UT.isEmpty(param.mfgr_nm)){
+               		UT.alert("STD.N3200");
+               		flage = false;
+               		return false;
+            	}
+            	return flage;
+            },
+            
+            // 검색(조회)
+            onFindList: function() {
+            	var me = this;
+            	if(me.validateFind()){
+            		UT.request(me.$.findListCateItem);
+            		me.applyFormula('checkMyItem');
+            	}
+            },
+            clearData: function(){
+            	var me = this;
+            	
+            	//properties 초기화
+				me.reset();
+            },
+            // 선택 목록 반환
+            onSelectedList: function() {
+                var me = this,provider = me.$.itemGridPanel.getDataProvider();
+                var selected = provider.selectionCheckedItems();
+                
+                if(UT.isEmpty(selected)){
+                	UT.alert("STD.N1600");
+                }else{
+                	me.fire("selected-items", selected);
+                }
+            },
+            
+            //나의 품목 지정
+            onAddMyItemList: function(){
+            	var me = this,provider = me.$.itemGridPanel.getDataProvider();
+                var selected = provider.selectionCheckedItems(),
+                	items = [];
+            	
+                if(selected.length === 0) {
+                	UT.alert("STD.N1600");
+                	return;
+                }
+                
+            	for(var i = 0, len = selected.length; i<len ;i++){
+            		var item = selected[i];
+            		if(item.my_item_yn !== "Y") {
+            			items.push(item);
+            		}
+            	}
+            	
+            	if(items.length === 0) {
+            		UT.alert("STD.PR1039");
+            		return;
+            	} else {
+            		UT.confirm("STD.PR1041", function() {
+            			me.$.saveMyItemList.body = {
+                      		insertMyItems : items
+                       	};
+                       	UT.request(me.$.saveMyItemList);
+            		});
+            	}
+            },
+            //나의품목지정 해제
+            onDeleteMyItemList: function(){
+            	var me = this,provider = me.$.itemGridPanel.getDataProvider();
+                var selected = provider.selectionCheckedItems(),
+            		items = [];
+            	
+                if(selected.length === 0) {
+                	UT.alert("STD.N1600");
+                	return;
+                }
+                
+            	for(var i = 0, len = selected.length; i<len ;i++){
+            		var item = selected[i];
+            		if(item.my_item_yn === "Y"){
+            			items.push(item);
+            		}
+            	}
+            	
+            	if(items.length === 0) {
+            		UT.alert("STD.PR1040");
+            		return;
+            	} else {
+            		UT.confirm("STD.PR1042", function() {
+            			me.$.saveMyItemList.body = {
+       	           			deleteMyItems : items
+       	            	};
+       	            	UT.request(me.$.saveMyItemList);
+            		});
+            	}
+            },
+            
+            completeSaveMyItemList: function(el,res){
+            	var me = this,
+            	lastResponse = res.response;
+            	
+            	//요청을 완료하였습니다.
+        		UT.completeAlert();
+            	
+            	me.onFindList();
+            },
+            // 단가계약 품목 여부 변경
+            onChangePriceCntrYn: function(e) {
+            	var me = this;
+            	
+            	if(!e.isTrusted) {
+            		var isPriceCntr = (me.findListCateItem.param.price_cntr_yn === "Y");
+            		
+            		if(!isPriceCntr) {
+            			me.set("findListCateItem.param.tl_yn", "N");
+            		}
+            	}
+            },
+            // touchless 여부 변경
+            onChangeTLYn: function(e) {
+				var me = this;
+            	
+            	if(!e.isTrusted) {
+            		var isAutoPo = (me.findListCateItem.param.tl_yn === "Y");
+            		
+            		if(isAutoPo) {
+            			me.set("findListCateItem.param.price_cntr_yn", "Y");
+            		}
+            	}
+            }, 
+            //내품목변경
+            onChangeMyItemYn: function(e){
+            	var me = this;
+            	if(!e.isTrusted){
+            		var isItemPo = (me.findListCateItem.param.my_item_yn === "Y");
+            		
+            		if(isItemPo) {
+            			me.set("findListCateItem.param.my_item_yn", "Y");
+            		}
+            	}
+            }
+        });
+    </script>
+
+</dom-module>

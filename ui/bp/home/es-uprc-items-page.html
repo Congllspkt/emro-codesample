@@ -1,0 +1,297 @@
+<sc-link rel="import" href="ep-add-shopping-cart.html"></sc-link>
+<dom-module id="es-uprc-items-page">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+
+    </style>
+
+    <template>
+        <sc-request-group init>
+            <sc-ajax url="findListOperationOrganizationByUser.do" body="PO" content-type="text/plain" last-response="{{codes.operorgPO}}" auth-disabled></sc-ajax>
+            <sc-code-group>
+                <sc-code code="C004" value="{{codes.cur}}" ></sc-code>          <!-- 통화 -->
+            </sc-code-group>
+        </sc-request-group>
+
+        <sc-ajax id="findListUprcItemWithoutCatalog" url="findListUprcItemWithoutCatalog.do" body="{{indexParam}}">
+        </sc-ajax>
+
+
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+
+        <div class="catalog-result-page catalog">
+            <div class="catalog-page-toolbar">
+                <div class="result-sort-type">
+                    <ul>
+                        <!--<li><button class="active"><span on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprc_efct_st_dt desc">최신순</span></button></li>
+                        <li><button><span on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc asc">낮은가격순</span></button></li>
+                        <li><button><span on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc desc">높은가격순</span></button></li>-->
+                        <li class="active"> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprc_efct_st_dt desc"><sc-label text="최신순"></sc-label></a></li>
+                        <li> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc asc"><sc-label text="최저가순"></sc-label></a></li>
+                        <li> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc desc"><sc-label text="최고가순"></sc-label></a></li>
+                    </ul>
+                </div>
+                <div class="wrap-btn">
+                    <button class="cart" on-click="onAddShoppingCartByUprc"><span>장바구니담기</span></button>
+                </div>
+            </div>
+            <div class="catalog-page-cont">
+                <sc-grid id="grid_cntr_item" data-provider="[[uprcItemList]]" class="h-500" use-state="false"
+                         use-selection="true" on-item-click="onGridCellClicked" data-args="cntr"
+                         show-number-line="false" sortable="false">
+                    <sc-grid-columns>
+                        <sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="110" items="{{codes.operorgPO}}" display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-column>
+                        <sc-data-column data-field="item_cd"   header-text="품목 코드" width="100" text-align="center"></sc-data-column>
+                        <sc-data-column data-field="item_nm"   header-text="품목 명"   width="200" text-align="left" ></sc-data-column>
+                        <sc-data-column data-field="item_spec"      header-text="품목 규격"     width="250" text-align="left"></sc-data-column>
+                        <sc-data-column data-field="uprccntr_uprc" header-text="단가" width="100" text-align="right" editor-regex-function="onRegexFn" validate-on-cell-paste="true"
+                                        data-type="number" format-type="price" validator-function="gridValidatorFn" min-value="0" max-length="13"></sc-data-column>
+                        <sc-data-column data-field="cur_ccd"       header-text="통화"     width="60"  text-align="center"></sc-data-column>
+                        <sc-data-column data-field="vd_nm"     header-text="공급사"   width="130" text-align="center"></sc-data-column>
+                    </sc-grid-columns>
+                    <sc-grid-fields>
+                        <sc-grid-field data-field="vd_cd" data-type="text"></sc-grid-field>
+                        <sc-grid-field data-field="uprc_efct_st_dt" data-type="text"></sc-grid-field>
+                        <sc-grid-field data-field="uprc_efct_exp_dt" data-type="text"></sc-grid-field>
+                        <sc-grid-field data-field="uom_ccd" data-type="text"></sc-grid-field>
+                        <sc-grid-field data-field="purc_grp_cd" data-type="text"></sc-grid-field>
+                    </sc-grid-fields>
+                </sc-grid>
+            </div>
+            <div class="catalog-page-selector">
+                <div class="prev-container">
+                    <button class="first" on-click="goFirstPage"></button>
+                    <button class="prev" on-click="goPreviousPage"></button>
+                </div>
+                <div class="num-container" id="pagination">
+                    <!-- drawn by script -->
+                </div>
+                <div class="next-container">
+                    <button class="next" on-click="goNextPage"></button>
+                    <button class="last" on-click="goLastPage"></button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-uprc-items-page",
+
+            properties: {
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            operorgPO: [], // 구매운영조직
+                            cur: [],
+                            purcTypCcd: [] // 구매 유형
+                        };
+                    }
+                },
+                uprcItemList: {
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                indexParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                totalCount: {
+                    type: Number,
+                    value: 0
+                }
+            },
+
+            formulas: {},
+
+            load: function (data, total) {
+                var me = this;
+                me.set("uprcItemList", data);
+                me.set("totalCount", total);
+            },
+            displayPagination: function(btnHtml) {
+                var me = this;
+                var container = Polymer.dom(me.$.pagination);
+                //me.clearElement(container, "._pg_", "click", "onFindPaging");
+
+                Polymer.dom(me.$$("#pagination")).innerHTML = btnHtml.join("");
+                me.bindListener(container, "._pg_", "click", "onFindPaging");
+            },
+            clearElement: function(container, selector, eventName, listener) {
+                var me = this;
+
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.unlisten(elements[i], eventName, listener);
+                    }
+                }
+
+                // 하위 노드 모두 지우기
+                var child = Polymer.dom(container).childNodes;
+                if (UT.isNotEmpty(child)) {
+                    for (var i = 0, len = child.length; i < len; i++) {
+                        Polymer.dom(container).removeChild(child[i]);
+                    }
+                }
+            },
+
+            // selector 의 event listener 를 등록한다
+            bindListener: function(container, selector, eventName, listener) {
+                var me = this;
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.listen(elements[i], eventName, listener);
+                    }
+                }
+            },
+            // 페이징 클릭 - 해당탭 & 검색어유지 & 품목분류유지 & X페이지변경 & 소팅유지 & 페이지당개수 유지
+            onFindPaging: function(event) {
+                var me = this;
+                var tab = me.getDataset(event, "tab");
+                var page = me.getDataset(event, "page");
+
+                if (UT.isEmpty(page) || UT.isEmpty(tab) || !me.hasData()) {
+                    return;
+                }
+                var param = me.get("indexParam");
+                param.from = param.size * (page - 1);
+
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            onFindSort: function(event) {
+                var me = this;
+                var sort = event.currentTarget.dataset.sort;
+                me.set("indexParam.sort", sort)
+
+                me.setActiveNode(UT.closest(event.target, "ul"), UT.closest(event.target, "li"));
+                me.onFindList();
+            },
+            setActiveNode: function(parent, activeNode) {
+                var me = this;
+                var nodes = Polymer.dom(parent).childNodes;
+                for (var i in nodes) {
+                    nodes[i].classList.remove("active");
+                }
+                activeNode.classList.add("active");
+            },
+            hasData: function(){
+                var me = this;
+                var count = me.get("uprcItemList").length;
+                return UT.isNumber(count) && count > 0 ? true : false;
+            },
+
+            // 클릭 이벤트의 파라미터
+            getDataset: function(event, name) {
+                var target = UT.isEmpty(event.target.dataset[name]) ? UT.closest(event.target, "button") : event.target;
+                return target.dataset[name];
+            },
+
+            saveIndexParam: function(param) {
+                var me = this;
+                me.set("indexParam", param);
+            },
+
+            onFindList: function(){
+                var me = this;
+                UT.request(me.$.findListUprcItemWithoutCatalog, function(e,res){
+                    me.set("uprcItemList",res.response);
+                    me.displayPagination(me.getPagingHtml());
+                });
+            },
+
+            getPagingHtml: function() {
+                var me = this;
+                var html = [];
+                var size = me.get("indexParam.size") || 2;
+                var from = me.get("indexParam.from") || 0;
+                var current = parseInt(from / size, 10) + 1;
+                var pages = parseInt(me.totalCount / size, 10) + (me.totalCount % size === 0 ? 0 : 1);
+                var start = Math.max(current - 5, 1);
+                var end = Math.min(start + 9, pages);
+                var prev = Math.max(current - 1, 1);
+                var next = Math.min(current + 1, pages);
+                var tab = "uprc_item_list";
+
+                for (var i = start; i <= end; i++) {
+                    html.push((current === i) ? "<button class='active'><span>" + i + "</span></button>" : "<button class='_pg_' data-tab='" + tab + "' data-page='" + i + "'><span>" + i + "</span></button>");
+                }
+                return html;
+            },
+            goFirstPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = 0;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goPreviousPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = param.from - param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goNextPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.from + param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goLastPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.size * (lastPageNumber-1);
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            onAddShoppingCartByUprc: function(event) {
+                var me           = this;
+                var provider     = me.$.grid_cntr_item.getDataProvider();
+                var selectedList   = provider.selectionCheckedItems();
+                var lenOfList = selectedList.length;
+
+                if(lenOfList === 0){
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                    return;
+                }
+                if(lenOfList > 0){
+                    var popup = UT.popup('ep-add-shopping-cart', me, "80%", "40%", {
+                        "save-close" : function(e, res){
+                            SCMdiManager.mdiHead.countShoppingCartList();
+                            popup.close();
+                        }
+                    });
+                    popup.show();
+                    popup.getWindowContent().load(selectedList);
+                }
+                //me.saveUprcItemToShoppingCartList(selectList);
+            },
+        });
+    </script>
+</dom-module>

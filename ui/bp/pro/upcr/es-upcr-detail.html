@@ -1,0 +1,1582 @@
+<sc-link rel="import" href="../../shared/ep-user-list.html"></sc-link>
+<sc-link rel="import" href="../../shared/ep-job-list.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-apply.html"></sc-link>
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="ep-upcr-mod-history.html"></sc-link>
+<sc-link rel="import" href="../../../bp/common/bidtemplate/ep-bidtemplate-list.html"></sc-link>
+<sc-link rel="import" href="../../../bp/common/bidtemplate/ep-bidtemplate-info.html"></sc-link>
+<sc-link rel="import" href="../../rfx/shared/ep-item-perform.html"></sc-link>
+
+<dom-module id="es-upcr-detail">
+<!--
+/**
+ *
+ *	@description : 단가계약요청 상세 화면
+ *  <pre>
+ * </pre>
+ * @FileName :
+ */
+-->
+
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- Upcr 조회 ajax -->
+		<sc-ajax
+			id="findUpcr"
+	        url="findUpcr.do"
+	        body="{{searchParam}}"
+	        on-response="completeFindUpcr">
+	    </sc-ajax>
+
+		<!-- 저장 ajax -->
+        <sc-ajax
+            id="saveDraftUpcr"
+            url="saveDraftUpcr.do"
+            on-response="completeSaveUpcr">
+        </sc-ajax>
+
+		<!-- 복사 ajax -->
+		<sc-ajax
+            id="copyUpcr"
+            url="copyUpcr.do"
+            on-response="completeSaveUpcr">
+        </sc-ajax>
+
+		<!-- 삭제 ajax -->
+		<sc-ajax
+            id="deleteUpcr"
+            url="deleteUpcr.do"
+            on-response="completeDeleteUpcr">
+        </sc-ajax>
+
+        <!-- 즉시 단가계약요청 -->
+        <sc-ajax
+            id="directReqUpcr"
+            url="directReqUpcr.do"
+            on-response="completeDirectReqUpcr">
+        </sc-ajax>
+
+        <!-- 단가계약요청 변경 가능여부 확인 -->
+        <sc-ajax
+            id="checkModifiableUpcrItems"
+            url="checkModifiableUpcrItems.do"
+            on-response="completeCheckModifiable">
+        </sc-ajax>
+
+        <!-- 단가계약요청 변경을 위한 조회 -->
+        <sc-ajax
+            id="findModUpcr"
+            url="findModUpcr.do"
+	        body="{{searchParam}}"
+            on-response="completeFindModUpcr">
+        </sc-ajax>
+
+        <!-- 단가계약요청 변경 -->
+        <sc-ajax
+            id="saveModUpcr"
+            url="saveModUpcr.do"
+            on-response="completeSaveUpcr">
+        </sc-ajax>
+
+        <!-- 코드 조회 -->
+		<sc-request-group init>
+	        <!-- 단가계약요청 목적 공통코드 콤보박스 목록 조회 P049 -->
+            <sc-ajax
+                url="getUpcrPurpCcd.do"
+                body="HDR"
+                content-type="text/plain"
+                last-response="{{codes.upcrPurpCd}}">
+            </sc-ajax>
+            <sc-code-group>
+	            <!-- 통화코드 -->
+				<sc-code code="C004"	value="{{codes.commCurCode}}"></sc-code>
+				<!-- 단가계약요청 승인 상태 -->
+				<sc-code code="P011"	value="{{codes.upcrAprvStsCode}}"></sc-code>
+				<!-- 구매 진행상태 -->
+		    	<sc-code code="P044"	value="{{codes.upcrStsCode}}"></sc-code>
+		    	<!-- 구매 유형 -->
+	        	<sc-code code="P045"	value="{{codes.purcTypCcdCode}}"></sc-code>
+	        	<!-- 공통 UOM 코드 -->
+		        <sc-code code="C007"	value="{{codes.comboUnitCode}}"></sc-code>
+	        </sc-code-group>
+        </sc-request-group>
+
+        <cc-auth-checker check-list="auth-a, auth-s, auth-r"></cc-auth-checker>
+        <cc-exchange id="exchange" value="{{codes.exchangeList}}"></cc-exchange>
+
+        <cc-page-title-bar title-text="[[titleText(upcrData.purc_typ_ccd,upcrData.upcr_purp_ccd)]]" i18n-disabled>
+			<sc-button text="변경 이력"		on-click="onShowModHistory"		hidden="[[!formula('showModHistory')]]"	auth-r></sc-button>
+			<sc-button text="단가계약요청 변경"		on-click="onModUpcr"				hidden="[[!formula('modifiable')]]"		auth-s></sc-button>
+			<sc-button text="단가계약요청 복사"		on-click="onCopyUpcr"				hidden="[[!formula('copyable')]]"		auth-s></sc-button>
+			<sc-button text="저장"			on-click="onTempSave"			hidden="[[!formula('editable')]]"		auth-s></sc-button>
+			<sc-button text="단가계약요청 발신"		on-click="onReqUpcr"				hidden="[[!formula('editable')]]"		auth-s></sc-button>
+			<sc-button text="결재 요청"		on-click="onReqApprovalUpcrBtn"	hidden="[[!formula('editable')]]"		auth-a></sc-button>
+			<sc-button text="삭제"			on-click="onDelete"				hidden="[[!formula('deletable')]]"		auth-s></sc-button>
+			<sc-button text="닫기"			on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+
+        <cc-link-document param="{{upcrData}}" app-type="UPCR"></cc-link-document>
+
+		<div class="flex page">
+
+			<cc-approval-summary app-id="{{upcrData.upcr_uuid}}" aprv-typcd="{{aprvTypeCd}}" hidden="[[!formula('requestedApproval')]]" auth-r></cc-approval-summary>
+
+			<cc-form-panel title-text="일반 정보"  collapsible="true" validation-group="upcrData" >
+				<cc-fieldset> <!-- cc-fieldset : Label 필드 1개 / Input 필드 1개 패턴 유지 필수 -->
+							<sc-label text="운영조직"></sc-label>
+						<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{upcrData.oorg_cd}}" selected-index="0" placeholder="필수" required="true" disabled="[[!formula('isNew')]]" on-change="onChangeOperOrgCd"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="단가계약요청 번호/차수"></sc-label>
+							<div class="field-box" style="width:100%">
+								<sc-text-field class="w-150" value="{{upcrData.upcr_no}}" readonly></sc-text-field>
+								<span style="margin:0 5px">&#47;</span>
+								<sc-text-field class="w-50 align-right" value="{{upcrData.upcr_revno}}" readonly></sc-text-field>
+							</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+						<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{upcrData.upcr_tit}}" required="true" readonly="[[!formula('editable')]]" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="구매 유형"></sc-label>
+							<sc-combobox-field display-field="label" value-field="data" items="{{codes.purcTypCcdCode}}" value="{{upcrData.purc_typ_ccd}}" required="true" readonly="[[!formula('isNew')]]" placeholder="필수"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="작성자"></sc-label>
+							<sc-text-field value="{{upcrData.upcr_crtr_nm}}" readonly></sc-text-field>
+					</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="작성자 부서"></sc-label>
+							<sc-text-field value="{{upcrData.upcr_req_dept_nm}}" readonly>
+							</sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="작성자 전화"></sc-label>
+							<sc-text-field value="{{upcrData.upcr_crtr_tel}}" readonly="[[!formula('editable')]]" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18"></sc-text-field>
+					</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<!-- 통화 단위는 data를 display-field로 사용함 -->
+					<cc-cur-search value="{{upcrData.cur_ccd}}" required="true" readonly="[[!formula('editable')]]" on-change="changeCur" hide-trigger="[[!formula('editable')]]" result-hidden="true"></cc-cur-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="금액" ></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-text-field  class="w-150 align-right" value="{{upcrData.only_cur_upcr_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-text-field>
+						<!--
+						<sc-text-field  class="w-150 align-right" value="{{upcrData.only_cur_upcr_amt}}" input-cover="true" format-type="amt" readonly="true" hidden="[[!formula('isOnlyCur')]]"></sc-text-field>
+						<span style="margin:0 5px" hidden="[[!formula('isOnlyCur')]]">&#47;</span>
+						<sc-label text="원화 환산 금액" hidden="[[!formula('isOnlyCur')]]"></sc-label>
+						<sc-text-field  class="w-150 align-right" value="{{upcrData.upcr_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-text-field>
+						<span style="margin-left:5px" hidden="[[formula('isOnlyCur')]]">([[translate('원화 환산 금액')]])</span> -->
+					</div>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field value="{{upcrData.upcr_rmk}}"  max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="upload" class="h-200" value="{{upcrData.athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+
+			<cc-form-panel title-text="변경 사유"  hidden="[[!formula('isUpcrMod')]]">
+				<cc-fieldset column-span="2">
+							<sc-label text="변경 사유"></sc-label>
+							<sc-textarea-field class="h-150" value="{{upcrData.upcr_chg_rsn}}" max-length="1000" readonly="[[!formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			<sc-grid id="gridPanel" class="h-400" collapsible="true" aggregate="true" use-dummy="false"
+					 editable="[[formula('editable')]]"
+					 use-state="[[formula('editable')]]"
+					 use-selection="[[formula('editable')]]"
+					 calc-footer-include-invisible="true"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd"
+					 selection-able-function="selectionAbleFn">
+				<cc-grid-toolbar title-text="품목 정보">
+					<sc-button text="무코드 품목 추가"	on-click="onAddNoCdItem"			hidden="[[!formula('noCdItemAddable')]]"	auth-s></sc-button>
+					<sc-button text="품목 추가"			on-click="onShowUpcrCateItemPopup"	hidden="[[!formula('editable')]]"	auth-s></sc-button>
+					<sc-button text="일괄 적용"			on-click="onAllApplyUpcrItem"			hidden="[[!formula('editable')]]"	auth-s></sc-button>
+					<sc-button text="삭제"				on-click="onDeleteUpcrItem"			hidden="[[!formula('editable')]]"	auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="upcr_lno"			header-text="항번"				width="50"	text-align="center"	editable="false"	data-type="number"></sc-data-column>
+					<sc-combobox-column	data-field="upcr_sts_ccd"	header-text="상태"		width="120"	text-align="center"	editable="false"
+										display-field="label"		value-field="data"				items="{{codes.upcrStsCode}}"></sc-combobox-column>
+					<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"			width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="sg_cd"	header-text="소싱그룹 코드"			width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="sg_nm"	header-text="소싱그룹 명"			width="100"	text-align="center"	editable="false"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="품목 명"				width="280">
+						<sc-data-column		data-field="disp_item_nm"	width="250"	text-align="left"	item-editable-function="onItemEditableFn"		max-length="500"	required="true"></sc-data-column>
+						<sc-image-column	data-field="img_item_cd"	image-change-function="onImageChangeFn"	width="30"	text-align="center" editable="false"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column		data-field="item_spec"			header-text="품목 규격"				width="250"	text-align="left"	item-editable-function="onItemEditableFn"	max-length="1000"
+										item-style-function="onItemStyleFn"		validator-function="gridValidatorFn"></sc-data-column>
+					<sc-image-column	data-field="img_dtl_spec"	header-text="품목 규격 상세"			width="100"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+										image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="uom_ccd"		header-text="UOM"				width="60"	text-align="center"	item-editable-function="onItemEditableFn"
+										display-field="data"		value-field="data"				items="{{codes.comboUnitCode}}" required="true"></sc-combobox-column>
+					<sc-data-column		data-field="cur_ccd"			header-text="통화"				width="70"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="upcr_qty"		header-text="수량"				width="80"	text-align="right"	item-editable-function="onItemEditableFn"
+										required="true"				validator-function="gridValidatorFn"			editor-regex-function="onRegexFn"	validate-on-cell-paste="true"
+										data-type="number"			format-type="qty" 				min-value="0"	max-length="8"></sc-data-column>
+					<sc-data-column		data-field="upcr_uprc"		header-text="단가"		width="100"	text-align="right"	item-editable-function="onItemEditableFn"
+										editor-regex-function="onRegexFn"							validate-on-cell-paste="true"
+										data-type="number"			format-type="price"				validator-function="gridValidatorFn" min-value="0"	max-length="13"></sc-data-column>
+					<sc-data-column		data-field="upcr_amt"			header-text="금액"		width="140"	text-align="right"	editable="false"
+										format-type="amt"			aggregate-format="amt" 			aggregate-function="onAmtAggregateFn" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-date-column		data-field="req_dlvy_dt"		header-text="요청 납품 일자"		width="120"	text-align="center"	item-editable-function="onItemEditableFn"	visible="[[formula('visibleGridQty')]]"
+										required="true"				validator-function="gridValidatorFn"></sc-date-column>
+					<sc-date-column		data-field="const_st_dt"			header-text="공사 시작 일자"		width="100"	text-align="center"	item-editable-function="onItemEditableFn"	visible="[[formula('visibleGridConstsvc')]]"
+										validator-function="gridValidatorFn"	required="true"></sc-date-column>
+					<sc-date-column		data-field="const_exp_dt"			header-text="공사 종료 일자"		width="100"	text-align="center"	item-editable-function="onItemEditableFn"	visible="[[formula('visibleGridConstsvc')]]"
+										validator-function="gridValidatorFn"	required="true"></sc-date-column>
+					<sc-group-column hide-child-headers="true" header-text="플랜트" width="180" text-align="center" editable="false">
+						<sc-data-column data-field="plt_cd" width="70" text-align="center" editable="false"></sc-data-column>
+						<sc-data-column data-field="plt_nm" width="70" text-align="center" editable="false"></sc-data-column>
+						<sc-image-column image-cls="search" data-field="img_plant_select" width="30" text-align="center"
+										 editable="false" visible="[[formula('noCdItemPlantAddable')]]" image-change-function="onImagePlantSelectShowFunction"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column		data-field="dlvy_plc"		header-text="[[getRdLocatHdText(upcrData.purc_typ_ccd)]]"			width="150"	text-align="left"	item-editable-function="onItemEditableFn"	visible="[[!formula('isUpcrPurpUC')]]"  max-length="1000"	required="true"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="구매 그룹"			width="180"	text-align="center"	editable="false">
+						<sc-data-column	data-field="purc_grp_cd"									width="50"	text-align="center"	editable="false"	required="true"></sc-data-column>
+						<sc-data-column	data-field="purc_grp_nm"									width="100"	text-align="center"	item-editable-function="onItemEditableFn" required="true"	max-length="60"></sc-data-column>
+						<sc-image-column	image-cls="search"		data-field="img_purc_grp"		width="30"	text-align="center" editable="false"	visible="[[formula('editable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column	hide-child-headers="true"	header-text="실수요자"	width="180"	text-align="center"	editable="false">
+						<sc-data-column	data-field="upcr_realusr_id"										width="60"	text-align="center"	editable="false"></sc-data-column>
+						<sc-data-column	data-field="upcr_realusr_nm"										width="100"	text-align="center"	item-editable-function="onItemEditableFn"	max-length="50"></sc-data-column>
+						<sc-image-column	image-cls="search"
+										data-field="img_upcr_sug"										width="30"	text-align="center" editable="false"	visible="[[formula('editable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column	hide-child-headers="true"	header-text="입고 담당자"		width="180"	text-align="center"	editable="false"	visible="[[!formula('isUpcrPurpUC')]]">
+						<sc-data-column	data-field="gr_pic_id"										width="60"	text-align="center"	editable="false"	required="true"></sc-data-column>
+						<sc-data-column	data-field="gr_pic_nm"										width="100"	text-align="center"	item-editable-function="onItemEditableFn"	required="true"	max-length="50"></sc-data-column>
+						<sc-image-column	data-field="img_gr_pic"	image-cls="search"				width="30"	text-align="center" editable="false"	visible="[[formula('editable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column		data-field="tl_yn"		header-text="touchless 여부"		width="100"	text-align="center"	editable="false"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_uuid"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_no"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_item_uuid"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="oorg_cd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="purc_typ_ccd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_chg_yn"	data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="upcr_purp_ccd"		data-type="text"></sc-grid-field>
+					<sc-grid-field 	data-field="item_oorg_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="cur_ccd"				data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_no"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_revno"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="pre_uprccntr_item_uuid"	data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_item_uuid"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="uprccntr_lno"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec_dtl"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="has_prev_yn"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_nm"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_nm_en"		data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-upcr-detail',
+			/***
+			 * Object, Array 타입에 default 값을 셋팅할 때는
+			 * 반드시 function() return {} 을 사용해야 함.
+			 ***/
+			properties : {
+                searchParam : {
+                	type : Object,
+                	value : function() {
+                		return {upcr_uuid : ""};
+                	}
+                },
+				upcrData : {
+					type : Object,
+					value : function() {
+						var currentUser = SCSessionManager.currentUser;
+						return {
+							saveType       : "",
+							upcr_uuid          : "",
+							upcr_no          : "",
+							upcr_revno         : 1,
+							uprc_purp_ccd   : "UPRCCNTR_SGNG",
+							purc_typ_ccd	: "QTY",
+							cur_ccd            : "KRW",
+							upcr_sts_ccd    : "CRNG",
+							upcr_amt     : 0,
+							upcr_crtr_id      : currentUser.usr_id,
+							upcr_crtr_nm      : currentUser.disp_usr_nm,
+							upcr_req_dept_nm : currentUser.disp_dept_nm,
+							upcr_crtr_dept_cd    : currentUser.dept_cd,
+							upcr_crtr_tel : currentUser.phone_no
+						};
+					}
+				},
+				aprvTypeCd : {
+					type : String,
+					value : function() {
+						return "UPCR";
+					}
+				},
+                codes : {
+                	type : Object,
+                	value : function(){
+                		return {
+	                		commCurCode    : [],
+	                		upcrAprvStsCode  : [],
+	        				upcrStsCode  : [],
+	        				purcTypCcdCode    : [],
+	        				comboUnitCode  : [],
+	        				upcrPurpCd : [],
+	        				exchangeList: []
+                		};
+                	},
+                	reset: false	//초기화 대상에서 제외할 경우
+                },
+				pageType : {
+					type : String,
+					value : function() {
+						return "UPCR";
+					}
+				},
+				canGridIconActionableList : {
+					type : Array,
+					value : function() {
+						return ["PR_CRNG","PR_APVL_RET","PR_CHG_CRNG"];	//PR_CRNG:구매요청저장, PR_APVL_RET:구매요청품의반려, PR_CHG_CRNG:구매요청변경저장
+					}
+				},
+				currentUser : {
+					type : Object,
+					value : function() {
+						return SCSessionManager.currentUser;
+					}
+				},
+				dupLnos: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				}
+			},
+			titleText: function(purcTypCcd,upcrPurpCcd){
+				var me = this;
+				var headerText2 = me.translate("수량");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText2 = me.translate("공사/용역");
+				}
+				return (me.translate("단가계약요청 정보") +"-"+ headerText2);
+			},
+			getRdLocatHdText: function(purcTypCcd){
+				var me = this;
+				var headerText = me.translate("납품 장소");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText = me.translate("수행 장소");
+				}
+				return headerText;
+            },
+			formulas : {
+				//신규 생성 (운영조직 수정 가능한 상태)
+				isNew: function() {
+					return UT.isEmpty(this.upcrData.upcr_no);
+				},
+				//복사 가능 상태
+				copyable: function() {
+					return (!this.formula('isNew') && this.pageType === "UPCR");
+				},
+				//수정 가능 상태
+				editable: function() {
+					return (["CRNG", "APVL_RET", "APVL_CNCL"].indexOf(this.upcrData.upcr_sts_ccd) > -1 || this.pageType === "UPCR_CHG");
+				},
+				//삭제 가능 상태
+				deletable: function() {
+					return (!this.formula('isNew') && ["CRNG", "APVL_RET", "APVL_CNCL"].indexOf(this.upcrData.upcr_sts_ccd) > -1 && this.pageType === "UPCR");
+				},
+				//결재 요청한 상태
+				requestedApproval: function() {
+					//진행중,결재승인,결재 반려 상태일때만 보임
+					return (["APVL_PRGSG", "APVD", "APVL_RET"].indexOf(this.upcrData.upcr_sts_ccd) > -1 && this.pageType !== "UPCR_CHG");
+				},
+				//단가계약요청 변경 가능 상태
+				modifiable: function() {
+						var me = this,
+							last_upcr_rev = this.upcrData.last_upcr_rev,
+							upcr_revno      = this.upcrData.upcr_revno,
+							upcr_sts_ccd = this.upcrData.upcr_sts_ccd,
+							provider = me.$.gridPanel.getDataProvider();
+
+					if(!this.formula('isNew') && (last_upcr_rev === upcr_revno) && this.pageType === "UPCR") {
+						if(upcr_sts_ccd === "APVD") {
+							//var allRows = this.upcrData.upcrItems;
+							var allRows = provider.getItems();
+							var noModCnt = 0;
+
+							for(var i=0 ; i<allRows.length ; i++) {
+								var item = allRows[i];
+								if(["PR_RCPT_WTG","PR_RCPT","PR_RET"].indexOf(item.upcr_sts_ccd) < 0) {
+									noModCnt++;
+								}
+							}
+							if(noModCnt === 0) {
+								return true;
+							}
+						}
+					}
+					return false;
+				},
+				// 변경이력 버튼
+				showModHistory: function() {
+					var me = this;
+					var lastUpcrRev = me.upcrData.last_upcr_rev;
+
+					return !me.formula("isNew") && (lastUpcrRev > 1) && me.pageType === "UPCR";
+				},
+				visibleGridQty: function(){
+					var me =  this;
+					return (me.formula('isPurcTypCcdQty') && !me.formula('isUpcrPurpUC'));
+				},
+				visibleGridConstsvc: function(){
+					var me = this;
+					return (!me.formula('isPurcTypCcdQty') && !me.formula('isUpcrPurpUC'));
+				},
+				isPurcTypCcdQty: function(){
+					// QTY : 수량 , CONSTSVC : 공사/용역
+					return (this.upcrData.purc_typ_ccd === "QTY");
+				},
+				isUpcrPurpUC : function() {
+					return (this.upcrData.upcr_purp_ccd === "UPRCCNTR_SGNG");
+				},
+				isUpcrMod : function() {
+					var me = this;
+
+					var upcrRev = parseInt(me.upcrData.upcr_revno, 10);
+					return (upcrRev > 1);
+				},
+				// 무코드품목 추가 가능여부
+				noCdItemAddable: function() {
+					var me = this;
+
+					// 수정가능 && 단가계약 아님
+					return me.formula("editable") && !me.formula("isUpcrPurpUC");
+				},
+				hasNoCdItem: function() {
+					var me = this;
+
+					return me.get("upcrData.has_no_cd_item") === "Y";
+				},
+				isOnlyCur: function(){
+					var me = this;
+					return (me.get("isOnlyCur"));
+				},
+				noCdItemPlantAddable: function() {
+					var me = this;
+					return me.formula("editable") && me.formula("hasNoCdItem");
+				}
+			},
+			observers : [
+		           'changePageType(pageType)',
+					'changPurcTypCcd(upcrData.purc_typ_ccd)',
+		           'changeUpcrRev(upcrData.upcr_revno)'
+		    ],
+		    /**************************************************
+			 * 화면 바인딩 처리
+			 **************************************************/
+			//운영조직 변경 시 호출
+			onChangeOperOrgCd : function(e) {
+				var me = this;
+
+				if(!e.isTrusted) {
+					var operOrgCds =   me.$.operorgcombobox.get("codes.operOrgCd");
+					var operOrgCd = me.get("upcrData.oorg_cd");
+					if(me.formula('isNew') && UT.isNotEmpty(operOrgCd)){
+						var operOrgCdMap = UT.arrayFilterChange(operOrgCds, {key:  'oorg_cd' , value: operOrgCd });
+						me.set("upcrData.cur_ccd",operOrgCdMap[0]['cur_ccd']);
+					}
+					if(me.formula('isNew') && me.get('loadCompleted')) {
+						var provider = me.$.gridPanel.getDataProvider();
+
+						if(SCUtil.isFunction(provider.getItemSize) && (provider.getItemSize() > 0) ) {
+							UT.alert("STD.PR1043");	//"운영조직 변경 시 품목 정보가 초기화 됩니다."
+
+							provider.removeAll();
+							/*
+							 * removeAll(collectionRemoveItems=default:true)
+							 * -> removeItems에 담아두고 getRemoveItems()를 사용하여 DB에서 삭제할 데이터를 반환
+							 */
+						}
+					}
+				}
+			},
+			//pageType 변경시
+			changePageType : function(pageType) {
+				var me = this;
+				me.set("canGridIconActionableList", (pageType === "UPCR_CHG") ? ["PR_CRNG","PR_CHG_CRNG","PR_RCPT_WTG","PR_RCPT","PR_RET"] : ["PR_CRNG","PR_APVL_RET","PR_CHG_CRNG"]);
+			},
+			// 구매 유형 공통코드 변경시
+			changPurcTypCcd: function(purcTyp){
+				var me = this;
+				me.applyFormula();
+			},
+			//단가계약요청 차수
+			changeUpcrRev : function(upcrRev) {
+				var me = this;
+				var upcrPurpCcd = me.get("upcrData.upcr_purp_ccd");
+				//조회한 upcrData의 upcr_revno(차수)가 2이상일 경우 결재 유형이 단가계약요청변경(UPCR_CHG)
+				if(parseInt(upcrRev,10) > 1) {
+					me.set("aprvTypeCd", "UPCR_CHG");					//결재 유형 코드(UPCR_CHG) : 단가계약요청변경
+				} else {
+					me.set("aprvTypeCd", "UPCR");					//결재 유형 코드(PR) : 단가계약요청
+				}
+				me.applyFormula('isUpcrMod');
+			},
+
+			// 통화 변경 시
+            changeCur : function(e) {
+                var me = this;
+
+                if(!e.isTrusted && me.formula("editable") && me.get('loadCompleted')) {
+                    var cur = me.get("upcrData.cur_ccd");
+
+                    var provider = me.$.gridPanel.getDataProvider();
+                    if(provider && provider.setItemAtBatch && me.formula("editable")) {
+
+                        // 전체 품목 변경
+                        provider.setItemAtBatch(true, function(index, data) {
+                            var price = data.upcr_uprc || 0, // 단가계약요청 단가
+                                qty = data.upcr_qty || 0, // 수량
+                                precPrice = CCPrecManager.format("price",price,cur), // 요청단가 소수점 처리
+                                amt = (new BigNumber(precPrice)).mul(new BigNumber(qty)).toFixed(), // 금액 = 요청단가 소수점 처리 * 수량
+                                precAmt = CCPrecManager.format("amt",amt,cur); // 금액 소수점 처리
+
+
+                                //단가계약건은 통화그대로 사용
+                                if(data.uprccntr_yn != "Y"){
+                                	return {
+                                        'cur_ccd' : cur,
+                                        'upcr_uprc' : precPrice,
+                                        'upcr_amt' : precAmt
+                                    }
+                                }
+                        });
+                    }
+                }
+            },
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function() {
+				var me = this;
+			},
+			// 2. 화면 load
+			load : function(data, items) {
+				var me = this;
+
+				me.set("loadCompleted", false);
+
+				//신규생성
+				if (UT.isEmpty(data.upcr_uuid)) {
+					me.set("upcrData.upcr_purp_ccd", (data.upcr_purp_ccd || "UPRCCNTR_SGNG"));
+					if (UT.isNotEmpty(data.oorg_cd)) {
+					    me.set("upcrData.oorg_cd", data.oorg_cd);
+					}
+					if (UT.isNotEmpty(items)) {
+					    me.addItemList(items);
+					}
+
+					me.applyFormula();
+					me.set('loadCompleted', true);
+				} else {
+					me.set("searchParam.upcr_uuid", data.upcr_uuid);
+
+					if(data.pageType) {
+						me.set("pageType", data.pageType);
+					}
+
+					if(me.pageType === "UPCR_CHG") {
+						me.findModUpcr();
+					} else {
+						me.findUpcrDetail();	//upcr 상세 조회
+					}
+				}
+			},
+
+			/**************************************************
+			 * validation 설정
+			 **************************************************/
+			//그리드 validator-function
+            gridValidatorFn: function(headerText,dataField,data){
+                var me = this,
+					value = data[dataField];
+
+                if(dataField === "upcr_qty"){
+                    //수량은 0 보다 크고 , 필수값
+                    if(new BigNumber(value || 0).isZero()) {
+                        return me.translate("STD.E1008", null, me.translate(headerText), 0);
+                    }
+
+                    var unitCd = data.uom_ccd;
+                    if(!CCPrecManager.validate("qty", value, unitCd)) { // 단위에 맞는 수량 소수점 체크
+                        return me.translate("STD.E1021", null, CCPrecManager.validateInfo("qty", unitCd).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+                    }
+                } else if(dataField === "upcr_uprc"){
+                	var cur = me.get("upcrData.cur_ccd");
+                	if(!CCPrecManager.validate("price", value || 0, cur)) { // 통화에 맞는 단가 소수점 체크
+                        return me.translate("STD.E1021", null, CCPrecManager.validateInfo("price", cur).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+                    }
+				} else if(dataField === "req_dlvy_dt"){
+                    if(me.get("upcrData.upcr_purp_ccd") !== "UPRCCNTR_SGNG") {
+                        var value = UT.toTime(UT.toDate(value,"yyyyMMdd"));
+                        var compareValue = UT.toTime(new Date());
+                        if (value < compareValue) {
+                            // {0}은(는) {1}이후 날짜로 입력하십시오
+                            return me.translate("STD.E1013", null, me.translate(headerText), UT.formatDate(compareValue));
+                        }
+                    }
+                } else if(dataField === "item_spec") {
+                	// 구매품목유형: 미등록(무코드) 인 경우 규격 필수 입력
+                	if(data["item_cd_crn_typ_ccd"] === "CDLS" && UT.isEmpty(value)) {
+                		// '{0}'은(는) 필수 입력 항목입니다.
+                		return me.translate("STD.E1001", null, me.translate(headerText));
+                	}
+                }
+                return true;
+            },
+			// 유효성검사
+            validUpcr : function(saveType) {
+				var me = this;
+
+				if(!me.validate('upcrData')){
+					UT.alert("STD.E0000");
+                    return false;
+				}
+
+				// 단가계약요청/결재상신일 경우 품목 추가 여부 체크
+				if(saveType === 'directReqUpcr' || saveType === 'approvalReqUpcr') {
+					var provider = me.$.gridPanel.getDataProvider();
+					if(provider.getItemSize() === 0) {
+						UT.alert("STD.PR1002"); //'품목 정보가 없습니다.'
+						return false;
+					}
+				}
+				//그리드 유효성검사
+                if(!me.$.gridPanel.validate()) {	//실패
+                	UT.alert("STD.N1102");
+                	return false;
+                }
+
+            	// 품목 중복체크
+				if(me.hasDupItems()) {
+					// 중복된 '{0}'(이)가 존재합니다.
+					var msg = me.translate("STD.E1042", null, this.translate("품목 정보"))
+							+ "<br/>[" + me.translate("항번") + "] " + me.dupLnos.toString();
+					UT.alert(msg, null, true);
+					return false;
+				}
+
+				return true;
+			},
+			// 품목 중복체크
+			hasDupItems: function() {
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					items = provider.getItems(),
+					len = items.length;
+            	if(len > 1) {
+	            	// 중복체크 대상 컬럼
+					var cols = ["disp_item_nm", "item_spec", "uom_ccd"];
+					if(!me.formula('isUpcrPurpUC')) {
+						cols.push("req_dlvy_dt", "dlvy_plc");
+					}
+					// 두 row 데이터 중복체크
+					var isEquals = function(row1, row2, cols) {
+						var eq = true;
+						for(var i=0, colsLen=cols.length; i<colsLen; i++) {
+							var col = cols[i];
+							if(row1[col] !== row2[col]) {
+								eq = false;
+								break;
+							}
+						}
+						return eq;
+					};
+					// 중복체크
+					var hasDup = false, dupLnos = [];
+					for(var i=0; i<len-1; i++) {
+						var item = items[i];
+						for(var j=i+1; j<len; j++) {
+							var compItem = items[j];
+							if(isEquals(item, compItem, cols)) {
+								hasDup = true;
+								if(dupLnos.indexOf(item["upcr_lno"]) === -1)
+									dupLnos.push(item["upcr_lno"]);
+								dupLnos.push(compItem["upcr_lno"]);
+							}
+						}
+						if(hasDup) break;	// item 기준으로 중복되는 compItem들을 dupLnos에 담음 (item도 포함)
+					}
+					me.dupLnos = dupLnos;
+					return hasDup;
+            	}
+            	return false;
+			},
+
+            /**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick : function(event) {
+				var me = this;
+				var data = event.detail.data,
+					item = event.detail.item,
+                	provider = event.detail.provider;
+
+				if(me.canGridIconActionableList.indexOf(data['upcr_sts_ccd']) > -1) {
+					//현재 row 인덱스를 담아둔다.
+					me.rowIndex = item.rowIndex;
+
+					if(item.dataField === "img_purc_grp") {			//구매그룹일 경우
+						me.showJobPopup();
+					} else if(item.dataField === 'img_upcr_sug') {		//단가계약요청 의뢰자일 경우
+						me.showUserPopup('upcr_realusr');
+					} else if(item.dataField === 'img_gr_pic') {		//검수 담당자일 경우
+						me.showUserPopup('gr_pic');
+					} else if(item.dataField === 'img_plant_select' && (UT.isNotEmpty(data["item_cd_crn_typ_ccd"]) && data["item_cd_crn_typ_ccd"] === 'CDLS')) {
+						// 팝업 호출
+						UT.popupOperOrgLinkSearch(me, me.prData.oorg_cd, 'POIO', function (selectedItems) {
+							provider.setItemAt(item.rowIndex, {
+								"plt_cd": selectedItems[0].org_cd,
+								"item_oorg_cd": selectedItems[0].oorg_cd,
+								"plt_nm": selectedItems[0].logic_org_nm
+							});
+						});
+					}
+				}
+			 	if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+			 		//현재 row 인덱스를 담아둔다.
+					me.rowIndex = item.rowIndex;
+
+					me.showDetailSpec(data, provider);
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					me.showItemContractHistory(data["item_cd"]);
+				}
+            },
+			// grid item edit end 이벤트
+			onItemEditEnd : function(event) {
+				var me = this, e = event.detail,
+					data = e.data,
+					item = e.item,
+					newValue = e.newValue,
+					oldValue = e.oldValue,
+					provider = e.provider;
+
+            	me.rowIndex = item.rowIndex;
+
+
+            	if(item.dataField === 'upcr_realusr_nm') {							//단가계약요청의뢰자 일경우
+            		provider.setItemAt(item.rowIndex, {'upcr_realusr_id':''});
+
+            		if(UT.isNotEmpty(newValue)){
+            			me.showUserPopup('upcr_realusr', {'usr_nm' : newValue}, true);
+                	}
+
+            	} else if(item.dataField === 'purc_grp_nm') {					//구매그룹일경우
+            		provider.setItemAt(item.rowIndex, {'purc_grp_cd':''});
+
+            		if(UT.isNotEmpty(newValue)){
+            			me.showJobPopup({'purc_grp_nm' : newValue}, true);
+            		}
+
+            	} else if(item.dataField === 'gr_pic_nm') {						//검수 담당자 일경우
+            		provider.setItemAt(item.rowIndex, {'gr_pic_id':''});
+
+            		if(UT.isNotEmpty(newValue)){
+            			me.showUserPopup('gr_pic', {'usr_nm' : newValue}, true);
+            		}
+
+            	} else if(["uom_ccd", "upcr_qty", "upcr_uprc"].indexOf(item.dataField) > -1) {
+                    var unit = data["uom_ccd"],
+                        qty = data["upcr_qty"] || 0,
+                        price = data["upcr_uprc"] || 0;
+
+                    // 단위에 맞는 소수점 처리
+                    if (item.dataField === "uom_ccd") {
+                        qty = CCPrecManager.format("qty",qty,unit);
+                    }
+
+                    // 통화에 맞는 소수점 처리
+                    var amt = CCPrecManager.format("amt",(new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), me.get("upcrData.cur_ccd"));
+
+                    provider.setItemAt(item.rowIndex, {
+                        "upcr_qty": qty,
+                        "upcr_amt": amt
+                    });
+                }
+			},
+			//원화 환산금액계산 : item 별로 cur이 다른경우 환산 계산, 아니라면 헤더 cur표시,
+			onAmtAggregateFn: function(dataField, datas){
+				var me = this;
+            	var result = new BigNumber('0');
+				var originResult = new BigNumber('0');
+				var headerCur = me.get("upcrData.cur_ccd");
+				var  notHeaderCurCnt = 0;
+            	//환율계산
+            	for(var i=0; i<datas.length; ++i){
+            		var price = new BigNumber(datas[i][dataField] || 0);
+            		var cur = datas[i]["cur_ccd"];
+
+					originResult = originResult.plus(price);
+
+					price = me.$.exchange.getExchange(price,cur);
+
+            		result = result.plus(price);
+
+					if((cur != headerCur)){
+						notHeaderCurCnt++;
+					}
+            	}
+            	me.set('upcrData.upcr_amt', result.toFixed());
+				me.set('upcrData.only_cur_upcr_amt',originResult.toFixed());
+				me.set("isOnlyCur",(notHeaderCurCnt ===0));
+				me.applyFormula('isOnlyCur');
+            	return '';
+            },
+            onSortCompareFn: UT.sortBigNumber,
+            //단가계약여부
+            cntrYnConverter: function(rowIndex, fieldName, data) {
+            	return UT.isEmpty(data["uprccntr_no"]) ? "N" : "Y";
+            },
+            // grid item editable function
+			onItemEditableFn : function(data, item) {
+				var me = this;
+
+				// 단가
+				if(item.dataField === 'upcr_uprc') {
+					// 단가계약 요청인 경우
+					if(me.formula('isUpcrPurpUC')){
+						return true;
+					}else{
+						// 일반구매 요청인 경우, 단가계약 체결 품목이 아닌 경우
+						return UT.isEmpty(data['uprccntr_no']);
+					}
+				// 품목명, 규격
+				} else if(["disp_item_nm", "item_spec"].indexOf(item.dataField) > -1) {
+					return (data["item_cd_crn_typ_ccd"] === "CDLS") && (data["has_prev_yn"] === "N") && me.formula("noCdItemAddable") && UT.isEmpty(data["upcr_item_uuid"]);
+				} else {
+					return (me.canGridIconActionableList.indexOf(data['upcr_sts_ccd']) > -1);
+				}
+			},
+			//checkbar selectable
+			selectionAbleFn : function(data) {
+				return (this.canGridIconActionableList.indexOf(data['upcr_sts_ccd']) > -1);
+			},
+			// 구매그룹 팝업 호출
+            showJobPopup : function(param, autoComplete) {
+            	var me = this;
+
+            	var defaultParam = {
+        				co_cd      : me.currentUser.co_cd,
+            			purc_grp_typ_ccd : 'PURC'	//직무유형이 구매
+           		};
+            	if(UT.isObject(param)) {
+            		for(var keys in param) {
+            			defaultParam[keys] = param[keys];
+            		}
+            	}
+
+				var jobPopup = me.createJobPopup();
+           		jobPopup.show();
+           		jobPopup.getWindowContent().load({singleSelect:true, defaultParam:defaultParam, autoComplete:autoComplete});
+            },
+            // 구매그룹 팝업 생성
+            createJobPopup : function() {
+            	var me = this;
+
+            	return UT.popup("ep-job-list", me, 800, 500, {
+    				'selected-items' : function(popup, e) {
+    					var result   = e.detail,
+    						selected = result[0];
+
+       					var provider = me.$.gridPanel.getDataProvider();
+       					provider.setItemAt(me.rowIndex, {
+       						'purc_grp_cd': selected.purc_grp_cd,
+       						'purc_grp_nm': selected.disp_purc_grp_nm
+     					});
+       					me.$.gridPanel.applyFocus();
+               			popup.close();
+    				}
+    			}, {titleText : me.translate("구매 그룹 검색")});
+            },
+            // 사용자 팝업 호출
+            showUserPopup : function(usrTyp, param, autoComplete) {
+            	var me = this;
+            	me.usrTyp = usrTyp;
+
+            	var titleText = null;
+            	if(usrTyp === 'upcr_realusr') {
+            		titleText = "실수요자 검색";
+            	} else if(usrTyp === 'gr_pic') {
+            		titleText = "입고 담당자 검색";
+            	}
+
+            	var userPopup = me.createUserPopup(titleText);
+				userPopup.show();
+				userPopup.getWindowContent().load({singleSelect : true, defaultParam : param, autoComplete : autoComplete});
+            },
+            // 사용자 팝업 생성
+            createUserPopup : function(titleText) {
+            	var me = this;
+
+            	return UT.popup('ep-user-list', me, '50%', '70%', {
+					'selected-items' : function(popup, e) {
+						var result   = e.detail,
+							selected = result[0];
+
+						var provider = me.$.gridPanel.getDataProvider();
+
+						var data = {};
+						data[me.usrTyp+'_id'] = selected.usr_id;
+						data[me.usrTyp+'_nm'] = selected.display_usr_nm;
+
+						provider.setItemAt(me.rowIndex, data);
+						me.$.gridPanel.applyFocus();
+
+						popup.close();
+					}
+				}, {titleText : titleText});
+            },
+            // 상세규격 팝업
+            showDetailSpec: function(data, provider) {
+            	var me = this;
+
+            	var readonly = (data["has_prev_yn"] === "Y") || (!me.formula('noCdItemAddable'));
+            	var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 260 : 260), {
+            		"clear-dtl-spec": function(popup, e) {
+            			provider.setItemAt(me.rowIndex, {
+                    		"item_spec_dtl": null
+                    	});
+            			popup.close();
+            		},
+            		"apply-dtl-spec": function(popup, e) {
+            			var dtlSpec = e.detail.item_spec_dtl;
+
+            			provider.setItemAt(me.rowIndex, {
+                    		"item_spec_dtl": dtlSpec
+                    	});
+            			popup.close();
+            		}
+            	});
+            	popup.show();
+            	popup.getWindowContent().load(data, readonly);
+            },
+
+            // 그리드 item-style-function
+            onItemStyleFn: function(data, item) {
+            	var me = this,
+	        		styleObj = {};
+
+	        	if(item.dataField === "spec" && me.onItemEditableFn(data, item)) {
+	        		styleObj = {
+	        			iconLocation : "leftSide",
+	                    iconOffset   : 0,
+	                    iconPadding  : 0,
+	                    paddingLeft  : 0,
+	                    paddingTop   : 0,
+	                    iconUrl      : "bower_components/sc-grid/resources/img/icon_required.png"
+	        		};
+	        	}
+	        	return styleObj;
+            },
+            // 그리드 image-change-function
+            onImageChangeFn: function(data, item){
+                if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                	return "link";
+                } else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+					return "link";
+				}
+               	return null;
+            },
+
+            /**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			// PR 상세 조회
+			findUpcrDetail : function() {
+				var me = this;
+
+				UT.request(me.$.findUpcr);
+			},
+			// Upcr상세 조회후 handler
+			completeFindUpcr : function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+				me.set("upcrData", lastResponse.upcrData);
+				me.$.gridPanel.setDataProvider(lastResponse.upcrItems);
+
+				me.applyFormula();
+				me.set('loadCompleted', true);
+			},
+			// 단가계약요청 변경 버튼 클릭
+			onModUpcr : function() {
+				var me = this;
+
+				// 해당 품목들이 변경 가능한 상태인지를 확인
+				me.$.checkModifiableUpcrItems.body = {
+					upcrData : me.get("upcrData")
+				};
+				UT.request(me.$.checkModifiableUpcrItems);
+			},
+			//변경가능여부 확인 완료
+			completeCheckModifiable: function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+
+				if(lastResponse.resultStatus === "S") {
+					//화면 타입이 단가계약요청변경
+					me.set("pageType", "UPCR_CHG");
+
+					me.findModUpcr();
+				} else {
+					me.failureMessageHandler(lastResponse);
+				}
+			},
+			// 단가계약요청 변경 데이터 조회
+			findModUpcr : function() {
+				var me = this;
+
+				UT.request(me.$.findModUpcr);
+			},
+			// 단가계약요청 변경 데이터 조회 완료
+			completeFindModUpcr : function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+
+				me.set("upcrData", lastResponse.upcrData);
+				me.$.gridPanel.setDataProvider(lastResponse.upcrItems);
+
+				me.set("aprvTypeCd", "UPCR_CHG");
+
+				me.applyFormula();
+				me.set('loadCompleted', true);
+			},
+			// 변경이력 버튼 클릭
+			onShowModHistory : function() {
+				var me = this;
+				var param = {upcr_uuid : me.get("upcrData.upcr_uuid")};
+
+				var historyPopup = UT.popup("ep-upcr-mod-history", me, 1000, 850, null, {titleText : "단가계약요청 변경이력"});
+				historyPopup.show();
+				historyPopup.getWindowContent().load(param);
+			},
+			// 저장
+			onSave : function() {
+				var me = this;
+
+				me.$.upload.upload().then(function() {
+					var upcrData = me.get("upcrData");
+					var provider = me.$.gridPanel.getDataProvider();
+
+					//단가계약요청변경 생성일경우
+					if(me.pageType === "UPCR_CHG") {
+			            me.$.saveModUpcr.body = {
+		                		upcrData        : upcrData,
+		                    	insertUpcrItems : provider.getItems()
+		                };
+			            UT.request(me.$.saveModUpcr);
+					} else {
+			            me.$.saveDraftUpcr.body = {
+		                		upcrData        : upcrData,
+		                    	insertUpcrItems : provider.getNewItems(),
+		                    	updateUpcrItems : provider.getUpdateItems(),
+		                    	deleteUpcrItems : provider.getRemoveItems(),
+		                    	upcrItemIds     : UT.getArrayValuesByKey(provider.getItems(), "upcr_item_uuid")
+		                };
+			            UT.request(me.$.saveDraftUpcr);
+					}
+				});
+			},
+			// 저장완료
+			completeSaveUpcr : function(e,res) {
+				var me = this;
+				var lastResponse = res.response;
+
+				if(lastResponse.resultStatus === "S") {
+					me.set("pageType", "UPCR");
+
+					var upcrId = lastResponse.resultData.upcr_uuid;
+					me.set("searchParam.upcr_uuid", upcrId);
+					me.set("upcrData.upcr_uuid"     , upcrId);
+
+					var saveType = me.upcrData.saveType;
+					if(saveType === 'approval') {
+						me.findUpcrDetail();				//Upcr상세조회
+						me.onShowPopupApproval(upcrId);	//결재요청 팝업 호출
+					} else if(saveType === 'directUpcr') {
+						me.directReqUpcr();				//즉시 구매 요청
+					} else {
+						UT.completeAlert();			//"요청을 완료 하였습니다"
+						me.findUpcrDetail();				//Upcr상세조회
+					}
+				} else {
+					me.failureMessageHandler(lastResponse);
+				}
+			},
+			// 저장/체크로직 후 SUCCESS가 아닌경우 처리
+			failureMessageHandler : function(response) {
+				var me = this,
+					status = response.resultStatus;
+
+                if((me.pageType === "UPCR_CHG" || me.pageType === "UPCR") && status === "UPCR_ITEM_STS_ERR") {
+					UT.alert("STD.PR1021");		// "단가계약요청접수대기,접수,반송 상태만 단가계약요청 변경이 가능합니다."
+					me.set("pageType", "UPCR");
+
+					me.findUpcrDetail(); //화면 재조회
+
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findUpcrDetail(); //화면 재조회
+
+				} else if(status === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					me.onClose();
+
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 임시저장 버튼 클릭 시
+			onTempSave : function() {
+				var me = this;
+
+				//유효성검사
+				if(!me.validUpcr('tempSave')) {
+					return;
+				}
+				me.onSave();
+			},
+			// 구매 요청 버튼 클릭시
+			onReqUpcr : function() {
+				var me = this;
+
+				//유효성 검사
+				if(!me.validUpcr('directReqUpcr')) {
+					return;
+				}
+
+				UT.confirm("STD.UPCR0003", function() {	//"단가계약요청 하시겠습니까?"
+					me.set('upcrData.saveType', 'directUpcr');
+					me.onSave();
+				});
+			},
+			// 즉시 단가계약요청
+			directReqUpcr : function() {
+				var me = this;
+
+	            me.$.directReqUpcr.body = {
+	            		upcrData : me.get('upcrData')
+	            };
+	            UT.request(me.$.directReqUpcr);
+			},
+			// 즉시 단가계약요청 후 handler
+			completeDirectReqUpcr : function(e, res) {
+				var me = this;
+				var lastResponse = res.response;
+
+				if(lastResponse.resultStatus === "S") {
+					UT.completeAlert();
+                    me.findUpcrDetail();	//Upcr상세조회
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 결재 요청 버튼 클릭시
+			onReqApprovalUpcrBtn : function() {
+				var me = this;
+
+				//유효성 검사
+				if(!me.validUpcr('approvalReqUpcr')) {
+					return;
+				}
+
+                UT.confirm("STD.PR1007", function() {		//"결재요청 하시겠습니까?"
+					me.set('upcrData.saveType', 'approval');
+					me.onSave();
+				});
+			},
+			// 결재 팝업 호출
+			onShowPopupApproval : function(upcrId) {
+				var me = this;
+
+                // 전결 파라미터
+                var appData = UT.copy(me.upcrData);
+                appData.dept_cd = SCSessionManager.currentUser.dept_cd;
+
+				if(me.aprvTypeCd === "PR" && me.upcrData.upcr_purp_ccd === "UPRCCNTR_SGNG"){
+					me.set("aprvTypeCd", "UPCR");
+				}
+                // 결재팝업 호출
+                UT.popupApproval(me, {task_uuid: upcrId,
+                	apvl_typ_ccd: me.aprvTypeCd,
+                	apvl_tit: me.get("upcrData.upcr_tit"),
+                	appData: appData,
+                	appAmt: me.upcrData.upcr_amt,
+                	aprv_incharge_usr_id: me.get("upcrData.upcr_crtr_id")},
+					// savedCallback (결재 팝업에서 이벤트 처리후 실행되는 callback 함수 내용을 정의한다.)
+					function(sts, popup) {
+						if(sts === "APVL_PRGSG") {	// 결재상신 시
+							me.onClose();
+						} else {			// 결재 임시저장 시
+							me.findUpcrDetail();
+						}
+                });
+			},
+			// 삭제 버튼 클릭 시
+			onDelete : function() {
+				var me = this;
+
+				UT.confirm("STD.N1300", function() {	//"삭제 하시겠습니까?"
+					me.$.deleteUpcr.body = {
+						deleteUpcr : me.get('upcrData')
+					};
+					UT.request(me.$.deleteUpcr);
+				});
+			},
+			// 삭제 후 Handler
+			completeDeleteUpcr : function(e,res) {
+				var me = this;
+				var lastResponse = res.response,
+					status = lastResponse.resultStatus;
+
+				if(status === "S") {
+					UT.alert("STD.N2500");	//"삭제하였습니다."
+					me.onClose();
+
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findUpcrDetail();	//Upcr상세조회
+
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 단가계약요청 복사 버튼 클릭 시
+			onCopyUpcr : function() {
+				var me = this;
+
+				UT.confirm("STD.N2100", function() {	//"복사 하시겠습니까?"
+					me.$.copyUpcr.body = me.get('upcrData');
+					UT.request(me.$.copyUpcr);
+				});
+			},
+			// 닫기 버튼 클릭시
+			onClose : function() {
+				var me = this;
+
+				me.clearData();
+				me.fire('close');
+			},
+			// 데이터 초기화
+			clearData : function() {
+				var me = this;
+
+				//데이터 clear 이전에 초기화 해주어야 함
+				me.set('loadCompleted', false);
+
+				//properties 초기화 및 grid provider 초기화
+				me.reset();
+			},
+
+            /**************************************************
+			 * 그리드 toolbar 버튼 이벤트
+			 **************************************************/
+			getNewItemLno : function(provider) {
+				var me = this;
+
+				var maxNo = 10;
+				if(provider.getItemSize() > 0) {
+					var allRows = provider.getItems();
+
+					var maxRow = allRows.reduce(function(a,b) {
+						if(!a.upcr_lno) a.upcr_lno = 0;
+						if(!b.upcr_lno) b.upcr_lno = 0;
+						return (parseInt(a.upcr_lno,10)> parseInt(b.upcr_lno,10)) ? a : b ;
+					});
+					maxNo = parseInt(maxRow.upcr_lno,10) + 10;
+				}
+				return maxNo;
+			},
+			// 무코드품목추가 버튼 클릭 시
+			onAddNoCdItem: function() {
+				var me = this;
+
+				var upcrData = me.get("upcrData");
+				var provider = me.$.gridPanel.getDataProvider();
+				var upcrLno = me.getNewItemLno(provider);
+				var defaultUnit = me.codes.comboUnitCode.length > 0 ? me.codes.comboUnitCode[0].data : null;
+
+				var addRow = {
+					upcr_lno          : upcrLno,
+					upcr_uuid           : upcrData.upcr_uuid,					//단가계약요청 아이디
+					upcr_no           : upcrData.upcr_no,					//단가계약요청 번호
+					oorg_cd     : upcrData.oorg_cd,			//운영조직
+					purc_typ_ccd        : upcrData.purc_typ_ccd,				//구매 유형 공통코드
+					upcr_realusr_id       : me.currentUser.usr_id,		//단가계약요청 의뢰자 아이디
+					upcr_realusr_nm       : me.currentUser.disp_usr_nm,		//단가계약요청 의뢰자명
+					upcr_sts_ccd     : 'PR_CRNG',							//구매 진행상태
+					upcr_chg_yn : 'N',							//변경 여부
+					upcr_purp_ccd    : upcrData.upcr_purp_ccd,			//단가계약요청 목적 공통코드
+					upcr_uprc        : 0,
+					upcr_amt          : 0,
+					upcr_qty        : 1,
+					cur_ccd             : upcrData.cur_ccd,					//통화
+					uom_ccd         : defaultUnit,
+					item_cd_crn_typ_ccd   : 'CDLS',							//구매품목유형: 미등록(무코드)
+					has_prev_yn     : 'N'
+	            };
+				provider.addItem(addRow);
+				me.set("upcrData.has_no_cd_item", "Y");
+				me.applyFormula("hasNoCdItem");
+			},
+			// 품목추가 버튼 클릭 시
+			onShowUpcrCateItemPopup : function() {
+				var me = this;
+
+				if(!me.upcrData.oorg_cd) {
+					UT.alert("STD.N3400"); //'운영조직을 선택하세요.'
+					return false;
+				}
+
+				var param = {
+					oorg_cd  : me.upcrData.oorg_cd,
+					purc_grp_typ_ccd : 'PURC',
+					purc_typ_ccd     : me.upcrData.purc_typ_ccd
+				};
+
+				UT.popupItemSearch(me, param, function(selectedItems) {
+					// 품목정보 리스트 추가
+					me.addItemList(selectedItems);
+				});
+			},
+			// 품목 정보 리스트 Grid에 추가
+			addItemList : function(selectedList) {
+				var me = this;
+
+				if(selectedList.length > 0 ) {
+					var upcrData = me.upcrData;
+					var provider = me.$.gridPanel.getDataProvider();
+					var upcrLno = me.getNewItemLno(provider);
+
+					for(var i=0; i<selectedList.length; i++) {
+						var selected = selectedList[i];
+						var UpcrPurp = upcrData.upcr_purp_ccd;
+
+						if(UT.isNotEmpty(selected.uprccntr_item_uuid)) {
+							if(UpcrPurp === "SPTPURC") {
+								UpcrPurp = "UPRCCNTR_PURC";
+							} else if(UpcrPurp === "UPRCCNTR_SGNG") {
+                                selected.pre_uprccntr_item_uuid = selected.uprccntr_item_uuid;
+								selected.uprccntr_item_uuid  = null;
+								selected.uprccntr_no       = null;
+								selected.uprccntr_revno      = null;
+								selected.uprccntr_lno = null;
+								selected.cur_ccd           = null;
+							}
+						}
+						var addRow = {
+							upcr_lno          : upcrLno,
+							upcr_uuid           : upcrData.upcr_uuid,					//단가계약요청 아이디
+							upcr_no           : upcrData.upcr_no,					//단가계약요청 번호
+							oorg_cd     : upcrData.oorg_cd,			//운영조직
+							plt_cd: selected.org_cd,
+							item_oorg_cd: selected.oorg_cd,
+							plt_nm: selected.logic_org_nm,
+							purc_typ_ccd        : upcrData.purc_typ_ccd,				//구매 유형 공통코드
+							disp_item_cd    : selected.item_cd,
+							item_cd         : selected.item_cd, 			//품목코드
+							disp_item_nm	: selected.disp_item_nm,
+							item_nm         : selected.item_nm, 			//품목명
+							item_nm_en	:	selected.item_nm_en,	//품목명 영문
+							item_spec       : selected.item_spec,				//규격
+							uom_ccd         : selected.uom_ccd,			//UOM (기본단위)
+							sg_cd           : selected.sg_cd,				//소싱그룹코드
+							sg_nm			: selected.sg_nm,				//소싱그룹명
+							purc_grp_cd     : selected.purc_grp_cd,			//구매그룹코드
+							purc_grp_nm     : selected.purc_grp_nm,			//구매그룹명
+							upcr_realusr_id       : me.currentUser.usr_id,		//단가계약요청 의뢰자 아이디
+							upcr_realusr_nm       : me.currentUser.disp_usr_nm,		//단가계약요청 의뢰자명
+							upcr_sts_ccd     : 'PR_CRNG',							//구매 진행상태
+							upcr_chg_yn : 'N',							//변경 여부
+							upcr_purp_ccd    : UpcrPurp,					//단가계약요청 목적 공통코드
+							cur_ccd             : selected.cur_ccd || upcrData.cur_ccd,	//통화
+							upcr_uprc        : selected.uprccntr_uprc || 0,		//단가계약체결단가
+							upcr_amt          : selected.uprccntr_uprc || 0,
+							upcr_qty        : 1,
+							tl_yn: selected.tl_yn || 'N',
+							item_cd_crn_typ_ccd   : 'ITEM_CD',							//구매품목유형: 등록
+							has_prev_yn     : 'N'
+			            };
+						provider.addItem(addRow);
+						upcrLno += 10;
+					}
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                }
+			},
+			// 일괄 적용 버튼 클릭 시
+			onAllApplyUpcrItem : function() {
+				var me = this;
+
+				var provider = me.$.gridPanel.getDataProvider();
+				var selectedIndexes = provider.selectionCheckedIndexes();
+
+				if(selectedIndexes.length > 0) {
+					me.showPopupAllApply(selectedIndexes);
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			// 일괄 적용 팝업 호출
+			showPopupAllApply : function(rowIndexes) {
+				var me = this;
+				me.rowIndexes = rowIndexes;
+
+				var provider = me.$.gridPanel.getDataProvider();
+				var hasCntrItem = (provider.filterItem({upcr_purp_ccd:"UPRCCNTR_PURC"}) !== null);
+
+				var param = {
+					purc_grp_typ_ccd : 'PURC',
+					purc_typ_ccd     : me.upcrData.purc_typ_ccd,
+					upcr_purp_ccd : me.upcrData.upcr_purp_ccd,
+					hiddenField  : {
+						"upcr_uprc" : ((hasCntrItem && me.upcrData.upcr_purp_ccd === "SPTPURC") || me.upcrData.upcr_purp_ccd === "UPRCCNTR_SGNG")
+					}
+				};
+
+				var applyPopup = UT.popup("ep-apply", me, 500, 450, {
+					'all-apply-items' : function(popup, e) {
+						me.allApplyList(e.detail);	//그리드 데이터 일괄적용
+						popup.close();
+					}
+				}, {titleText : "일괄 적용"});
+				applyPopup.show();
+				applyPopup.getWindowContent().load(param);
+			},
+			// 선택된 row에  일괄적용
+            allApplyList : function(applyValues) {
+                var me = this;
+
+                var rowIndexes = me.rowIndexes;
+                var provider = me.$.gridPanel.getDataProvider();
+
+                var upcr_uprc = "";
+                provider.setItemAtBatch(rowIndexes, function(index, data){
+                    if(data['uprccntr_yn'] === "Y") {
+                        if(UT.isNotEmpty(applyValues["price"])) {
+							price = applyValues["price"];
+                        }
+                        //단가계약 건은 단가계약요청 단가 수정불가
+                        delete applyValues["price"];
+                    } else {
+                        if(UT.isNotEmpty(price)) {
+                            applyValues["price"] = price;
+                        }
+                    }
+                    var unit  = applyValues["uom_ccd"] || data["uom_ccd"];
+                    var qty   = new BigNumber(applyValues['qty'] || data['upcr_qty'] || 0);
+                    var price = new BigNumber(applyValues['price'] || data['upcr_uprc'] || 0);
+
+                    var result = UT.copy(applyValues);
+
+                    // 수량 일괄적용 데이터 존재 시
+                    if(applyValues["qty"]) {
+                        // 단위에 따른 수량 소수점처리
+                        qty = CCPrecManager.format("qty",qty,unit);
+                        result["upcr_qty"] = qty;
+                    }
+
+                    // 단가 일괄적용 데이터 존재 시
+                    if(applyValues["price"]) {
+                        // 통화에 따른 단가 소수점처리
+                        price = CCPrecManager.format("price",price,me.get("upcrData.cur_ccd"));
+                        result["upcr_uprc"] = price;
+                    }
+
+                    // 통화에 따른 금액 계산 소수점처리
+                    result["upcr_amt"] = CCPrecManager.format("amt",(new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), me.get("upcrData.cur_ccd"));
+
+                    return result;
+                });
+            },
+			// 품목 삭제 버튼 클릭 시
+			onDeleteUpcrItem : function() {
+				var me = this;
+
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+						me.set("upcrData.has_no_cd_item", (provider.filterItem({item_cd_crn_typ_ccd : "CDLS"}) != null) ? "Y" : "N");
+						me.applyFormula("hasNoCdItem");
+
+						// 1차수인 경우만 항번 다시 설정한다.
+						if(!me.formula("isUpcrMod")) {
+							var upcrLno = 0;
+							provider.setItemAtBatch(true, function(index, data) {
+								upcrLno += 10;
+								return {
+									"upcr_lno" : upcrLno
+								}
+							});
+						}
+					});
+		        }
+			},
+
+            onRegexFn: function(data, item) {
+                var me = this,
+                    dataField = item.dataField;
+
+                if (dataField === "upcr_qty") {
+                    var unit = data["uom_ccd"];
+                    return CCPrecManager.regex("qty", unit);
+
+                } else if (dataField === "upcr_uprc") {
+                    var cur = me.get("upcrData.cur_ccd");
+                    return CCPrecManager.regex("price", cur);
+                }
+            },
+			// 품목 별 계약 및 발주 이력 조회
+			showItemContractHistory: function(itemCd) {
+				var me = this;
+				
+				var itemHistoryPopup = UT.popup("ep-item-perform", me, "90%", "80%", null, {titleText : I18N.translate("품목 정보")});
+				itemHistoryPopup.show();
+				itemHistoryPopup.getWindowContent().load({item_cd: itemCd});
+			},
+			onImagePlantSelectShowFunction: function(data, item) {
+				if(UT.isNotEmpty(data["item_cd_crn_typ_ccd"]) && data["item_cd_crn_typ_ccd"] === 'CDLS') { // 무품목코드 일 경우만 표기
+					return "search";
+				}
+				return "";
+			}
+		});
+	</script>
+
+</dom-module>

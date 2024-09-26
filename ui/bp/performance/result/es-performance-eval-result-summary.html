@@ -1,0 +1,293 @@
+<dom-module id="es-performance-eval-result-summary">
+	<!--
+	/**
+	 *
+	 *	@description : 퍼포먼스 평가 결과 summary 탭 화면
+	 *  <pre>
+	 * </pre>
+	 * @author : hj.jang
+	 * @FileName :
+	 * @Since 2023. 7. 6
+	 * @변경이력 : [2023. 7. 6.] hj.jang 최초작성
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findPeGrdCntByPeg"
+				 url="findPeGrdCntByPeg.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindPeGrdCntByPeg">
+		</sc-ajax>
+		
+		<cc-search-condition-panel on-search="onSearch"	on-enter="onSearch" 	validation-group="search"	auth-r>
+			<cc-fieldset>
+				<sc-label text="퍼포먼스평가그룹"></sc-label>
+				<sc-combobox-field id="pegSearchField"	value="{{searchParam.peg_uuid}}" selected-index="0" required="true" class="w-200"
+								   items="{{codes.pegList}}" display-field="peg_nm" value-field="peg_uuid"  on-change="onChangePegCombo"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<!--<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="퍼포먼스평가그룹"></sc-label>
+				<sc-combobox-field id="pegSearchField"	value="{{searchParam.peg_uuid}}" selected-index="0" required="true" on-change="onChangePegCombo"
+								   items="{{codes.pegList}}" display-field="peg_nm" value-field="peg_uuid"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-form-panel>-->
+		
+		<!--<div id="chartContainer" style="min-height:200px;padding:10px 10px 20px 10px;"></div>-->
+		
+		<cc-echart id="evalgrdBarChart" class="flex" style="min-height:200px;padding:10px 10px 20px 10px;"></cc-echart>
+		
+		
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-performance-eval-result-summary',
+			behaviors:[
+				Polymer.SCResizableBehavior,
+				Polymer.CCModuleBehavior
+			],
+			listeners:{
+				'sc-resize':'doContentElementResize'
+			},
+			properties : {
+				peInfo: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				},
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function(){
+						return {
+							pegList:[],
+							vmgList:[]
+						};
+					},
+				},
+				
+				loadCompleted : {
+					type : Boolean,
+					value : false
+				},
+				evalgrdBarChartOptions : {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: I18N.translate("평가 등급") + " / " + I18N.translate("협력사")
+							},
+							tooltip: {
+								trigger: 'item',
+								axisPointer: {
+									type: 'shadow'
+								},
+								formatter : '{a}<br>' + I18N.translate("평가 등급") + ' : {b}<br>' + I18N.translate("협력사 수") + ' : {c}'
+							},
+							legend: {
+								top : 0
+							},
+							// x축 설정
+							xAxis: {
+								type: 'category',
+								name : I18N.translate("평가 등급"), // x축 레이블
+								nameLocation : "middle",
+								nameGap : 30,
+								data : [],
+							},
+							// y축 설정
+							yAxis: {
+								type: 'value',
+								name : I18N.translate("협력사 수") , // y축 레이블
+								nameLocation : "middle",
+								nameGap : 30
+							},
+						};
+					}
+				},
+				_seriesItemDefaultConfig: {
+					type: Object,
+					value: function(){
+						return {
+							type : 'bar', // bar 차트
+							name : "",
+							data : [],
+							barWidth : 30,
+							labelField: "x",
+							valueField: "y",
+							tooltip: {},
+							animation :true,
+							label: {show : false}
+						};
+					}
+				},
+				// series 아이템 스타일
+				_seriesItemStyles : {
+					type : Object,
+					value : function() {
+						return {
+							color: ['#7cb5ec', '#434348', '#90ed7d', '#f7a35c', '#8085e9',
+								'#f15c80', '#e4d354', '#2b908f', '#f45b5b', '#91e8e1']
+						};
+					},
+					reset : false
+				}
+			},
+			doContentElementResize: function(){
+				var me = this;
+				if(!me._chartMain || !me.isVisible(true)){
+					return;
+				}
+				me.reDrawChart();
+			},
+			/**************************************************
+			 * 초기화 설정
+			 ************************************************* */
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+				window.requestCustomAnimationFrame = (function(callback) {
+					return window.requestAnimationFrame ||
+							window.webkitRequestAnimationFrame ||
+							window.mozRequestAnimationFrame ||
+							window.oRequestAnimationFrame ||
+							window.msRequestAnimationFrame ||
+							function(callback) { window.setTimeout(callback, 20); };
+				})();
+			},
+			resizeChartContainer: function(){
+				var me = this;
+				var container = me.$.chartContainer;
+				
+				if (container) {
+					container.style.height = (me.parentElement.clientHeight - 50) + "px";
+					container.style.width = (me.parentElement.clientWidth - 20) + "px";
+				}
+			},
+			// 차트 초기화
+			removeChart : function() {
+				var me = this;
+				me.$.evalgrdBarChart.reset();
+			},
+			load: function(param){
+				var me = this;
+				
+				me.set("peInfo", param.peInfo);
+				me.set("codes.pegList", UT.copy(param.codes.pegList));
+				me.set("searchParam", UT.copy(param.peInfo));
+				
+				if (me.isVisible(true)) {
+					me.removeChart();
+				}
+				
+				if(UT.isNotEmpty(me.codes.pegList)) {
+					me.$.pegSearchField.selectedIndex = 0;
+					me.onSearch();
+				}
+				me.set("loadCompleted", true);
+			},
+			onChangePegCombo : function(e) {
+				var me = this;
+				var selectedItem = e.detail.selectedItem;
+				
+				if(UT.isNotEmpty(selectedItem) && me.loadCompleted) {
+					me.onSearch();
+				}
+			},
+			onSearch : function() {
+				var me = this;
+				
+				var param = UT.copy(me.get("peInfo")),
+					searchParam = me.get("searchParam");
+				
+				if(!me.validate("search")){
+					return UT.alert("STD.E0000");
+				}
+				
+				if (me.isVisible(true)) {
+					me.removeChart();
+				}
+				UT.request(me.$.findPeGrdCntByPeg);
+			},
+			completeFindPeGrdCntByPeg : function(el,res){
+				var me = this;
+				var result = res.response;
+				
+				if (UT.isNotEmpty(result) && !result["error"]) {
+					var evalGrdCdList = result.evalGrdCds || []; // PE PEG 평가등급 종류
+					var peGrdCnts = result.peGrdCnts || []; // 최근 4개년 PEG 평가등급 별 협력사 수
+					var resultSeries = [];
+					
+					var xAxisData = []; // x축 카테고리
+					var xAxisIndex = {}; // x축 카테고리를 배열로 전환했을 때 등급별 인덱스 맵
+					
+					// PE PEG 평가등급 목록. eval_grd_cd, eval_grd_nm, idx
+					if(UT.isNotEmpty(evalGrdCdList)) {
+						// x축 카테고리. ["[S] Excellent", "[A] Great" ... ]
+						xAxisData = evalGrdCdList.map(function(data) { return "[" + data.eval_grd_cd + "] " + data.eval_grd_nm;});
+						// x축 등급별 인덱스. { S : 0, A : 1, B : 2 ... }
+						evalGrdCdList.forEach(function(data) {
+							xAxisIndex[data.eval_grd_cd] = data.idx;
+						});
+					}
+					
+					// 최근 4개년 PE PEG 평가등급 별 협력사 수
+					if(UT.isEmpty(peGrdCnts)) {
+						var seriesItem = UT.copy(me._seriesItemDefaultConfig);
+						var name = me.translate("{0}년", null, me.peInfo.eval_subj_yr);
+						seriesItem.name = name;
+						resultSeries.push(seriesItem);
+					} else {
+						peGrdCnts.forEach(function (peGrdCnt, idx) {
+							var evalYr = peGrdCnt["eval_subj_yr"] || "";
+							var seriesItem = UT.copy(me._seriesItemDefaultConfig);
+							var data = new Array(xAxisData.langth); // series value
+							var name = me.translate("{0}년", null, evalYr); // series name
+							name += (peGrdCnt.pe_flag == "CURRENT") ? " (" + me.translate("현재")+ ")" : "";
+							
+							seriesItem.name = name;
+							seriesItem.color = me._seriesItemStyles.color[idx]; // bar color
+							
+							var peGrdCntList = peGrdCnt["peGrdCnt"] || [];
+							peGrdCntList.forEach(function (peGrdCnt) {
+								var evalGrd = peGrdCnt["eval_grd_cd"]; // 평가등급
+								var resultCnt = parseInt(peGrdCnt["eval_grd_cd_cnt"]); // 협력사 수
+								resultCnt = isNaN(resultCnt) ? 0 : resultCnt;
+								data[xAxisIndex[evalGrd]] = resultCnt; // series data. x축 평가등급 순서대로 value list
+							});
+							
+							seriesItem.data = data;
+							resultSeries.push(seriesItem);
+						});
+					}
+					me.set("evalgrdBarChartOptions.xAxis.data",xAxisData); // x축 category 세팅. (평가등급)
+					me.set("evalgrdBarChartOptions.series", resultSeries); // series 세팅 (최근 4개년 평가. bar)
+					me.drawChart(); // 차트 그리기
+				}
+			},
+			drawChart: function(){
+				var me = this;
+				var option = me.evalgrdBarChartOptions;
+				var echart = me.$.evalgrdBarChart.generateChart(option); // xAxis, yAxis, series로 차트 생성
+			},
+			destroy : function(){
+				window.requestCustomAnimationFrame = null;
+				this.removeChart();
+			}
+		});
+	</script>
+</dom-module>

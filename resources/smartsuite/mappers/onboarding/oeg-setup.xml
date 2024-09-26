@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="oeg-setup">
+    <!-- 온보딩평가그룹 목록 조회 -->
+    <select id="findListOeg" resultType="map">
+        /* oeg-setup.findListOeg: 온보딩평가그룹 목록 조회 */
+        SELECT O.TEN_ID                   /* 테넌트 아이디 */
+             , O.OEG_UUID                 /* 온보딩평가그룹 UUID */
+             , EFCT_SHT.OBD_EVALSHT_UUID  /* 온보딩 평가시트 UUID */
+             , O.OORG_CD                  /* 운영조직 코드 */
+             , O.OEG_CD                   /* 온보딩평가그룹 코드 */
+             , O.OEG_NM                   /* 온보딩평가그룹 명 */
+             , O.OEG_EXPLN                /* 온보딩평가그룹 명 설명 */
+             , EFCT_SHT.EVALSHT_NM        /* 평가시트 명 */
+             , (CASE WHEN EFCT_SHT.CNFD_YN IS NULL OR EFCT_SHT.CNFD_YN = '' THEN 'N' ELSE EFCT_SHT.CNFD_YN END) AS CNFD_YN  /* 평가시트 확정 여부 */
+             , (CASE WHEN EFCT_SHT.OBD_EVALSHT_UUID IS NULL OR EFCT_SHT.OBD_EVALSHT_UUID = '' THEN 'N'
+                     WHEN EFCT_SHT.OBD_EVALSHT_UUID = CRNT_SHT.OBD_EVALSHT_UUID THEN 'N'
+                     ELSE 'Y'
+                 END) AS VERSIONUP_SHT_EXIST_YN  /* 버전업 평가시트 존재 여부 */
+             , O.STS
+             , O.RMK
+             , O.REGR_ID
+             , O.REG_DTTM
+             , O.MODR_ID
+             , O.MOD_DTTM
+             , (SELECT COUNT(OVMG.VMG_OORG_UUID)
+                  FROM OEG_VMG OVMG  /* OVMG : 온보딩평가그룹 온보딩그룹 */
+                 WHERE OVMG.TEN_ID   = O.TEN_ID
+                   AND OVMG.OEG_UUID = O.OEG_UUID
+                   AND OVMG.STS     != 'D') AS NUM_OF_VMG  /* 협력사관리그룹 수 */
+          FROM OEG O    /* O : 온보딩평가그룹 */
+          LEFT OUTER JOIN (
+                  SELECT OES.*
+                       , ROW_NUMBER() OVER(PARTITION BY OES.OEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC) RK
+                   FROM OBD_EVALSHT OES
+                  WHERE OES.TEN_ID = #{g.tenant} 
+	                  AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(OES.EFCT_ST_DT, 'YYYYMMDD') 
+	                  AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(OES.EFCT_EXP_DT, 'YYYYMMDD')  AND OES.CNFD_YN ='Y'
+                    AND OES.STS    != 'D'
+             ) EFCT_SHT  /* 온보딩 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+            ON O.TEN_ID   = EFCT_SHT.TEN_ID
+           AND O.OEG_UUID = EFCT_SHT.OEG_UUID
+           AND EFCT_SHT.RK = 1
+          LEFT OUTER JOIN (
+                     SELECT TEN_ID, OEG_UUID, OBD_EVALSHT_UUID, CURRENT_EVALSHT_RANK
+                       FROM (
+                               SELECT  TEN_ID, OEG_UUID, OBD_EVALSHT_UUID, RANK() OVER (PARTITION BY OEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC) AS CURRENT_EVALSHT_RANK
+                                 FROM OBD_EVALSHT
+                                WHERE TEN_ID = #{g.tenant}
+                                  AND STS   != 'D'
+                                ORDER BY REG_DTTM DESC, MOD_DTTM DESC, EFCT_EXP_DT DESC, EFCT_ST_DT DESC
+                            ) x
+                      WHERE CURRENT_EVALSHT_RANK = 1
+                     ) CRNT_SHT /* 온보딩 평가그룹의 최근 작성한 평가시트 아이디 조회 */
+            ON CRNT_SHT.TEN_ID   = O.TEN_ID
+           AND CRNT_SHT.OEG_UUID = O.OEG_UUID
+       <trim prefix="WHERE" prefixOverrides="AND">
+           AND O.TEN_ID = #{g.tenant}
+           AND O.STS   != 'D'
+         <if test="p.oorg_cd != null and p.oorg_cd != ''">
+           AND O.OORG_CD = #{p.oorg_cd}              /* 운영조직 코드 */
+         </if>
+         <if test="p.oeg_cd != null and p.oeg_cd != ''">
+           <bind name="oegCd" value="'%' + p.oeg_cd+ '%'"/>
+           AND UPPER(O.OEG_CD) LIKE UPPER(#{oegCd})  /* 온보딩평가그룹 코드 */
+         </if>
+         <if test="p.oeg_nm != null and p.oeg_nm != ''">
+           <bind name="oegNm" value="'%' + p.oeg_nm+ '%'"/>
+           AND UPPER(O.OEG_NM) LIKE UPPER(#{oegNm})  /* 온보딩평가그룹 명 */
+         </if>
+         <if test="p.cnfd_yn != null and p.cnfd_yn != ''">
+           AND (CASE WHEN EFCT_SHT.CNFD_YN IS NULL OR EFCT_SHT.CNFD_YN = '' THEN 'N' ELSE EFCT_SHT.CNFD_YN END) = #{p.cnfd_yn}
+         </if>
+       </trim>
+        ORDER BY O.OORG_CD, O.OEG_CD
+    </select>
+    <!-- 온보딩평가그룹 삭제 상태 변경 (sts = 'D')-->
+    <update id="updateOegByDelete">
+        /* oeg-setup.updateOegByDelete : 온보딩평가그룹 삭제(STS = 'D') */
+        UPDATE OEG  /* 온보딩평가그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS      = 'D'
+            , MODR_ID  = #{g.username}
+            , MOD_DTTM = #{g.now}
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID   = #{g.tenant}    /* 테넌트 아이디 */
+            AND OEG_UUID = #{p.oeg_uuid}  /* 온보딩평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 온보딩 협력사관리그룹 삭제 상태 변경 (sts = 'D')-->
+    <update id="updateVmgStsByDelete">
+        /* oeg-setup.updateVmgStsByDelete : 온보딩 협력사관리그룹 삭제(STS = 'D') */
+        UPDATE OEG_VMG                  /* 온보딩평가그룹 협력사관리그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS      = 'D'
+            , MODR_ID  = #{g.username}
+            , MOD_DTTM = #{g.now}
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND TEN_ID   = #{g.tenant}    /* 테넌트 아이디 */
+            AND OEG_UUID = #{p.oeg_uuid}  /* 온보딩평가그룹 UUID */
+        </trim>
+    </update>
+    <!-- 온보딩평가그룹 Mater 저장 (Insert) -->
+    <insert id="insertOegMaster">
+        /* oeg-setup.insertOegMaster : 온보딩평가그룹 Mater 저장 */
+        INSERT INTO OEG  /* 온보딩평가그룹  */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                /* 테넌트 아이디 */
+            , OEG_UUID              /* 온보딩평가그룹 UUID */
+            , OORG_CD               /* 운영조직 코드 */
+            , OEG_CD                /* 온보딩평가그룹 코드 */
+            , OEG_NM                /* 온보딩평가그룹 명 */
+            , OEG_EXPLN             /* 온보딩평가그룹 설명 */
+            , STS
+            , RMK
+            , REGR_ID
+	        , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.oeg_uuid}
+            , #{p.oorg_cd}
+            , #{p.oeg_cd}
+            , #{p.oeg_nm}
+            , #{p.oeg_expln}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+	        , #{g.now}
+            , #{g.username}
+	        , #{g.now}
+        </trim>
+    </insert>
+    <!-- 온보딩평가그룹 Mater 수정 -->
+    <update id="updateOegMaster">
+        /* oeg-setup.updateOegMaster : 온보딩평가그룹 Mater 수정 */
+        UPDATE OEG  /* 온보딩평가그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+              MODR_ID   = #{g.username}                /* 수정자 아이디 */
+            , MOD_DTTM  = #{g.now}                     /* 수정 일시 */
+            , STS       = 'U'                          /* 상태 */
+            , OEG_NM    = #{p.oeg_nm}                  /* 온보딩평가그룹 명 */
+            , OEG_EXPLN = #{p.oeg_expln}               /* 온보딩평가그룹 설명 */
+        </trim>
+        WHERE TEN_ID = #{g.tenant}                     /* 시스템 아이디 */
+        AND OEG_UUID = #{p.oeg_uuid}                   /* 온보딩평가그룹 UUID */
+    </update>
+	<select id="findOegInfoInUsingVmg" resultType="map">
+        /* oeg-setup.findOegInfoInUsingVmg: 협력사관리그룹을 사용 중인 타 온보딩평가그룹 정보 조회 */
+        SELECT O.TEN_ID
+             , O.OORG_CD
+             , O.OEG_UUID
+             , O.OEG_CD
+             , O.OEG_NM
+             , O.OEG_CD
+             , O.OEG_NM
+             , V.VMG_CD
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN V.VMG_NM ELSE (CASE WHEN V.VMG_NM_EN IS NULL OR V.VMG_NM_EN = '' THEN V.VMG_NM ELSE V.VMG_NM_EN END) END AS VMG_NM
+          FROM OEG_VMG OVMG  /* OVMG : 온보딩평가그룹 협력사관리그룹 */
+         INNER JOIN OEG O
+            ON O.TEN_ID   = OVMG.TEN_ID
+           AND O.OEG_UUID = OVMG.OEG_UUID
+           AND O.OORG_CD  = #{p.oorg_cd}
+           AND O.STS     != 'D'
+		INNER JOIN VMG_OORG VO
+            ON VO.TEN_ID = OVMG.TEN_ID
+           AND VO.VMG_OORG_UUID = OVMG.VMG_OORG_UUID
+           AND VO.USE_YN = 'Y'
+           AND VO.STS != 'D'
+         INNER JOIN VMG V
+            ON V.TEN_ID   = VO.TEN_ID
+           AND V.VMG_UUID = VO.VMG_UUID
+           AND V.STS     != 'D'
+         WHERE OVMG.TEN_ID              = #{g.tenant}
+           AND OVMG.VMG_OORG_UUID            = #{p.vmg_oorg_uuid}
+           AND OVMG.STS                != 'D'
+    </select>
+    <!-- 온보딩평가그룹 - 협력사관리그룹 저장 -->
+    <insert id="insertOegVmg">
+        /* oeg-setup.insertOegVmg : 온보딩평가그룹 - 협력사관리그룹 저장 */
+        INSERT INTO OEG_VMG        /* 온보딩평가그룹 온보딩그룹 */
+        <trim prefix="(" prefixOverrides="," suffix=")">
+              TEN_ID                /* 테넌트 아이디 */
+            , OEG_UUID              /* 온보딩평가그룹 UUID */
+            , VMG_OORG_UUID              /* 협력사관리그룹 UUID */
+            , STS
+            , RMK
+            , REGR_ID
+	        , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+              #{g.tenant}
+            , #{p.oeg_uuid}
+            , #{p.vmg_oorg_uuid}
+            , 'C'
+            , #{p.rmk}
+            , #{g.username}
+	        , #{g.now}
+            , #{g.username}
+	        , #{g.now}
+        </trim>
+    </insert>
+	<!-- 온보딩평가그룹 - 협력사관리그룹 삭제 (delete) -->
+    <delete id="deleteOegVmg">
+        /* oeg-setup.deleteOegVmg : 온보딩평가그룹 - 협력사관리그룹 삭제 (delete) */
+        DELETE FROM OEG_VMG    /* 온보딩평가그룹 온보딩그룹 */
+         WHERE TEN_ID          = #{g.tenant}
+       <choose>
+         <when test="p.oeg_uuid != null and p.oeg_uuid != ''">
+           AND OEG_UUID        = #{p.oeg_uuid}
+         </when>
+         <otherwise>
+           AND OEG_UUID IN (SELECT O.OEG_UUID
+                              FROM OEG O
+                             INNER JOIN OEG_VMG OV
+                                ON OV.TEN_ID   = O.TEN_ID
+                               AND OV.OEG_UUID = O.OEG_UUID
+                               AND OV.VMG_OORG_UUID = #{p.vmg_oorg_uuid}
+                               AND O.OORG_CD   = #{p.oorg_cd})
+         </otherwise>
+       </choose>
+          AND VMG_OORG_UUID         = #{p.vmg_oorg_uuid}
+    </delete>
+    <!-- 온보딩평가그룹 Mater 조회 -->
+    <select id="findOegMaster" resultType="map">
+        /* oeg-setup.findOegMaster: 온보딩평가그룹 Mater 조회 */
+        SELECT O.TEN_ID                   /* 테넌트 아이디 */
+             , O.OEG_UUID                 /* 온보딩평가그룹 UUID */
+             , EFCT_SHT.OBD_EVALSHT_UUID  /* 온보딩 평가시트 UUID */
+             , O.OORG_CD                  /* 운영조직 코드 */
+             , O.OEG_CD                   /* 온보딩평가그룹 코드 */
+             , O.OEG_NM                   /* 온보딩평가그룹 명 */
+             , O.OEG_EXPLN                /* 온보딩평가그룹 명 설명 */
+             , O.STS
+             , O.RMK
+             , O.REGR_ID
+             , O.REG_DTTM
+             , O.MODR_ID
+             , O.MOD_DTTM
+        FROM OEG O  /* O : 온보딩평가그룹 */
+        LEFT OUTER JOIN (
+                  SELECT OES.*
+                       , ROW_NUMBER() OVER(PARTITION BY OES.OEG_UUID ORDER BY REG_DTTM DESC, MOD_DTTM DESC) RK
+                   FROM OBD_EVALSHT OES
+                  WHERE OES.TEN_ID  = #{g.tenant}
+                      AND TO_CHAR(#{g.now}, 'YYYYMMDD') &gt;= TO_CHAR(OES.EFCT_ST_DT, 'YYYYMMDD') 
+                      AND TO_CHAR(#{g.now}, 'YYYYMMDD') <![CDATA[<]]> TO_CHAR(OES.EFCT_EXP_DT, 'YYYYMMDD')  AND OES.CNFD_YN = 'Y'
+                    AND OES.STS    != 'D'
+             ) EFCT_SHT  /* 온보딩 평가그룹의 현재 유효한 평가시트 아이디 조회 */
+            ON O.TEN_ID    = EFCT_SHT.TEN_ID
+           AND O.OEG_UUID  = EFCT_SHT.OEG_UUID
+           AND EFCT_SHT.RK = 1
+       WHERE O.TEN_ID    = #{g.tenant}
+         AND O.OEG_UUID  = #{p.oeg_uuid}
+    </select>
+    <!-- 온보딩평가그룹 - 협력사관리그룹 조회 -->
+    <select id="findListOegVmg" resultType="map">
+        /* oeg-setup.findListOegVmg: 온보딩평가그룹 - 협력사관리그룹 조회 */
+        SELECT OVMG.TEN_ID                  /* 테넌트 아이디 */
+             , OVMG.OEG_UUID                /* 온보딩평가그룹 UUID */
+             , OVMG.VMG_OORG_UUID        /* 협력사관리그룹 UUID */
+             , VMG.VMG_CD
+             , VMG.VMG_NM
+             , VMG.VMG_NM_EN
+             , CASE WHEN 'ko_KR' = #{g.locale} THEN VMG.VMG_NM ELSE VMG.VMG_NM_EN END AS DISPLAY_VMG_NM
+             , OVMG.STS
+             , OVMG.RMK
+             , OVMG.REGR_ID
+             , OVMG.REG_DTTM
+             , OVMG.MODR_ID
+             , OVMG.MOD_DTTM
+             , VMT.VMT_CCD
+        FROM OEG_VMG OVMG  /* OVMG : 온보딩평가그룹 협력사관리그룹 */
+	    INNER JOIN VMG_OORG VO
+	      ON VO.TEN_ID = OVMG.TEN_ID
+		 AND VO.VMG_OORG_UUID = OVMG.VMG_OORG_UUID
+		 AND VO.USE_YN = 'Y'
+	     AND VO.STS != 'D'
+	    INNER JOIN VMG VMG  /* VMG : 협력사관리그룹 */
+          ON VMG.TEN_ID               = VO.TEN_ID
+         AND VMG.VMG_UUID             = VO.VMG_UUID
+         AND VMG.STS                 != 'D'
+	    INNER JOIN VMT
+          ON VMG.TEN_ID               = VMT.TEN_ID
+         AND VMG.VMT_UUID             = VMT.VMT_UUID
+       WHERE OVMG.TEN_ID              = #{g.tenant}
+         AND OVMG.OEG_UUID            = #{p.oeg_uuid}
+         AND OVMG.STS                != 'D'
+    </select>
+</mapper>

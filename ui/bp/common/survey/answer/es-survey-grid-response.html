@@ -1,0 +1,821 @@
+<dom-module id="es-survey-grid-response">
+	<style>
+		:host {
+			display: block;
+		}
+	</style>
+	
+	<template>
+		<form id="gridForm">
+			<table>
+				<thead>
+				<tr id="questionHeader">
+				</tr>
+				</thead>
+				<tbody id="questionBody">
+				</tbody>
+			</table>
+		</form>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-grid-response",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {};
+					}
+				},
+				question: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				childrenQuestions: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				time: {
+					type: Array,
+					value: function() {
+						var time = [];
+						for(var i = 0; i < 24; i++) {
+							for(var j = 0; j < 60; j = j + 15) {
+								var hour = this.padWithZero(String(i));
+								var min = this.padWithZero(String(j));
+								time.push({
+									data: hour + min,
+									label: hour + " : " + min
+								});
+							}
+						}
+						return time;
+					}
+				},
+				editable: {
+					type: Object,
+					value: function() {
+						return true;
+					}
+				}
+			},
+			formulas: {
+				isRequired: function() {
+					return this.question.ans_mand_yn === "Y";
+				},
+				isOther: function() {
+					return this.question.otrs_ans_yn === "Y";
+				},
+				isComment: function() {
+					return this.question.cmnt_add_yn === "Y";
+				},
+				isAttach: function() {
+					return this.question.ath_poss_yn === "Y";
+				},
+				isAttachRequired: function() {
+					return this.formula('isAttach') && this.question.ath_mand_yn === "Y";
+				},
+				editable: function() {
+					return this.editable && this.formula('editableFromParent');
+				},
+				editableFromParent: function() {
+					var me = this;
+					var parSurvAnsOptUuid = me.question.par_surv_ans_opt_uuid;
+					if(parSurvAnsOptUuid == null) {
+						return true;
+					}
+					var parAnswer = me.question.par_answer;
+					if(parAnswer == parSurvAnsOptUuid) {
+						return true;
+					}
+					return false;
+				}
+			},
+			
+			load: function() {
+				this.loadQuestion();
+				this.applyFormula();
+			},
+			
+			loadQuestion: function() {
+				var me = this;
+				var question = me.question;
+				me.addHeader(question);
+				for(var i = 0; i < me.childrenQuestions.length; i++) {
+					var childrenQuestion = me.childrenQuestions[i];
+					me.addQuestion(question, childrenQuestion, i);
+				}
+				
+				if(question.ans_typ_ccd === "RANK") {
+					for(var i = 0; i < me.childrenQuestions.length; i++) {
+						var childrenQuestion = me.childrenQuestions[i];
+						var subjectGridAnswerOpt = childrenQuestion.subjectGridAnswerOpt || {};
+						var survAnsOptUuids = subjectGridAnswerOpt.surv_ans_opt_uuids || "";
+						var values = survAnsOptUuids.split('\,');
+						
+						me.setChecked(childrenQuestion, values);
+					}
+				}
+			},
+			
+			setChecked: function(childrenQuestion, values) {
+				var me = this;
+				var questionBody = me.$.questionBody;
+				
+				var field;
+				for(var i = 0; i < values.length; i++) {
+					var value = values[i];
+					if(!value) {
+						continue;
+					}
+					field = questionBody.querySelector('[id="' + `${childrenQuestion.surv_qn_uuid}_${value}` + '"]');
+					field.value = true;
+				}
+			},
+			
+			addHeader: function(question) {
+				var me = this;
+				var thead = me.$.questionHeader;
+				var th = document.createElement('th');
+				th.classList.add("question");
+				/*th.style.width = "50%";*/
+				thead.appendChild(th);
+				
+				var ansTypCcd = question.ans_typ_ccd;
+				if(me.isSelectType) {
+					if(ansTypCcd === "LINEAR") {
+						var dispLnrMinNm = question.disp_lnr_min_nm;
+						if(UT.isNotEmpty(dispLnrMinNm)) {
+							th = document.createElement('th');
+							/*th.style.width = "50px";*/
+							th.textContent = dispLnrMinNm;
+							thead.appendChild(th);
+						}
+					}
+					
+					// 가로 동적 헤더 구성
+					var answers = question.answers || [];
+					for(var i = 0; i < answers.length; i++) {
+						var answer = answers[i];
+						th = document.createElement('th');
+						/*th.style.width = "50px";*/
+						th.textContent = answer.disp_opt_nm;
+						thead.appendChild(th);
+					}
+					
+					if(ansTypCcd === "LINEAR") {
+						var dispLnrMaxNm = question.disp_lnr_max_nm;
+						if(UT.isNotEmpty(dispLnrMaxNm)) {
+							th = document.createElement('th');
+							/*th.style.width = "50px";*/
+							th.textContent = dispLnrMaxNm;
+							thead.appendChild(th);
+						}
+					}
+				} else {
+					th = document.createElement('th');
+					/*th.style.width = "50%";*/
+					th.textContent = me.translate("응답");
+					thead.appendChild(th);
+				}
+				
+				if(me.formula('isOther')) {
+					th = document.createElement('th');
+					/*th.style.width = "200px";*/
+					th.textContent = me.translate("기타");
+					thead.appendChild(th);
+				}
+				if(me.formula('isComment')) {
+					th = document.createElement('th');
+					/*th.style.width = "200px";*/
+					th.textContent = me.translate("댓글");
+					thead.appendChild(th);
+				}
+				if(me.formula('isAttach')) {
+					th = document.createElement('th');
+					/*th.style.width = "200px";*/
+					th.textContent = me.translate("첨부파일");
+					thead.appendChild(th);
+				}
+			},
+			
+			addQuestion: function(question, childrenQuestion, idx) {
+				var me = this;
+				var tbody = me.$.questionBody;
+				var tr = document.createElement('tr');
+				tr.id = childrenQuestion.surv_qn_uuid;
+				
+				var th = document.createElement('th');
+				th.classList.add("question");
+				th.data = childrenQuestion;
+				th.textContent = childrenQuestion.disp_surv_qn_nm;
+				tr.appendChild(th);
+				
+				var ansTypCcd = question.ans_typ_ccd;
+				if(me.isSelectType) {
+					me.addQuestionSelectAnswer(question, childrenQuestion, tr, idx);
+				} else {
+					me.addQuestionAnswer(question, childrenQuestion, tr);
+				}
+				
+				var subjectGridAnswer = childrenQuestion.subjectGridAnswer || {};
+				var survSubjOtrsVal = subjectGridAnswer.surv_subj_otrs_val;
+				var survSubjAthgUuid = subjectGridAnswer.surv_subj_athg_uuid;
+				var survSubjCmntVal = subjectGridAnswer.surv_subj_cmnt_val;
+				
+				var textField;
+				var uploadField;
+				if(me.formula('isOther')) {
+					td = document.createElement('td');
+					td.setAttribute("form", "other");
+					textField = document.createElement('sc-text-field');
+					textField.value = survSubjOtrsVal;
+					textField.readonly = !me.formula('editable');
+					textField.addEventListener("change", function(e) {
+						var currentTr = e.currentTarget.parentElement.parentElement;
+						var inputs = currentTr.querySelectorAll('[name]');
+						for(var i = 0; i < inputs.length; i++) {
+							inputs[i].checked = false;
+						}
+					});
+					td.appendChild(textField);
+					tr.appendChild(td);
+				}
+				if(me.formula('isComment')) {
+					td = document.createElement('td');
+					td.setAttribute("form", "comment");
+					textField = document.createElement('sc-text-field');
+					textField.value = survSubjCmntVal;
+					textField.readonly = !me.formula('editable');
+					td.appendChild(textField);
+					tr.appendChild(td);
+				}
+				if(me.formula('isAttach')) {
+					td = document.createElement('td');
+					td.setAttribute("form", "attach");
+					uploadField = document.createElement('sc-upload-field');
+					uploadField.autoUpload = true;
+					uploadField.value = survSubjAthgUuid;
+					uploadField.editable = me.formula('editable');
+					uploadField.required = me.formula('isAttachRequired');
+					td.appendChild(uploadField);
+					tr.appendChild(td);
+				}
+				
+				tbody.appendChild(tr);
+			},
+			
+			addQuestionSelectAnswer: function(question, childrenQuestion, tr, idx) {
+				var me = this;
+				var ansTypCcd = question.ans_typ_ccd;
+				var answers = question.answers || [];
+				var subjectGridAnswer = childrenQuestion.subjectGridAnswer || {};
+				var subjectAnswerOpt = childrenQuestion.subjectGridAnswerOpt || {};
+				var survAnsOptUuids = subjectAnswerOpt.surv_ans_opt_uuids || "";
+				
+				var td = document.createElement('td');
+				if(ansTypCcd === "LINEAR") {
+					var dispLnrMinNm = question.disp_lnr_min_nm;
+					if(UT.isNotEmpty(dispLnrMinNm)) {
+						tr.appendChild(td);
+					}
+				}
+				
+				for(var i = 0; i < answers.length; i++) {
+					var answer = answers[i];
+					td = document.createElement('td');
+					if(ansTypCcd === "SINGLE" || ansTypCcd === "LINEAR") {
+						/*var field = document.createElement("sc-radio-field");
+						field.name = childrenQuestion.surv_qn_uuid;
+						field.checkedValue = answer.surv_ans_opt_uuid;
+						td.appendChild(field);*/
+						var radio = document.createElement('input');
+						radio.type = 'radio';
+						radio.name = childrenQuestion.surv_qn_uuid;
+						radio.value = answer.surv_ans_opt_uuid;
+						if(survAnsOptUuids === answer.surv_ans_opt_uuid) {
+							radio.checked = true;
+						}
+						radio.disabled = !me.formula('editable');
+						if(me.formula('isOther')) {
+							radio.addEventListener("change", function(e) {
+								var currentTr = e.target.parentElement.parentElement;
+								var otherTd = currentTr.querySelector('[form="other"]');
+								var textField = otherTd.firstChild;
+								textField.value = null;
+							});
+						}
+						td.appendChild(radio);
+					} else if(ansTypCcd === "MULTI") {
+						var checkbox = document.createElement('input');
+						checkbox.type = 'checkbox';
+						checkbox.name = `${childrenQuestion.surv_qn_uuid}_${answer.surv_ans_opt_uuid}`;
+						if(survAnsOptUuids.indexOf(answer.surv_ans_opt_uuid) >= 0) {
+							checkbox.checked = true;
+						}
+						checkbox.disabled = !me.formula('editable');
+						td.appendChild(checkbox);
+					} else if(ansTypCcd === "RANK") {
+						var field = document.createElement("sc-checkbox-field");
+						field.id = `${childrenQuestion.surv_qn_uuid}_${answer.surv_ans_opt_uuid}`;
+						field.checkedValue = answer.surv_ans_opt_uuid;
+						field.readonly = !me.formula('editable');
+						field.addEventListener("checkchange", function(e) {
+							me.checkchange(e.target, e.detail);
+						});
+						td.appendChild(field);
+					}
+					tr.appendChild(td);
+				}
+			},
+			
+			checkchange: function(field, checked) {
+				var me = this;
+				var questionBody = me.$.questionBody;
+				var questionId = field.id.split('_')[0];
+				var question = questionBody.querySelector('[id="' + questionId + '"]').firstChild;
+				
+				var maxSelCnt = me.question.max_sel_cnt;
+				var checkedOrder = question.checkedOrder || [];
+				var rankFieldCnt = checkedOrder.length;
+				
+				if(checked && rankFieldCnt === maxSelCnt) {
+					UT.alert(me.translate("STD.SURV0015", null, maxSelCnt), null, true); // 최대 선택 개수는 {0}개 입니다.
+					field.value = false;
+					return;
+				}
+				
+				checkedOrder.forEach(box => {
+					box.classList.remove('rank-1', 'rank-2', 'rank-3');
+				});
+				
+				var checkbox = field.firstChild;
+				if(checked) {
+					// 체크되었을 때 순서 배열에 추가
+					checkedOrder.push(checkbox);
+				} else {
+					// 체크 해제되었을 때 순서 배열에서 제거
+					checkedOrder = checkedOrder.filter(item => item !== checkbox);
+				}
+				question.checkedOrder = checkedOrder;
+				
+				// 체크된 순서대로 순위
+				checkedOrder.forEach((box, index) => {
+					if(index < maxSelCnt) {
+						box.classList.add(`rank-${index + 1}`);
+					}
+				});
+			},
+			
+			addQuestionAnswer: function(question, childrenQuestion, tr) {
+				var me = this;
+				var subjectGridAnswer = childrenQuestion.subjectGridAnswer || {};
+				var survSubjAnsVal = subjectGridAnswer.surv_subj_ans_val;
+				
+				var subjectAnswerOpt = childrenQuestion.subjectGridAnswerOpt || {};
+				var survAnsOptUuids = subjectAnswerOpt.surv_ans_opt_uuids || "";
+				
+				var td = document.createElement('td');
+				td.setAttribute("form", "answer");
+				var ansTypCcd = question.ans_typ_ccd;
+				if(ansTypCcd === "DROPDOWN") {
+					var comboField = document.createElement('sc-combobox-field');
+					comboField.displayField = "disp_opt_nm";
+					comboField.valueField = "surv_ans_opt_uuid";
+					comboField.items = question.answers;
+					comboField.placeholder = me.translate("선택");
+					comboField.required = me.formula('isRequired');
+					comboField.value = survAnsOptUuids;
+					comboField.readonly = !me.formula('editable');
+					td.appendChild(comboField);
+				} else if(ansTypCcd === "SHORTANS") {
+					var textField = document.createElement('sc-text-field');
+					if(UT.isNotEmpty(question.inp_lmt)) {
+						textField.placeholder = this.translate("{0}자 이하로 입력해 주십시오.", null, question.inp_lmt);
+					}
+					textField.required = me.formula('isRequired');
+					textField.maxLength = question.inp_lmt;
+					textField.value = survSubjAnsVal;
+					textField.readonly = !me.formula('editable');
+					textField.validator = 'shortTextValidator';
+					td.appendChild(textField);
+				} else if(ansTypCcd === "ESSAYANS") {
+					var textareaField = document.createElement('sc-textarea-field');
+					if(UT.isNotEmpty(question.inp_lmt)) {
+						textareaField.placeholder = this.translate("{0}자 이하로 입력해 주십시오.", null, question.inp_lmt);
+					}
+					textareaField.required = me.formula('isRequired');
+					textareaField.maxLength = question.inp_lmt;
+					textareaField.value = survSubjAnsVal;
+					textareaField.readonly = !me.formula('editable');
+					td.appendChild(textareaField);
+				} else if(ansTypCcd === "DATE") {
+					var dateField = document.createElement("sc-date-field");
+					dateField.style.display = "block";
+					dateField.stringDate = true;
+					dateField.required = me.formula('isRequired');
+					dateField.value = survSubjAnsVal;
+					dateField.readonly = !me.formula('editable');
+					td.appendChild(dateField);
+				} else if(ansTypCcd === "TIME") {
+					var timeField = document.createElement("sc-combobox-field");
+					timeField.style.display = "block";
+					timeField.classList.add("w-100");
+					timeField.items = me.time;
+					timeField.displayField = "label";
+					timeField.valueField = "data";
+					timeField.placeholder = me.translate("선택");
+					timeField.required = me.formula('isRequired');
+					timeField.value = survSubjAnsVal;
+					timeField.readonly = !me.formula('editable');
+					td.appendChild(timeField);
+				}
+				tr.appendChild(td);
+			},
+			
+			shortTextValidator: function(value) {
+				var me = this;
+				var shortansInpFormCcd = me.question.shortans_inp_form_ccd;
+				if(shortansInpFormCcd !== "NA") {
+					var regexp = new RegExp(me.question.regexp);
+					if(!regexp.test(value)) {
+						var inpFormCcds = me.codes.inpFormCcd;
+						var filteredInpFormCcd = inpFormCcds.filter(function(item) {
+							return item.data === shortansInpFormCcd;
+						})[0];
+						return me.translate("STD.SURV0013", null, filteredInpFormCcd.dtlcd_nm); // {0} 형식으로 입력해주시기 바랍니다.
+					}
+				}
+				return true;
+			},
+			
+			get isSelectType() {
+				var me = this;
+				var question = me.question;
+				var ansTypCcd = question.ans_typ_ccd;
+				var selectAnsTypCcds = ["SINGLE", "MULTI", "RANK", "LINEAR"];
+				if(selectAnsTypCcds.indexOf(ansTypCcd) >= 0) {
+					return true;
+				} else {
+					return false;
+				}
+			},
+			
+			validator: function() {
+				var me = this;
+				var question = me.question;
+				var childrenQuestions = me.childrenQuestions;
+				var ansTypCcd = question.ans_typ_ccd;
+				var tbody = me.$.questionBody;
+				var trs = tbody.querySelectorAll("tr");
+				
+				if(me.isSelectType) {
+					for(var i = 0; i < trs.length; i++) {
+						var tr = trs[i];
+						
+						if(me.formula('isRequired')) {
+							var otherValue = me.getGridEtcFormValue(tr.querySelector('[form="other"]'));
+							var inputs = tr.querySelectorAll('[name]');
+							var isChecked = false;
+							for(var j = 0; j < inputs.length; j++) {
+								var input = inputs[j];
+								if(input.checked) {
+									isChecked = true;
+									break;
+								}
+							}
+							if(!isChecked && UT.isEmpty(otherValue)) {
+								UT.alert("STD.E0000");
+								return false;
+							}
+						}
+						
+						var attachTd = tr.querySelector('[form="attach"]');
+						if(attachTd != null) {
+							var field = attachTd.firstChild;
+							if(!field.validate()) {
+								UT.alert("STD.E0000");
+								return false;
+							}
+						}
+					}
+				} else {
+					for(var i = 0; i < trs.length; i++) {
+						var tr = trs[i];
+						var childrenQuestion = tr.firstChild.data;
+						
+						var answerTd = tr.querySelector('[form="answer"]');
+						var otherValue = me.getGridEtcFormValue(tr.querySelector('[form="other"]'));
+						var attachTd = tr.querySelector('[form="attach"]');
+						
+						var field = answerTd.firstChild;
+						if(UT.isNotEmpty(otherValue)) {
+							field.required = false;
+						}
+						if(!field.validate()) {
+							UT.alert("STD.E0000");
+							return false;
+						}
+						
+						if(attachTd != null) {
+							var field = attachTd.firstChild;
+							if(!field.validate()) {
+								UT.alert("STD.E0000");
+								return false;
+							}
+						}
+					}
+				}
+				return true;
+			},
+			
+			setParentAnswer: function(parentValue) {
+				var me = this;
+				me.question.par_answer = parentValue;
+				me.applyFormula();
+				
+				me.fieldEditable(me.formula('editable'));
+				if(!me.formula('editableFromParent')) {
+					me.clearData();
+				}
+			},
+			
+			fieldEditable: function(editable) {
+				var me = this;
+				var questionBody = me.$.questionBody;
+				var fields = questionBody.querySelectorAll("[field]");
+				for(var i = 0; i < fields.length; i++) {
+					var field = fields[i];
+					field.readonly = !editable;
+				}
+				var inputs = questionBody.querySelectorAll("[name]");
+				for(var j = 0; j < inputs.length; j++) {
+					var input = inputs[j];
+					input.disabled = !editable;
+				}
+			},
+			
+			clearData: function() {
+				var me = this;
+				var questionBody = me.$.questionBody;
+				var fields = questionBody.querySelectorAll("[field]");
+				for(var i = 0; i < fields.length; i++) {
+					var field = fields[i];
+					field.value = null;
+				}
+				var inputs = questionBody.querySelectorAll("[name]");
+				for(var j = 0; j < inputs.length; j++) {
+					var input = inputs[j];
+					input.checked = false;
+				}
+			},
+			
+			get getValue() {
+				var me = this;
+				var question = me.question;
+				var childrenQuestions = me.childrenQuestions;
+				var ansTypCcd = question.ans_typ_ccd;
+				var tbody = me.$.questionBody;
+				var values = [];
+				
+				if(me.isSelectType) {
+					var answerMap = {};
+					for(var i = 0; i < question.answers.length; i++) {
+						var answer = question.answers[i];
+						answerMap[answer.surv_ans_opt_uuid] = answer;
+					}
+					var value = me.getGridFormSelectValues;
+					if(ansTypCcd === "SINGLE" || ansTypCcd === "LINEAR") {
+						for(var key in value) {
+							if(value.hasOwnProperty(key)) {
+								var tr = tbody.querySelector('[id="' + key + '"]');
+								
+								var filteredChildrenQuestion = childrenQuestions.filter(function(childrenQuestion) {
+									if(childrenQuestion.surv_qn_uuid === key) {
+										return true;
+									}
+								})[0];
+								var filteredQuestionAnswer = question.answers.filter(function(answer) {
+									if(answer.surv_ans_opt_uuid === value[key]) {
+										return true;
+									}
+								})[0];
+								values.push({
+									surv_uuid: filteredChildrenQuestion.surv_uuid,
+									surv_sect_uuid: filteredChildrenQuestion.surv_sect_uuid,
+									surv_qn_uuid: filteredChildrenQuestion.surv_qn_uuid,
+									par_surv_qn_uuid: question.surv_qn_uuid,
+									surv_ans_opt_uuid: filteredQuestionAnswer.surv_ans_opt_uuid,
+									surv_ans_opt_sc: filteredQuestionAnswer.opt_sc
+								});
+							}
+						}
+					} else if(ansTypCcd === "MULTI") {
+						var keyMap = {};
+						for(var key in value) {
+							var valueList = keyMap[key.split("_")[0]] || [];
+							valueList.push(key.split("_")[1]);
+							keyMap[key.split("_")[0]] = valueList;
+						}
+						for(var key in keyMap) {
+							var tr = tbody.querySelector('[id="' + key + '"]');
+							
+							var answers = [];
+							var filteredChildrenQuestion = childrenQuestions.filter(function(childrenQuestion) {
+								if(childrenQuestion.surv_qn_uuid === key) {
+									return true;
+								}
+							})[0];
+							var filteredQuestionAnswers = question.answers.filter(function(answer) {
+								if(keyMap[key].indexOf(answer.surv_ans_opt_uuid) >= 0) {
+									return true;
+								}
+							});
+							for(var i = 0; i < filteredQuestionAnswers.length; i++) {
+								var filteredQuestionAnswer = filteredQuestionAnswers[i];
+								answers.push({
+									surv_uuid: filteredChildrenQuestion.surv_uuid,
+									surv_sect_uuid: filteredChildrenQuestion.surv_sect_uuid,
+									surv_qn_uuid: filteredChildrenQuestion.surv_qn_uuid,
+									par_surv_qn_uuid: question.surv_qn_uuid,
+									surv_ans_opt_uuid: filteredQuestionAnswer.surv_ans_opt_uuid,
+									surv_ans_opt_sc: filteredQuestionAnswer.opt_sc
+								});
+							}
+							values.push({
+								surv_uuid: filteredChildrenQuestion.surv_uuid,
+								surv_sect_uuid: filteredChildrenQuestion.surv_sect_uuid,
+								surv_qn_uuid: filteredChildrenQuestion.surv_qn_uuid,
+								par_surv_qn_uuid: question.surv_qn_uuid,
+								answers: answers
+							});
+						}
+					} else if(ansTypCcd === "RANK") {
+						for(var i = 0; i < childrenQuestions.length; i++) {
+							var childrenQuestion = childrenQuestions[i];
+							var tr = tbody.querySelector('[id="' + childrenQuestion.surv_qn_uuid + '"]');
+							var checkedOrder = tr.firstChild.checkedOrder || [];
+							if(checkedOrder.length === 0) {
+								continue;
+							}
+							var answers = [];
+							for(var j = 0; j < checkedOrder.length; j++) {
+								var checkedDiv = checkedOrder[j];
+								var checkedField = checkedDiv.parentElement;
+								var survAnsOptUuid = checkedField.id.split('_')[1];
+								
+								answers.push({
+									surv_uuid: childrenQuestion.surv_uuid,
+									surv_sect_uuid: childrenQuestion.surv_sect_uuid,
+									surv_qn_uuid: childrenQuestion.surv_qn_uuid,
+									par_surv_qn_uuid: question.surv_qn_uuid,
+									surv_ans_opt_uuid: survAnsOptUuid,
+									surv_ans_opt_sc: answerMap[survAnsOptUuid].opt_sc,
+									surv_ans_opt_rank: j + 1
+								});
+							}
+							values.push({
+								surv_uuid: childrenQuestion.surv_uuid,
+								surv_sect_uuid: childrenQuestion.surv_sect_uuid,
+								surv_qn_uuid: childrenQuestion.surv_qn_uuid,
+								par_surv_qn_uuid: question.surv_qn_uuid,
+								answers: answers
+							});
+						}
+					}
+					
+					var trs = tbody.querySelectorAll("tr");
+					
+					var otherValues = [];
+					for(var i = 0; i < trs.length; i++) {
+						var tr = trs[i];
+						var childrenQuestion = tr.firstChild.data;
+						var otherValue = me.getGridEtcFormValue(tr.querySelector('[form="other"]'));
+						var commentValue = me.getGridEtcFormValue(tr.querySelector('[form="comment"]'));
+						var attachValue = me.getGridEtcFormValue(tr.querySelector('[form="attach"]'));
+						
+						if(UT.isEmpty(otherValue) && UT.isEmpty(commentValue) && UT.isEmpty(attachValue)) {
+							continue;
+						}
+						otherValues.push({
+							surv_uuid: childrenQuestion.surv_uuid,
+							surv_sect_uuid: childrenQuestion.surv_sect_uuid,
+							surv_qn_uuid: childrenQuestion.surv_qn_uuid,
+							par_surv_qn_uuid: question.surv_qn_uuid,
+							surv_subj_cmnt_val: commentValue,
+							surv_subj_otrs_val: otherValue,
+							surv_subj_athg_uuid: attachValue
+						});
+					}
+					
+					var addValues = [];
+					for(var i = 0; i < otherValues.length; i++) {
+						var otherValue = otherValues[i];
+						var existValue = false;
+						for(var j = 0; j < values.length; j++) {
+							var value = values[j];
+							
+							if(value.surv_qn_uuid === otherValue.surv_qn_uuid) {
+								existValue = true;
+								value.surv_subj_cmnt_val = otherValue.surv_subj_cmnt_val;
+								value.surv_subj_otrs_val = otherValue.surv_subj_otrs_val;
+								value.surv_subj_athg_uuid = otherValue.surv_subj_athg_uuid;
+							}
+						}
+						if(!existValue) {
+							addValues.push(otherValue);
+						}
+					}
+					values = values.concat(addValues);
+				} else {
+					values = me.getGridFormValues;
+				}
+				return values;
+			},
+			
+			get getGridFormSelectValues() {
+				var me = this;
+				var form = me.$.gridForm;
+				var formData = new FormData(form);
+				
+				var responses = {};
+				for(let entry of formData.entries()) {
+					responses[entry[0]] = entry[1];
+				}
+				return responses;
+			},
+			
+			get getGridFormValues() {
+				var me = this;
+				var question = me.question;
+				var ansTypCcd = question.ans_typ_ccd;
+				var tbody = me.$.questionBody;
+				var trs = tbody.querySelectorAll("tr");
+				
+				var values = [];
+				for(var i = 0; i < trs.length; i++) {
+					var tr = trs[i];
+					var childrenQuestion = tr.firstChild.data;
+					
+					var value = me.getGridFormAnsTypValue(tr.querySelector('[form="answer"]'));
+					var otherValue = me.getGridEtcFormValue(tr.querySelector('[form="other"]'));
+					var commentValue = me.getGridEtcFormValue(tr.querySelector('[form="comment"]'));
+					var attachValue = me.getGridEtcFormValue(tr.querySelector('[form="attach"]'));
+					
+					var answers = [];
+					if(ansTypCcd === "DROPDOWN" && UT.isNotEmpty(value)) {
+						var filteredQuestionAnswer = question.answers.filter(function(answer) {
+							if(answer.surv_ans_opt_uuid === value) {
+								return true;
+							}
+						})[0];
+						answers.push({
+							surv_uuid: childrenQuestion.surv_uuid,
+							surv_sect_uuid: childrenQuestion.surv_sect_uuid,
+							surv_qn_uuid: childrenQuestion.surv_qn_uuid,
+							par_surv_qn_uuid: question.surv_qn_uuid,
+							surv_ans_opt_uuid: filteredQuestionAnswer.surv_ans_opt_uuid,
+							surv_ans_opt_sc: filteredQuestionAnswer.opt_sc
+						});
+						value = null;
+					}
+					
+					values.push({
+						surv_uuid: childrenQuestion.surv_uuid,
+						surv_sect_uuid: childrenQuestion.surv_sect_uuid,
+						surv_qn_uuid: childrenQuestion.surv_qn_uuid,
+						par_surv_qn_uuid: question.surv_qn_uuid,
+						surv_subj_ans_val: value,
+						surv_subj_cmnt_val: commentValue,
+						surv_subj_otrs_val: otherValue,
+						surv_subj_athg_uuid: attachValue,
+						answers: answers
+					});
+				}
+				return values;
+			},
+			
+			getGridFormAnsTypValue: function(td) {
+				return td.firstChild.value;
+			},
+			
+			getGridEtcFormValue: function(td) {
+				if(td == null) {
+					return null;
+				}
+				return td.firstChild.value;
+			},
+			
+			padWithZero: function(str) {
+				return str.padStart(2, '0');
+			}
+		})
+	</script>
+</dom-module>

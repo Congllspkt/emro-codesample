@@ -1,0 +1,593 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="site-briefing">
+	<select id="findListFieldIntro" resultType="map">
+		/* site-briefing.findListFieldIntro : 현장설명회 현황 조회  */
+		SELECT SITEBRFG.TEN_ID
+		     , SITEBRFG.SITEBRFG_UUID
+		     , SITEBRFG.OORG_CD
+		     , SITEBRFG.SITEBRFG_NO
+		     , SITEBRFG.SITEBRFG_TIT
+		     , SITEBRFG.SITEBRFG_STS_CCD
+		     , SITEBRFG.SITEBRFG_ST_DTTM
+		     , SITEBRFG.SITEBRFG_CLSG_DTTM
+		     , SITEBRFG.SITEBRFG_PLC
+		     , SITEBRFG.SITEBRFG_PIC_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS SITEBRFG_PIC_NM
+		     , SITEBRFG.SITEBRFG_PIC_CTC
+		     , SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS SITEBRFG_INCHR_DEPT_NM
+		     , SITEBRFG.BUYER_ATHG_UUID
+		     , SITEBRFG.VD_ATHG_UUID
+		     , SITEBRFG.SITEBRFG_BUYER_RMK
+		     , SITEBRFG.SITEBRFG_VD_RMK
+		     , SITEBRFG.VD_ATND_CNFD_YN
+		     , SITEBRFG.VCONF_USE_YN
+		     , SITEBRFG.VCONF_STS_CCD
+		     , SITEBRFG.VCONF_SHR_YN
+		     , SITEBRFG.SHR_ATHG_UUID
+		     , (
+		        SELECT COUNT(SITEBRFG_VD.VD_CD)
+		          FROM SITEBRFG_VD SITEBRFG_VD
+		         INNER JOIN VD VD
+		            ON VD.TEN_ID = SITEBRFG_VD.TEN_ID
+		           AND VD.VD_CD  = SITEBRFG_VD.VD_CD
+		         WHERE SITEBRFG_VD.TEN_ID = #{g.tenant}
+		           AND SITEBRFG_VD.SITEBRFG_UUID = SITEBRFG.SITEBRFG_UUID
+		       ) AS VENDOR_TOT_CNT
+		     , (
+		        SELECT COUNT(SITEBRFG_VD.ATND_CONFM_YN)
+		          FROM SITEBRFG_VD SITEBRFG_VD
+		         INNER JOIN VD VD
+		            ON VD.TEN_ID = SITEBRFG_VD.TEN_ID
+		           AND VD.VD_CD  = SITEBRFG_VD.VD_CD
+		         WHERE SITEBRFG_VD.TEN_ID = #{g.tenant}
+		           AND SITEBRFG_VD.SITEBRFG_UUID = SITEBRFG.SITEBRFG_UUID
+		       ) AS VENDOR_ATTEND_EXPT_CNT
+		  FROM SITEBRFG SITEBRFG
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = SITEBRFG.TEN_ID
+		   AND USR.USR_ID = SITEBRFG.SITEBRFG_PIC_ID
+		   AND USR.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON DEPT.TEN_ID = USR.TEN_ID
+		   AND DEPT.DEPT_CD = SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		   AND DEPT.STS != 'D'
+		 WHERE SITEBRFG.TEN_ID = #{g.tenant}
+		   <if test="p.sitebrfg_tit != null and p.sitebrfg_tit != ''">
+		       <bind name="userNamePattern" value="'%' + p.sitebrfg_tit + '%'"/>
+		       AND UPPER(SITEBRFG.SITEBRFG_TIT) LIKE UPPER(#{userNamePattern})
+		   </if>
+		   <if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+		       AND SITEBRFG.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_date != null">
+		       AND SITEBRFG.SITEBRFG_ST_DTTM &gt;= #{p.from_date}
+		   </if>
+		   <if test="p.to_date != null">
+		   <bind name="toDatePattern" value="g.getPlusDays(p.to_date,1)"/>
+		       AND SITEBRFG.SITEBRFG_ST_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.sitebrfg_sts_ccd != null">
+		       AND SITEBRFG.SITEBRFG_STS_CCD = #{p.sitebrfg_sts_ccd}
+		   </if>
+		   <if test="p.sitebrfg_pic_id != null and p.sitebrfg_pic_id != ''">
+		       AND SITEBRFG.SITEBRFG_PIC_ID = #{p.sitebrfg_pic_id}
+		   </if>
+		   <if test="p.sitebrfg_inchr_dept_cd != null and p.sitebrfg_inchr_dept_cd != ''">
+		       AND SITEBRFG.SITEBRFG_INCHR_DEPT_CD = #{p.sitebrfg_inchr_dept_cd}
+		   </if>
+		 ORDER BY SITEBRFG.SITEBRFG_NO DESC
+	</select>
+	<select id="findInfoFieldIntro" resultType="map">
+		/* site-briefing.findInfoFieldIntro : 현장설명회 상세 조회  */
+		SELECT SITEBRFG.TEN_ID
+		     , SITEBRFG.SITEBRFG_UUID
+		     , SITEBRFG.OORG_CD
+		     , SITEBRFG.SITEBRFG_NO
+		     , SITEBRFG.SITEBRFG_TIT
+		     , SITEBRFG.SITEBRFG_STS_CCD
+		     , SITEBRFG.SITEBRFG_ST_DTTM
+		     , SITEBRFG.SITEBRFG_CLSG_DTTM
+		     , SITEBRFG.SITEBRFG_PLC
+		     , SITEBRFG.SITEBRFG_PIC_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS SITEBRFG_PIC_NM
+		     , SITEBRFG.SITEBRFG_PIC_CTC
+		     , SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS SITEBRFG_INCHR_DEPT_NM
+		     , SITEBRFG.BUYER_ATHG_UUID
+		     , SITEBRFG.VD_ATHG_UUID
+		     , SITEBRFG.SITEBRFG_BUYER_RMK
+		     , SITEBRFG.SITEBRFG_VD_RMK
+		     , CASE WHEN (
+		                  SELECT COUNT(SITEBRFG_ITEM.SITEBRFG_ITEM_UUID)
+		                    FROM SITEBRFG_ITEM SITEBRFG_ITEM
+		                   WHERE SITEBRFG_ITEM.TEN_ID        = SITEBRFG.TEN_ID
+		                     AND SITEBRFG_ITEM.SITEBRFG_UUID = SITEBRFG.SITEBRFG_UUID
+		                     AND SITEBRFG_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+		                 ) &gt; 0 THEN 'Y'
+		            ELSE 'N'
+		        END AS HAS_NO_CD_ITEM
+		     , SITEBRFG.VD_ATND_CNFD_YN
+		     , SITEBRFG.VCONF_USE_YN
+		     , SITEBRFG.VCONF_STS_CCD
+		     , SITEBRFG.VCONF_SHR_YN
+		     , SITEBRFG.SHR_ATHG_UUID
+		     , SITEBRFG.RCRD_ATHG_UUID
+		  FROM SITEBRFG SITEBRFG
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = SITEBRFG.TEN_ID
+		   AND USR.USR_ID = SITEBRFG.SITEBRFG_PIC_ID
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON DEPT.TEN_ID  = USR.TEN_ID
+		   AND DEPT.DEPT_CD = SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		 WHERE SITEBRFG.TEN_ID = #{g.tenant}
+		   AND SITEBRFG.SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</select>
+	<select id="findListFiItem" resultType="map">
+		/* site-briefing.findListFiItem : 현장설명회 품목 정보 조회  */
+		SELECT SITEBRFG_ITEM.TEN_ID
+		     , SITEBRFG_ITEM.SITEBRFG_ITEM_UUID
+		     , SITEBRFG_ITEM.OORG_CD
+		     , SITEBRFG_ITEM.SITEBRFG_UUID
+		     , SITEBRFG_ITEM.ITEM_CD
+		     , CASE WHEN SITEBRFG_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE SITEBRFG_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , SITEBRFG_ITEM.SITEBRFG_LNO
+		     , SITEBRFG_ITEM.ITEM_NM
+		     , SITEBRFG_ITEM.UOM_CCD
+		     , SITEBRFG_ITEM.ITEM_SPEC
+		     , SITEBRFG_ITEM.SG_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN SG.SG_NM_EN
+		            ELSE SG.SG_NM
+		        END AS SG_NM
+		     , SITEBRFG_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , SITEBRFG_ITEM.ITEM_SPEC_DTL
+		     , SITEBRFG_ITEM.STS
+		     , SITEBRFG_ITEM.REGR_ID
+		     , SITEBRFG_ITEM.REG_DTTM
+		     , SITEBRFG_ITEM.MODR_ID
+		     , SITEBRFG_ITEM.MOD_DTTM
+		  FROM SITEBRFG_ITEM SITEBRFG_ITEM
+		  LEFT OUTER JOIN SG SG
+		    ON SG.TEN_ID = SITEBRFG_ITEM.TEN_ID
+		   AND SG.SG_CD = SITEBRFG_ITEM.SG_CD
+		 WHERE SITEBRFG_ITEM.TEN_ID = #{g.tenant}
+		   AND SITEBRFG_ITEM.SITEBRFG_UUID = #{p.sitebrfg_uuid}
+		 ORDER BY CAST(SITEBRFG_ITEM.SITEBRFG_LNO  AS INT)
+	</select>
+	<select id="findListFiVendor" resultType="map">
+		/* site-briefing.findListFiVendor : 현장설명회 업체 정보 조회  */
+		SELECT SITEBRFG_VD.TEN_ID
+		     , SITEBRFG_VD.SITEBRFG_VD_UUID
+		     , SITEBRFG_VD.SITEBRFG_UUID
+		     , SITEBRFG_VD.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN SITEBRFG_VD.VD_CD
+		            ELSE VD.ERP_VD_CD
+		        END AS DISP_VD_CD
+		     , SITEBRFG_VD.VD_PIC_UUID
+		     , SITEBRFG_VD.VD_PIC_NM
+		     , SITEBRFG_VD.VD_PIC_CTC
+		     , SITEBRFG_VD.VD_PIC_EML
+		     , SITEBRFG_VD.ATND_CONFM_YN
+		     , SITEBRFG_VD.ATND_YN
+		  FROM SITEBRFG_VD SITEBRFG_VD
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = SITEBRFG_VD.TEN_ID
+		   AND VD.VD_CD  = SITEBRFG_VD.VD_CD
+		 WHERE SITEBRFG_VD.TEN_ID = #{g.tenant}
+		   AND SITEBRFG_VD.SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</select>
+	<select id="findListFiVendorReceiver" resultType="smartsuite.app.common.mail.data.TemplateMailData$Receiver">
+		/* site-briefing.findListFiVendorReceiver : 현장설명회 업체 정보 조회  */
+		SELECT 'To' AS RECIPIENTTYPE
+		     , SITEBRFG_VD.VD_PIC_EML AS ADDRESS
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS NAME
+		  FROM SITEBRFG_VD SITEBRFG_VD
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = SITEBRFG_VD.TEN_ID
+		   AND VD.VD_CD  = SITEBRFG_VD.VD_CD
+		 WHERE SITEBRFG_VD.TEN_ID = #{g.tenant}
+		   AND SITEBRFG_VD.SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</select>
+	<insert id="insertFiHd">
+		/* 현장 설명회 헤더 신규 생성 : site-briefing.insertFiHd */
+		INSERT INTO SITEBRFG (
+			TEN_ID
+			, SITEBRFG_UUID
+			, OORG_CD
+			, SITEBRFG_NO
+			, SITEBRFG_TIT
+			, SITEBRFG_STS_CCD
+			, SITEBRFG_ST_DTTM
+			, SITEBRFG_CLSG_DTTM
+			, SITEBRFG_PLC
+			, SITEBRFG_PIC_ID
+			, SITEBRFG_PIC_CTC
+			, SITEBRFG_INCHR_DEPT_CD
+			, BUYER_ATHG_UUID
+			, VD_ATHG_UUID
+			, SITEBRFG_BUYER_RMK
+			, SITEBRFG_VD_RMK
+			, VD_ATND_CNFD_YN
+			, VCONF_USE_YN
+			, VCONF_STS_CCD
+			, VCONF_SHR_YN
+			, SHR_ATHG_UUID
+			, RCRD_ATHG_UUID
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		)
+		VALUES(
+			#{g.tenant}
+			, #{p.sitebrfg_uuid}
+			, #{p.oorg_cd}
+			, #{p.sitebrfg_no}
+			, #{p.sitebrfg_tit}
+			, #{p.sitebrfg_sts_ccd}
+			, #{p.sitebrfg_st_dttm}
+			, #{p.sitebrfg_clsg_dttm}
+			, #{p.sitebrfg_plc}
+			, #{p.sitebrfg_pic_id}
+			, #{p.sitebrfg_pic_ctc}
+			, #{p.sitebrfg_inchr_dept_cd}
+			, #{p.buyer_athg_uuid}
+			, #{p.vd_athg_uuid}
+			, #{p.sitebrfg_buyer_rmk}
+			, #{p.sitebrfg_vd_rmk}
+			, 'N'
+			, #{p.vconf_use_yn}
+			, ''
+			, 'N'
+			, ''
+			, #{p.rcrd_athg_uuid}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateFiHd">
+		/* 현장 설명회 헤더 수정 : site-briefing.insertFiHd */
+		UPDATE SITEBRFG
+		   SET SITEBRFG_TIT           = #{p.sitebrfg_tit}
+		     , SITEBRFG_ST_DTTM       = #{p.sitebrfg_st_dttm}
+		     , SITEBRFG_CLSG_DTTM     = #{p.sitebrfg_clsg_dttm}
+		     , SITEBRFG_PLC           = #{p.sitebrfg_plc}
+		     , SITEBRFG_PIC_ID        = #{p.sitebrfg_pic_id}
+		     , SITEBRFG_PIC_CTC       = #{p.sitebrfg_pic_ctc}
+		     , SITEBRFG_INCHR_DEPT_CD = #{p.sitebrfg_inchr_dept_cd}
+		     , BUYER_ATHG_UUID        = #{p.buyer_athg_uuid}
+		     , VD_ATHG_UUID           = #{p.vd_athg_uuid}
+		     , SITEBRFG_BUYER_RMK     = #{p.sitebrfg_buyer_rmk}
+		     , SITEBRFG_VD_RMK        = #{p.sitebrfg_vd_rmk}
+		     , VCONF_USE_YN           = #{p.vconf_use_yn}
+		     , STS      = 'U'
+		     , MODR_ID  = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</update>
+	<delete id="deleteFiItem">
+		/* 현장 설명회 품목 삭제 : site-briefing.deleteFiItem */
+		DELETE
+		  FROM SITEBRFG_ITEM
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_ITEM_UUID = #{p.sitebrfg_item_uuid}
+	</delete>
+	<delete id="deleteFiVendor">
+		/* 현장 설명회 업체 삭제 : site-briefing.deleteFiVendor */
+		DELETE
+		  FROM SITEBRFG_VD
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_VD_UUID = #{p.sitebrfg_vd_uuid}
+	</delete>
+	<update id="updateFiItem">
+		/* 현장 설명회 품목 수정 : site-briefing.updateFiItem */
+		UPDATE SITEBRFG_ITEM
+		   SET ITEM_NM             = #{p.item_nm}
+		     , UOM_CCD             = #{p.uom_ccd}
+		     , ITEM_SPEC           = #{p.item_spec}
+		     , SG_CD               = #{p.sg_cd}
+		     , ITEM_CD_CRN_TYP_CCD = #{p.item_cd_crn_typ_ccd}
+		     , ITEM_SPEC_DTL       = #{p.item_spec_dtl}
+		     , STS      = 'U'
+		     , MODR_ID  = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_ITEM_UUID = #{p.sitebrfg_item_uuid}
+	</update>
+	<update id="updateFiVendor">
+		/* 현장 설명회 업체 수정 : site-briefing.updateFiVendor */
+		UPDATE SITEBRFG_VD
+		   SET VD_PIC_UUID   = #{p.vd_pic_uuid}
+		     , VD_PIC_NM     = #{p.vd_pic_nm}
+		     , VD_PIC_CTC    = #{p.vd_pic_ctc}
+		     , VD_PIC_EML    = #{p.vd_pic_eml}
+		     , ATND_CONFM_YN = #{p.atnd_confm_yn}
+		     , ATND_YN       = #{p.atnd_yn}
+		     , STS           = 'U'
+		     , MODR_ID       = #{g.username}
+		     , MOD_DTTM      = #{g.now}
+		WHERE TEN_ID = #{g.tenant}
+		  AND SITEBRFG_VD_UUID = #{p.sitebrfg_vd_uuid}
+	</update>
+	<insert id="insertFiItem">
+		/* 현장 설명회 품목 추가 : site-briefing.insertFiItem */
+		INSERT INTO SITEBRFG_ITEM (
+			TEN_ID
+			, SITEBRFG_ITEM_UUID
+			, OORG_CD
+			, SITEBRFG_UUID
+			, ITEM_CD
+			, SITEBRFG_LNO
+			, ITEM_NM
+			, UOM_CCD
+			, ITEM_SPEC
+			, SG_CD
+			, ITEM_CD_CRN_TYP_CCD
+			, ITEM_SPEC_DTL
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.sitebrfg_item_uuid}
+			, #{p.oorg_cd}
+			, #{p.sitebrfg_uuid}
+			, #{p.item_cd}
+			, #{p.sitebrfg_lno}
+			, #{p.item_nm}
+			, #{p.uom_ccd}
+			, #{p.item_spec}
+			, #{p.sg_cd}
+			, #{p.item_cd_crn_typ_ccd}
+			, #{p.item_spec_dtl}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<insert id="insertFiVendor">
+		/* 현장 설명회 업체 추가 : site-briefing.insertFiVendor */
+		INSERT INTO SITEBRFG_VD (
+			TEN_ID
+			, SITEBRFG_VD_UUID
+			, SITEBRFG_UUID
+			, VD_CD
+			, VD_PIC_UUID
+			, VD_PIC_NM
+			, VD_PIC_CTC
+			, VD_PIC_EML
+			, ATND_CONFM_YN
+			, ATND_YN
+			, ATND_CONFM_SUBM_YN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.sitebrfg_vd_uuid}
+			, #{p.sitebrfg_uuid}
+			, #{p.vd_cd}
+			, #{p.vd_pic_uuid}
+			, #{p.vd_pic_nm}
+			, #{p.vd_pic_ctc}
+			, #{p.vd_pic_eml}
+			, #{p.atnd_confm_yn}
+			, #{p.atnd_yn}
+			<choose>
+			    <when test="g.isNotEmpty(p.atnd_confm_subm_yn)">
+			        , #{p.atnd_confm_subm_yn}
+			    </when>
+			    <otherwise>
+			        , 'N'
+			    </otherwise>
+			</choose>
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateProgStsFieldIntro">
+		/* 현장 설명회 진행상태 UPDATE : site-briefing.updateProgStsFieldIntro */
+		UPDATE SITEBRFG
+		   SET SITEBRFG_STS_CCD = #{p.sitebrfg_sts_ccd}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</update>
+	<update id="updateAttendConfirm">
+		/* 현장 설명회 업체 참석 확정 여부 UPDATE : site-briefing.updateAttendConfirm */
+		UPDATE SITEBRFG
+		   SET VD_ATND_CNFD_YN = 'Y'
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</update>
+	<update id="updateVendorAttendYn">
+		/* 현장 설명회 업체 참석여부 UPDATE : site-briefing.updateVendorAttendYn */
+		UPDATE SITEBRFG_VD
+		   SET ATND_YN = #{p.atnd_yn}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_VD_UUID = #{p.sitebrfg_vd_uuid}
+	</update>
+	<delete id="deleteFiHd">
+		/* 현장 설명회 헤더 삭제 : site-briefing.deleteFiHd */
+		DELETE
+		  FROM SITEBRFG
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</delete>
+	<delete id="deleteFiItems">
+		/* 현장 설명회 품목 삭제 : site-briefing.deleteFiItems */
+		DELETE
+		  FROM SITEBRFG_ITEM
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</delete>
+	<delete id="deleteFiVendors">
+		/* 현장 설명회 업체 삭제 : site-briefing.deleteFiVendors */
+		DELETE
+		  FROM SITEBRFG_VD
+		 WHERE TEN_ID = #{g.tenant}
+		   AND SITEBRFG_UUID = #{p.sitebrfg_uuid}
+	</delete>
+	<select id="findListFieldIntroPopup" resultType="map">
+		/* site-briefing.findListFieldIntroPopup : 견적 생성 시 현장설명회 목록 조회 팝업 */
+		SELECT SITEBRFG.TEN_ID
+		     , SITEBRFG.SITEBRFG_UUID
+		     , SITEBRFG.OORG_CD
+		     , SITEBRFG.SITEBRFG_NO
+		     , SITEBRFG.SITEBRFG_TIT
+		     , SITEBRFG.SITEBRFG_STS_CCD
+		     , SITEBRFG.SITEBRFG_ST_DTTM
+		     , SITEBRFG.SITEBRFG_CLSG_DTTM
+		     , SITEBRFG.SITEBRFG_PLC
+		     , SITEBRFG.SITEBRFG_PIC_ID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS SITEBRFG_PIC_NM
+		     , SITEBRFG.SITEBRFG_PIC_CTC
+		     , SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS SITEBRFG_INCHR_DEPT_NM
+		     , SITEBRFG.BUYER_ATHG_UUID
+		     , SITEBRFG.VD_ATHG_UUID
+		     , SITEBRFG.SITEBRFG_BUYER_RMK
+		     , SITEBRFG.SITEBRFG_VD_RMK
+		     , SITEBRFG.VCONF_USE_YN
+		     , SITEBRFG.VCONF_STS_CCD
+		     , SITEBRFG.VCONF_SHR_YN
+		     , SITEBRFG.SHR_ATHG_UUID
+		  FROM SITEBRFG SITEBRFG
+		  LEFT OUTER JOIN USR USR
+		    ON USR.TEN_ID = SITEBRFG.TEN_ID
+		   AND USR.USR_ID = SITEBRFG.SITEBRFG_PIC_ID
+		   AND USR.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON DEPT.TEN_ID = USR.TEN_ID
+		   AND DEPT.DEPT_CD = SITEBRFG.SITEBRFG_INCHR_DEPT_CD
+		   AND DEPT.STS != 'D'
+		 WHERE SITEBRFG.TEN_ID = #{g.tenant}
+		   AND SITEBRFG.SITEBRFG_STS_CCD = 'SITEBRFG_ED'
+		   AND SITEBRFG.STS != 'D'
+		   AND NOT EXISTS (
+		                   SELECT 1
+		                     FROM RFX
+		                    WHERE TEN_ID = SITEBRFG.TEN_ID
+		                      AND BFG_YN = 'Y'
+		                      AND SITEBRFG_UUID = SITEBRFG.SITEBRFG_UUID
+		                      AND STS != 'D'
+		                  )
+		   <if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+		       AND UPPER(SITEBRFG.OORG_CD) IN
+		       <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_date != null">
+		       AND SITEBRFG.SITEBRFG_ST_DTTM &gt;= #{p.from_date}
+		   </if>
+		   <if test="p.to_date != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_date,1)"/>
+		       AND SITEBRFG.SITEBRFG_CLSG_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.sitebrfg_tit != null and p.sitebrfg_tit != ''">
+		       <bind name="fiTitPattern" value="'%' + p.sitebrfg_tit + '%'"/>
+		       AND UPPER(SITEBRFG.SITEBRFG_TIT) LIKE UPPER(#{fiTitPattern})
+		   </if>
+		   <if test="p.sitebrfg_pic_nm != null and p.sitebrfg_pic_nm != ''">
+		       <bind name="userNamePattern" value="'%' + p.sitebrfg_pic_nm + '%'"/>
+		       AND (UPPER(USR.USR_NM) LIKE UPPER(#{userNamePattern}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{userNamePattern}) )
+		   </if>
+		   <if test="p.sitebrfg_pic_id != null and p.sitebrfg_pic_id != ''">
+		       AND SITEBRFG.SITEBRFG_PIC_ID = #{p.sitebrfg_pic_id}
+		   </if>
+	</select>
+	<select id="selectRfxFieldIntroHd" resultType="map">
+		/* site-briefing.selectRfxFieldIntroHd : 견적 현장설명회 정보 조회 */
+		SELECT RFX_UUID
+		     , RFX_NO
+		     , OORG_CD
+		     , 'SITEBRFG_ED' AS SITEBRFG_STS_CCD    /* 현장설명회 진행상태(종료) */
+		     , BFG_DTTM      AS SITEBRFG_ST_DTTM
+		     , BFG_DTTM      AS SITEBRFG_CLSG_DTTM
+		     , BFG_PLC       AS SITEBRFG_PLC
+		     , BFG_PIC_ID    AS SITEBRFG_PIC_ID
+		     , 'Y'           AS VD_ATND_CNFD_YN     /* 현장설명회 업체 참여 확정 여부  */
+		  FROM RFX
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="selectRfxItems" resultType="map">
+		/* site-briefing.selectRfxItems : 견적 품목 정보 조회 */
+		SELECT ITEM_CD
+		     , ITEM_NM
+		     , ITEM_SPEC
+		     , UOM_CCD
+		     , SG_CD
+		     , ITEM_CD_CRN_TYP_CCD
+		     , ITEM_SPEC_DTL
+		  FROM RFX_ITEM
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="selectRfxVendors" resultType="map">
+		/* site-briefing.selectRfxVendors : 견적 업체 정보 조회 */
+		SELECT VD_CD
+		     , VD_PIC_UUID
+		     , VD_PIC_TEL AS VD_PIC_CTC
+		     , VD_PIC_EML
+		     , 'Y' AS ATND_CONFM_SUBM_YN /* 현장설명회 업체 참여 예정 제출 여부  */
+		  FROM RFX_VD
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<update id="updateRfxHdFieldInfo">
+		/* site-briefing.updateRfxHdFieldInfo : 견적 현장설명회 아이디 update */
+		UPDATE RFX
+		   SET SITEBRFG_UUID = #{p.sitebrfg_uuid}
+		 WHERE TEN_ID   = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+</mapper>

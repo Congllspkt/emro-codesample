@@ -1,0 +1,362 @@
+<sc-link rel="import" href="ep-catalog-item-pr.html"></sc-link>
+<sc-link rel="import" href="ep-shopping-cart-list.html"></sc-link>
+<sc-link rel="import" href="ep-add-shopping-cart.html"></sc-link>
+<dom-module id="es-catalog-page">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+        sc-listbox>.item-selected.item-focused {
+            background: none;
+        }
+        sc-listbox>:hover {
+            background: none;
+        }
+        sc-listbox> * {
+            cursor: auto;
+        }
+    </style>
+
+    <template>
+        <sc-code-group auto>
+        </sc-code-group>
+
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+
+        <sc-ajax id="findListUprcItemWithCatalog" url="findListUprcItemWithCatalog.do" body="{{indexParam}}">
+        </sc-ajax>
+
+        <div class="catalog-result-page catalog">
+            <div class="catalog-page-toolbar">
+                <div class="result-sort-type">
+                    <ul>
+                        <li class="active"> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprc_efct_st_dt desc"><sc-label text="최신순"></sc-label></a></li>
+                        <li> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc asc"><sc-label text="최저가순"></sc-label></a></li>
+                        <li> <a on-click="onFindSort" data-tab="uprc_item_list" data-sort="uprccntr_uprc desc"><sc-label text="최고가순"></sc-label></a></li>
+                    </ul>
+                </div>
+                <div class="wrap-btn">
+                    <button class="cart" on-click="onAddShoppingCart"><span>[[translate('장바구니담기')]]</span></button>
+                </div>
+            </div>
+            <div class="catalog-page-cont">
+                <sc-listbox id="catalog_list_box"
+                            items="[[catalogList]]"
+                            prevent-focus="true"
+                            enable-check-box="true" multi="true"
+                            style="border-top:0px !important;border:0px;background:inherit;">
+                    <template>
+                        <div class="catalog-item-container">
+                            <div class="item-checkbox">
+                            </div>
+                            <div class="item-img"><img src="[[displayThumbnailByCls(item)]]"/></div>
+                            <div class="item-info">
+                                <div class="info-title"><a href="#" on-click="onDirectBuy" data="[[item]]">[[item.item_nm]]</a></div>
+                                <div class="info-category">
+                                    [[item.item_spec]]
+                                </div>
+                                <div class="info-txt">
+                                    <span style="font-weight:bold;">[[translate('모델 번호')]]</span><span>[[item.mod_no]]</span>
+                                    <span style="font-weight:bold;">[[translate('제조사')]]</span><span>[[item.mfgr_nm]]</span>
+                                    <span style="font-weight:bold;">[[translate('원산지')]]</span><span>[[item.orgn_ctry]]</span>
+                                </div>
+                            </div>
+                            <div class="item-cost">
+                                <div><span>[[displayPrice(item.uprccntr_uprc, item.cur_ccd)]]</span></div>
+                            </div>
+                            <div class="item-company"><span>[[item.vd_nm]]</span></div>
+                            <div class="item-purchase-button">
+                                <!--<button  on-click="onDirectBuy"><span>바로구매</span></button>-->
+                                <sc-button text="바로구매" on-click="onDirectBuy" data="[[item]]"></sc-button>
+                            </div>
+                        </div>
+                    </template>
+                </sc-listbox>
+            </div>
+            <div class="catalog-page-selector">
+                <div class="prev-container">
+                    <button class="first" on-click="goFirstPage"></button>
+                    <button class="prev" on-click="goPreviousPage"></button>
+                </div>
+                <div class="num-container" id="pagination">
+                    <!-- drawn by script -->
+                </div>
+                <div class="next-container">
+                    <button class="next" on-click="goNextPage"></button>
+                    <button class="last" on-click="goLastPage"></button>
+                </div>
+            </div>
+        </div>
+
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-catalog-page",
+
+            properties: {
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function () {
+                        return {
+                            mandYn: [],
+                            dataType: [],
+                            cmnYn: []
+                        }
+                    }
+                },
+                catalogList: {
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                indexParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                totalCount: {
+                    type: Number,
+                    value: 0
+                }
+            },
+
+            formulas: {},
+
+            load: function (data, total) {
+                var me = this;
+                me.set("catalogList", data);
+                me.set("totalCount", total);
+            },
+
+            onDirectBuy: function(item){
+                var me = this;
+                var data;
+                if(item.ctlg_uuid){
+                    data = item;
+                }else{
+                    data = item.currentTarget.data;
+                }
+
+                data.isPreview = false;
+
+                var popup = UT.popup('ep-catalog-item-pr', me, "55%", "85%", {
+                    "save-close" : function(e, res){
+                        SCMdiManager.mdiHead.countShoppingCartList();
+                        popup.close();
+                    }
+                },{titleText: "상세 정보"});
+                popup.show();
+                popup.getWindowContent().load(data);
+            },
+            onFindSort: function(event) {
+                var me = this;
+                var sort = event.currentTarget.dataset.sort;
+                me.set("indexParam.sort", sort)
+
+                me.setActiveNode(UT.closest(event.target, "ul"), UT.closest(event.target, "li"));
+                me.onFindList();
+            },
+            setActiveNode: function(parent, activeNode) {
+                var me = this;
+                var nodes = Polymer.dom(parent).childNodes;
+                for (var i in nodes) {
+                    nodes[i].classList.remove("active");
+                }
+                activeNode.classList.add("active");
+            },
+            onAddShoppingCart: function(){
+                var me           = this;
+                var listbox      = me.$.catalog_list_box;
+                var selectedList   = listbox.selectedItems;
+                var lenOfList = selectedList.length;
+
+                if(lenOfList === 0){
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                    return;
+                }
+                if(lenOfList === 1){
+                    me.onDirectBuy(selectedList[0]);
+                }
+                if(lenOfList > 1){
+                    var popup = UT.popup('ep-add-shopping-cart', me, "80%", "40%", {
+                        "save-close" : function(e, res){
+                            SCMdiManager.mdiHead.countShoppingCartList();
+                            popup.close();
+                        }
+                    });
+                    popup.show();
+                    popup.getWindowContent().load(selectedList);
+                }
+                //me.saveUprcItemToShoppingCartList(selectedList);
+
+            },
+            displayDate: function(date){
+                var me = this;
+                return SCFormatter.format("date", date);
+            },
+
+            displayPagination: function(btnHtml) {
+                var me = this;
+                var container = Polymer.dom(me.$.pagination);
+                //me.clearElement(container, "._pg_", "click", "onFindPaging");
+
+                Polymer.dom(me.$$("#pagination")).innerHTML = btnHtml.join("");
+                me.bindListener(container, "._pg_", "click", "onFindPaging");
+            },
+            clearElement: function(container, selector, eventName, listener) {
+                var me = this;
+
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.unlisten(elements[i], eventName, listener);
+                    }
+                }
+
+                // 하위 노드 모두 지우기
+                var child = Polymer.dom(container).childNodes;
+                if (UT.isNotEmpty(child)) {
+                    for (var i = 0, len = child.length; i < len; i++) {
+                        Polymer.dom(container).removeChild(child[i]);
+                    }
+                }
+            },
+
+            // selector 의 event listener 를 등록한다
+            bindListener: function(container, selector, eventName, listener) {
+                var me = this;
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.listen(elements[i], eventName, listener);
+                    }
+                }
+            },
+            // 페이징 클릭 - 해당탭 & 검색어유지 & 품목분류유지 & X페이지변경 & 소팅유지 & 페이지당개수 유지
+            onFindPaging: function(event) {
+                var me = this;
+                var tab = me.getDataset(event, "tab");
+                var page = me.getDataset(event, "page");
+
+                if (UT.isEmpty(page) || UT.isEmpty(tab) || !me.hasData()) {
+                    return;
+                }
+                var param = me.get("indexParam");
+                param.from = param.size * (page - 1);
+
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+
+            hasData: function(){
+                var me = this;
+                var count = me.get("catalogList").length;
+                return UT.isNumber(count) && count > 0 ? true : false;
+            },
+
+            // 클릭 이벤트의 파라미터
+            getDataset: function(event, name) {
+                var target = UT.isEmpty(event.target.dataset[name]) ? UT.closest(event.target, "button") : event.target;
+                return target.dataset[name];
+            },
+
+            saveIndexParam: function(param) {
+                var me = this;
+                me.set("indexParam", param);
+            },
+
+            onFindList: function(){
+                var me = this;
+                UT.request(me.$.findListUprcItemWithCatalog, function(e,res){
+                    me.set("catalogList",res.response);
+                    me.displayPagination(me.getPagingHtml());
+                });
+            },
+
+            getPagingHtml: function() {
+                var me = this;
+                var html = [];
+                var size = me.get("indexParam.size") || 2;
+                var from = me.get("indexParam.from") || 0;
+                var current = parseInt(from / size, 10) + 1;
+                var pages = parseInt(me.totalCount / size, 10) + (me.totalCount % size === 0 ? 0 : 1);
+                var start = Math.max(current - 5, 1);
+                var end = Math.min(start + 9, pages);
+                var prev = Math.max(current - 1, 1);
+                var next = Math.min(current + 1, pages);
+                var tab = "ctlg_list";
+
+                for (var i = start; i <= end; i++) {
+                    html.push((current === i) ? "<button class='active'><span>" + i + "</span></button>" : "<button class='_pg_' data-tab='" + tab + "' data-page='" + i + "'><span>" + i + "</span></button>");
+                }
+                return html;
+            },
+            goFirstPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = 0;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goPreviousPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = param.from - param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goNextPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.from + param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goLastPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.size * (lastPageNumber-1);
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            // 단가계약가격
+            displayPrice: function(amt, cur) {
+                var me = this;
+                var parts = amt.toString().split('.');
+                parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                return parts.join('.') + " " + cur;
+            },
+            // thumbnail 경로
+            displayThumbnailByCls: function(item) {
+                var me = this;
+                var host = window.location.origin;
+                if (UT.isEmpty(item.thnl_athg_uuid)) {
+                    return item.thnl_img_addr;
+                } else {
+                    return me.getImageUrl(item.thnl_img_addr);
+                }
+            },
+            getImageUrl : function(id) {
+                return '/attachment/download.do?id=' + encodeURIComponent(id);
+            },
+        });
+    </script>
+</dom-module>

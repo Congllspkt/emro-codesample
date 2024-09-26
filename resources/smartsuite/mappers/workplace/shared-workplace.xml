@@ -1,0 +1,523 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="shared-workplace">
+    <!-- tenant (워크플레이스 메뉴에서 조회 시 g.tenant, 스케줄러에서 조회 시 p.ten_id) -->
+    <sql id="get_tenant">
+        <choose>
+            <when test="p.search_typ != null and p.search_typ eq 'scheduler'.toString()">
+                #{p.ten_id}
+            </when>
+            <otherwise>
+                #{g.tenant}
+            </otherwise>
+        </choose>
+    </sql>
+    <!-- username (워크플레이스 메뉴 조회 시 g.username, 스케줄러에서 조회 시 p.usr_id) -->
+    <sql id="get_username">
+        <choose>
+            <when test="p.search_typ != null and p.search_typ eq 'scheduler'.toString()">
+                #{p.usr_id}
+            </when>
+            <otherwise>
+                #{g.username}
+            </otherwise>
+        </choose>
+    </sql>
+    <!-- usr_cls (워크플레이스 메뉴 조회 시 g.usr_cls, 스케줄러에서 조회 시 p.usr_typ_ccd) -->
+    <sql id="get_usr_cls">
+        <choose>
+            <when test="p.search_typ != null and p.search_typ eq 'scheduler'.toString()">
+                #{p.usr_typ_ccd}
+            </when>
+            <otherwise>
+                #{g.usr_cls}
+            </otherwise>
+        </choose>
+    </sql>
+    <!-- co_cd (워크플레이스 메뉴 조회 시 g.co_cd, 스케줄러에서 조회 시 p.co_cd) -->
+    <sql id="get_co_cd">
+        <choose>
+            <when test="p.search_typ != null and p.search_typ eq 'scheduler'.toString()">
+                #{p.co_cd}
+            </when>
+            <otherwise>
+                #{g.co_cd}
+            </otherwise>
+        </choose>
+    </sql>
+    <!-- Task 대상자 조건 -->
+    <sql id="condition_task_authty">
+      <choose>
+        <!-- 협력사 -->
+        <when test="g.usr_cls eq &quot;VD&quot;">
+        EXISTS ( SELECT TAUTH.TASK_UUID
+                   FROM TASK_AUTHTY TAUTH
+                  WHERE TAUTH.TEN_ID       = TASK.TEN_ID
+                   AND TAUTH.TASK_UUID      = TASK.TASK_UUID
+                   AND TAUTH.AUTHTY_DIV_CCD IN ('VENDOR')  -- 협력사,
+                   AND TAUTH.AUTHTY_CD      = #{g.vd_cd}
+             )
+        </when>
+        <otherwise>
+        EXISTS ( SELECT TAUTH.TASK_UUID
+                   FROM TASK_AUTHTY TAUTH
+                  WHERE TAUTH.TEN_ID      = TASK.TEN_ID
+                    AND TAUTH.TASK_UUID   = TASK.TASK_UUID
+                    AND TAUTH.AUTHTY_DIV_CCD = 'OORG'  -- 운영조직
+                    AND TAUTH.AUTHTY_CD IN (
+                        SELECT OORG_CD
+                          FROM OORG_USR
+                         WHERE TEN_ID = TASK.TEN_ID
+                           AND USR_ID = <include refid="shared-workplace.get_username"/>
+                           AND STS   <![CDATA[<>]]> 'D'
+                      )
+                  UNION ALL
+                 SELECT TAUTH.TASK_UUID
+                   FROM TASK_AUTHTY TAUTH
+                  WHERE TAUTH.TEN_ID      = TASK.TEN_ID
+                    AND TAUTH.TASK_UUID   = TASK.TASK_UUID
+                    AND TAUTH.AUTHTY_DIV_CCD = 'PURC_GRP'  -- 구매 그룹
+                    AND TAUTH.AUTHTY_CD   IN (
+                          SELECT PGP.PURC_GRP_CD
+                            FROM PURC_GRP_PIC PGP
+                           WHERE PGP.TEN_ID = TASK.TEN_ID
+                             AND PGP.CO_CD = <include refid="shared-workplace.get_co_cd"/>
+                             AND PGP.USR_ID = <include refid="shared-workplace.get_username"/>
+                             AND PGP.STS != 'D'
+                             AND PGP.PURC_GRP_TYP_CCD = 'PURC'
+                      )
+                  UNION ALL
+                 SELECT TAUTH.TASK_UUID
+                   FROM TASK_AUTHTY TAUTH
+                  WHERE TAUTH.TEN_ID      = TASK.TEN_ID
+                    AND TAUTH.TASK_UUID   = TASK.TASK_UUID
+                    AND TAUTH.AUTHTY_DIV_CCD = 'BUYER'  -- 내부 사용자
+                    AND TAUTH.AUTHTY_CD   = <include refid="shared-workplace.get_username"/>
+            )
+        </otherwise>
+      </choose>
+	</sql>
+	<!-- 사용자 롤에 따른 sub work -->
+	<sql id="taskStatusByUserRole">
+    SELECT TSTS.TASK_STS_UUID
+      FROM ROLE_MENU RMENU       -- 롤 메뉴
+     INNER JOIN TASK_STS TSTS  -- work 메뉴 기능
+        ON TSTS.TEN_ID  = RMENU.TEN_ID
+       AND TSTS.MENU_CD = RMENU.MENU_CD
+       AND TSTS.STS != 'D'
+       AND TSTS.USE_YN = 'Y'
+     WHERE RMENU.TEN_ID   = <include refid="shared-workplace.get_tenant"/>
+       AND RMENU.ROLE_CD IN (
+           SELECT ROLE_CD
+             FROM ROLE_USR RUSR       -- 사용자 롤
+            WHERE TEN_ID = <include refid="shared-workplace.get_tenant"/>
+              AND USR_ID = <include refid="shared-workplace.get_username"/>
+     <choose>
+         <when test="p.search_typ != null and p.search_typ eq 'scheduler'.toString() and p.usr_typ_ccd eq 'BUYER'.toString()">
+            UNION ALL
+           SELECT RDEPT.ROLE_CD
+             FROM ROLE_DEPT RDEPT  -- 부서 롤
+            INNER JOIN USR USR
+               ON USR.TEN_ID  = RDEPT.TEN_ID
+              AND USR.DEPT_CD = RDEPT.DEPT_CD
+            WHERE RDEPT.TEN_ID = <include refid="shared-workplace.get_tenant"/>
+              AND USR.USR_ID  = <include refid="shared-workplace.get_username"/>
+         </when>
+         <otherwise>
+             <if test="g.usr_cls eq &quot;BUYER&quot;">
+             UNION ALL
+            SELECT RDEPT.ROLE_CD
+              FROM ROLE_DEPT RDEPT  -- 부서 롤
+             INNER JOIN USR USR
+                ON USR.TEN_ID  = RDEPT.TEN_ID
+               AND USR.DEPT_CD = RDEPT.DEPT_CD
+             WHERE RDEPT.TEN_ID = #{g.tenant}
+               AND USR.USR_ID  = #{g.username}
+             </if>
+         </otherwise>
+     </choose>
+         )
+  	</sql>
+    <!-- 지연 조건 (지연 표시 시작 일자 < 현재일자) -->
+    <sql id="condition_delay">
+                            ( TASK.DELAY_DSPY_ST_DT <![CDATA[<=]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD')  ) </sql>
+    <!-- 임박 조건 (지연 표시 시작 일자 >= 현재일자 && 임박 표시 시작 일자 <= 현재일자) -->
+    <sql id="condition_immnt">
+                            ( TASK.DELAY_DSPY_ST_DT <![CDATA[>]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD') AND TASK.IMMNT_DSPY_ST_DT <![CDATA[<=]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD')) </sql>
+    <!-- 일반 조건 ((지연 표시 시작 일자 > 현재일자 || 마감일자없음) && (임박시작일자 > 현재일자 || 임박시작일자없음)) -->
+    <sql id="condition_norm">
+                            ( (TASK.DELAY_DSPY_ST_DT <![CDATA[>]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD') OR TASK.CLSG_DT IS NULL) AND (TASK.IMMNT_DSPY_ST_DT <![CDATA[>]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD') OR TASK.IMMNT_DSPY_ST_DT IS NULL) ) </sql>
+    <!-- 신규 조건 (신규종료일자 > 현재일자) -->
+    <sql id="condition_new">
+                            ( TASK.NEW_DSPY_ED_DT <![CDATA[>=]]> TO_CHAR(CURRENT_DATE ,'YYYYMMDD') ) </sql>
+	<!-- 오픈티켓 with 절 (제외시킨 task 미포함) -->
+    <sql id="with_clause_task_not_in_xecpt">
+    WITH O_TASK AS (
+         SELECT TASK.*
+           FROM TASK TASK
+          INNER JOIN TASK_STS TSTS
+             ON TSTS.TEN_ID = TASK.TEN_ID
+            AND TSTS.TASK_STS_UUID = TASK.TASK_STS_UUID
+            AND TSTS.STS != 'D'
+            AND TSTS.USE_YN = 'Y'
+           LEFT OUTER JOIN TASK_ASGT_XCEPT TXCEPT
+             ON TXCEPT.TEN_ID  = TASK.TEN_ID
+            AND TXCEPT.TASK_UUID = TASK.TASK_UUID
+            AND TXCEPT.REGR_ID  = <include refid="shared-workplace.get_username"/>
+          WHERE TASK.TEN_ID  = <include refid="shared-workplace.get_tenant"/>
+            --- task 대상자 조건
+            AND <include refid="condition_task_authty"/>
+            --- 사용자 롤에 따른 task sts
+            --- 검색조건
+            <include refid="condition_task_searchTerm"/>
+            AND TSTS.TASK_STS_UUID IN (
+                <include refid="taskStatusByUserRole"/>
+              )
+           -- 제외된 task 조회하지 않음
+           AND (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '')
+        )
+  	</sql>
+    <sql id="condition_task_searchTerm">
+        <if test="p != null and p.searchTerm != null and p.searchTerm != ''">
+            <bind name="searchTermPattern" value="'%' + p.searchTerm + '%'"/>
+            AND UPPER(TASK.TASK_TIT) LIKE UPPER(#{searchTermPattern})
+        </if>
+    </sql>
+    <resultMap id="findListMainTaskCount-resultMap" type="java.util.HashMap">
+        <id column="MAIN_TASK_UUID" property="main_task_uuid"/>
+        <id column="MAIN_TASK_NM" property="main_task_nm"/>
+        <result column="MAIN_TASK_NM_EN" property="main_task_nm_en"/>
+        <result column="DISPLAY_MAIN_TASK_NM" property="display_main_task_nm"/>
+        <result column="SORT" property="sort"/>
+        <result column="DELAY_TOT_CNT" property="delay_tot_cnt"/>
+        <result column="IMMNT_TOT_CNT" property="immnt_tot_cnt"/>
+        <result column="NORM_TOT_CNT" property="norm_tot_cnt"/>
+        <result column="NEW_TOT_CNT" property="new_tot_cnt"/>
+        <collection javaType="list" property="taskList" resultMap="taskMap"/>
+    </resultMap>
+    <resultMap id="taskMap" type="java.util.HashMap">
+        <id column="TASK_UUID" property="task_uuid"/>
+        <result column="TASK_TIT" property="task_tit"/>
+        <result column="SND_DTTM" property="snd_dttm"/>
+        <result column="DELAY_YN" property="delay_yn"/>
+        <result column="IMMNT_YN" property="immnt_yn"/>
+        <result column="NORM_YN" property="norm_yn"/>
+        <result column="NEW_YN" property="new_yn"/>
+        <result column="MENU_CD" property="menu_cd"/>
+        <result column="DAT_SRC_LOGIC_NM" property="dat_src_logic_nm"/>
+        <result column="DAT_SRC_PHYC_NM" property="dat_src_phyc_nm"/>
+    </resultMap>
+    <select id="findListMainTaskCount" resultMap="findListMainTaskCount-resultMap">
+    /* shared-workplace.findListMainTaskCount */
+            <include refid="with_clause_task_not_in_xecpt"/>
+            SELECT TASK.MAIN_TASK_UUID
+                 , TASK.MAIN_TASK_NM
+                 , TASK.MAIN_TASK_NM_EN
+                 , TASK.DISPLAY_MAIN_TASK_NM
+                 , TASK.SORT
+                 , TASK.DELAY_TOT_CNT
+                 , TASK.IMMNT_TOT_CNT
+                 , TASK.NORM_TOT_CNT
+                 , TASK.NEW_TOT_CNT
+                 , TASK_CONT.TASK_UUID
+                 , TASK_CONT.TASK_TIT
+                 , TO_CHAR(TASK_CONT.SND_DTTM, 'MM/DD') SND_DTTM  , TASK_CONT.DELAY_YN
+                 , TASK_CONT.IMMNT_YN
+                 , TASK_CONT.NORM_YN
+                 , TASK_CONT.NEW_YN
+                 , TASK_CONT.MENU_CD
+                 , TASK_CONT.DAT_SRC_LOGIC_NM
+                 , TASK_CONT.DAT_SRC_PHYC_NM
+              FROM (
+            SELECT MTASK.TEN_ID
+                 , MTASK.MAIN_TASK_UUID
+                 , MTASK.MAIN_TASK_NM
+                 , MTASK.MAIN_TASK_NM_EN
+                 , CASE WHEN 'ko_KR' = #{g.locale} THEN MTASK.MAIN_TASK_NM ELSE CASE WHEN MTASK.MAIN_TASK_NM_EN IS NULL OR MTASK.MAIN_TASK_NM_EN = '' THEN MTASK.MAIN_TASK_NM ELSE MTASK.MAIN_TASK_NM_EN END END AS DISPLAY_MAIN_TASK_NM
+                 , CAST(MTASK.SORT AS INT) AS SORT
+                 , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_delay"/>
+                        THEN 1 ELSE 0 END) AS DELAY_TOT_CNT
+                 , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_immnt"/>
+                        THEN 1 ELSE 0 END) AS IMMNT_TOT_CNT
+                 , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_norm"/>
+                        THEN 1 ELSE 0 END) AS NORM_TOT_CNT
+                 , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_new"/>
+                            THEN 1 ELSE 0 END) AS NEW_TOT_CNT
+              FROM MAIN_TASK MTASK
+             INNER JOIN TASK_STS TSTS
+                ON TSTS.TEN_ID = MTASK.TEN_ID
+               AND TSTS.MAIN_TASK_UUID = MTASK.MAIN_TASK_UUID
+               AND TSTS.STS     !=  'D'
+               AND TSTS.USE_YN = 'Y'
+              LEFT OUTER JOIN O_TASK TASK
+                ON TASK.TEN_ID     = TSTS.TEN_ID
+               AND TASK.TASK_STS_UUID = TSTS.TASK_STS_UUID
+               --- 검색조건
+             <include refid="condition_task_searchTerm"/>
+             WHERE MTASK.TEN_ID     = <include refid="shared-workplace.get_tenant"/>
+               AND MTASK.USR_TYP_CCD    = <include refid="shared-workplace.get_usr_cls"/>
+               AND MTASK.STS       <![CDATA[<>]]> 'D'
+               -- 사용자 main work
+               AND MTASK.MAIN_TASK_UUID IN (
+                   SELECT DISTINCT MAIN_TASK_UUID
+                     FROM TASK_STS TEMP
+                    WHERE TEMP.TEN_ID   =<include refid="shared-workplace.get_tenant"/>
+                      AND TEMP.STS     <![CDATA[<>]]> 'D'
+                      AND TEMP.USE_YN = 'Y'
+                      --- 사용자 롤에 따른 task sts
+                      AND TEMP.TASK_STS_UUID IN (
+                      <include refid="taskStatusByUserRole"/>
+                      )
+                 )
+             GROUP BY MTASK.TEN_ID, MTASK.MAIN_TASK_UUID, MTASK.MAIN_TASK_NM, MTASK.MAIN_TASK_NM_EN, MTASK.SORT
+          ) TASK
+       LEFT OUTER JOIN (
+            SELECT TASK.TEN_ID
+                 , TASK.TASK_UUID
+                 , TASK.TASK_TIT
+                 , TASK.SND_DTTM
+                 , TSTS.MENU_CD
+                 , MTASK.MAIN_TASK_UUID
+                 , RANK() OVER(PARTITION BY TASK.TEN_ID, MTASK.MAIN_TASK_UUID ORDER BY TASK.SND_DTTM DESC , TASK.TASK_UUID) RK
+                 , CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_delay"/>  THEN 'Y' ELSE 'N' END AS DELAY_YN
+                 , CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_immnt"/>  THEN 'Y' ELSE 'N' END AS IMMNT_YN
+                 , CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_norm"/>  THEN 'Y' ELSE 'N' END AS NORM_YN
+                 , CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_new"/>   THEN 'Y' ELSE 'N' END AS NEW_YN
+                 , DSRC.DAT_SRC_LOGIC_NM
+                 , DSRC.DAT_SRC_PHYC_NM
+              FROM TASK TASK
+             INNER JOIN TASK_STS TSTS
+                ON TASK.TEN_ID = TSTS.TEN_ID
+               AND TASK.TASK_STS_UUID = TSTS.TASK_STS_UUID
+               AND TSTS.STS != 'D'
+               AND TSTS.USE_YN = 'Y'
+             INNER JOIN MAIN_TASK MTASK
+                ON TSTS.TEN_ID = MTASK.TEN_ID
+               AND TSTS.MAIN_TASK_UUID = MTASK.MAIN_TASK_UUID
+               AND MTASK.STS != 'D'
+              LEFT OUTER JOIN DAT_SRC DSRC
+                ON TSTS.TEN_ID = DSRC.TEN_ID
+                AND TSTS.DAT_SRC_UUID = DSRC.DAT_SRC_UUID
+             INNER JOIN TASK_AUTHTY TAUTH
+                ON TASK.TEN_ID = TAUTH.TEN_ID
+               AND TASK.TASK_UUID     = TAUTH.TASK_UUID
+               AND NOT EXISTS(SELECT 'X' FROM TASK_ASGT_XCEPT TXCEPT WHERE TASK.TEN_ID = TXCEPT.TEN_ID AND TASK.TASK_UUID = TXCEPT.TASK_UUID )
+               --- task 대상자 조건
+               AND <include refid="condition_task_authty"/>
+          ) TASK_CONT
+         ON TASK.TEN_ID = TASK_CONT.TEN_ID
+        AND TASK.MAIN_TASK_UUID = TASK_CONT.MAIN_TASK_UUID
+        AND TASK_CONT.RK <![CDATA[ <= ]]> 3
+      ORDER BY CAST(TASK.SORT AS INT)
+    </select>
+    <select id="findListMainTask" resultType="map">
+    /* shared-workplace.findListMainTask */
+    SELECT MTASK.MAIN_TASK_UUID
+         , MTASK.MAIN_TASK_NM
+         , MTASK.MAIN_TASK_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN MTASK.MAIN_TASK_NM ELSE CASE WHEN MTASK.MAIN_TASK_NM_EN IS NULL OR MTASK.MAIN_TASK_NM_EN = '' THEN MTASK.MAIN_TASK_NM ELSE MTASK.MAIN_TASK_NM_EN END END AS DISPLAY_MAIN_TASK_NM
+      FROM MAIN_TASK MTASK
+     WHERE MTASK.TEN_ID   = #{g.tenant}
+       AND MTASK.USR_TYP_CCD  = #{g.usr_cls}
+       AND MTASK.STS     <![CDATA[<>]]> 'D'
+       -- 사용자 main work
+       AND MTASK.MAIN_TASK_UUID IN (
+           SELECT DISTINCT MAIN_TASK_UUID
+             FROM TASK_STS TASTS
+            WHERE TEN_ID   = #{g.tenant}
+              AND STS     <![CDATA[<>]]> 'D'
+              --- 사용자 롤에 따른 task sts
+              AND TASK_STS_UUID IN (
+                  <include refid="taskStatusByUserRole"/>
+              )
+           )
+     ORDER BY CAST(MTASK.SORT AS INT)
+    </select>
+    <select id="findListTaskStatusCount" resultType="map">
+    /* shared-workplace.findListTaskStatusCount */
+    <include refid="with_clause_task_not_in_xecpt"/>
+    SELECT TSTS.TASK_STS_UUID
+         , TSTS.TASK_STS_NM
+         , TSTS.TASK_STS_NM_EN
+         , CASE WHEN 'ko_KR' = #{g.locale} THEN TSTS.TASK_STS_NM ELSE CASE WHEN TSTS.TASK_STS_NM_EN IS NULL OR TSTS.TASK_STS_NM_EN = '' THEN TSTS.TASK_STS_NM ELSE TSTS.TASK_STS_NM_EN END END AS DISPLAY_TASK_STS_NM
+         , TSTS.SORT
+         , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_delay"/> THEN 1 ELSE 0 END) AS DELAY_TOT_CNT
+         , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_immnt"/> THEN 1 ELSE 0 END) AS IMMNT_TOT_CNT
+         , SUM(CASE WHEN TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_norm"/> THEN 1 ELSE 0 END) AS NORM_TOT_CNT
+      FROM TASK_STS TSTS
+     INNER JOIN MAIN_TASK MTASK
+        ON TSTS.TEN_ID = MTASK.TEN_ID
+       AND TSTS.MAIN_TASK_UUID = MTASK.MAIN_TASK_UUID
+       AND MTASK.STS  <![CDATA[<>]]> 'D'
+      LEFT OUTER JOIN O_TASK TASK
+        ON TASK.TEN_ID  = TSTS.TEN_ID
+       AND TASK.TASK_STS_UUID = TSTS.TASK_STS_UUID
+       --- 검색조건
+       <include refid="condition_task_searchTerm"/>
+     WHERE TSTS.TEN_ID     = #{g.tenant}
+       AND TSTS.MAIN_TASK_UUID = #{p.main_task_uuid}
+       AND MTASK.USR_TYP_CCD   = #{g.usr_cls}
+       AND TSTS.STS       <![CDATA[<>]]> 'D'
+       AND TSTS.USE_YN = 'Y'
+       --- 사용자 롤에 따른 task sts
+       AND TSTS.TASK_STS_UUID   IN (
+             <include refid="taskStatusByUserRole"/>
+           )
+     GROUP BY TSTS.TASK_STS_UUID, TSTS.TASK_STS_NM, TSTS.TASK_STS_NM_EN, TSTS.SORT
+     ORDER BY CAST(TSTS.SORT AS INT)
+    </select>
+    <resultMap id="findListTaskStatus_resultMap" type="java.util.HashMap">
+        <id column="MAIN_TASK_UUID" property="main_task_uuid"/>
+        <result column="MAIN_TASK_NM" property="main_task_nm"/>
+        <result column="MAIN_TASK_NM_EN" property="main_task_nm_en"/>
+        <result column="DISPLAY_MAIN_TASK_NM" property="display_main_task_nm"/>
+        <collection javaType="java.util.List" property="task_status_list" resultMap="taskStatusList"/>
+    </resultMap>
+    <resultMap id="taskStatusList" type="java.util.HashMap">
+        <id column="TASK_STS_UUID" property="task_sts_uuid"/>
+        <result column="TASK_STS_NM" property="task_sts_nm"/>
+        <result column="TASK_STS_NM_EN" property="task_sts_nm_en"/>
+        <result column="DISPLAY_TASK_STS_NM" property="display_task_sts_nm"/>
+        <result column="CONN_LN_TYP_CCD" property="conn_ln_typ_ccd"/>
+        <result column="MEMO_YN" property="memo_yn"/>
+        <result column="NOTI_YN" property="noti_yn"/>
+        <result column="XCEPT_YN" property="xcept_yn"/>
+        <result column="DELAY_YN" property="delay_yn"/>
+        <result column="IMMNT_YN" property="immnt_yn"/>
+        <result column="NORM_YN" property="norm_yn"/>
+        <result column="NEW_YN" property="new_yn"/>
+        <result column="DELAY_CNT" property="delay_cnt"/>
+        <result column="IMMNT_CNT" property="immnt_cnt"/>
+        <result column="NORM_CNT" property="norm_cnt"/>
+        <result column="NEW_CNT" property="new_cnt"/>
+    </resultMap>
+    <select id="findListTaskStatus" resultMap="findListTaskStatus_resultMap">
+    /* shared-workplace.findListTaskStatus */
+    SELECT MAX(MTASK.MAIN_TASK_UUID)      AS MAIN_TASK_UUID
+         , MAX(MTASK.MAIN_TASK_NM)       AS MAIN_TASK_NM
+         , MAX(MTASK.MAIN_TASK_NM_EN)    AS MAIN_TASK_EN
+         , MAX(CASE WHEN 'ko_KR' = #{g.locale} THEN MTASK.MAIN_TASK_NM ELSE CASE WHEN MTASK.MAIN_TASK_NM_EN IS NULL OR MTASK.MAIN_TASK_NM_EN = '' THEN MTASK.MAIN_TASK_NM ELSE MTASK.MAIN_TASK_NM_EN END END)    AS DISPLAY_MAIN_TASK_NM
+         , TSTS.TASK_STS_UUID            AS TASK_STS_UUID
+         , MAX(TSTS.TASK_STS_NM)         AS TASK_STS_NM
+         , MAX(TSTS.TASK_STS_NM_EN)      AS TASK_STS_NM_EN
+         , MAX(CASE WHEN 'ko_KR' = #{g.locale} THEN TSTS.TASK_STS_NM ELSE CASE WHEN TSTS.TASK_STS_NM_EN IS NULL OR TSTS.TASK_STS_NM_EN = '' THEN TSTS.TASK_STS_NM ELSE TSTS.TASK_STS_NM_EN END END)     AS DISPLAY_TASK_STS_NM
+         , MAX(TSTS.CONN_LN_TYP_CCD)     AS CONN_LN_TYP_CCD
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TMEMO.TASK_UUID IS NOT NULL  THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END AS MEMO_YN
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TRASGN.TASK_UUID IS NOT NULL  THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END AS NOTI_YN
+         , CASE WHEN SUM(CASE WHEN TXCEPT.TASK_UUID IS NOT NULL  THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END AS XCEPT_YN
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_delay"/>
+            THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END  AS DELAY_YN
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_immnt"/> THEN 1 ELSE 0 END) &gt; 0
+            THEN 'Y'  ELSE 'N' END AS IMMNT_YN
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_norm"/>
+            THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END   AS NORM_YN
+         , CASE WHEN SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_new"/>
+            THEN 1 ELSE 0 END) &gt; 0 THEN 'Y' ELSE 'N' END    AS NEW_YN
+         , SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_delay"/>
+            THEN 1 ELSE 0 END) AS DELAY_CNT
+         , SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_immnt"/>
+            THEN 1 ELSE 0 END) AS IMMNT_CNT
+         , SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_norm"/>
+            THEN 1 ELSE 0 END) AS NORM_CNT
+         , SUM(CASE WHEN (TXCEPT.TASK_UUID IS NULL OR TXCEPT.TASK_UUID = '') AND TASK.TASK_UUID IS NOT NULL  AND <include refid="condition_new"/>
+            THEN 1 ELSE 0 END)  AS NEW_CNT
+      FROM TASK_STS TSTS
+     INNER JOIN MAIN_TASK MTASK
+        ON MTASK.TEN_ID     = TSTS.TEN_ID
+       AND MTASK.MAIN_TASK_UUID    = TSTS.MAIN_TASK_UUID
+       AND MTASK.USR_TYP_CCD    = #{g.usr_cls}
+       AND MTASK.STS       <![CDATA[<>]]> 'D'
+      LEFT JOIN TASK TASK
+        ON TASK.TEN_ID  = TSTS.TEN_ID
+       AND TASK.TASK_STS_UUID = TSTS.TASK_STS_UUID
+       AND <include refid="condition_task_authty"/>
+       --- 검색조건
+       <include refid="condition_task_searchTerm"/>
+      LEFT JOIN TASK_ASGT_XCEPT TXCEPT
+        ON TXCEPT.TEN_ID  = TASK.TEN_ID
+       AND TXCEPT.TASK_UUID = TASK.TASK_UUID
+       AND TXCEPT.REGR_ID  = #{g.username}
+      LEFT JOIN TASK_MEMO TMEMO
+        ON TMEMO.TEN_ID  = TASK.TEN_ID
+       AND TMEMO.TASK_UUID = TASK.TASK_UUID
+       AND TMEMO.REGR_ID  = #{g.username}
+      LEFT JOIN TASK_RASGN TRASGN
+        ON TRASGN.TEN_ID      = TASK.TEN_ID
+       AND TRASGN.TASK_UUID     = TASK.TASK_UUID
+       AND TRASGN.RCPNT_ID = #{g.username}
+     WHERE TSTS.TEN_ID   = #{g.tenant}
+       AND MTASK.USR_TYP_CCD  = #{g.usr_cls}
+       --- 사용자 롤에 따른 task sts
+       AND TSTS.TASK_STS_UUID IN (
+           <include refid="taskStatusByUserRole"/>
+         )
+       AND TSTS.STS     <![CDATA[<>]]> 'D'
+       AND TSTS.USE_YN = 'Y'
+     GROUP BY TSTS.TASK_STS_UUID
+     ORDER BY MAX(CAST(MTASK.SORT AS INT)), MAX(CAST(TSTS.SORT AS INT))
+    </select>
+    <select id="findItemSimilarityByItemDoctor" resultType="Bigdecimal">
+/* shared-workplace.findItemSimilarityByItemDoctor */
+        <if test="g.existModule(&quot;item-doctor&quot;)">
+            SELECT COUNT(CASE WHEN SIMLRT_VAL = 100 AND SRC_MTGL.USE_YN = 'Y' AND DUP_MTGL.USE_YN = 'Y' THEN 1 END) AS HIGH
+            FROM SIMLRT_ANAL_RES SIM
+            INNER JOIN ITEM SRC_MTGL
+            ON SRC_MTGL.TEN_ID = 'EMRO'
+            AND SRC_MTGL.ITEM_CD = SIM.SRC_ITEM_CD
+            INNER JOIN ITEM DUP_MTGL
+            ON DUP_MTGL.TEN_ID = 'EMRO'
+            AND DUP_MTGL.ITEM_CD = SIM.SUBJ_ITEM_CD
+            INNER JOIN OORG_USR OGUSER
+            ON OGUSER.TEN_ID = SRC_MTGL.TEN_ID
+            AND OGUSER.USR_ID = #{g.username}
+            AND SIM.OORG_CD = OGUSER.OORG_CD
+            INNER JOIN OORG OPOG
+            ON OPOG.TEN_ID       = OGUSER.TEN_ID
+            AND OPOG.OORG_CD  = OGUSER.OORG_CD
+            AND OPOG.OUNIT_CD = 'IO'
+            AND OPOG.USE_YN       = 'Y'
+            AND OPOG.STS         != 'D'
+            INNER JOIN LOGIC_ORG OG
+            ON OG.TEN_ID     = OPOG.TEN_ID
+            AND OG.LOGIC_ORG_TYP_CCD = OPOG.LOGIC_ORG_TYP_CCD
+            AND OG.LOGIC_ORG_CD     = OPOG.LOGIC_ORG_CD
+            INNER JOIN OUNIT OUNIT
+            ON OPOG.TEN_ID = OUNIT.TEN_ID
+            AND OPOG.OUNIT_CD = OUNIT.OUNIT_CD
+            WHERE 1=1
+        </if>
+    </select>
+    <select id="findAutoPoItemRecommendByPriceDoctor" resultType="Bigdecimal">
+/* shared-workplace.findAutoPoItemRecommendByPriceDoctor */
+        <if test="g.existModule(&quot;price-doctor&quot;)">
+            SELECT COUNT(DISTINCT AUTOPO_RCMD.ITEM_CD) AS AUTO_PO_RCMD_CNT
+            FROM PO_BYITEM_ANLY PO_ANLY
+            LEFT OUTER JOIN PO_BYITEM_CLS AUTOPO_RCMD
+            ON AUTOPO_RCMD.TEN_ID = PO_ANLY.TEN_ID
+            AND AUTOPO_RCMD.OORG_CD = PO_ANLY.OORG_CD
+            AND AUTOPO_RCMD.ITEM_CD = PO_ANLY.ITEM_CD
+            AND AUTOPO_RCMD.STS != 'D'
+            AND AUTOPO_RCMD.RCMD_PO_CLS_CCD = 'AUTOPO'                       /* 발주 분류 그룹코드 [PD011] (AUTOPO: 자동발주) */
+            AND PO_ANLY.LAST_PO_TYP_CCD NOT IN ('TLAUTOPO', 'NTLAUTOPO')     /* 발주 유형 공통코드 [P056] (TLAUTOPO, NTLAUTOPO: 자동발주) */
+            INNER JOIN OORG_USR OGUSER
+            ON OGUSER.TEN_ID = PO_ANLY.TEN_ID
+            AND OGUSER.USR_ID = #{g.username}
+            AND PO_ANLY.OORG_CD = OGUSER.OORG_CD
+            INNER JOIN OORG OPOG
+            ON OPOG.TEN_ID       = OGUSER.TEN_ID
+            AND OPOG.OORG_CD  = OGUSER.OORG_CD
+            AND OPOG.OUNIT_CD = 'PO'
+            AND OPOG.USE_YN       = 'Y'
+            AND OPOG.STS         != 'D'
+            INNER JOIN LOGIC_ORG OG
+            ON OG.TEN_ID     = OPOG.TEN_ID
+            AND OG.LOGIC_ORG_TYP_CCD = OPOG.LOGIC_ORG_TYP_CCD
+            AND OG.LOGIC_ORG_CD     = OPOG.LOGIC_ORG_CD
+            INNER JOIN OUNIT OUNIT
+            ON OPOG.TEN_ID = OUNIT.TEN_ID
+            AND OPOG.OUNIT_CD = OUNIT.OUNIT_CD
+        </if>
+    </select>
+</mapper>

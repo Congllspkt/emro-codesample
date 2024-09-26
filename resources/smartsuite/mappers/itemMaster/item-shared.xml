@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-shared">
+    <select id="findListCate" resultType="map">
+        /* item-shared.findListCate */
+        SELECT
+            CLS.PAR_ITEMCAT_CD
+            , CLS.TEN_ID
+            , CLS.ITEMCAT_CD
+            , CLS.ITEMCAT_LVL
+            , CASE WHEN 'en_US' = #{g.locale}
+                THEN (CASE WHEN CLS.ITEMCAT_NM_EN IS NULL THEN CLS.ITEMCAT_NM
+                        ELSE CLS.ITEMCAT_NM_EN
+                        END)
+                ELSE CLS.ITEMCAT_NM
+                END ITEMCAT_NM
+            , CLS.ITEMCAT_PATH
+            , CLS.ITEMCAT_PATH_EN
+            , CLS.MGMT_DEPT_CD
+            , CLS.ITEMCAT_SIMWORD
+            , CLS.SORT
+            , CLS.RISK_MGMT_YN
+            , CLS.ITEM_CD_MAND_YN
+            , CLS.USE_YN
+            , CLS.USG_EXPLN
+        FROM ITEMCAT CLS
+        WHERE CLS.TEN_ID = #{g.tenant}
+        <if test="p.itemcat_cd != null and p.itemcat_cd != ''">
+            AND CLS.ITEMCAT_CD = #{p.itemcat_cd}
+        </if>
+        <if test="p.itemcat_nm != null and p.itemcat_nm != ''">
+            <bind name="catenamePattern" value="'%' + p.itemcat_nm + '%'"/>
+                AND UPPER(CLS.ITEMCAT_NM) like UPPER(#{catenamePattern})
+        </if>
+        <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+            AND (CLS.PURC_TYP_CCD = #{p.purc_typ_ccd} OR CLS.PURC_TYP_CCD IS NULL)
+        </if>
+        AND CLS.STS != 'D'
+        ORDER BY CLS.SORT ASC
+    </select>
+    <select id="findListCateItem" resultType="map">
+        <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+        /* item-shared.findListCateItem */
+        SELECT
+            ITEM_OORG.TEN_ID
+            , ITEM_OORG.OORG_CD
+            , CASE WHEN ITEM_OORG.TL_YN IS NULL THEN 'N'
+                ELSE ITEM_OORG.TL_YN
+                END AS TL_YN
+            , LOGIC_ORG.ORG_CD
+            , CASE WHEN 'en_US' = #{g.locale} THEN LOGIC_ORG.LOGIC_ORG_NM_EN
+                ELSE LOGIC_ORG.LOGIC_ORG_NM
+                END AS LOGIC_ORG_NM
+            , MTGL.ITEM_CD
+            , MTGL.REQ_ITEM_CD
+            , MTGL.ITEM_REG_REQ_NO
+            , CASE WHEN 'en_US' = #{g.locale} THEN MTGL.ITEM_NM_EN
+                ELSE MTGL.ITEM_NM
+                END AS DISP_ITEM_NM
+            , MTGL.ITEM_NM
+            , MTGL.ITEM_NM_EN
+            , MTGL.ITEM_SIMWORD
+            , MTGL.ITEM_SPEC
+            , MTGL.UOM_CCD
+            , MTGL.SG_CD
+            <if test="g.existModule('SRM')">
+                , CASE WHEN 'en_US' = #{g.locale} THEN SG.SG_NM_EN
+                    ELSE SG.SG_NM
+                    END AS SG_NM
+            </if>
+            , MTGL.ATHG_UUID
+            , MTGL.IMG_ATHG_UUID
+            , MTGL.DWG_NO
+            , MTGL.MFGR_CD
+            , MTGL.MFGR_NM
+            , MTGL.MDL_NO
+            , MTGL.HS_NO
+            , MTGL.REP_ITEM_CD_YN
+            , MTGL.USE_YN
+            , MTGL.RMK
+            , MTGL.STS
+            , MCLS1.ITEMCAT_CD
+            , MCLS1.ITEMCAT_NM
+            , MCLS2.ITEMCAT_CD
+            , MCLS2.ITEMCAT_NM
+            , MCLS3.ITEMCAT_CD
+            , MCLS3.ITEMCAT_NM
+            , MCLS4.ITEMCAT_CD
+            , MCLS4.ITEMCAT_NM
+            , CASE WHEN MYMT.USE_YN IS NULL THEN 'N'
+                ELSE MYMT.USE_YN
+                END AS MY_ITEM_YN
+            , JOB_MCLS_MAP.PURC_GRP_CD
+            , CASE WHEN #{g.locale} = 'en_US' THEN JOB.PURC_GRP_NM_EN
+                   ELSE JOB.PURC_GRP_NM
+               END AS PURC_GRP_NM
+        FROM ITEM MTGL
+        INNER JOIN ITEM_OORG ITEM_OORG
+        ON ITEM_OORG.TEN_ID  = MTGL.TEN_ID
+        AND ITEM_OORG.OORG_CD = #{p.oorg_cd}
+        AND ITEM_OORG.ITEM_CD = MTGL.ITEM_CD
+        INNER JOIN OORG OORG
+        ON ITEM_OORG.TEN_ID  = OORG.TEN_ID
+        AND ITEM_OORG.OORG_CD = OORG.OORG_CD
+        AND OORG.OUNIT_CD     = 'IO'
+        INNER JOIN LOGIC_ORG LOGIC_ORG
+        ON OORG.TEN_ID       = LOGIC_ORG.TEN_ID
+        AND OORG.LOGIC_ORG_CD = LOGIC_ORG.LOGIC_ORG_CD
+        LEFT OUTER JOIN ITEMCAT MCLS1
+        ON MCLS1.TEN_ID     = MTGL.TEN_ID
+        AND MCLS1.ITEMCAT_CD = MTGL.ITEMCAT_LVL_1_CD
+        LEFT OUTER JOIN ITEMCAT MCLS2
+        ON MCLS2.TEN_ID     = MTGL.TEN_ID
+        AND MCLS2.ITEMCAT_CD = MTGL.ITEMCAT_LVL_2_CD
+        LEFT OUTER JOIN ITEMCAT MCLS3
+        ON MCLS3.TEN_ID     = MTGL.TEN_ID
+        AND MCLS3.ITEMCAT_CD = MTGL.ITEMCAT_LVL_3_CD
+        LEFT OUTER JOIN ITEMCAT MCLS4
+        ON MCLS4.TEN_ID     = MTGL.TEN_ID
+        AND MCLS4.ITEMCAT_CD = MTGL.ITEMCAT_LVL_4_CD
+        LEFT OUTER JOIN USR_FAV_ITEM MYMT
+        ON MYMT.TEN_ID  = ITEM_OORG.TEN_ID
+        AND MYMT.OORG_CD = ITEM_OORG.OORG_CD
+        AND MYMT.ITEM_CD = ITEM_OORG.ITEM_CD
+        AND MYMT.USR_ID  = #{g.username}
+        LEFT OUTER JOIN PURC_GRP_ITEMCAT JOB_MCLS_MAP    /* 품목분류_직무(그룹)유형_매핑  */
+        ON JOB_MCLS_MAP.TEN_ID       = MTGL.TEN_ID
+        AND JOB_MCLS_MAP.PURC_GRP_TYP_CCD = #{p.purc_grp_typ_ccd}
+        AND JOB_MCLS_MAP.CO_CD      = #{p.co_cd}
+        AND JOB_MCLS_MAP.ITEMCAT_CD      = MTGL.ITEMCAT_LVL_4_CD
+        LEFT OUTER JOIN PURC_GRP JOB             /* 직무(그룹) */
+        ON JOB.TEN_ID           = JOB_MCLS_MAP.TEN_ID
+        AND JOB.PURC_GRP_TYP_CCD = JOB_MCLS_MAP.PURC_GRP_TYP_CCD
+        AND JOB.PURC_GRP_CD      = JOB_MCLS_MAP.PURC_GRP_CD
+        AND JOB.CO_CD            = JOB_MCLS_MAP.CO_CD
+        AND JOB.USE_YN           = 'Y'
+        <if test="g.existModule('SRM')">
+            LEFT OUTER JOIN SG SG
+            ON SG.TEN_ID = MTGL.TEN_ID
+            AND SG.SG_CD = MTGL.SG_CD
+            AND SG.STS != 'D'
+        </if>
+        WHERE MTGL.TEN_ID          = #{g.tenant}
+        <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+            AND MCLS1.ITEMCAT_CD        = #{p.itemcat_lvl_1_cd}
+        </if>
+        <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+            AND MCLS2.ITEMCAT_CD        = #{p.itemcat_lvl_2_cd}
+        </if>
+        <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+            AND MCLS3.ITEMCAT_CD        = #{p.itemcat_lvl_3_cd}
+        </if>
+        <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+            AND MCLS4.ITEMCAT_CD        = #{p.itemcat_lvl_4_cd}
+        </if>
+        <choose>
+            <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+                AND MTGL.ITEM_CD IN
+                <foreach close=")" collection="p.item_cds" item="item_cd" open="(" separator=",">
+                    #{item_cd}
+                </foreach>
+            </when>
+            <otherwise>
+                <if test="p.item_cd != null and p.item_cd != ''">
+                    <bind name="cdPattern" value="'%' + g.trim(p.item_cd) + '%'"/>
+                        AND MTGL.ITEM_CD  LIKE UPPER(#{cdPattern})
+                </if>
+            </otherwise>
+        </choose>
+        <if test="p.disp_item_nm != null and p.disp_item_nm != ''">
+            <bind name="namePattern" value="'%' + g.trim(p.disp_item_nm) + '%'"/>
+                AND (UPPER(MTGL.ITEM_NM) LIKE UPPER(#{namePattern}) OR UPPER(MTGL.ITEM_NM_EN) LIKE UPPER(#{namePattern}))
+        </if>
+        <if test="p.mfgr_nm != null and p.mfgr_nm != ''">
+            <bind name="makerNmPattern" value="'%' + p.mfgr_nm + '%'"/>
+                AND UPPER(MTGL.MFGR_NM) LIKE UPPER(#{makerNmPattern})
+        </if>
+        <if test="p.item_spec != null and p.item_spec != ''">
+            <bind name="specPattern" value="'%' + p.item_spec + '%'"/>
+                AND UPPER(MTGL.ITEM_SPEC) LIKE UPPER(#{specPattern})
+        </if>
+        <if test="p.my_item_yn == &quot;Y&quot;">
+            AND MYMT.USE_YN = 'Y'
+        </if>
+    </select>
+    <insert id="insertMyItem">
+        /* item-shared.insertMyItem */
+        INSERT INTO USR_FAV_ITEM (
+            TEN_ID
+            , OORG_CD
+            , ITEM_CD
+            , USR_ID
+            , USE_YN
+            , RMK
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        ) VALUES (
+            #{g.tenant}
+            , #{p.oorg_cd}
+            , #{p.item_cd}
+            , #{g.username}
+            , #{p.use_yn}
+            , #{p.rmk}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}        
+        )
+    </insert>
+    <delete id="deleteMyItem">
+        /* item-shared.deleteMyItem */
+        DELETE FROM USR_FAV_ITEM
+        WHERE TEN_ID = #{g.tenant}
+        AND OORG_CD = #{p.oorg_cd}
+        AND ITEM_CD = #{p.item_cd}
+        AND USR_ID = #{g.username}
+    </delete>
+    <select id="findListCateItemWithUprcCntr" resultType="map">
+        <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+        /* item-shared.findListCateItemWithUprcCntr */
+        ${p.start_of_paging}
+        SELECT
+        ITEM_OORG.TEN_ID
+        , ITEM_OORG.OORG_CD
+        , CASE WHEN ITEM_OORG.TL_YN IS NULL THEN 'N'
+        ELSE ITEM_OORG.TL_YN
+        END AS TL_YN
+        , LOGIC_ORG.ORG_CD
+        , CASE WHEN 'en_US' = #{g.locale} THEN LOGIC_ORG.LOGIC_ORG_NM_EN
+        ELSE LOGIC_ORG.LOGIC_ORG_NM
+        END AS LOGIC_ORG_NM
+        , MTGL.ITEM_CD
+        , MTGL.REQ_ITEM_CD
+        , MTGL.ITEM_REG_REQ_NO
+        , CASE WHEN 'en_US' = #{g.locale} THEN MTGL.ITEM_NM_EN
+        ELSE MTGL.ITEM_NM
+        END AS DISP_ITEM_NM
+        , MTGL.ITEM_NM
+        , MTGL.ITEM_NM_EN
+        , MTGL.ITEM_SIMWORD
+        , MTGL.ITEM_SPEC
+        , MTGL.UOM_CCD
+        , MTGL.SG_CD
+        <if test="g.existModule('SRM')">
+            , CASE WHEN 'en_US' = #{g.locale} THEN SG.SG_NM_EN
+            ELSE SG.SG_NM
+            END AS SG_NM
+        </if>
+        , MTGL.ATHG_UUID
+        , MTGL.IMG_ATHG_UUID
+        , MTGL.DWG_NO
+        , MTGL.MFGR_CD
+        , MTGL.MFGR_NM
+        , MTGL.MDL_NO
+        , MTGL.HS_NO
+        , MTGL.REP_ITEM_CD_YN
+        , MTGL.USE_YN
+        , MTGL.RMK
+        , MTGL.STS
+        , CASE WHEN MYMT.USE_YN IS NULL THEN 'N'
+            ELSE MYMT.USE_YN
+            END AS MY_ITEM_YN
+        , IUH.UPRC_EFCT_ST_DT                                     AS UPRC_EFCT_ST_DT
+        , IUH.UPRC_EFCT_EXP_DT                                     AS UPRC_EFCT_EXP_DT
+        , IUH.UPRCCNTR_DT                                    AS UPRCCNTR_DT
+        , IUH.CUR_CCD                                          AS CUR_CCD
+        , IUH.CNTR_NO
+        , IUH.CNTR_REVNO
+        , CASE WHEN IUH.UPRCCNTR_QTY IS NULL
+            THEN 0
+            ELSE IUH.UPRCCNTR_QTY
+            END                                                AS UPRCCNTR_QTY
+        , CASE WHEN IUH.UPRCCNTR_UPRC IS NULL
+            THEN 0
+            ELSE IUH.UPRCCNTR_UPRC
+            END                                                AS UPRCCNTR_UPRC
+        , CASE WHEN IUH.UPRCCNTR_QTY IS NOT NULL
+            AND IUH.UPRCCNTR_UPRC IS NOT NULL
+            THEN  GETPRECFORMAT(#{g.tenant}, 'amt', IUH.UPRCCNTR_QTY * IUH.UPRCCNTR_UPRC, IUH.CUR_CCD)
+            ELSE 0
+            END                                                AS UPRCCNTR_AMT
+        , IUH.AUTO_PO_YN                                   AS AUTO_PO_YN
+        , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+            ELSE VD.VD_NM
+            END AS VD_NM
+        , VD.ERP_VD_CD
+        FROM ITEM MTGL
+        INNER JOIN ITEM_OORG ITEM_OORG
+        ON ITEM_OORG.TEN_ID  = MTGL.TEN_ID
+        AND ITEM_OORG.OORG_CD = #{p.oorg_cd}
+        AND ITEM_OORG.ITEM_CD = MTGL.ITEM_CD
+        INNER JOIN OORG OORG
+        ON ITEM_OORG.TEN_ID  = OORG.TEN_ID
+        AND ITEM_OORG.OORG_CD = OORG.OORG_CD
+        AND OORG.OUNIT_CD     = 'IO'
+        INNER JOIN LOGIC_ORG LOGIC_ORG
+        ON OORG.TEN_ID       = LOGIC_ORG.TEN_ID
+        AND OORG.LOGIC_ORG_CD = LOGIC_ORG.LOGIC_ORG_CD
+        LEFT OUTER JOIN ITEMCAT MCLS1
+        ON MCLS1.TEN_ID     = MTGL.TEN_ID
+        AND MCLS1.ITEMCAT_CD = MTGL.ITEMCAT_LVL_1_CD
+        LEFT OUTER JOIN ITEMCAT MCLS2
+        ON MCLS2.TEN_ID     = MTGL.TEN_ID
+        AND MCLS2.ITEMCAT_CD = MTGL.ITEMCAT_LVL_2_CD
+        LEFT OUTER JOIN ITEMCAT MCLS3
+        ON MCLS3.TEN_ID     = MTGL.TEN_ID
+        AND MCLS3.ITEMCAT_CD = MTGL.ITEMCAT_LVL_3_CD
+        LEFT OUTER JOIN ITEMCAT MCLS4
+        ON MCLS4.TEN_ID     = MTGL.TEN_ID
+        AND MCLS4.ITEMCAT_CD = MTGL.ITEMCAT_LVL_4_CD
+        LEFT OUTER JOIN ITEM_UPRC_HISTREC IUH           /* 단가정보 */
+        ON IUH.TEN_ID      = MTGL.TEN_ID
+        AND IUH.OORG_CD IN ( SELECT OOLM.CONNSRC_OORG_CD
+                            FROM OORG_MAPG OOLM
+                            WHERE OOLM.TEN_ID           = ITEM_OORG.TEN_ID
+                            AND OOLM.CONN_TYP_CCD         = 'POIO'
+                            AND OOLM.CONNSUBJ_OORG_CD = ITEM_OORG.OORG_CD
+                            AND OOLM.CONN_YN          = 'Y' )
+        AND IUH.ITEM_CD     = MTGL.ITEM_CD
+        AND IUH.UPRC_EFCT_ST_DT    <![CDATA[<=]]> #{nowDate}
+        AND IUH.UPRC_EFCT_EXP_DT    <![CDATA[>=]]> #{nowDate}
+        <if test="p.auto_po_yn == &quot;Y&quot;">
+            AND IUH.AUTO_PO_YN  = #{p.auto_po_yn}
+        </if>
+        AND IUH.STS         <![CDATA[<>]]> 'D'
+        LEFT OUTER JOIN VD VD            /* 단가계약 업체 */
+        ON VD.TEN_ID = IUH.TEN_ID
+        AND VD.VD_CD  = IUH.VD_CD
+        LEFT OUTER JOIN USR_FAV_ITEM MYMT
+        ON MYMT.TEN_ID  = ITEM_OORG.TEN_ID
+        AND MYMT.OORG_CD = ITEM_OORG.OORG_CD
+        AND MYMT.ITEM_CD = ITEM_OORG.ITEM_CD
+        AND MYMT.USR_ID  = #{g.username}
+        LEFT OUTER JOIN PURC_GRP_ITEMCAT JOB_MCLS_MAP    /* 품목분류_직무(그룹)유형_매핑  */
+        ON JOB_MCLS_MAP.TEN_ID       = MTGL.TEN_ID
+        AND JOB_MCLS_MAP.PURC_GRP_TYP_CCD = #{p.purc_grp_typ_ccd}
+        AND JOB_MCLS_MAP.CO_CD      = #{p.co_cd}
+        AND JOB_MCLS_MAP.ITEMCAT_CD      = MTGL.ITEMCAT_LVL_4_CD
+        LEFT OUTER JOIN PURC_GRP JOB             /* 직무(그룹) */
+        ON JOB.TEN_ID           = JOB_MCLS_MAP.TEN_ID
+        AND JOB.PURC_GRP_TYP_CCD = JOB_MCLS_MAP.PURC_GRP_TYP_CCD
+        AND JOB.PURC_GRP_CD      = JOB_MCLS_MAP.PURC_GRP_CD
+        AND JOB.CO_CD            = JOB_MCLS_MAP.CO_CD
+        AND JOB.USE_YN           = 'Y'
+        <if test="g.existModule('SRM')">
+            LEFT OUTER JOIN SG SG
+            ON SG.TEN_ID = MTGL.TEN_ID
+            AND SG.SG_CD = MTGL.SG_CD
+            AND SG.STS != 'D'
+        </if>
+        WHERE MTGL.TEN_ID          = #{g.tenant}
+        <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+            AND MCLS1.ITEMCAT_CD        = #{p.itemcat_lvl_1_cd}
+        </if>
+        <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+            AND MCLS2.ITEMCAT_CD        = #{p.itemcat_lvl_2_cd}
+        </if>
+        <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+            AND MCLS3.ITEMCAT_CD        = #{p.itemcat_lvl_3_cd}
+        </if>
+        <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+            AND MCLS4.ITEMCAT_CD        = #{p.itemcat_lvl_4_cd}
+        </if>
+        <choose>
+            <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+                AND MTGL.ITEM_CD IN
+                <foreach close=")" collection="p.item_cds" item="item_cd" open="(" separator=",">
+                    #{item_cd}
+                </foreach>
+            </when>
+            <otherwise>
+                <if test="p.item_cd != null and p.item_cd != ''">
+                    <bind name="cdPattern" value="'%' + g.trim(p.item_cd) + '%'"/>
+                    AND MTGL.ITEM_CD  LIKE UPPER(#{cdPattern})
+                </if>
+            </otherwise>
+        </choose>
+        <if test="p.disp_item_nm != null and p.disp_item_nm != ''">
+            <bind name="namePattern" value="'%' + g.trim(p.disp_item_nm) + '%'"/>
+            AND (UPPER(MTGL.ITEM_NM) LIKE UPPER(#{namePattern}) OR UPPER(MTGL.ITEM_NM_EN) LIKE UPPER(#{namePattern}))
+        </if>
+        <if test="p.mfgr_nm != null and p.mfgr_nm != ''">
+            <bind name="makerNmPattern" value="'%' + p.mfgr_nm + '%'"/>
+            AND UPPER(MTGL.MFGR_NM) LIKE UPPER(#{makerNmPattern})
+        </if>
+        <if test="p.item_spec != null and p.item_spec != ''">
+            <bind name="specPattern" value="'%' + p.item_spec + '%'"/>
+            AND UPPER(MTGL.ITEM_SPEC) LIKE UPPER(#{specPattern})
+        </if>
+        <if test="p.my_item_yn == &quot;Y&quot;">
+            AND MYMT.USE_YN = 'Y'
+        </if>
+        ${p.end_of_paging}
+    </select>
+</mapper>

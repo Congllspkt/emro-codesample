@@ -1,0 +1,448 @@
+<sc-link rel="import" href="es-task-list.html"></sc-link>
+<sc-link rel="import" href="popup/ep-work-setup.html"></sc-link>
+<sc-link rel="import" href="popup/ep-new-work.html"></sc-link>
+<sc-link rel="stylesheet" type="text/css" href="../../../assets/css/workplace.css"></sc-link>
+<sc-link rel="stylesheet" type="text/css" href="../../../assets/css/workplace_custom.css"></sc-link>
+
+<dom-module id="em-workplace">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+    	
+    	<sc-ajax id="findWorkByUserSetup" url="setup/findWorkByUserSetup.do" on-response="completeFindUserWorkSetup"></sc-ajax>
+    	
+        <sc-ajax id="findTaskCount" url="findTaskCount.do" body="{{searchParam}}" last-response="{{taskCount}}"></sc-ajax>
+        
+        <sc-ajax id="findListMainTaskCount" url="findListMainTaskCount.do" body="{{searchParam}}" on-response="completeFindListMainTaskInfo"></sc-ajax>
+        
+        <sc-ajax id="findListTaskStatus" url="findListTaskStatus.do" body="{{searchParam}}" on-response="completeFindListTaskStatus"></sc-ajax>
+
+        <div class="wpWrap flex">
+        
+	        <div class="wpTitleBar">
+	        	<table style="border:none; width:100%;">
+	        		<colgroup>
+	        			<col style="width:10%"/>
+	        			<col style="width:90%"/>
+	        		</colgroup>
+	        		<tr>
+	        			<td>
+							<h3>Workplace</h3>
+	        			</td>
+	        			<td style="text-align:right; margin:0 auto;">
+							<div class="searchBar">
+								<div class="field-box" style="height:100%; width:100%">
+									<sc-text-field id="searchTerm" value="{{searchParam.searchTerm}}" type="text" placeholder="어떤 업무를 찾으시나요?" on-enter="allSearch"></sc-text-field>
+									<button class="btn_search" on-click="allSearch"></button>
+								</div>
+							</div>
+							<!--<sc-button class="btn_newTask" text="New Task" on-click="onPopupNewTask"></sc-button>-->
+	        			</td>
+	        		</tr>
+	        	</table>
+			</div>
+			
+	        <div class="flex wpPanel">
+	            <sc-panel id="taskChartPanel" class="page boxType" title-text="Workplace Chart" collapsible="true" i18n-disabled >
+	                <div class="hbox flex" style="height:300px">
+	                    <cc-task-bar-chart id="mainTaskChart" class="vbox flex" on-item-click="onMainTaskClicked"></cc-task-bar-chart>
+	                    <cc-task-line-chart id="taskStatusChart" class="vbox flex" on-item-click="onTaskStatusClicked"></cc-task-line-chart>
+	                </div>
+
+	            <sc-panel id="workTitlePanel" class="sTitleBar boxType" title-text="Task Status" collapsible="true">
+	
+	                <div class="innerPanel">
+	                    <div class="tabBar">
+	                        <a class="on tab-link" on-click="onClickMainTaskPage" data-args="main">Overview per Main Task</a>
+	                        <a class="tab-link" on-click="onClickTaskStatusPage"  data-args="sub">Overview per Task Status</a>
+	                    </div>
+						
+	                    <sc-pages id="pages" class="tabContent">
+		    	            <div class="tabContent flex" id="mainTaskDiv">
+			                    <cc-main-task-detail id="mainTaskDetail" on-item-click="onItemClickMainTaskDetail" main-task-list="{{mainTaskList}}" search-param="{{searchParam}}"></cc-main-task-detail>
+		                    </div>
+		                    <div class="tabContent flex" id="taskStatusDiv">
+			                    <cc-task-status-detail id="taskStatusDetail" on-item-click="onItemClickTaskStatusDetail" main-task-list="{{mainTaskList}}" flow-data="{{flowData}}" search-param="{{searchParam}}"></cc-task-status-detail>
+		                    </div>
+	                    </sc-pages>
+	                </div>
+	            </sc-panel>
+	
+	            <es-task-list id="list" on-complete-save="onCompleteSaveWorkList"  search-param="{{searchParam}}"></es-task-list>
+	        </div>
+        
+        </div>
+        
+    </template>
+    <script>
+        Polymer({
+            is : 'em-workplace',
+
+            properties: {
+				taskCount: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				mainTaskList : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				flowData  : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				}
+            },
+            allSearch : function() {
+            	var me = this;
+            	me.findTaskCount();
+            	me.$.list.load({});
+            },
+			onMainTaskClicked: function (e) {
+            	var me = this;
+                var item = e.detail;
+                
+                me.searchParam.searchTerm = me.$.searchTerm.value || "";
+                
+                // me.$.taskStatusChart.load(item);
+                me.$.mainTaskDetail.set("selectedItem",item);
+				me.$.list.load(item);
+				me.$.list.scrollIntoView({behavior:'smooth'});
+			},
+
+			onTaskStatusClicked: function (e) {
+				var me = this;
+				var item = e.detail;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				me.$.list.load(item);
+				// 업무상태 클릭 시 task list 그리드로 scroll 이동
+				if(UT.isNotEmpty(item.taskStatusList)) {
+					me.$.list.scrollIntoView({behavior:'smooth'});
+				}
+			},
+
+            initialized: function () {
+                var me = this;
+                // me.$.taskChartPanel.collapsed = true;
+                me.searchParam.searchTerm = me.$.searchTerm.value || "";
+                
+                //UT.request(me.$.findWorkByUserSetup);
+                me.findTaskCount();
+			},
+			
+			completeFindUserWorkSetup: function(e,res){
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				
+				if(UT.isNotEmpty(res.response)){
+					var result = res.response;
+					if(result.chic_tab_cd === "S"){
+						me.togglePageOnStatus(e.target);
+						me.$.pages.selectItem(me.$.taskStatusDetail);
+					}
+					/* if(result.chart_disp_yn === "Y"){
+						me.$.taskChartPanel.collapsed = false;
+					}else{
+						me.$.taskChartPanel.collapsed = true;
+					}
+					if(result.work_sts_disp_yn === "Y"){
+						me.$.statusPanel.collapsed = false;
+					}else{
+						me.$.statusPanel.collapsed = true;
+					} */
+				}
+			},
+			
+			refresh: function () {
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				me.findTaskCount();
+				
+				/*
+				me.$.mainTaskChart.refresh();
+				if(me.$.taskStatusChart.drawReady){
+					me.$.taskStatusChart.refresh();
+				}
+				me.$.mainTaskDetail.refresh();
+				me.$.taskStatusDetail.refresh();
+				*/
+				me.$.list.refresh();
+				
+				//me.$.taskChartPanel.collapsed = true;
+			},
+			
+			findTaskCount: function() {
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				UT.request(me.$.findTaskCount);
+				me.findMainTask();
+			},
+			findMainTask : function() {
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				UT.request(me.$.findListMainTaskCount);
+			},
+			findTaskStatus : function() {
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				UT.request(me.$.findListTaskStatus);
+			},
+			
+			onCompleteSaveWorkList: function () {
+            	var me = this;
+            	me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				me.refresh();
+			},
+            
+			onClickMainTaskPage: function (e) {
+                var me = this;
+                me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				me.togglePageOnStatus(e.target);
+				me.$.pages.selectItem(me.$.mainTaskDiv);
+			},
+
+			onClickTaskStatusPage: function (e) {
+				var me = this;
+				
+				me.togglePageOnStatus(e.target);
+				me.$.pages.selectItem(me.$.taskStatusDiv);
+			},
+            togglePageOnStatus: function (target) {
+            	var me = this;
+            	
+            	if(target.classList.contains("on")){
+            		return;
+            	}
+            	
+				var list = me.querySelectorAll(".tabBar .tab-link");
+
+				for(var i=0; i<list.length; i++) {
+					list[i].classList.toggle("on");
+                }
+				
+				target.scrollIntoView({
+					behavior: 'smooth'
+				});
+			},
+
+			onItemClickTaskStatusDetail: function (e) {
+				var me = this;
+				
+                me.$.list.load(e.detail);
+			},
+
+			onItemClickMainTaskDetail: function (e) {
+                var me = this;
+                // me.$.taskStatusChart.load(e.detail);
+                me.$.list.load(e.detail);
+			},
+
+			//******************************************
+			//* 탑메뉴
+			//*********************************************/
+			onClickUserSetup: function(){
+				var me = this;
+				var setupPopup = UT.popup("ep-work-setup",me,"40%","50%");
+				setupPopup.show();
+				setupPopup.getWindowContent().load();
+				
+			},
+			onClickMemo: function () {
+				var me = this;
+				var param = {
+					only_memo: "Y",
+					workList: []
+				};
+				me.$.list.load(param);
+			},
+
+			onClickNoti: function () {
+				var me = this;
+				var param = {
+					only_noti: "Y",
+					workList: [],
+                    isNotiSearch: true
+				};
+				me.$.list.load(param);
+			},
+
+			onClickExcept: function () {
+				var me = this;
+				var param = {
+					only_exception: "Y",
+					workList: []
+                };
+				me.$.list.load(param);
+			},
+
+			onClickNew: function () {
+            	var me = this;
+				var param = {
+					seriesIndex: 3,
+					workList: []
+				};
+				me.$.list.load(param);
+			},
+			
+			convertCount : function (count){
+				return UT.isEmpty(count) ? 0 : count;
+			},
+			
+			convertTitle: function(type) {
+				var me = this;
+				if(type === "new") {
+					return me.translate("신규 업무");
+				} else if(type === "memo") {
+					return me.translate("메모된 업무");
+				} else if(type === "noti") {
+					return me.translate("할당통보된 업무");
+				} else if(type === "except") {
+					return me.translate("제외된 업무");
+				}else if(type === "setting"){
+					return me.translate("설정");
+				} else {
+					return "";
+				}
+			},
+			completeFindListMainTaskInfo: function (e, res) {
+                var me = this;
+                var result = res.response || [];
+                me.searchParam.searchTerm = me.$.searchTerm.value || "";
+                var selectedItem = me.get("selectedItem");
+                
+				result.forEach(function (r) {
+					
+					//widget에서 선택한 workStatus가 있는 경우 처리
+					if(UT.isNotEmpty(selectedItem) && r.main_task_uuid === selectedItem.main_task_uuid){
+						r.selectedIndex = "on";
+					}else{
+						r.selectedIndex = "";
+					}
+					var all = new BigNumber(r.delay_tot_cnt || 0).add(new BigNumber(r.immnt_tot_cnt || 0)).add(new BigNumber(r.norm_tot_cnt || 0)).toFixed();
+					
+					r.delay = {};        // 지연
+					r.imminent = {};     // 임박(경고)
+					r.normal = {};      // 일반
+					r.taskCount = all; // 전체 카운트 설정
+					
+					if(all == 0){
+						r.delay.left = "0";
+						r.imminent.left = "0";
+						r.normal.left = "0";
+						r.delay.width = "0%";
+						r.imminent.width = "0%";
+						r.normal.width = "0%";
+						return;
+					}
+					
+					var delayRate = new BigNumber((new BigNumber(r.delay_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var imminentRate = new BigNumber((new BigNumber(r.immnt_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var delayAndImminentRate = delayRate.plus(imminentRate);
+					var normalRate = (r.norm_tot_cnt === 0) ? new BigNumber(0) : (new BigNumber(100)).minus(delayAndImminentRate);
+					
+					r.delay.left = "0%";
+					r.delay.width = delayRate.toFixed() + "%";
+					
+					r.imminent.left = delayRate.toFixed() + "%";
+					r.imminent.width = imminentRate.toFixed() + "%";
+					
+					r.normal.left = delayAndImminentRate.toFixed() + "%";
+					r.normal.width = normalRate.toFixed() + "%";
+				});
+				
+				me.set("mainTaskList", result);
+				me.$.list.setMainTaskList(result);
+				
+				me.findTaskStatus();
+			},
+			completeFindListTaskStatus: function (e, res) {
+				var me = this;
+				me.searchParam.searchTerm = me.$.searchTerm.value || "";
+				var result = res.response;
+				var flowData = [];
+				for(var i = 0; i < result.length; i++) {
+					var taskStatus = UT.copy(result[i]);
+					var mainWorks = me.mainTaskList.filter(function(data) {
+						 return taskStatus.main_task_uuid === data.main_task_uuid;
+					});
+					if(UT.isNotEmpty(mainWorks) && mainWorks.length > 0) {
+						taskStatus.delay_tot_cnt = mainWorks[0].delay_tot_cnt;
+						taskStatus.norm_tot_cnt = mainWorks[0].norm_tot_cnt;
+						taskStatus.immnt_tot_cnt = mainWorks[0].immnt_tot_cnt;
+						taskStatus.new_tot_cnt = mainWorks[0].new_tot_cnt;
+						taskStatus.tot_cnt = new BigNumber(mainWorks[0].delay_tot_cnt || 0).add(new BigNumber(mainWorks[0].immnt_tot_cnt || 0)).add(new BigNumber(mainWorks[0].norm_tot_cnt || 0)).toFixed();
+					}
+					
+					for(var j = 0; j < taskStatus.task_status_list.length; j++) {
+						var taskStatusItem = taskStatus.task_status_list[j];
+						
+						var delayCnt = taskStatusItem.delay_cnt;
+						var normCnt = taskStatusItem.norm_cnt;
+						var immntCnt = taskStatusItem.immnt_cnt;
+						var totCnt = new BigNumber(delayCnt || 0).add(new BigNumber(normCnt || 0)).add(new BigNumber(immntCnt || 0)).toFixed();
+						
+						
+						taskStatusItem.tot_cnt = Number(totCnt || 0);
+						
+						taskStatusItem.delay = {left : "0", width: "0%"};
+						taskStatusItem.immnt = {left : "0", width: "0%"};
+						taskStatusItem.norm = {left : "0", width: "0%"};
+						
+						if(totCnt !== 0){
+							var minRate = 0; // statusLine 상태별 최소 너비 비율
+							var minCnt = new BigNumber(totCnt).mul(new BigNumber(minRate)).div(new BigNumber(100));
+							var minDelyCnt = new BigNumber(taskStatusItem.delay_cnt || 0);
+							minDelyCnt = minDelyCnt.gte(minCnt) ? minDelyCnt : minCnt;
+							var minWrnnCnt = new BigNumber(taskStatusItem.immnt_cnt || 0);
+							minWrnnCnt = minWrnnCnt.gte(minCnt) ? minWrnnCnt : minCnt;
+							var minNormCnt = new BigNumber(taskStatusItem.norm_cnt || 0);
+							minNormCnt = minNormCnt.gte(minCnt) ? minNormCnt : minCnt;
+							var minTotCnt = minDelyCnt.plus(minWrnnCnt).plus(minNormCnt);
+							
+							var delayRate = new BigNumber(minDelyCnt.mul(new BigNumber(100)).div(minTotCnt).toFixed(2));
+							var immntRate = new BigNumber(minWrnnCnt.mul(new BigNumber(100)).div(minTotCnt).toFixed(2));
+							var delayAndImmntRate = delayRate.plus(immntRate);
+							var normRate = (new BigNumber(100)).minus(delayAndImmntRate);
+							
+							taskStatusItem.delay.left = "0%";
+							taskStatusItem.delay.width = delayRate.toFixed() + "%";
+							
+							taskStatusItem.immnt.left = delayRate.toFixed() + "%";
+							taskStatusItem.immnt.width = immntRate.toFixed() + "%";
+							
+							taskStatusItem.norm.left = delayAndImmntRate.toFixed() + "%";
+							taskStatusItem.norm.width = normRate.toFixed() + "%";
+						}
+						
+					}
+					
+					flowData.push(taskStatus);
+				}
+				me.set("flowData", flowData);
+				
+				// 그후 State를 표시한다. (필요시 수정)
+				// me.setItemStateEachColumn(me.$.workSubBox, result, "work_id", ["delay_yn", "immnt_yn", "new_yn", "norm_yn"]);
+			},
+			onPopupNewTask: function() {
+				var me = this;
+				var popup = UT.popup("ep-new-work", me, 1300, 650);
+				popup.show();
+				popup.getWindowContent().load();
+			}
+        });
+    </script>
+</dom-module>

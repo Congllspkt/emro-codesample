@@ -1,0 +1,156 @@
+<dom-module id="es-sp-vendor-improve-cmp">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		 -->
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<div class="vbox flex">
+			<!-- 툴바 -->
+			<cc-sub-title-bar>
+				<sc-button text="저장" 	on-click="onCmpTempSave"		hidden="[[!formula('isCmpEditable')]]"	auth-s></sc-button>
+				<sc-button text="제출" 		on-click="onCmpSubmit"		hidden="[[!formula('isCmpEditable')]]"	auth-s></sc-button>
+			</cc-sub-title-bar>
+			
+			<cc-form-panel column="3" column-cls="autofit">
+				<cc-fieldset column-span="3">
+					<sc-label text="개선 완료 일자"></sc-label>
+					<sc-date-field value="{{improveInfo.improv_cmpld_dt}}" readonly="[[!formula('isCmpEditable')]]" required="[[formula('isCmpEditable')]]" max-length="8" string-date="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="개선 담당자"></sc-label>
+					<sc-text-field value="{{improveInfo.improv_exec_pic_nm}}" readonly="[[!formula('isCmpEditable')]]" required="[[formula('isCmpEditable')]]" max-length="10" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="연락처"></sc-label>
+					<sc-text-field value="{{improveInfo.improv_exec_pic_ctc}}" readonly="[[!formula('isCmpEditable')]]" required="[[formula('isCmpEditable')]]" max-length="20" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이메일"></sc-label>
+					<sc-text-field value="{{improveInfo.improv_exec_pic_eml}}" readonly="[[!formula('isCmpEditable')]]" required="[[formula('isCmpEditable')]]" max-length="30" validator-type="email" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="개선 완료 내용"></sc-label>
+					<!--<sc-editor id="editorPanel" value="{{improveInfo.improv_cmpld_cont}}"class="h-400" image-uploader="true" editable="[[formula('isCmpEditable')]]" ></sc-editor>-->
+					<sc-textarea-field id="editorPanel" value="{{improveInfo.improv_cmpld_cont}}"class="h-200" image-uploader="true" editable="[[formula('isCmpEditable')]]" max-length="1000"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-upload id="uploadPanel" class="h-200" value="{{improveInfo.improv_cmpld_athg_uuid}}"  editable="[[formula('isCmpEditable')]]" ></sc-upload> <!-- editable="[[formula('isReqReq')]]" --> <!-- readonly="[[!formula('isCmpEditable')]]" -->
+				</cc-fieldset>
+				<cc-fieldset column-span="3">
+					<sc-label text="개선 완료 보완 사유"></sc-label>
+					<sc-textarea-field value="{{improveInfo.improv_cmpld_supp_rsn}}"  style="height:150px"  readonly="true"></sc-textarea-field> <!-- readonly="[[!formula('isPlan')]]" -->
+				</cc-fieldset>
+			</cc-form-panel>
+		</div>
+	
+	</template>
+	
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-sp-vendor-improve-cmp",
+			
+			properties:  {
+				codes:{
+					type: Object,
+					value: function(){
+						return {
+						};
+					},
+					reset:false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return{};
+					}
+				},
+				improveInfo : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				}
+			},
+			formulas : {
+				// 개선 완료 임시저장 상태
+				isCmpEditable : function(){
+					//return true;
+					// 개선완료 임시저장, 개선완료 보완요청
+					return UT.isNotEmpty(this.improveInfo) && ["IMPROV_CMPLD_CRNG", "IMPROV_CMPLD_SUPP_REQG"].indexOf(this.improveInfo.improv_sts_ccd) > -1;
+				},
+				// 임시저장 상태
+				isCmpTemp : function(){
+					return UT.isNotEmpty(this.improveInfo) && this.improveInfo.improv_sts_ccd === "IMPROV_CMPLD_CRNG";
+				},
+				// 개선 완료 요청 상태
+				isCmpReq : function() {
+					return UT.isNotEmpty(this.improveInfo) && this.improveInfo.improv_sts_ccd === "IMPROV_CMPLD_SUBM";
+				}
+			},
+			initialized: function(){
+				var me = this;
+			},
+			onSearch : function(param) {
+				var me = this;
+				me.set("improveInfo", UT.copy(param));
+				me.applyFormula();
+			},
+			// 임시저장버튼 클릭
+			onCmpTempSave: function(e) {
+				var me = this;
+				var btnName = e.target.text;
+				
+				if(!me.validate()){
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+				
+				me.fire("save", {
+					reqType : "complete",
+					saveType : "temp",
+					info : me.improveInfo,
+					btnName	: btnName
+				});
+			},
+			
+			// 개선완료 제출버튼 클릭
+			onCmpSubmit: function(e) {
+				var me = this;
+				var btnName = e.target.text;
+				
+				if(!me.validate()){
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+				
+				me.set("improveInfo.improv_cmpld_subm_dt", UT.formatDate(new Date(), "yyyyMMdd"));
+				me.fire("save", {
+					reqType : "complete",
+					saveType : "submit",
+					info : me.improveInfo,
+					btnName	: btnName
+				});
+			}
+			
+		});
+	</script>
+
+</dom-module>

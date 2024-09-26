@@ -1,0 +1,297 @@
+<sc-link rel="import" href="ep-evalfactor-detail.html"></sc-link>
+<dom-module id="ep-evalfactor">
+    <style>
+        :host {
+            @apply(--vbox-flex);
+        }
+    </style>
+    
+    <template>
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 정량/정성 공통코드콤보 조회 -->
+				<sc-code code="R001" value="{{codes.R001}}" ></sc-code>
+				<!-- 확정구분 공통코드콤보 조회 -->
+				<sc-code code="R716" value="{{codes.R716}}" ></sc-code>
+				<!-- 추가 조건 콤보 -->
+				<sc-code code="EVKD" value="{{codes.EVKD}}" ></sc-code>
+			</sc-code-group>
+			<!-- 평가항목군 조회 -->
+			<sc-ajax
+				id="findEvalFactorGrp"
+				url="findEvalFactorGrp.do"
+				last-response="{{codes.efactgList}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		
+		<!-- 평가항목 목록 조회 -->
+		<sc-ajax
+			id="findListEvalFactor"
+			url="findListEvalFactor.do"
+			body="{{searchParam}}"
+			last-response="{{evalFactorList}}"
+			on-response="completeFindListEvalFactor">
+		</sc-ajax>
+		
+		<!-- 평가템플릿 평가항목 스케일 조회 -->
+		<sc-ajax
+				id="findListEvalTmplEvalFactScale"
+				url="findListEvalTmplEvalFactScale.do"
+				on-response="completeFindListEvalTmplEvalFactScale">
+		</sc-ajax>
+<!--  
+    화면
+-->
+		<div class="flex">
+			<cc-search-condition-panel on-search="onSearchEvalFactor" search-condition-cls="label-row">
+				<cc-fieldset>
+					<sc-label text="평가항목 명"></sc-label>
+					<sc-text-field value="{{searchParam.evalfact_nm}}" max-length="60" on-enter="onSearchEvalFactor" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가항목 유형"></sc-label>
+					<sc-combobox-field value="{{searchParam.evalfact_typ_ccd}}" items="{{codes.R001}}" display-field="label" value-field="data"
+									   placeholder="전체">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가항목군"></sc-label>
+					<sc-combobox-field value="{{searchParam.efactg_uuid}}" items="{{codes.efactgList}}" display-field="efactg_nm" value-field="efactg_uuid" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+
+			<div class="vspace-10"></div>
+			
+			<sc-grid id="gridPanel" is-tree="false" use-state="false" class="h-500" editable="false" selection-able-function="selectionAbleFn"
+					 selection-mode="[[formula('selectionMode')]]"	on-item-click="onDataCellClicked">
+				<cc-grid-toolbar>
+					<sc-button text="평가항목 생성" on-click="onAddEvalFact" auth-s hidden="[[formula('disableMode')]]"></sc-button>
+					<sc-button text="선택" on-click="onClickSeletBtn"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-group-column hide-child-headers="true" header-text="평가항목 명" width="500" text-align="center">
+						<sc-data-column	data-field="evalfact_nm"	header-text="평가항목 명"	width="470"	text-align="left" style-name="link"></sc-data-column>
+						<sc-image-column data-field="img_evalfact_nm" width="30" text-align="center" image-cls="link"></sc-image-column>
+					</sc-group-column>
+					<sc-combobox-column	data-field="cnfd_yn" header-text="확정 여부" width="100" display-field="label" value-field="data" items="{{codes.R716}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="evalfact_typ_ccd"	header-text="평가항목 유형"	width="120"
+										   display-field="label"		value-field="data"		items="{{codes.R001}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="add_cnd_ccd"		header-text="추가 조건"		width="120"
+										   display-field="label"		value-field="data"			items="{{codes.EVKD}}"></sc-combobox-column>
+					<sc-data-column	data-field="evalfact_expln"		header-text="평가항목 설명"	width="400"	text-align="left"></sc-data-column>
+					<sc-data-column	data-field="mod_nm"	header-text="작성자"	width="100"	></sc-data-column>
+					<sc-date-column	data-field="mod_dttm"	header-text="작성일"	width="100"	></sc-date-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="sort"></sc-grid-field>
+					<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+					<sc-grid-field data-field="evalfact_cd"></sc-grid-field>
+					<sc-grid-field data-field="cnfd_yn"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-grid id="gridPanelScale" class="h-300" use-selection="false" use-state="false">
+				<cc-grid-toolbar title-text="평가항목 스케일">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="scale_nm" header-text="스케일 명" width="650" text-align="left" editable="true"
+									max-length="100" required="true" validator-function="gridValidatorFuncQuali" validation-group="quali"></sc-data-column>
+					<sc-data-column data-field="sc" header-text="점수" width="60" text-align="right" editable="true" max-length="6"
+									data-type="number" format-type="srmScore" required="true" max-value="10000" validation-group="quali"></sc-data-column>
+					<sc-data-column data-field="scale_sort" header-text="정렬" width="40" text-align="right" editable="true" validation-group="quali"
+									data-type="number" format-type="integer" max-length="2"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="evalfact_scale_uuid"></sc-grid-field>
+					<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+					<sc-grid-field data-field="evalfact_cd"></sc-grid-field>
+					<sc-grid-field data-field="scale_cd"></sc-grid-field>
+					<sc-grid-field data-field="scale_nm"></sc-grid-field>
+					<sc-grid-field data-field="scale_sort" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="evalfact_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="scale_appl_yn"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			</div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "ep-evalfactor",
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "평가항목 목록"
+				},
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							R704: {
+								param: {
+									ccd: "R704",
+									cstr_cnd_cd: "MDCD"
+								},
+								result: []
+							},
+							R001: [],               // 정량정성 구분
+							R716: [],               // 확정 여부
+							efactgList: [],         // 평가항목군 리스트
+							EVKD: []                // 추가 조건
+						};
+					}
+				},
+				// 조회 조건 Object
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				// 평가항목목록
+				evalFactorList: {
+					type: Array,
+					value: function(){
+						return [];
+					}
+				},
+				evalFactorInfo: {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				singleSelect: {
+					type: Boolean,
+					value: false
+				},
+				disableMode : {
+					type : Boolean,
+					value : false
+				}
+			},
+			formulas : {
+				selectionMode: function() {
+					var me = this;
+					return (me.get("singleSelect") ? "radio" : "check");
+				},
+				// 비활성화 모드
+				disableMode: function() {
+					var me = this;
+					return me.get("disableMode");
+				},
+			},
+			// 팝업 load 및 옵션 설정
+			load: function(options) {
+				var me = this;
+				options = options || {};
+				
+				me.set("searchParam", options.searchParam);
+				me.set("singleSelect", UT.isBoolean(options.singleSelect) ? options.singleSelect: false);
+				me.set("disableMode", UT.isBoolean(options.disableMode) ? options.disableMode: false);
+				
+				me.applyFormula();
+				me.onSearchEvalFactor();
+			},
+
+			onSearchEvalFactor: function() {
+				var me = this;
+				
+				UT.request(me.$.findListEvalFactor);
+			},
+			
+			// 평가항목 리스트
+			completeFindListEvalFactor: function(e, res){
+				var me = this;
+				var list = me.get("evalFactorList");
+				me.$.gridPanel.setDataProvider(list);
+			},
+
+			onDataCellClicked: function(event) {
+				var me = this, detail = event.detail,
+					data = detail.data,
+					item = detail.item,
+					fieldName = item.dataField,
+					provider = me.$.gridPanel.getDataProvider();
+				me.set("evalFactorInfo", data);
+				
+				if(fieldName == "evalfact_nm"){  // 평가항목 클릭
+					if(data.evalfact_typ_ccd == "QUALI_SC_INP"){
+						// 점수입력인 경우 스케일 조회 안함
+						me.$.gridPanelScale.setDataProvider([]);
+					} else {
+						// 평가항목 스케일 조회
+						me.$.findListEvalTmplEvalFactScale.set("body", data);
+						UT.request(me.$.findListEvalTmplEvalFactScale);
+					}
+					
+				} else if(fieldName == "img_evalfact_nm"){
+					// 평가항목 상세 팝업 조회
+					var evalfactPopup = UT.popup("ep-evalfactor-detail", me, "90%", "90%", {
+						"close": function(popup, e) {
+							me.onSearchEvalFactor();
+							popup.close();
+						},
+						"sc-window-hided": function(popup, e) {
+							me.onSearchEvalFactor();
+							popup.destroy();
+						}
+					});
+					evalfactPopup.show();
+					evalfactPopup.getWindowContent().load(me.evalFactorInfo);
+				}
+			},
+			
+			completeFindListEvalTmplEvalFactScale : function(e, res){
+				var me = this;
+				var result = res.response;
+				me.$.gridPanelScale.setDataProvider(result);
+			},
+			
+			
+			/**
+			 * 선택 버튼 클릭
+			 */
+			onClickSeletBtn: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				if(selected.length > 0) {
+					me.fire("selected-items", selected);
+				}else{
+					UT.alert("STD.N1600");    //선택된 항목이 없습니다
+				}
+			},
+
+			/**
+			 * 평가항목 생성 버튼 클릭 (평가항목 신규 추가)
+			 */
+			onAddEvalFact: function(){
+				var me = this;
+				
+				// 평가항목 신규 추가 팝업 호출
+				var evalFactorPopup = UT.popup("ep-evalfactor-detail", me, "90%", "90%", {
+					"close": function(popup, e) {
+						me.onSearchEvalFactor();
+						popup.close();
+					},
+					"sc-window-hided": function(popup, e) {
+						me.onSearchEvalFactor();
+						popup.destroy();
+					}
+				}, {titleText: "평가항목 생성"});
+				evalFactorPopup.show();
+				evalFactorPopup.getWindowContent().load(me.searchParam);
+			},
+			// 평가항목 확정 상태만 선택 가능
+			selectionAbleFn: function(data) {
+				var me = this;
+				var cnfdYn = data["cnfd_yn"];
+				return UT.isNotEmpty(cnfdYn) && cnfdYn == "Y";
+			}
+		});
+    </script>
+
+</dom-module>

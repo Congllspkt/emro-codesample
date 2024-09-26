@@ -1,0 +1,163 @@
+<dom-module id="ep-sales-plan-list">
+	<style>
+		:host {
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<sc-ajax
+				id="findListSalesPlanFromRfx"
+				url="findListSalesPlanFromRfx.do"
+				body="{{searchParam}}"
+				on-response="completeFindListSalesPlanFromRfx"
+		></sc-ajax>
+		
+		<sc-grid id="itemGridPanel" data-provider="{{resultList}}" class="flex" use-state="false" use-selection="false" editable="true">
+			<cc-grid-toolbar  result-hidden="true" btn-group-hidden="true">
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="item_cd" header-text="품목 코드" width="100" editable="false"></sc-data-column>
+				<sc-data-column data-field="item_nm" header-text="품목 명" width="200" text-align="left" editable="false"></sc-data-column>
+				<sc-data-column data-field="proj_cd" header-text="프로젝트 코드" width="150" editable="false"></sc-data-column>
+				<sc-data-column data-field="per_unit_rqamt" header-text="RequiredQty Per Unit" width="200" text-align="right" data-type="number" format-type="qty" max-length="8" visible="false"></sc-data-column>
+				<sc-group-column header-text="RequiredQty By Production Plan" width="{{prodPlanYearWidth}}" text-align="center">
+					<sc-data-column data-field="prod_plan_yr0" header-text="Y+0" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y0}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr1" header-text="Y+1" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y1}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr2" header-text="Y+2" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y2}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr3" header-text="Y+3" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y3}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr4" header-text="Y+4" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y4}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr5" header-text="Y+5" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y5}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="prod_plan_yr6" header-text="Y+6" width="100" text-align="right"	editable="false"  visible="{{yearVisible.Y6}}" display-field="label" data-type="number" format-type="qty" item-style-function="onItemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="tot_qty" header-text="Total Quantity" width="120" text-align="right" editable="false" display-field="label"	data-type="number" data-type="number" format-type="qty" converter="onQtyTotConverter" ></sc-data-column>
+				</sc-group-column>
+			</sc-grid-columns>
+		</sc-grid>
+	
+	</template>
+	<script>
+		Polymer({
+			is: 'ep-sales-plan-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				resultList: {
+					type: Array,
+                    value: function() {
+                        return [];
+                    }
+				},
+				yearVisible : {
+					type: Object,
+					value : function() {
+						return {
+							Y0 : false,
+							Y1 : false,
+							Y2 : false,
+							Y3 : false,
+							Y4 : false,
+							Y5 : false,
+							Y6 : false,
+						}
+					}
+				},
+				prodPlanYearWidth : {
+					type: Number,
+					value : function() {
+						return 220;
+					},
+					reset : true
+				}
+			},
+			load : function(data) {
+				var me = this;
+				me.set("searchParam", UT.copy(data));
+				UT.request(me.$.findListSalesPlanFromRfx);
+			},
+			completeFindListSalesPlanFromRfx : function(e, res) {
+                var me = this;
+                var result = res.response;
+				if(result.success) {
+					var lastResponse = result.resultData;
+                    me.set("resultList", lastResponse.items);
+					
+					me.onProdYearSet();
+				}
+            },
+			onProdYearSet : function(){
+				var me = this;
+				var itemProvider = me.$.itemGridPanel.getDataProvider();
+				var greaterYr = me.onCalculateGreaterYr(itemProvider.getItems());
+				var prodPlanYr = greaterYr.match(/\d+/)[0];
+				var yearVisible = me.get("yearVisible");
+				var widthValue = 120+(prodPlanYr*100);
+				
+				for (var key in yearVisible) {
+					var year = key.match(/\d+/)[0];
+					if (year <= prodPlanYr) {
+						widthValue = widthValue
+						me.set(`yearVisible.Y${year}`, true);
+					} else {
+						me.set(`yearVisible.Y${year}`, false);
+						itemProvider.setItemAtBatch(true, function(index, data) {
+							return { [`prod_plan_yr${year}`]: null };
+						});
+					}
+				}
+				me.set(`prodPlanYearWidth`, widthValue);
+			},
+			onCalculateGreaterYr : function(items) {
+				var me = this;
+				var returnYr;
+				for(var i in items) {
+					var item = items[i];
+					if(i == 0) {
+						returnYr = item.prod_plan_yr;
+					} else if(i > 0) {
+						returnYr = returnYr > item.prod_plan_yr ? returnYr : item.prod_plan_yr;
+					}
+				}
+				return returnYr;
+			},
+			//생산판매 계획 합계
+			onQtyTotConverter: function(rowIndex, fieldName, data) {
+				var me = this;
+				var prodYr = data.prod_plan_yr;
+				var prodPlanYr = prodYr.match(/\d+/)[0];
+				var totQty  = new BigNumber(0);
+				
+				for(var i = 0; i <= prodPlanYr; i++) {
+					var yr_qty = new BigNumber(data[`prod_plan_yr${i}`] || 0);
+					totQty = totQty.plus(yr_qty);
+				}
+				
+				return Math.max(0, totQty);
+			},
+			onItemStyleFunction: function(data, item) {
+				var me = this;
+				
+				if(item.dataField == "prod_plan_yr0" && UT.isEmpty(data.prod_plan_yr0)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr1" && UT.isEmpty(data.prod_plan_yr1)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr2" && UT.isEmpty(data.prod_plan_yr2)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr3" && UT.isEmpty(data.prod_plan_yr3)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr4" && UT.isEmpty(data.prod_plan_yr4)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr5" && UT.isEmpty(data.prod_plan_yr5)) {
+					return {"background": "#b0b0b0"};
+				} else if(item.dataField == "prod_plan_yr6" && UT.isEmpty(data.prod_plan_yr6)) {
+					return {"background": "#b0b0b0"};
+				} else {
+					return null;
+				}
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,516 @@
+<sc-link rel="import" href="../comm/es-survey-template-form.html"></sc-link>
+<sc-link rel="import" href="es-survey-basic-form.html"></sc-link>
+<sc-link rel="import" href="../comm/es-survey-cover-form.html"></sc-link>
+<sc-link rel="import" href="../comm/es-survey-section-form.html"></sc-link>
+<sc-link rel="import" href="../comm/es-survey-question-form.html"></sc-link>
+<sc-link rel="import" href="../comm/ep-survey-preview.html"></sc-link>
+
+<dom-module id="es-survey-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 답변 유형 -->
+				<sc-code code="C090" value="{{codes.ansTypCcd}}"></sc-code>
+				<!-- 선형 배율 값 -->
+				<sc-code code="C092" value="{{codes.lnrValCcd}}"></sc-code>
+				<!-- 설문 유형 -->
+				<sc-code code="C093" value="{{codes.survTypCcd}}"></sc-code>
+				<!-- 통계 방식 -->
+				<sc-code code="C094" value="{{codes.statMethCcd}}"></sc-code>
+				<!-- 레이아웃 -->
+				<sc-code code="C095" value="{{codes.lytCcd}}"></sc-code>
+			</sc-code-group>
+			<!-- 답변 입력 형식 -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.inpFormCcdParam}}"
+					 last-response="{{codes.inpFormCcd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<sc-ajax id="findSurveyByUuid"
+				 url="findSurveyByUuid.do"
+				 on-response="completeFindSurveyByUuid">
+		</sc-ajax>
+		
+		<sc-ajax id="saveSurvey"
+				 url="saveSurvey.do"
+				 on-response="completeSaveSurvey">
+		</sc-ajax>
+		
+		<sc-ajax id="publishSurvey"
+				 url="publishSurvey.do"
+				 on-response="completePublishSurvey">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-s,auth-r"></cc-auth-checker>
+		<cc-page-title-bar title-text="설문 작성">
+			<sc-button text="미리보기" on-click="onPreview" auth-r></sc-button>
+			<sc-button text="저장" on-click="onSave" auth-s hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="배포" on-click="onPublish" auth-s hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox" style="height: 100%;">
+			<es-survey-template-form id="templateForm" style="width: 500px; margin-right: 10px;"
+									 editable="[[formula('editable')]]"
+									 on-select-form="onSelectForm"
+									 on-remove-form="onRemoveForm"
+									 on-remove-cover="onRemoveCover"
+									 on-add-cover-form="onAddCoverForm"
+									 on-add-section-form="onAddSectionForm"
+									 on-add-question-form="onAddQuestionForm"
+									 on-sync-value="onSyncValue">
+			</es-survey-template-form>
+			<sc-pages id="pages" selected="0" class="fit" style="width: 100%;" detached-on-element-hided="false">
+				<es-survey-basic-form id="basic" codes="[[codes]]"
+									  editable="[[formula('editable')]]"
+									  on-change-cover="onChangeCover"
+									  on-change-surv-typ="onChangeSurvTyp"
+				></es-survey-basic-form>
+			</sc-pages>
+		</div>
+		
+		<es-survey-cover-form hidden></es-survey-cover-form>
+		<es-survey-section-form hidden></es-survey-section-form>
+		<es-survey-question-form hidden></es-survey-question-form>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-detail",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							inpFormCcdParam: {
+								ccd: "C091",
+								cstr_cnd_cd: "REGEXP"
+							}
+						};
+					}
+				},
+				survey: {
+					type: Object,
+					value: function() {
+						return {
+							surv_prgs_sts_ccd: "CRNG",
+							lyt_ccd: "PAGE",
+							qn_no_dspy_yn: "Y"
+						};
+					}
+				},
+				action: {
+					type: String,
+					value: function() {
+						return "";
+					}
+				}
+			},
+			formulas: {
+				editable: function() {
+					return this.survey.surv_prgs_sts_ccd === "CRNG" || UT.isEmpty(this.survey.surv_prgs_sts_ccd);
+				}
+			},
+			
+			load: function(survUuid) {
+				var me = this;
+				
+				if(UT.isNotEmpty(survUuid)) {
+					me.findSurveyByUuid(survUuid);
+				} else {
+					me.clearData();
+					var survey = me.get("survey");
+					// 신규 작성 시 현재일 + 7일
+					if(UT.isEmpty(survey.surv_ed_dttm)) {
+						var now = new Date();
+						var nextWeek = new Date(now);
+						nextWeek.setDate(now.getDate() + 7);
+						nextWeek.setHours(12, 0, 0, 0);
+						survey.surv_ed_dttm = nextWeek;
+						survey = UT.convertDtToDayHourMin(survey);
+					}
+					
+					var templateForm = me.$.templateForm;
+					templateForm.load({
+						survey: survey,
+						sections: []
+					});
+					me.$.basic.set("subjects", []);
+					me.$.basic.load(survey);
+					me.applyFormula();
+				}
+			},
+			
+			findSurveyByUuid: function(survUuid) {
+				var me = this;
+				
+				me.$.findSurveyByUuid.body = {
+					surv_uuid: survUuid
+				};
+				UT.request(me.$.findSurveyByUuid);
+			},
+			
+			completeFindSurveyByUuid: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				var survey = UT.convertDtToDayHourMin(response.survey);
+				me.set("survey", survey);
+				
+				var sections = response.sections;
+				me.generateUuid(sections);
+				
+				var templateForm = me.$.templateForm;
+				templateForm.load({
+					survey: survey,
+					subjects: response.subjects,
+					sections: sections
+				});
+				
+				me.$.basic.set("subjects", response.subjects);
+				me.$.basic.load(survey);
+				
+				for(var i = 0; i < sections.length; i++) {
+					var section = sections[i];
+					me.addSection(section);
+				}
+				
+				templateForm.dataCleaner();
+				Polymer.dom.flush();
+				me.applyFormula();
+			},
+			
+			generateUuid: function(values) {
+				for(var i = 0; i < values.length; i++) {
+					var value = values[i];
+					value.id = UT.generateUUID();
+					
+					this.generateUuid(value.questions || []);
+				}
+			},
+			
+			onAddSection: function() {
+				this.addSection(null);
+			},
+			
+			addSection: function(section, nextElementSibling) {
+				var me = this;
+				var pages = me.$.pages;
+				
+				var sectionForm = document.createElement("es-survey-section-form");
+				sectionForm.id = section.id;
+				sectionForm.set("editable", me.formula('editable'));
+				sectionForm.set("codes", me.get("codes"));
+				sectionForm.addEventListener("change-title", function(e) {
+					me.$.templateForm.changeTitle(e.detail);
+				});
+				Polymer.dom(pages).appendChild(sectionForm);
+				
+				var questions = section.questions || [];
+				for(var i = 0; i < questions.length; i++) {
+					me.addQuestion(questions[i]);
+				}
+			},
+			
+			addQuestion: function(question) {
+				var me = this;
+				var pages = me.$.pages;
+				
+				var questionForm = document.createElement("es-survey-question-form");
+				questionForm.id = question.id;
+				questionForm.set("editable", me.formula('editable'));
+				questionForm.set("codes", me.get("codes"));
+				questionForm.addEventListener("change-title", function(e) {
+					me.$.templateForm.changeTitle(e.detail);
+				});
+				Polymer.dom(pages).appendChild(questionForm);
+			},
+			
+			copySection: function(e) {
+				var me = this;
+				var section = e.detail;
+				var sectionForm = e.target;
+				
+				delete section.surv_sect_cd;
+				
+				var questions = section.questions;
+				if(UT.isNotEmpty(questions)) {
+					for(var i = 0; i < questions.length; i++) {
+						me.deleteQuestionAttribute(questions[i], "surv_qn_cd");
+					}
+				}
+				
+				me.addSection(section, sectionForm.nextElementSibling);
+			},
+			
+			deleteQuestionAttribute: function(question, attribute) {
+				var me = this;
+				delete question[attribute];
+				
+				if(UT.isNotEmpty(question.questions)) {
+					for(var i = 0; i < question.questions; i++) {
+						me.deleteQuestionAttribute(question.questions[i], "surv_qn_cd");
+					}
+				}
+			},
+			
+			onSave: function() {
+				this.save("save");
+			},
+			
+			save: function(action) {
+				var me = this;
+				var templateForm = me.$.templateForm;
+				
+				if(!templateForm.validate(me.$.pages)) {
+					return;
+				}
+				me.set("action", action);
+				
+				if(action === "publish") {
+					UT.confirm("STD.SURV0008", function() {
+						saveProcess(me.$.publishSurvey);
+					});
+				} else {
+					saveProcess(me.$.saveSurvey);
+				}
+				
+				function saveProcess(ajax) {
+					var surveyData = templateForm.getData(me.$.pages);
+					ajax.body = {
+						survey: surveyData.survey,
+						insertSubjects: surveyData.subjects.insertSubjects,
+						deleteSubjects: surveyData.subjects.deleteSubjects,
+						sections: surveyData.sections
+					};
+					UT.request(ajax);
+				}
+			},
+			
+			completeSaveSurvey: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("action", "");
+				if(response.success) {
+					var survUuid = response.resultData.surv_uuid;
+					
+					me.fire("reload");
+					me.clearForm();
+					me.load(survUuid);
+					
+					if(me.get("action") === "preview") {
+						me.preview(survUuid);
+					} else {
+						UT.completeAlert();
+					}
+				}
+			},
+			
+			reset: function() {
+				this.clearData();
+				this.clearForm();
+			},
+			
+			clearData: function() {
+				var me = this;
+				var survTypCcd  = me.get("codes.survTypCcd"),
+					lytCcd      = me.get("codes.lytCcd"),
+					statMethCcd = me.get("codes.statMethCcd");
+				
+				me.set("survey", {
+					surv_typ_ccd: survTypCcd[0].data,
+					lyt_ccd: lytCcd[0].data,
+					stat_meth_ccd: statMethCcd[0].data,
+					qn_no_dspy_yn: "Y"
+				});
+			},
+			
+			clearForm: function() {
+				var me = this;
+				var pages = me.$.pages;
+				var childrens = pages.children;
+				
+				for(var i = childrens.length - 1; i >= 0; i--) {
+					if(childrens[i].id !== "basic") {
+						pages.removeChild(childrens[i]);
+					}
+				}
+				pages.selectedIndex = 0;
+				
+				me.$.templateForm.clearForm();
+			},
+			
+			onPreview: function() {
+				//this.save("preview");
+				var me = this;
+				var templateForm = me.$.templateForm;
+				
+				if(!templateForm.validate(me.$.pages)) {
+					return;
+				}
+				var surveyData = templateForm.getData(me.$.pages);
+				me.preview(surveyData);
+			},
+			
+			preview: function(surveyData) {
+				var me = this;
+				var popup = UT.popup("ep-survey-preview", me, 1100, 900, {
+					'close': function(popup, e) {
+						popup.close();
+					}
+				}, {maximizable: true, titleText: "설문지 미리보기", alwaysNew: true});
+				popup.show();
+				popup.getWindowContent().load(surveyData);
+			},
+			
+			onSelectForm: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var survey = me.get("survey");
+				var children = pages.querySelector('[id="' + detail.id + '"]');
+				pages.selectItem(children);
+				
+				if(children.id === "basic") {
+					children.load(detail.data);
+				} else {
+					if(!children.loadCompleted || detail.force) {
+						if(detail.type === "section" || detail.type === "question") {
+							children.load({
+								survey: survey,
+								data: detail.data
+							});
+						} else if(detail.type === "front" || detail.type === "back") {
+							children.load({
+								content: detail.data,
+								type: detail.type
+							});
+						}
+					}
+				}
+			},
+			
+			onRemoveForm: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var children = pages.querySelector('[id="' + detail.id + '"]');
+				if(!children) return;
+				
+				pages.removeChild(children);
+			},
+			
+			onRemoveCover: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var basic = pages.querySelector('[id="basic"]');
+				basic.removeCover(detail);
+			},
+			
+			onAddCoverForm: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var coverForm = document.createElement("es-survey-cover-form");
+				coverForm.id = detail.id;
+				coverForm.set("editable", me.formula('editable'));
+				Polymer.dom(pages).appendChild(coverForm);
+				Polymer.dom.flush();
+			},
+			
+			onChangeCover: function() {
+				this.$.templateForm.changeCover();
+			},
+			
+			onChangeSurvTyp: function() {
+				var me = this;
+				var pages = me.$.pages;
+				var childrens = pages.children;
+				for(var i = 0; i < childrens.length; i++) {
+					var children = childrens[i];
+					if(children.loadCompleted) {
+						children.applyFormula();
+					}
+				}
+			},
+			
+			onAddSectionForm: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var sectionForm = document.createElement("es-survey-section-form");
+				sectionForm.id = detail.id;
+				sectionForm.set("codes", me.get("codes"));
+				sectionForm.addEventListener("change-title", function(e) {
+					me.$.templateForm.changeTitle(e.detail);
+				});
+				Polymer.dom(pages).appendChild(sectionForm);
+				Polymer.dom.flush();
+			},
+			
+			onAddQuestionForm: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var questionForm = document.createElement("es-survey-question-form");
+				questionForm.id = detail.id;
+				questionForm.set("codes", me.get("codes"));
+				questionForm.addEventListener("change-title", function(e) {
+					me.$.templateForm.changeTitle(e.detail);
+				});
+				Polymer.dom(pages).appendChild(questionForm);
+				Polymer.dom.flush();
+			},
+			
+			onSyncValue: function(e) {
+				var me = this;
+				var pages = me.$.pages;
+				var detail = e.detail;
+				
+				var children = pages.querySelector('[id="' + detail.id + '"]');
+				if(children.loadCompleted) {
+					children.syncValue;
+				}
+			},
+			
+			onPublish: function() {
+				var me = this;
+				me.save("publish");
+			},
+			
+			completePublishSurvey: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("action", "");
+				if(response.success) {
+					UT.completeAlert();
+					me.fire("reload");
+					me.onClose();
+				}
+			},
+			
+			onClose: function() {
+				this.reset();
+				this.fire('close');
+			}
+		})
+	</script>
+</dom-module>

@@ -1,0 +1,663 @@
+<sc-link rel="import" href="../../../bp/shared/ep-zipcode.html"></sc-link>
+<!-- 정보변경요청 팝업 -->
+<dom-module id="ep-vendor-req-main-info-change-receipt">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!--
+	************************************************************************************************************
+	* Service Area
+	************************************************************************************************************
+ -->
+        <!-- 협력사가 요청한 정보변경 조회 -->
+        <sc-ajax
+            id="findVendorReqMainInfoChange"
+            url="findVendorReqMainInfoChange.do"
+            body="{{searchParam}}"
+            on-response="completeFindVendorReqMainInfoChange">
+        </sc-ajax>
+        
+        <!-- 반려 -->
+        <sc-ajax
+            id="rejectVendorReqMainInfoChange"
+            url="rejectVendorReqMainInfoChange.do"
+            on-response="completeRejectVendorReqMainInfoChange">
+        </sc-ajax>
+        
+		<!-- 진행중인 협력사 결재 정보 조회 -->
+        <sc-ajax
+            id="findVendorApprovalInfo"
+            url="../vendorInfo/findVendorApprovalInfo.do"
+            body="{{searchParam}}"
+            on-response="completeFindVendorApprovalInfo">
+        </sc-ajax>
+		
+		<!-- 접수 -->
+    	<sc-ajax
+    		id="saveReceiptVendorReqMainInfoChange"
+    		url="saveReceiptVendorReqMainInfoChange.do"
+    		on-response="completeSaveVendorInfoBeforeChange">
+    	</sc-ajax>
+		
+ 		<!-- 공통코드 조회 -->
+ 		<sc-request-group id="codes" init>
+			<!-- 운영조직 조회 -->
+			<sc-ajax
+					url="findListOperationOrganizationByUser.do"
+					body="EO"
+					content-type="text/plain"
+					last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+	    	<sc-code-group id="codes">
+	    		<sc-code code="C001" value="{{codes.ctryCcd}}" ></sc-code>
+				<sc-code code="C008" value="{{codes.euCtryCcd}}"></sc-code><!-- EU국가 -->
+				<sc-code code="E032" value="{{codes.vdSubmddocTypCcd}}"></sc-code>	<!-- 협력사 제출서류 유형 -->
+				<sc-code code="E065" value="{{codes.bnkCcd}}"></sc-code><!-- 은행 공통코드-->
+			</sc-code-group>
+        </sc-request-group>
+		
+		<cc-auth-checker check-list="auth-vs"></cc-auth-checker>
+ <!--
+	************************************************************************************************************
+	* UI Area
+	************************************************************************************************************
+ -->
+ 	
+		<cc-sub-title-bar title-text="협력사 정보">
+			<sc-button text="반려" on-click="onSaveReject" hidden="[[!formula('editable')]]" auth-vs></sc-button>
+			<sc-button text="접수" on-click="onSaveReceipt" hidden="[[!formula('editable')]]" auth-vs></sc-button>
+		</cc-sub-title-bar>
+		<div class="flex">
+			<cc-form-panel>
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<sc-combobox-field
+							display-field="logic_org_nm" value-field="oorg_cd" readonly="true"
+							items="{{codes.oorgCd}}" value="{{nextBasicInfo.oorg_cd}}" placeholder="선택">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text ="협력사 코드"></sc-label>
+					<div class="field-box">
+						<sc-text-field class="w-200" value="{{nextBasicInfo.erp_vd_cd}}" readonly="true" max-length="18"></sc-text-field>
+						<sc-combobox-field style="margin-left:5px;"
+										   display-field="label" value-field="data"
+										   items="{{codes.ctryCcd}}" value="{{nextBasicInfo.ctry_ccd}}" readonly="true">
+						</sc-combobox-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden$="[[!formula('kr')]]">
+					<sc-label text="사업자등록번호"></sc-label>
+					<sc-text-field value="{{nextBasicInfo.bizregno}}" class="w-200" readonly="true" input-mask="999-99-99999" max-length="12" class="w-"></sc-text-field>
+					<sc-text-field value="{{nextBasicInfo.taxnsubj_seqno}}" readonly="true" input-mask="9999" max-length="4" style="margin-left:5px; width: 100px;"></sc-text-field>
+					<sc-checkbox-field label="사업자단위과세적용사업자 여부" class="w-150" input-value="{{nextBasicInfo.taxnsubj_yn}}" checked-value="Y" un-checked-value="N" readonly="true" style="margin-left:5px;"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden$="[[!formula('etc')]]" column-span="2">
+					<sc-label text="Tax Id"  i18n-disabled></sc-label>
+					<sc-text-field value="{{nextBasicInfo.tax_id}}" readonly="true" max-length="36"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset hidden$="[[!formula('eu')]]" column-span="2">
+					<sc-label text="EU VAT Id"  i18n-disabled></sc-label>
+					<sc-text-field value="{{nextBasicInfo.eu_vat_reg_id}}" readonly="true" max-length="36"></sc-text-field>
+				</cc-fieldset>
+			</cc-form-panel>
+	  
+			<div class="vspace-5"></div>
+	
+			<cc-sub-title-bar title-text="[[translate('기본 정보')]]"></cc-sub-title-bar>
+			<div class="hbox" style="width:100%; height: auto">
+				<cc-form-panel style="width: 100%" id="basicInfo" column="1" form-cls="label-row" hidden="[[formula('isBeforeBasicInfoHidden')]]">
+					<cc-fieldset>
+						<sc-label text="협력사 명"></sc-label>
+						<sc-text-field value="{{basicInfo.vd_nm}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="협력사 명 영문"></sc-label>
+						<sc-text-field value="{{basicInfo.vd_nm_en}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="대표자 명"></sc-label>
+						<sc-text-field value="{{basicInfo.ceo_nm}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="대표자 명 영문"></sc-label>
+						<sc-text-field value="{{basicInfo.ceo_nm_en}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="법인번호"></sc-label>
+						<sc-text-field value="{{basicInfo.corpno}}" input-mask="999999-9999999" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="본사 사업자등록번호"></sc-label>
+						<sc-text-field value="{{basicInfo.hq_bizregno}}" input-mask="999-99-99999" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="업종"></sc-label>
+						<sc-text-field value="{{basicInfo.ind}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="업태"></sc-label>
+						<sc-text-field value="{{basicInfo.biztyp}}" readonly="true"></sc-text-field>
+					</cc-fieldset>
+				</cc-form-panel>
+				
+				<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+				<sc-label text=">" style="padding-top:150px;font-size:20px" hidden="[[formula('isBeforeBasicInfoHidden')]]" i18n-disabled></sc-label>
+				<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+				
+				<cc-form-panel style="width: 100%" id="nextBasicInfo" column="1" form-cls="label-row" validation-group="nextBasicInfo" i18n-disabled>
+					<cc-fieldset>
+						<sc-label text="협력사 명"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.vd_nm}}" max-length="50" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="협력사 명 영문"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.vd_nm_en}}" max-length="50" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="대표자 명"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.ceo_nm}}" max-length="40" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="대표자 명 영문"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.ceo_nm_en}}" max-length="40" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="법인번호"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.corpno}}" max-length="14" input-mask="999999-9999999" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="본사 사업자등록번호"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.hq_bizregno}}" max-length="12" input-mask="999-99-99999" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="업종"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.ind}}" max-length="50" readonly="true"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset hidden$="[[!formula('kr')]]">
+						<sc-label text="업태"></sc-label>
+						<sc-text-field value="{{nextBasicInfo.biztyp}}" max-length="50" readonly="true"></sc-text-field>
+					</cc-fieldset>
+				</cc-form-panel>
+			</div>
+			
+			<div>
+				<cc-sub-title-bar title-text="[[translate('첨부파일')]]"></cc-sub-title-bar>
+				
+				<div class="hbox" style="width:100%">
+					<sc-grid id="athfList" class="h-300" editable="false" use-selection="false" use-state="false" use-dummy="true" hidden="[[formula('isBeforeBasicInfoHidden')]]"
+							 data-provider="{{athfList}}">
+						<cc-grid-toolbar></cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column   data-field="vd_submddoc_typ_ccd"   header-text="첨부파일 구분" width="150" text-align="left" items="{{codes.vdSubmddocTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+							<sc-data-column       data-field="mand_yn"    header-text="필수 여부"     width="60"></sc-data-column>
+							<sc-attachment-column data-field="att_count" header-text="첨부파일"     width="60" text-align="left" shared-group-field="athg_uuid" popup-call-fn="callAttach"></sc-attachment-column>
+							<sc-data-column	      data-field="rmk"       header-text="비고"        width="100" text-align="left" editable="true" max-length="128"></sc-data-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="vd_athf_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_athf_chg_histrec_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+							<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+					
+					<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+					<sc-label text=">" style="padding-top:150px;font-size:20px" hidden="[[formula('isBeforeBasicInfoHidden')]]" i18n-disabled></sc-label>
+					<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+					
+					<sc-grid id="nextAthfList" class="h-300" editable="false" use-selection="false" use-state="false" use-dummy="true"
+							 data-provider="{{nextAthfList}}">
+						<cc-grid-toolbar></cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column   data-field="vd_submddoc_typ_ccd"   header-text="첨부파일 구분" width="150" text-align="left" items="{{codes.vdSubmddocTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+							<sc-data-column       data-field="mand_yn"    header-text="필수 여부"     width="60"></sc-data-column>
+							<sc-attachment-column data-field="att_count" header-text="첨부파일"     width="60" text-align="left" editable="false" shared-group-field="athg_uuid" popup-call-fn="callAttach"></sc-attachment-column>
+							<sc-data-column	      data-field="rmk"       header-text="비고"        width="100" text-align="left" editable="false" max-length="128"></sc-data-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="vd_athf_chg_req_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_info_chg_req_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+							<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</div>
+				<div class="vspace-5"></div>
+			</div>
+			
+			<div>
+				<cc-sub-title-bar title-text="[[translate('계좌 정보')]]"></cc-sub-title-bar>
+				
+				<div class="hbox" style="width:100%">
+					<sc-grid id="bnkAcctList" class="h-200" editable="false" data-provider="{{bnkAcctList}}"
+							 use-selection="false" use-state="false" hidden="[[formula('isBeforeBasicInfoHidden')]]">
+						<cc-grid-toolbar></cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column data-field="bnk_ccd" header-text="은행" width="180" text-align="left"
+												items="{{codes.bnkCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+							<sc-data-column	data-field="accthldr" header-text="예금주" width="180" text-align="left"></sc-data-column>
+							<sc-data-column	data-field="bnkacct_no" header-text="계좌 번호" width="200" text-align="left"></sc-data-column>
+							<sc-data-column	data-field="iban_cd" header-text="IBAN 코드" width="120"></sc-data-column>
+							<sc-data-column	data-field="swift_cd" header-text="SWIFT 코드" width="120"></sc-data-column>
+							<sc-checkbox-column data-field="vtl_bnkacct_yn" header-text="가상 계좌 여부" width="110"></sc-checkbox-column>
+							<sc-checkbox-column data-field="main_bnkacct_yn" header-text="메인 계좌 여부" width="110"></sc-checkbox-column>
+							<sc-checkbox-column	data-field="use_yn" header-text="사용 여부" width="110"></sc-checkbox-column>
+							<sc-date-column	data-field="efct_st_dt" header-text="유효 시작 일자" width="110"></sc-date-column>
+							<sc-date-column	data-field="efct_ed_dt" header-text="유효 종료 일자" width="110"></sc-date-column>
+							<sc-attachment-column data-field="att_count" shared-group-field="athg_uuid" header-text="첨부파일" width="90"></sc-attachment-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_bnkacct_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+					
+					<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+					<sc-label text=">" style="padding-top:150px;font-size:20px" hidden="[[formula('isBeforeBasicInfoHidden')]]" i18n-disabled></sc-label>
+					<div class="hspace-10" hidden="[[formula('isBeforeBasicInfoHidden')]]"></div>
+					
+					<sc-grid id="nextBnkAcctList" class="h-200" editable="false" data-provider="{{nextBnkAcctList}}"
+							 use-selection="false" use-state="false">
+						<cc-grid-toolbar></cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column data-field="bnk_ccd" header-text="은행" width="180" text-align="left"
+												items="{{codes.bnkCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+							<sc-data-column	data-field="accthldr" header-text="예금주" width="180" text-align="left" max-length="60"></sc-data-column>
+							<sc-data-column	data-field="bnkacct_no" header-text="계좌 번호" width="200" text-align="left" max-length="60"></sc-data-column>
+							<sc-data-column	data-field="iban_cd" header-text="IBAN 코드" width="120" max-length="60"></sc-data-column>
+							<sc-data-column	data-field="swift_cd" header-text="SWIFT 코드" width="120" max-length="60"></sc-data-column>
+							<sc-checkbox-column	data-field="vtl_bnkacct_yn"	header-text="가상 계좌 여부" width="110"></sc-checkbox-column>
+							<sc-checkbox-column	data-field="main_bnkacct_yn" header-text="메인 계좌 여부" width="110"></sc-checkbox-column>
+							<sc-checkbox-column	data-field="use_yn" header-text="사용 여부" width="110"></sc-checkbox-column>
+							<sc-date-column	data-field="efct_st_dt" header-text="유효 시작 일자" width="110"></sc-date-column>
+							<sc-date-column	data-field="efct_ed_dt" header-text="유효 종료 일자" width="110"></sc-date-column>
+							<sc-attachment-column data-field="att_count" shared-group-field="athg_uuid" header-text="첨부파일" width="90"></sc-attachment-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="vd_bnkacct_chg_hist_uuid"></sc-grid-field>
+							<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_bnkacct_uuid"></sc-grid-field>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</div>
+				<div class="vspace-5"></div>
+			</div>
+			
+			<cc-form-panel title-text="[[translate('변경 요청 정보')]]" form-cls="label-row" column="1" i18n-disabled>
+				<cc-fieldset>
+					<sc-label text="요청 사유"></sc-label>
+					<sc-textarea-field class="h-100" value="{{nextBasicInfo.chg_req_rsn}}" max-length="1000" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<div class="vspace-5"></div>
+			<cc-form-panel validation-group="rejectInfo">
+				<cc-fieldset>
+					<sc-label text="요청자"></sc-label>
+					<sc-text-field value="{{nextBasicInfo.vd_pic_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="요청 일자"></sc-label>
+					<sc-date-field value="{{nextBasicInfo.chg_req_dt}}" string-date="true" readonly="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="담당자"></sc-label>
+					<sc-text-field value="{{nextBasicInfo.buyer_pic_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="반려 일자"></sc-label>
+					<sc-date-field value="{{rejectInfo.chg_req_ret_dt}}" string-date="true" readonly="true"></sc-date-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{rejectInfo.chg_req_ret_rsn}}" class="h-100" max-length="1000" readonly="[[!formula('editable')]]" required="[[formula('editable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+		</div>
+    </template>
+<!--
+	************************************************************************************************************
+	* Script Area
+	************************************************************************************************************
+ -->
+    <script>
+   
+ 		Polymer({
+ 			is: "ep-vendor-req-main-info-change-receipt",
+ 			properties: {
+ 				titleText:{
+ 	                type: String,
+ 					value: "정보 변경 요청 접수"
+ 				},
+ 				
+ 				// 공통코드 binding 객체
+ 				codes: {
+ 					type: Object,
+ 					value: function(){
+ 					    return {
+							oorgCd: [],
+							ctryCcd: [],
+							euCtryCcd: [],
+							vdSubmddocTypCcd: []
+                        };
+ 					},
+ 					reset: false
+ 				},
+ 				searchParam:{
+ 				    type: Object,
+ 				    value: function(){
+ 				       return {};
+ 	 	 			}
+ 	 	 		},
+            	/*기본 정보 data binding 객체*/
+            	basicInfo: {
+            		type: Object,
+            		value : function(){
+						return {};
+					}
+            	},
+				nextBasicInfo: {
+            		type: Object,
+            		value : function(){
+						return {};
+					}
+            	},
+				vdOorgInfo: {
+            		type: Object,
+            		value : function(){
+						return {};
+					}
+            	},
+				nextVdOorgInfo: {
+            		type: Object,
+            		value : function(){
+						return {};
+					}
+            	},
+				athfList: {
+					type: Array,
+					value: function(){
+						return [];
+					}
+				},
+				nextAthfList: {
+					type: Array,
+					value: function(){
+						return [];
+					}
+				},
+				bnkAcctList: {
+					type: Array,
+					value : function(){
+						return [];
+					}
+				},
+				nextBnkAcctList: {
+					type: Array,
+					value : function(){
+						return [];
+					}
+				},
+            	chgTypCcd : {
+                    type: String,
+                    value : "MAIN_INFO_CHG_REQ"  /* 주요정보 변경요청 */
+                },
+ 				rejectInfo : {
+ 					type: Object,
+                    value:function(){
+                        return {};
+                    }
+ 				}
+ 			},
+			
+			behaviors: [
+				Polymer.CCModuleBehavior,
+				Polymer.SCResizableBehavior
+			],
+			
+ 			formulas: {
+ 				editable : function(){
+ 					var me = this;
+                	var chgReqStsCcd = me.get("searchParam.chg_req_sts_ccd");
+                	
+					return chgReqStsCcd == "REQ";  // REQ : 요청
+ 				},
+                kr: function(){
+                    var me = this;
+                    var ctryCcd = me.get("nextBasicInfo.ctry_ccd");
+                    return (ctryCcd === "KR");
+                },
+                eu: function(){
+                    var me = this;
+                    var codes = me.get("codes.euCtryCcd");
+                    var euCtryList = [];
+                    for(var i = 0; i < codes.length; i++){
+                        euCtryList[i] = codes[i].data;
+                    }
+                    var ctryCcd = me.get("nextBasicInfo.ctry_ccd");
+                    return (euCtryList.indexOf(ctryCcd) != -1);
+                },
+                etc: function(){
+                    var me = this;
+                    return (!me.formula('kr') && !me.formula('eu'));
+                },
+				/* 이전 차수 협력사 정보 미조회 */
+				isBeforeBasicInfoHidden: function(){
+					var me = this;
+					var basicInfo = me.get("basicInfo");
+					return UT.isEmpty(basicInfo);
+				}
+ 			},
+ 			load: function(data){
+				var me = this;
+				me.reset();
+				me.set("searchParam", data);
+				
+				me.onSearch();
+ 			},
+
+ 			onSearch: function(){
+ 			    var me = this;
+				UT.request(me.$.findVendorReqMainInfoChange);
+ 	 		},
+			
+			/* 협력사가 요청한 정보변경 조회 완료 후 callback */
+			completeFindVendorReqMainInfoChange: function(e, res){
+				var me = this;
+				var resultData = res.response.resultData;
+				var basicInfo = resultData.basicInfo;
+				var nextBasicInfo = resultData.nextBasicInfo;
+				var vdOorgInfo = resultData.vdOorgInfo;
+				var nextVdOorgInfo = resultData.nextVdOorgInfo;
+				var athfList = resultData.athfList;
+				var nextAthfList = resultData.nextAthfList;
+				var bnkAcctList = resultData.bnkAcctList;
+				var nextBnkAcctList = resultData.nextBnkAcctList;
+				
+				if(nextBasicInfo){
+					me.set("basicInfo", basicInfo);
+					me.set("nextBasicInfo", nextBasicInfo);
+					me.set("vdOorgInfo", vdOorgInfo);
+					me.set("nextVdOorgInfo", nextVdOorgInfo);
+					me.set("athfList", athfList);
+					me.set("nextAthfList", nextAthfList);
+					me.set("bnkAcctList", bnkAcctList);
+					me.set("nextBnkAcctList", nextBnkAcctList);
+					
+					if(UT.isEmpty(nextBasicInfo.buyer_pic_id)){
+						me.set("nextBasicInfo.buyer_pic_id", SCSessionManager.currentUser.usr_id);
+		                me.set("nextBasicInfo.buyer_pic_nm", SCSessionManager.currentUser.usr_nm);
+					}else{
+						me.set("rejectInfo.buyer_pic_id", nextBasicInfo.buyer_pic_id);
+						me.set("rejectInfo.buyer_pic_nm", nextBasicInfo.buyer_pic_nm);
+						me.set("rejectInfo.chg_req_ret_rsn", nextBasicInfo.chg_req_ret_rsn);
+						me.set("rejectInfo.chg_req_ret_dt", nextBasicInfo.chg_req_ret_dt);
+					}
+					me.applyFormula();
+				}
+				
+				me.$.athfList.doContentElementResize();
+				me.$.nextAthfList.doContentElementResize();
+				me.$.bnkAcctList.doContentElementResize();
+				me.$.nextBnkAcctList.doContentElementResize();
+			},
+ 			
+            /* 반려 저장 */
+            onSaveReject: function () {
+                var me = this;
+                var rejectList = [me.get("nextBasicInfo")];
+                var rejectInfo = me.get("rejectInfo");
+                
+                if(!me.validate("rejectInfo")){
+                	UT.alert("STD.E0000");
+                	return;
+                }
+                
+            	UT.confirm("STD.N3000", function () {  // 반려 하시겠습니까?
+					rejectInfo.buyer_pic_id = me.get("nextBasicInfo.buyer_pic_id");
+		            rejectInfo.buyer_pic_nm = me.get("nextBasicInfo.buyer_pic_nm");
+					me.$.rejectVendorReqMainInfoChange.body = {
+						rejectList : rejectList,
+						rejectInfo : rejectInfo
+					};
+					UT.request(me.$.rejectVendorReqMainInfoChange);
+            	});
+            },
+			
+            // 반려 완료 후 callback
+            completeRejectVendorReqMainInfoChange: function(e, res){
+            	var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus == "S"){
+					UT.completeAlert("반려");  // 요청을 완료 하였습니다.
+					me.fire("close-popup");
+				}
+            },
+			
+			/* 접수 저장 */
+            onSaveReceipt: function(){
+            	var me = this;
+				me.onSearchAprvInfo();  // 진행 중인 결재정보 체크
+            },
+			
+			/* 진행 중인 결재정보 체크 */
+			onSearchAprvInfo: function(){
+ 			    var me = this;
+ 			    UT.request(me.$.findVendorApprovalInfo);
+ 	 		},
+			
+			/* 결재정보 조회 완료 후 callback */
+            completeFindVendorApprovalInfo: function(e, res){
+                var me = this;
+                var result = res.response || {};
+				var aprvRockInfo = result.aprvRockInfo;
+				var aprvInfo = result.aprvInfo;
+				var modStsInfo = result.modStsInfo;
+				
+				// 마지막 변경이력(결재)이 진행중인 경우
+                if (UT.isNotEmpty(aprvRockInfo) && aprvRockInfo.vd_mst_chg_histrec_uuid) {
+					// ROCK 대상 여부 체크
+					var isExistAprvRockTarget = aprvRockInfo.rock_yn == "Y"  // 진행중인 결재중, Rock 대상 결재 존재
+												&& aprvRockInfo.vd_mst_chg_histrec_uuid != me.get("searchParam.vd_mst_chg_histrec_uuid");  // Rock 대상 결재 != 현재 결재
+					
+					var isNotAprvRock   = true;
+					if(isExistAprvRockTarget){  // ROCK 대상
+						var rockTyp = aprvRockInfo.rock_typ;
+						if(rockTyp == "INFO_ROCK"){
+							// 현재 결재가 정보 변경 결재이면, Rock 대상 결재
+							isNotAprvRock = false;  // 현재 결재는 Y_FIX : 항상 정보 Rock 대상
+						} else if("OORG_ROCK"){
+							// 현재 결재의 운영조직 == 운영조직 Rock 대상 결재의 운영조직 이면, Rock 대상 결재
+							isNotAprvRock = true;  // 현재 결재는 !(PO_POSS_VD_REG_REQ, PO_LMT_REQ) : 항상 운영조직 Rock 미대상
+						}
+					}
+					
+					var isRegUser       = aprvRockInfo.rock_yn == "Y" ? (aprvRockInfo.chg_reqr_id == SCSessionManager.currentUser.usr_id) : (aprvInfo.chg_reqr_id == SCSessionManager.currentUser.usr_id);
+					var isSameModTarget = aprvRockInfo.rock_yn == "Y" ? (aprvRockInfo.vd_mst_chg_histrec_uuid == me.get("searchParam.vd_mst_chg_histrec_uuid")) : (aprvInfo.vd_mst_chg_histrec_uuid == me.get("searchParam.vd_mst_chg_histrec_uuid"));
+					if(!isNotAprvRock || (isNotAprvRock && isSameModTarget && !isRegUser)) {
+						// Rock 대상 결재
+						// Rock 대상 결재가 아니고 결재 대상이 같은데. 결재요청자가 현재 로그인 사용자와 다른 경우
+						aprvInfo = aprvRockInfo.rock_yn == "Y" ? aprvRockInfo : aprvInfo;
+						var message = me.getVdModInvalidMessage(aprvInfo);
+						return UT.alert(message);
+					}
+				}
+				
+				// 정보변경요청 접수
+				UT.confirm("STD.N1108", function () {  // 접수하시겠습니까?
+					me.$.saveReceiptVendorReqMainInfoChange.body = {
+						chgTypCcd   : me.chgTypCcd,
+						modStsInfo  : null,
+               			basicInfo   : me.nextBasicInfo,
+                        vdOorgInfo  : me.nextVdOorgInfo,
+						athfList    : me.$.nextAthfList.getDataProvider().getItems(),
+						bnkAcctList : me.$.nextBnkAcctList.getDataProvider().getItems()
+                	};
+					UT.request(me.$.saveReceiptVendorReqMainInfoChange);
+            	});
+            },
+			
+			/* 접수 저장 완료 후 callback */
+			completeSaveVendorInfoBeforeChange: function(e, res){
+            	var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus == "S"){
+					UT.completeAlert("접수", function(){ // 요청을 완료 하였습니다.
+						// 품의 팝업 연결
+						me.fire("complete-save", result.resultData);
+					});
+				} else {
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다. 관리자에게 문의하세요
+				}
+            },
+			
+			/* 진행중인 결재 알림 팝업창 */
+            getVdModInvalidMessage: function(aprvInfo){
+                var me = this;
+                // 진행중인 결재가 존재하여 결재요청이 불가합니다.
+                var message = me.translate("STD.VS1073");
+                var brStr = "<br>";
+                var str1 = aprvInfo.chg_typ_nm,
+                    str2 = aprvInfo.chg_req_sts_nm,
+                    str3 = aprvInfo.chg_reqr_nm;
+                // str1 : 결재 유형명 (운영조직명/협력사관리유형명)
+                str1 += aprvInfo.vmg_nm ? brStr + "&nbsp;" : "";
+                str1 += " ( " + aprvInfo.logic_org_nm;
+                str1 += aprvInfo.vmt_nm ? " / " + aprvInfo.vmt_nm : "";
+                str1 += " )";
+                // str2 : 결재 상태명 (결재 문서번호)
+                str2 += aprvInfo.apvl_docno ? " ( " + me.translate("결재 문서번호") + " : " + aprvInfo.apvl_docno + " )": "";
+                // str3 : 결재 요청자명(요청자아이디)
+                str3 += " ( " + aprvInfo.chg_reqr_id + " )";
+                
+                message += brStr;
+                message += me.translate("STD.VS1082", null, str1, str2, str3);
+                return message;
+            },
+			
+			/* 첨부파일 팝업 */
+			callAttach : function(data, item, provider){
+				var me = this,
+					athg_uuid = data.athg_uuid,
+					itemIndex = item.rowIndex;
+
+				UT.popupAttach(me, athg_uuid, function(result){
+					var param = {
+						athg_uuid : result.athg_uuid,
+						att_count: result.file_count
+					}
+					provider.setItemAt(itemIndex, param);
+				}, {editable : item.editable, required : data.mand_yn === 'Y'});
+            }
+ 		});
+    </script>
+</dom-module>

@@ -1,0 +1,217 @@
+<sc-link rel="import" href="./popup/ep-checkedsigncommon.html"></sc-link>
+
+<dom-module id="es-edoc-user-file">
+	<style>
+		:host{
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 기타첨부문서 파일 저장 -->
+		<sc-ajax id="saveCntrEtcFile"
+				 url="saveCntrEtcFile.do"
+				 on-response="completeSaveCntrEtcFile"></sc-ajax>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-7">
+				<div class="flex" id="pdf-container" style="padding-top : 5px;background-color:gray">
+					<iframe id="{{myIframe}}" width="100%" height="100%" type="application/pdf"></iframe>
+				</div>
+			</div>
+			
+			<div class="hspace-5"></div>
+			
+			<div class="vbox flex-3">
+				<div class="vbox flex-5" >
+					<cc-sub-title-bar title-text="부속서류">
+						<sc-button text="저장" on-click="onSaveAppxFile" hidden="[[!formula('editable')]]"></sc-button>
+					</cc-sub-title-bar>
+					<sc-upload id="uploadAppx" value="{{cntrInfo.tmpl_unud_appx_athg_uuid}}" class="flex" readonly="[[!formula('editable')]]"
+							sort-data-field="name" sort-direction="asc"
+							max-total-file-count="10" max-total-file-size="10MB"
+							extension="jpg,gif,png,tif,bmp,txt,xls,doc,ppt,xlsx,docx,pptx,rtf,gul,hwp,pdf,mht,mp4,dwg,eml,msg"
+							restrict-extension="exe,vbs,zip"></sc-upload>
+				</div>
+				
+				<div class="vbox flex-5" >
+					<cc-sub-title-bar title-text="기타 첨부">
+						<sc-button text="저장" on-click="onSaveEtcFile"></sc-button>
+					</cc-sub-title-bar>
+					<sc-upload id="uploadEtc" class="flex" value="{{cntrInfo.otrs_athg_uuid}}" max-total-file-size="10MB"></sc-upload>
+				</div>
+			</div>
+		</div>
+	</template>
+	<script>
+	Polymer({
+		is : "es-edoc-user-file",
+		properties: {
+			cntrInfo : {
+				type : Object,
+				value : function(){
+					return {};
+				}
+			},
+			myIframe : {
+				type : String,
+				value : ""
+			},
+			validateType: {
+				type: String,
+				value: function() {
+					return "";
+				}
+			}
+		},
+		
+		formulas : {
+			editable: function() {
+				var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+				var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+				if(sgnMethCcd === "PKI"
+						|| (sgnMethCcd === "EFORM" && UT.isEmpty(this.get("cntrInfo.dgtlsgn_cntrdoc_tmpl_athg_uuid")))
+						|| (sgnMethCcd === "DOCUSIGN" && UT.isEmpty(this.get("cntrInfo.dsgn_uuid")))
+						|| (sgnMethCcd === "ADOBESIGN" && UT.isEmpty(this.get("cntrInfo.asgn_uuid")))) {
+					return cntrStsCcd === "CCMPLD" || cntrStsCcd === "APPX_RVG" || cntrStsCcd === "VD_RET";
+				}
+				return false;
+			}
+		},
+		
+		load: function(param) {
+			var me = this;
+			me.set("myIframe", UT.generateUUID());
+			me.set("cntrInfo", param);
+			me.getPDF();
+			me.applyFormula();
+		},
+		
+		getPDF: function() {
+			var me = this;
+			var paramObj = { cntrdoc_athg_uuid: me.get("cntrInfo.tmpl_unud_cntrdoc_athg_uuid") };
+			DL.downloadByUrl("bp/edoc/getNonStandardCntrPdf.do", me.get("myIframe"), paramObj);
+		},
+		
+		// 서명 확인
+		onConfirmSign : function(){
+			var me = this;
+			var checkedSignPopup = UT.popup("ep-checkedsigncommon", me, "800", "350", {
+				"sc-window-hided" : function(popup, e){
+					// 팝업을 닫을 때
+					me.showIframe();
+				}
+			}, {destroyOnHided : false});
+			checkedSignPopup.show();
+			checkedSignPopup.getWindowContent().load(me.cntrInfo);
+			me.hiddenIframe();
+		},
+		
+		// 부속서류 저장
+		onSaveAppxFile: function() {
+			var me = this;
+			me.$.uploadAppx.upload().then(function () {
+				var cntrInfo = me.get("cntrInfo");
+				me.$.saveCntrEtcFile.body = {
+					ecntr_uuid : cntrInfo.ecntr_uuid,
+					otrs_athg_uuid : cntrInfo.otrs_athg_uuid,
+					tmpl_unud_appx_athg_uuid : cntrInfo.tmpl_unud_appx_athg_uuid
+				};
+				UT.request(me.$.saveCntrEtcFile);
+			});
+		},
+		
+		// 기타첨부문서 저장
+		onSaveEtcFile: function() {
+			var me = this;
+			me.$.uploadEtc.upload().then(function () {
+				var cntrInfo = me.get("cntrInfo");
+				me.$.saveCntrEtcFile.body = {
+					ecntr_uuid : cntrInfo.ecntr_uuid,
+					otrs_athg_uuid : cntrInfo.otrs_athg_uuid
+				};
+				UT.request(me.$.saveCntrEtcFile);
+			});
+		},
+		
+		completeSaveCntrEtcFile: function(e, res) {
+			var me = this;
+			var result = res.response;
+			if(result.success) {
+				UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+			} else {
+				UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+			}
+		},
+		
+		// 유효성 검사
+		isValid: function() {
+			var me = this;
+			var validateType = me.get("validateType");
+			
+			if(me.$.uploadAppx._hasUploadFiles() || me.$.uploadEtc._hasUploadFiles()
+					|| me.$.uploadAppx._hasDeleteFiles() || me.$.uploadEtc._hasDeleteFiles()) {
+				UT.confirm("STD.N3900", function() { //변경된 정보가 있습니다. 저장하지 않고 진행하시겠습니까?
+					me.fire(validateType, true);
+				});
+			} else {
+				me.fire(validateType, true);
+			}
+		},
+		
+		// 계약서 발신 유효성 검사
+		validateOnSendContract: function() {
+			var me = this;
+			me.set("validateType", "validated-send");
+			me.isValid();
+		},
+		
+		// docusign template 생성 유효성 검사
+		validateOnCreateDsgnTmpl: function() {
+			var me = this;
+			me.set("validateType", "validated-create-dstmpl");
+			me.isValid();
+		},
+		
+		// eformsign template 생성 유효성 검사
+		validateOnCreateEFormTmpl: function() {
+			var me = this;
+			me.set("validateType", "validated-create-eformtmpl");
+			me.isValid();
+		},
+		
+		// adobesign 계약서 생성 유효성 검사
+		validateOnCreateAdobeSign: function() {
+			var me = this;
+			me.set("validateType", "validated-create-adobesign");
+			me.isValid();
+		},
+		
+		// iframe 숨기기
+		hiddenIframe : function(){
+			var iframe = document.getElementById(this.get("myIframe"))
+			if(iframe){
+				iframe.style.display = "none";
+			}
+		},
+		
+		// iframe 보이기
+		showIframe : function(){
+			var iframe = document.getElementById(this.get("myIframe"));
+			if(iframe){
+				iframe.style.display = "block";
+			}
+		},
+		
+		clear: function() {
+			var me = this;
+			var iframe = document.getElementById(me.get("myIframe"))
+			if(iframe){
+				iframe.contentWindow.document.body.innerHTML="";
+			}
+			me.$.uploadAppx.reset();
+			me.$.uploadEtc.reset();
+		}
+	});
+	</script>
+</dom-module>

@@ -1,0 +1,496 @@
+<sc-link rel="import" href="../../vendorMaster/shared/ep-user-by-operorg-list.html"></sc-link>
+<dom-module id="es-performance-eval-req-evaltr">
+
+	<!--
+	/**
+	*
+	*	@description : 퍼포먼스평가 퍼포먼스그룹의 평가 대상 평가자 관리
+	*	<pre>
+	* </pre>
+	* @author : hj.jang
+	* @FileName :
+	* @Since 2023. 06. 20
+	* @변경이력 : [2023. 06. 20] hj.jang 최초작성
+	*/
+	-->
+
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- ajax 선언 부 -->
+		<!-- 평가그룹의 평가 대상 정보 조회 -->
+		<sc-ajax id="findListPeSubjEvaltr"
+				 url="findListPeSubjEvaltr.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListPeSubjEvaltr">
+		</sc-ajax>
+		<!---->
+		<sc-request-group init>
+			<sc-code-group>
+				<!-- 평가항목 담당 그룹 -->
+				<sc-code code="R707" value="{{codes.evalfactAuthtyCcd}}"></sc-code>
+			</sc-code-group>
+
+		</sc-request-group>
+
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		<div class="vbox flex">
+			<cc-search-condition-panel hidden="true" on-search="onFindListPfmcReqSubjEvaltr" on-enter="onFindListPfmcReqSubjEvaltr" search-condition-group-cls="label-column" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="퍼포먼스평가그룹 명"></sc-label>
+					<sc-text-field value="{{searchParam.peg_nm}}" max-length="100" readonly="true" reset="false" ></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 규모"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.vdSizeCcd}}" value="{{searchParam.vd_size}}" placeholder="전체">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="[[translate('발주 금액')]] ([[translate('이상')]])" i18n-disabled></sc-label>
+					<sc-number-field id="cntr_amt" value="{{searchParam.cntr_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" max-value="1000000000000000" step="10000">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="소싱그룹"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-text-field class="w-150" value="{{searchParam.vmg_cd}}" placeholder="코드"></sc-text-field>
+						<div class="hspace-10"></div>
+						<sc-text-field class="flex" value="{{searchParam.vmg_nm}}"  placeholder="소싱그룹 명"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가 대상"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.useCcd}}" value="{{searchParam.targ_yn}}" placeholder="전체">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사"></sc-label>
+					<div class="field-box" style="width:100%;">
+						<sc-text-field class="w-100" value="{{searchParam.erp_vd_cd}}" placeholder="코드" on-enter="onSearch"></sc-text-field>
+						<div class="hspace-5"></div>
+						<sc-text-field value="{{searchParam.vd_nm}}" placeholder="협력사 명" on-enter="onSearch"></sc-text-field>
+					</div>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+
+
+			<div class="hspace-10"></div>
+
+			<sc-grid id="evaltrGridPanel" class="flex" use-selection="[[formula('isEvaltrEditable')]]" use-state="[[formula('isEvaltrEditable')]]" editable="[[formula('isEvaltrEditable')]]"
+					 on-item-click="onEvaltrItemClick" on-item-edit-end="onEvaltrItemEditEnd">
+				<cc-grid-toolbar title-text="평가 대상 평가자">
+					<sc-button text="일괄 변경" on-click="onChangePfmcSubjEvaltr" hidden="[[!formula('isEvaltrEditable')]]"></sc-button>
+					<sc-button text="추가" on-click="onAddPfmcSubjEvaltr" hidden="[[!formula('isEvaltrEditable')]]"></sc-button>
+					<sc-button text="저장" on-click="onSavePfmcSubjEvaltr" hidden="[[!formula('isEvaltrEditable')]]"></sc-button>
+					<sc-button text="삭제" on-click="onDeletePfmcSubjEvaltr" hidden="[[!formula('isEvaltrEditable')]]"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-group-column header-text="소싱그룹" hide-child-headers="true" width="350">
+						<sc-data-column	data-field="vmg_cd"	width="100"></sc-data-column>
+						<sc-data-column	data-field="display_vmg_nm"	width="200"	text-align="left"></sc-data-column>
+					</sc-group-column>
+					<sc-data-column data-field="erp_vd_cd"	header-text="협력사 코드"		width="100"></sc-data-column>
+					<sc-data-column data-field="display_vd_nm"	header-text="협력사 명"	width="250"	text-align="left"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="평가자"	width="240">
+						<sc-data-column data-field="evaltr_id"		width="80" ></sc-data-column>
+						<sc-data-column data-field="display_evaltr_nm"	width="130" editable="[[formula('isEvaltrEditable')]]"></sc-data-column>
+					<sc-image-column	image-cls="search"	data-field="img_evaltr_search"	width="30" editable="false"	visible="[[formula('isEvaltrEditable')]]"></sc-image-column>
+					</sc-group-column>
+					<sc-combobox-column data-field="evalfact_evaltr_authty_ccd"	header-text="평가항목 평가자 권한"	width="200"	item-editable-function="itemEditableFunction" required="true"
+										items="{{codes.filteredEvalfactAuthtyCcd}}"	display-field="label" value-field="data"></sc-combobox-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="pe_uuid"></sc-grid-field>
+					<sc-grid-field data-field="peg_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pe_peg_uuid"></sc-grid-field>
+					<sc-grid-field data-field="vmg_oorg_uuid"></sc-grid-field>
+					<sc-grid-field data-field="vmg_cd"></sc-grid-field>
+					<sc-grid-field data-field="vmg_nm"></sc-grid-field>
+					<sc-grid-field data-field="vmg_nm_en"></sc-grid-field>
+					<sc-grid-field data-field="pfmc_evalsht_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pe_subj_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pe_subj_evlatr_uuid"></sc-grid-field>
+					<sc-grid-field data-field="slfck_subj_yn"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is : 'es-performance-eval-req-evaltr',
+			properties: {
+				codes : {
+					type : Object,
+					value : function() {
+						return {
+							evalfactAuthtyCcd : []  /* R707 평가항목 담당 그룹 */
+						};
+					},
+					reset : false
+				},
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {
+							search_slfck_evaltr : "N"   /* 자체점검 평가자는 제외하고 조회*/
+						};
+					}
+				},
+				/* 퍼포먼스평가 요청 정보 */
+				pfmcEvalReq : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				pePegInfo : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				readOnly : {
+					type : Boolean,
+					value : true
+				}
+			},
+			formulas : {
+				// 평가 대상 평가자 수정 가능 상태
+				isEvaltrEditable : function() {
+					return !this.readOnly;
+				}
+			},
+			initialized : function() {
+
+			},
+			load : function(param) {
+				var me = this;
+				if(UT.isNotEmpty(param)) {
+					me.set("pfmcEvalReq", param.pfmcEvalReq);
+					if(UT.isNotEmpty(param.pePegInfo)) {
+						var pePegInfo = param.pePegInfo;
+						me.set("searchParam.pe_uuid", me.pfmcEvalReq.pe_uuid);
+						me.set("searchParam.peg_uuid", pePegInfo.peg_uuid);
+						me.set("searchParam.pe_peg_uuid", pePegInfo.pe_peg_uuid);
+					}
+					if(UT.isNotEmpty(param.pfmcEvalshtEvalfactAuthty)) {
+						var evamlfactAuthtyList = UT.getArrayValuesByKey(param.pfmcEvalshtEvalfactAuthty, "evalfact_evaltr_authty_ccd");
+						var filteredEvalfactAuthtyCcd = me.codes.evalfactAuthtyCcd.filter(function(commonCode) {
+							return evamlfactAuthtyList.includes(commonCode.data);
+						});
+						me.set("codes.filteredEvalfactAuthtyCcd", filteredEvalfactAuthtyCcd);
+					}
+				}
+				me.onFindListPfmcReqSubjEvaltr();
+				me.applyFormula();
+			},
+			onFindListPfmcReqSubjEvaltr : function() {
+				var me = this;
+
+				if(!me.validate("search")){
+					UT.alert("STD.E0000");
+					return;
+				}
+				UT.request(me.$.findListPeSubjEvaltr);
+			},
+
+			completeFindListPeSubjEvaltr : function(e, res) {
+				var me = this;
+				var result = res.response;
+
+				me.$.evaltrGridPanel.setDataProvider(result);
+			},
+			/************** 그리드 이벤트 ***************/
+			onEvaltrItemClick : function(e) {
+				var me = this, detail = event.detail,
+						data = detail.data,
+						item = detail.item,
+						fieldName = item.dataField,
+						itemIndex = item.rowIndex;
+
+				if(item.dataField === 'img_evaltr_search') {		//평가자검색버튼
+					var param = {
+						singleSelect : true,
+						operorgDisabled : true,
+						defaultParam : {
+							oorg_cd : me.get("pfmcEvalReq.oorg_cd")
+						}
+					};
+					var callbackFn = function(popup,e) {
+						var selected = e.detail;
+						// 선택 완료후 callback
+						me.saveChangedEvaltr(selected[0], item);
+						popup.close();
+					};
+					//사용자검색 팝업을 호출한다.
+					me.createOperOrgUserPopup(param, callbackFn);
+				}
+			},
+			onEvaltrItemEditEnd : function(e) {
+				var me = this,
+					data = event.detail.data,
+					item = event.detail.item,
+					provider = event.detail.provider,
+					newValue = event.detail.newValue,
+					grid = event.detail.grid;
+
+				if(item.dataField === "display_evaltr_nm") {
+					var param = {
+						singleSelect : true,
+						autoComplete : true,
+						operorgDisabled : true,
+						defaultParam : {
+							usr_nm : newValue,
+							oorg_cd : me.get("pfmcEvalReq.oorg_cd")
+						}
+					};
+					//사용자검색 팝업을 호출한다.
+					var callbackFn = function(popup,e){
+						var selected = e.detail;
+						// 선택 완료후 callback
+						me.saveChangedEvaltr(selected[0], item);
+						popup.close();
+					};
+					provider.setItemAt(item.rowIndex, {evaltr_id : null});
+					me.createOperOrgUserPopup(param, callbackFn);
+
+				}
+			},
+			itemEditableFunction: function(data, item){
+				var me = this,
+					dataField = item.dataField;
+
+				if(dataField === "evalfact_evaltr_authty_ccd" && me.formula('isEvaltrEditable') && UT.isEmpty(data.pe_subj_evaltr_uuid)) {
+					return true;
+				}
+				return false;
+			},
+			/************** 그리드 버튼 function ************/
+			// 평가자변경
+			onChangePfmcSubjEvaltr : function() {
+				var me = this,
+					provider = me.$.evaltrGridPanel.getDataProvider();
+
+				var checked = provider.selectionCheckedItems();
+
+				if(checked.length == 0){
+					return UT.alert("STD.N1600");  // 선택된 항목이 없습니다.
+				}
+
+				//사용자검색 팝업을 호출한다.
+				var callbackFn = function(popup,e){
+						var selected = e.detail;
+						// 선택 완료후 callback
+						me.saveChangedEvaltr(selected[0]);
+						popup.close();
+					};
+				var popupParam = {
+					singleSelect : true,
+					operorgDisabled : true,
+					defaultParam : {
+						oorg_cd : me.get("pfmcEvalReq.oorg_cd")
+					}
+				};
+
+				me.createOperOrgUserPopup(popupParam, callbackFn);
+			},
+			// 평가자 추가
+			onAddPfmcSubjEvaltr : function() {
+				var me = this,
+					provider = me.$.evaltrGridPanel.getDataProvider();
+
+				var checked = provider.selectionCheckedItems();
+				var allItmeCnt = provider.getItemSize();
+
+				if(checked.length == 0){
+					return UT.alert("STD.N1600");  // 선택된 항목이 없습니다.
+				}
+
+				//사용자검색 팝업을 호출한다.
+				var callbackFn = function(popup,e){
+					var selected = e.detail;
+					// 선택 완료후 callback
+					me.saveAddEvaltr(selected);
+					popup.close();
+				};
+				var popupParam = {
+					singleSelect : false,
+					operorgDisabled : true,
+					defaultParam : {
+						oorg_cd : me.get("pfmcEvalReq.oorg_cd")
+					}
+				};
+
+				me.createOperOrgUserPopup(popupParam, callbackFn);
+			},
+			// 평가자 삭제
+			onDeletePfmcSubjEvaltr : function() {
+				var me = this;
+
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				var allItems = provider.getItems();
+
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					// 삭제대상 아이템
+					// 평가 대상 평가항목담당자권한 별로 모든 평가자가 삭제 체크 되었는지 확인
+					var checkedSubjMap = me.getArrangeListToMapByKey(checked, "pe_subj_uuid"); // 선택된 평가자 List -> 평가 대상 uuid를 key 로 갖는 맵으로 변환
+					var allSubjMap = me.getArrangeListToMapByKey(allItems, "pe_subj_uuid");  // 전체 평가자 List -> 평가 대상 uuid를 key 로 갖는 맵으로 변환
+					var checkedSubjKeys = Object.keys(checkedSubjMap); // 선택된 행의 평가 대상 uuid list
+					
+					for(var i = 0; i < checkedSubjKeys.length; i++) {
+						var peSubjUuid = checkedSubjKeys[i];
+						var checkedPeSubjEvaltrMap = me.getArrangeListToMapByKey(checkedSubjMap[peSubjUuid], "evalfact_evaltr_authty_ccd"); // 특정 평가 대상의 평가자 목록
+						var peSubjEvaltrMap = me.getArrangeListToMapByKey(allSubjMap[peSubjUuid], "evalfact_evaltr_authty_ccd");   // 특정 평가 대상의 평가자 목록
+						var checkedAuthtyKeys = Object.keys(checkedPeSubjEvaltrMap); // 선택된 행의 특정 평가 대상의 평가항목 담당자 권한 공통코드 list
+						
+						for(var j = 0; j < checkedAuthtyKeys.length; j++) {
+							var authtyCcd = checkedAuthtyKeys[j];
+							if(checkedPeSubjEvaltrMap[authtyCcd].length == peSubjEvaltrMap[authtyCcd].length) {
+								UT.alert("STD.SRM1098"); //	평가자는 한 명 이상 존재해야 합니다.
+								return;
+							}
+						}
+					}
+					provider.removeItems(true);
+				}
+			},
+			onSavePfmcSubjEvaltr : function() {
+				var me = this;
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+
+				if(!me.getExistChangedInfo()) {
+					UT.alert("STD.N1700"); //	변경된 내용이 없습니다.
+					return;
+				}
+				if(!me.$.evaltrGridPanel.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+
+				// 	저장 하시겠습니까?
+				UT.confirm("STD.N1200", function() {
+					var saveParam = {
+						inserted : provider.getNewItems(),
+						updated : provider.getUpdateItems(),
+						deleted : provider.getRemoveItems()
+					};
+					me.fire("save-pe-subj-evaltr", saveParam);
+				});
+			},
+			// field 값이 동일한 아이템끼리 list를 새로 구성하여 map으로 return
+			// { fieldVlaue1 : newList1, fieldValue2 : newList2 }
+			getArrangeListToMapByKey : function(list, field) {
+				var arrangeMap = {};
+				var fieldValueList = [];
+				for(var i = 0; i < list.length; i++) {
+					var item = list[i];
+					if(!fieldValueList.includes(item[field])) {
+						fieldValueList.push(item[field]);
+						arrangeMap[item[field]] = [];
+					}
+					arrangeMap[item[field]].push(item);
+				}
+				return arrangeMap;
+			},
+			createOperOrgUserPopup : function(popupParam, callbackFunction) {
+				var me = this;
+
+				var operOrgUserPopup = UT.popup("ep-user-by-operorg-list", me, 1000, 600, {
+					"selected-items" : callbackFunction
+				});
+				
+				operOrgUserPopup.show();
+				operOrgUserPopup.getWindowContent().load(popupParam);
+			},
+			saveChangedEvaltr : function(selected, row){
+				var me = this;
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+				var checkedIdx = provider.selectionCheckedIndexes(),
+						allItems = provider.getItems();
+				//var item = UT.copy(checked[0]);
+
+				// 사용자 input으로 평가자 지정
+				if(UT.isNotEmpty(row)) {
+					provider.setItemAt(row.rowIndex, {display_evaltr_nm : selected.usr_nm, evaltr_id : selected.usr_id});
+				}
+				// 평가자변경 버튼
+				else {
+					provider.setItemAtBatch(checkedIdx, function(index, data) {
+						return {display_evaltr_nm : selected.usr_nm, evaltr_id : selected.usr_id};
+					});
+				}
+
+			},
+			saveAddEvaltr : function(selected){
+				var me = this;
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+				var checkedItems = provider.selectionCheckedItems();
+
+				var addedPeSubjList = [];
+				var dupCnt = 0;
+
+				// 선택된 평가 대상별로 평가자 추가
+				for(var i = 0; i < checkedItems.length; i++) {
+					var peSubj = checkedItems[i];
+
+					if(!addedPeSubjList.includes(peSubj.pe_subj_uuid)) {
+						addedPeSubjList.push(peSubj.pe_subj_uuid);
+
+						// 그리드에 이미 추가된 평가 대상 평가자아이디 목록
+						var existedSubjEvaltrList = provider.filterItems({pe_subj_uuid : peSubj.pe_subj_uuid}).map(function(data) { return data.evaltr_id});
+
+						for(var j = 0; j < selected.length; j++) {
+							var addEvaltr = selected[j];
+							// 이미 그리드에 존재하는 평가자 아이디인 경우 새로 추가하지 않는다.
+							if(!existedSubjEvaltrList.includes(addEvaltr.usr_id)) {
+								var evaltrInfo = UT.copy(peSubj);
+
+								evaltrInfo.evaltr_id = addEvaltr.usr_id;
+								evaltrInfo.evaltr_nm = addEvaltr.usr_nm;
+								evaltrInfo.display_evaltr_nm = addEvaltr.usr_nm;
+								evaltrInfo.pe_subj_evaltr_uuid = null;
+								evaltrInfo.evalfact_evaltr_authty_ccd = null;
+								evaltrInfo.slfck_subj_yn = "N";
+
+								provider.addItem(evaltrInfo);
+							} else {
+								dupCnt++;
+							}
+						}
+					} else {
+						dupCnt++;
+					}
+				}
+
+				if(dupCnt > 0) {
+					UT.alert("STD.N2000"); 	// 중복 데이터를 제외 후 추가하였습니다.
+				} else {
+					//UT.alert("STD.SRM1302"); // 	추가하였습니다
+				}
+
+			},
+			// 변경정보 존재 확인
+			getExistChangedInfo : function() {
+				var me = this;
+				var provider = me.$.evaltrGridPanel.getDataProvider();
+				var inserted = provider.getNewItems();
+				var updated = provider.getUpdateItems();
+				var deleted = provider.getRemoveItems();
+
+				return UT.isNotEmpty(inserted) || UT.isNotEmpty(updated) || UT.isNotEmpty(deleted);
+			}
+
+		});
+	</script>
+
+
+</dom-module>

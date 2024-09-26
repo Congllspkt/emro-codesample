@@ -1,0 +1,644 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="pr">
+	<!-- 진행 상태 콤보박스 조회 -->
+	<select id="getPrPurpCcd" resultType="map">
+		/* pr.getPrPurpCcd 구매요청 목적 공통코드 조회 */
+		SELECT A.DTLCD       AS DATA
+		     , B.DTLCD_NM    AS LABEL
+		  FROM DTLCD A
+		     , DTLCD_MULTLANG B
+		     , CCD_CSTR_CND_VAL C
+		 WHERE A.TEN_ID          =  #{g.tenant}
+		   AND A.STS            != 'D'
+		   AND A.USE_YN          = 'Y'
+		   AND A.TEN_ID          = B.TEN_ID
+		   AND A.TEN_ID          = C.TEN_ID
+		   AND A.CCD          = B.CCD
+		   AND A.CCD          = C.CCD
+		   AND A.DTLCD          = B.DTLCD
+		   AND A.DTLCD          = C.DTLCD
+		   AND A.CCD          = 'P049'
+		   AND B.LANG_CCD         = #{g.locale}
+		   AND C.CSTR_CND_VAL = #{p}
+		 ORDER BY A.DTLCD_SORT
+	</select>
+	<resultMap id="resultMap-findPr" type="map">
+		<result column="PR_CHG_RSN" javaType="string" property="pr_chg_rsn" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findPr" resultMap="resultMap-findPr">
+		/* pr.findPr */
+		SELECT PHD.TEN_ID
+		     , PHD.PR_UUID
+		     , PHD.PR_NO
+		     , PHD.PR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.PR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.PR_PURP_CCD
+		     , PHD.PR_REQ_DT
+		     , PHD.PR_CRTR_ID
+		     , PHD.PR_CRTR_TEL
+		     , PHD.PR_CRTR_DEPT_CD
+		     , PHD.PR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.PR_RMK
+		     , PHD.PR_CHG_RSN
+		     , PHD.ATHG_UUID
+		     , PHD.PR_STS_CCD
+		     , PHD.PR_CHG_YN
+		     , PHD.PR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		         	ELSE USR.USR_NM
+		        END AS PR_CRTR_NM
+		     , CASE WHEN DEPT.DEPT_NM IS NULL OR DEPT.DEPT_NM = '' THEN ''
+		        	WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS PR_REQ_DEPT_NM               /* 부서명 */
+		     , CASE WHEN (
+		                  SELECT COUNT(DT.PR_ITEM_UUID)
+		                    FROM PR_ITEM DT
+		                   WHERE DT.TEN_ID      = PHD.TEN_ID
+		                     AND DT.PR_UUID       = PHD.PR_UUID
+		                     AND DT.PR_STS_CCD NOT IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		                 ) &gt; 0
+		                 THEN 'N'
+		            ELSE 'Y'
+		        END AS ALL_ITEM_RETURNED
+		     , CASE WHEN (
+		                  SELECT COUNT(DT.PR_ITEM_UUID)
+		                    FROM PR_ITEM DT
+		                   WHERE DT.TEN_ID        = PHD.TEN_ID
+		                     AND DT.PR_UUID         = PHD.PR_UUID
+		                     AND DT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+		                 ) &gt; 0
+		                 THEN 'Y'
+		            ELSE 'N'
+		        END AS HAS_NO_CD_ITEM
+		  --  , PHD.VENDOR_TEMPL_ID
+		  FROM PR PHD
+		  LEFT OUTER JOIN USR USR       /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.PR_CRTR_ID = USR.USR_ID
+		  LEFT OUTER JOIN LOGIC_ORG B         /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+						  ON USR.TEN_ID = ODM.TEN_ID
+							  AND USR.CO_CD = ODM.LOGIC_ORG_CD
+							  AND PHD.PR_CRTR_DEPT_CD = ODM.DEPT_CD
+							  AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD = DEPT.DEPT_CD
+		   AND USR.STS        != 'D'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.PR_UUID  = #{p.pr_uuid}
+	</select>
+	<select id="findPrevPrId" resultType="java.lang.String">
+		/* pr.findPrevPrId */
+		SELECT PREV_PRHD.PR_UUID
+		  FROM PR PRHD
+		 INNER JOIN PR PREV_PRHD
+		    ON PREV_PRHD.TEN_ID = PRHD.TEN_ID
+		   AND PREV_PRHD.PR_NO  = PRHD.PR_NO
+		   AND PREV_PRHD.PR_REVNO = PRHD.PR_REVNO -1
+		   AND PREV_PRHD.STS   != 'D'
+		 WHERE PRHD.TEN_ID = #{g.tenant}
+		   AND PRHD.PR_UUID  = #{p}
+	</select>
+	<select id="findPrRevMax" resultType="java.lang.Integer">
+		/* pr.findPrRevMax */
+		SELECT MAX(CAST(PHD.PR_REVNO AS INT))
+		  FROM PR PHD
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.PR_NO  = #{p.pr_no}
+	</select>
+	<select id="findListPr" resultType="map">
+		/* pr.findListPr 전체 구매 목록 조회 */
+		SELECT PHD.TEN_ID
+		     , PHD.PR_UUID
+		     , TASK_APVL.TASK_UUID
+		     , PHD.PR_NO
+		     , PHD.PR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.PR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.PR_PURP_CCD
+		     , PHD.PR_REQ_DT
+		     , PHD.PR_CRTR_ID
+		     , PHD.PR_CRTR_TEL
+		     , PHD.PR_CRTR_DEPT_CD
+		     , PHD.PR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.ATHG_UUID
+		     , PHD.PR_STS_CCD
+		     , PHD.PR_CHG_YN
+		     , PHD.PR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS PR_CRTR_NM       /* 구매요청 의뢰자 */
+		     , (
+		        SELECT COUNT(PR_ITEM_UUID)
+		          FROM PR_ITEM DT
+		         WHERE DT.TEN_ID = PHD.TEN_ID
+		           AND DT.PR_UUID  = PHD.PR_UUID
+		       ) AS TOT_ITEM_CNT
+		     , (
+		        SELECT COUNT(PR_ITEM_UUID)
+		          FROM PR_ITEM DT
+		         WHERE DT.TEN_ID = PHD.TEN_ID
+		           AND DT.PR_UUID  = PHD.PR_UUID
+		           AND DT.PR_STS_CCD IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		       ) AS RETURN_ITEM_CNT
+		     , CASE WHEN (
+		                  SELECT COUNT(PR_ITEM_UUID)
+		                    FROM PR_ITEM DT
+		                   WHERE DT.TEN_ID      = PHD.TEN_ID
+		                     AND DT.PR_UUID       = PHD.PR_UUID
+		                     AND DT.PR_STS_CCD NOT IN ('PR_APVL_RET','PR_RET','PR_CHG_APVL_RET')
+		                 ) &gt; 0
+		                 THEN 'N'
+		            ELSE 'Y'
+		        END AS ALL_ITEM_RETURNED
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS PR_REQ_DEPT_NM       /* 구매요청자 부서 */
+		  FROM PR PHD
+		  LEFT OUTER JOIN USR USR  /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.PR_CRTR_ID = USR.USR_ID
+		  LEFT OUTER JOIN LOGIC_ORG B    /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+			LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+		      ON USR.TEN_ID = ODM.TEN_ID
+		      AND B.LOGIC_ORG_TYP_CCD = ODM.LOGIC_ORG_TYP_CCD
+		      AND USR.CO_CD = ODM.LOGIC_ORG_CD
+			  AND PHD.PR_CRTR_DEPT_CD = ODM.DEPT_CD
+		      AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD     = DEPT.DEPT_CD
+		   AND PHD.PR_CRTR_DEPT_CD = DEPT.DEPT_CD
+		   AND USR.STS        != 'D'
+		  LEFT OUTER JOIN TASK_APVL
+		    ON TASK_APVL.TEN_ID = PHD.TEN_ID
+		   AND TASK_APVL.TASK_UUID = PHD.PR_UUID
+		   AND TASK_APVL.USE_YN = 'Y'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.STS   != 'D'
+		   <if test="p.pr_crtr_nm != null and p.pr_crtr_nm != ''">
+		       <bind name="userNamePattern" value="'%' + p.pr_crtr_nm + '%'"/>
+			   AND (UPPER(USR.USR_NM) LIKE UPPER(#{p.pr_crtr_nm}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{p.pr_crtr_nm}) )
+		   </if>
+		   <if test="p.pr_crtr_id != null and p.pr_crtr_id != ''">
+		       AND USR.USR_ID = #{p.pr_crtr_id}
+		   </if>
+		   <if test="p.pr_req_dept_nm != null and p.pr_req_dept_nm != ''">
+		       <bind name="deptNamePattern" value="'%' + p.pr_req_dept_nm + '%'"/>
+		   AND (UPPER(DEPT.DEPT_NM) LIKE UPPER(#{deptNamePattern}) OR UPPER(DEPT.DEPT_NM_EN) LIKE UPPER(#{deptNamePattern}))
+		   </if>
+		   <if test="p.pr_crtr_dept_cd != null and p.pr_crtr_dept_cd != ''">
+		       <bind name="deptCdPattern" value="'%' + p.pr_crtr_dept_cd + '%'"/>
+		       AND UPPER(DEPT.DEPT_CD) LIKE UPPER(#{deptCdPattern})
+		   </if>
+		   <if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+		       AND UPPER(PHD.OORG_CD) IN
+		       <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_create_date != null">
+		       AND PHD.PR_REQ_DT &gt;= #{p.from_create_date}
+		   </if>
+		   <if test="p.to_create_date != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_create_date,1)"/>
+		       AND PHD.PR_REQ_DT <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <choose>
+		       <when test="p.pr_nos != null and p.pr_nos.size() != 0">
+		           AND UPPER(PHD.PR_NO) IN
+		           <foreach close=")" collection="p.pr_nos" item="pr_no" open="(" separator=",">
+		               #{pr_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.pr_no != null and p.pr_no != ''">
+		               <bind name="noPattern" value="'%' + p.pr_no + '%'"/>
+		               AND UPPER(PHD.PR_NO) LIKE UPPER(#{noPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+		       AND PHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   </if>
+		   <if test="p.pr_sts_ccd != null and p.pr_sts_ccd != ''">
+		       AND PHD.PR_STS_CCD = #{p.pr_sts_ccd}
+		   </if>
+		   <if test="p.pr_tit != null and p.pr_tit != ''">
+		       <bind name="namePattern" value="'%' + p.pr_tit + '%'"/>
+		       AND UPPER(PHD.PR_TIT) LIKE UPPER(#{namePattern})
+		   </if>
+		   <if test="p.pr_purp_ccd != null and p.pr_purp_ccd !=''">
+		       AND PHD.PR_PURP_CCD = #{p.pr_purp_ccd}
+		   </if>
+		 ORDER BY PHD.PR_NO DESC, PHD.PR_REVNO DESC
+	</select>
+	<update id="updatePr">
+		/* updatePr : 구매 header 수정 */
+		UPDATE PR
+		   SET PR_STS_CCD     = #{p.pr_sts_ccd}
+		     , PR_REVNO          = CAST(#{p.pr_revno} AS INT)
+		     , PR_TIT          = #{p.pr_tit}
+		     , PURC_TYP_CCD        = #{p.purc_typ_ccd}
+		     , PR_PURP_CCD    = #{p.pr_purp_ccd}
+		     , PR_REQ_DT     = #{g.now}
+		     , PR_CRTR_ID       = #{p.pr_crtr_id}
+		     , PR_CRTR_TEL = #{p.pr_crtr_tel}
+		     , PR_CRTR_DEPT_CD     = #{p.pr_crtr_dept_cd}
+		     , PR_AMT      = CAST(#{p.pr_amt} AS FLOAT  )
+		     , CUR_CCD             = #{p.cur_ccd}
+		     , PR_RMK          = #{p.pr_rmk}
+		     , ATHG_UUID          = #{p.athg_uuid}
+		     , PR_CHG_YN = #{p.pr_chg_yn}
+		     , PR_CHG_PIC_ID = #{p.pr_chg_pic_id}
+		     , MIGR_YN          = #{p.migr_yn}
+		     , STS             = 'U'
+		     , MODR_ID          = #{g.username}
+		     , MOD_DTTM          = #{g.now}
+		     , PR_CHG_RSN          = #{p.pr_chg_rsn,jdbcType=CLOB}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<insert id="insertPr">
+		/* insertPr : 구매 header 추가 */
+		INSERT INTO PR (
+			TEN_ID
+			, PR_UUID
+			, PR_NO
+			, PR_REVNO
+			, OORG_CD
+			, PR_TIT
+			, PURC_TYP_CCD
+			, PR_PURP_CCD
+			, PR_REQ_DT
+			, PR_CRTR_ID
+			, PR_CRTR_TEL
+			, PR_CRTR_DEPT_CD
+			, PR_AMT
+			, CUR_CCD
+			, PR_RMK
+			, ATHG_UUID
+			, PR_CHG_YN
+			, PR_CHG_PIC_ID
+			, MIGR_YN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+			, MODR_ID
+			, MOD_DTTM
+			, PR_CHG_RSN
+		) VALUES (
+			#{g.tenant}
+			, #{p.pr_uuid}
+			, #{p.pr_no}
+			, CAST(#{p.pr_revno} AS INT)
+			, #{p.oorg_cd}
+			, #{p.pr_tit}
+			, #{p.purc_typ_ccd}
+			, #{p.pr_purp_ccd}
+			, #{g.now}
+			, #{p.pr_crtr_id}
+			, #{p.pr_crtr_tel}
+			, #{p.pr_crtr_dept_cd}
+			, CAST(#{p.pr_amt} AS FLOAT  )
+			, #{p.cur_ccd}
+			, #{p.pr_rmk}
+			, #{p.athg_uuid}
+			, #{p.pr_chg_yn}
+			, #{p.pr_chg_pic_id}
+			, #{p.migr_yn}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+			, #{g.username}
+			, #{g.now}
+			, #{p.pr_chg_rsn,jdbcType=CLOB}
+		)
+	</insert>
+	<delete id="deletePr">
+		/* deletePr */
+		DELETE
+		  FROM PR
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</delete>
+	<select id="countAutoPoItem" resultType="java.lang.Integer">
+		/* SELECT COUNT(1) AS AUTO_PO_ITEM_CNT
+		  FROM PR PRHD
+		 INNER JOIN PR_ITEM PRDT
+		    ON PRDT.TEN_ID = PRHD.TEN_ID
+		   AND PRDT.PR_UUID  = PRHD.PR_UUID
+		 WHERE PRHD.TEN_ID       = #{g.tenant}
+		   AND PRHD.PR_UUID        = #{p.pr_uuid}
+		   AND PRHD.PR_PURP_CCD = 'SPTPURC'
+		   AND PRDT.PR_PURP_CCD = 'UPRCCNTR_PURC'
+		   AND PRDT.AUTO_PO_YN   = 'Y'
+		   AND PRDT.STS         != 'D' */
+	</select>
+	<select id="countTouchlessItem" resultType="java.lang.Integer">
+		/* pr.countTouchlessItem */
+		SELECT COUNT(1) AS TL_ITEM_CNT
+		FROM PR PRHD
+		 INNER JOIN PR_ITEM PRDT
+		    ON PRDT.TEN_ID = PRHD.TEN_ID
+		   AND PRDT.PR_UUID  = PRHD.PR_UUID
+		INNER JOIN ITEM_OORG
+			ON ITEM_OORG.TEN_ID = PRDT.TEN_ID
+		AND ITEM_OORG.ITEM_CD = PRDT.ITEM_CD
+		AND ITEM_OORG.OORG_CD = PRDT.ITEM_OORG_CD
+		AND ITEM_OORG.TL_YN = 'Y'
+		 WHERE PRHD.TEN_ID       = #{g.tenant}
+		   AND PRHD.PR_UUID        = #{p.pr_uuid}
+		   AND PRDT.STS         != 'D'
+	</select>
+	<select id="findListMyPurcGrpCd" resultType="map">
+		/* pr.findListMyPurcGrpCd : 나의 담당 구매그룹 리스트 조회 */
+		SELECT CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN ELSE JOB.PURC_GRP_NM END AS PURC_GRP_NM
+		     , JOB.PURC_GRP_CD
+		  FROM PURC_GRP JOB
+		 INNER JOIN PURC_GRP_PIC JOB_USR
+		    ON JOB_USR.TEN_ID       = JOB.TEN_ID
+		   AND JOB_USR.PURC_GRP_TYP_CCD = JOB.PURC_GRP_TYP_CCD
+		   AND JOB_USR.PURC_GRP_CD  = JOB.PURC_GRP_CD
+		   AND JOB_USR.CO_CD      = JOB.CO_CD
+		   AND JOB_USR.USR_ID       = #{g.username}
+		   AND JOB_USR.STS         != 'D'
+		 WHERE JOB.TEN_ID       = #{g.tenant}
+		   AND JOB.CO_CD      = #{g.co_cd}
+		   AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+		   AND JOB.STS         != 'D'
+	</select>
+	<resultMap id="resultMap-findListPrHistory" type="map">
+		<result column="PR_UUID" property="pr_uuid"/>
+		<result column="PR_TIT" property="pr_tit"/>
+		<result column="PR_REVNO" property="pr_revno"/>
+		<result column="PR_CRTR_NM" property="pr_crtr_nm"/>
+		<result column="PR_REQ_DEPT_NM" property="pr_req_dept_nm"/>
+		<result column="PR_CRTR_TEL" property="pr_crtr_tel"/>
+		<result column="CUR_CCD" property="cur_ccd"/>
+		<result column="PR_AMT" property="pr_amt"/>
+		<result column="PR_RMK" property="pr_rmk"/>
+		<result column="PR_CHG_RSN" javaType="string" property="pr_chg_rsn" typeHandler="stringClob"/>
+		<result column="ATHG_UUID" property="athg_uuid"/>
+		<result column="ATT_CNT" property="att_cnt"/>
+	</resultMap>
+	<select id="findListPrHistory" resultMap="resultMap-findListPrHistory">
+		/* pr.findListPrHistory */
+		SELECT PRHD.PR_UUID
+		     , PRHD.PR_TIT
+		     , PRHD.PR_REVNO
+		     , CASE WHEN 'en_US' = #{g.locale} THEN PR_REQ_USR.USR_NM_EN ELSE PR_REQ_USR.USR_NM END AS PR_CRTR_NM
+		     , PRHD.PR_CRTR_DEPT_CD
+		     , PRHD.PR_CRTR_TEL
+		     , PRHD.CUR_CCD
+		     , PRHD.PR_AMT
+		     , PRHD.PR_RMK
+		     , PRHD.PR_CHG_RSN
+		     , PRHD.ATHG_UUID
+		     , (
+		        SELECT COUNT(1)
+		          FROM ATHF ATT
+		         WHERE ATT.TEN_ID = PRHD.TEN_ID
+		           AND ATT.ATHG_UUID = PRHD.ATHG_UUID
+		       ) AS ATT_CNT
+		  FROM PR PRHD
+		  LEFT OUTER JOIN USR PR_REQ_USR        /* PR_REQ_USR : 구매요청자 */
+		    ON PRHD.TEN_ID    = PR_REQ_USR.TEN_ID
+		   AND PRHD.PR_CRTR_ID = PR_REQ_USR.USR_ID
+		 WHERE PRHD.TEN_ID = #{g.tenant}
+		   AND PRHD.PR_NO  = #{p.pr_no}
+		   <if test="p.pr_revs != null">
+		       AND PRHD.PR_REVNO IN
+		       <foreach close=")" collection="p.pr_revs" item="pr_revno" open="(" separator=",">
+		           #{pr_revno}
+		       </foreach>
+		   </if>
+		   AND PRHD.STS != 'D'
+		 ORDER BY PRHD.PR_REVNO
+	</select>
+	<resultMap id="resultMap-findComparePrData" type="map">
+		<result column="PREV_PR_ID" property="prev_pr_id"/>
+		<result column="PREV_PR_TIT" property="prev_pr_tit"/>
+		<result column="PREV_PR_REV" property="prev_pr_rev"/>
+		<result column="PREV_PR_REQ_NM" property="prev_pr_req_nm"/>
+		<result column="PREV_PR_REQ_DEPT_NM" property="prev_pr_req_dept_nm"/>
+		<result column="PREV_PR_REQ_PHONE_NO" property="prev_pr_req_phone_no"/>
+		<result column="PREV_CUR" property="prev_cur"/>
+		<result column="PREV_PR_TOT_AMT" property="prev_pr_tot_amt"/>
+		<result column="PREV_PR_REM" property="prev_pr_rem"/>
+		<result column="PREV_PR_TXT" javaType="string" property="prev_pr_txt" typeHandler="stringClob"/>
+		<result column="PREV_ATT_NO" property="prev_att_no"/>
+		<result column="POST_PR_ID" property="post_pr_id"/>
+		<result column="POST_PR_TIT" property="post_pr_tit"/>
+		<result column="POST_PR_REV" property="post_pr_rev"/>
+		<result column="POST_PR_REQ_NM" property="post_pr_req_nm"/>
+		<result column="POST_PR_REQ_DEPT_NM" property="post_pr_req_dept_nm"/>
+		<result column="POST_PR_REQ_PHONE_NO" property="post_pr_req_phone_no"/>
+		<result column="POST_CUR" property="post_cur"/>
+		<result column="POST_PR_TOT_AMT" property="post_pr_tot_amt"/>
+		<result column="POST_PR_REM" property="post_pr_rem"/>
+		<result column="POST_PR_TXT" javaType="string" property="post_pr_txt" typeHandler="stringClob"/>
+		<result column="POST_ATT_NO" property="post_att_no"/>
+	</resultMap>
+	<select id="findComparePrData" resultMap="resultMap-findComparePrData">
+		/* pr.findComparePrData */
+		SELECT PREV_PRHD.PR_UUID              AS PREV_PR_ID
+		     , POST_PRHD.PR_UUID              AS POST_PR_ID
+		     , PREV_PRHD.PR_TIT             AS PREV_PR_TIT
+		     , POST_PRHD.PR_TIT             AS POST_PR_TIT
+		     , PREV_PRHD.PR_REVNO             AS PREV_PR_REV
+		     , POST_PRHD.PR_REVNO             AS POST_PR_REV
+		     , PREV_PR_REQ.USR_NM           AS PREV_PR_REQ_NM
+		     , POST_PR_REQ.USR_NM           AS POST_PR_REQ_NM
+		     , PREV_DEPT.DEPT_NM            AS PREV_PR_REQ_DEPT_NM
+		     , POST_DEPT.DEPT_NM            AS POST_PR_REQ_DEPT_NM
+		     , PREV_PRHD.PR_CRTR_TEL    AS PREV_PR_REQ_PHONE_NO
+		     , POST_PRHD.PR_CRTR_TEL    AS POST_PR_REQ_PHONE_NO
+		     , PREV_PRHD.CUR_CCD                AS PREV_CUR
+		     , POST_PRHD.CUR_CCD                AS POST_CUR
+		     , PREV_PRHD.PR_AMT         AS PREV_PR_TOT_AMT
+		     , POST_PRHD.PR_AMT         AS POST_PR_TOT_AMT
+		     , PREV_PRHD.PR_RMK             AS PREV_PR_REM
+		     , POST_PRHD.PR_RMK             AS POST_PR_REM
+		     , PREV_PRHD.PR_CHG_RSN             AS PREV_PR_TXT
+		     , POST_PRHD.PR_CHG_RSN             AS POST_PR_TXT
+		     , PREV_PRHD.ATHG_UUID             AS PREV_ATT_NO
+		     , POST_PRHD.ATHG_UUID             AS POST_ATT_NO
+		  FROM PR PREV_PRHD
+		 INNER JOIN PR POST_PRHD
+		    ON POST_PRHD.TEN_ID = PREV_PRHD.TEN_ID
+		   AND POST_PRHD.PR_NO  = PREV_PRHD.PR_NO
+		   AND POST_PRHD.PR_REVNO = CAST(#{p.post_pr_rev} AS INT)
+		   AND POST_PRHD.STS   != 'D'
+		  LEFT OUTER JOIN USR PREV_PR_REQ
+		    ON PREV_PR_REQ.TEN_ID = PREV_PRHD.TEN_ID
+		   AND PREV_PR_REQ.USR_ID = PREV_PRHD.PR_CRTR_ID
+		  LEFT OUTER JOIN LOGIC_ORG PREV_OGMG
+		    ON PREV_OGMG.TEN_ID      = PREV_PR_REQ.TEN_ID
+		   AND PREV_OGMG.LOGIC_ORG_CD      = PREV_PR_REQ.CO_CD
+		   AND PREV_OGMG.LOGIC_ORG_TYP_CCD  = 'COMPANY'
+		   AND PREV_OGMG.STS        != 'D'
+		 LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG PREV_ODM
+						 ON PREV_PR_REQ.TEN_ID = PREV_ODM.TEN_ID
+							 AND PREV_PR_REQ.CO_CD = PREV_ODM.LOGIC_ORG_CD
+							 AND PREV_PRHD.PR_CRTR_DEPT_CD = PREV_ODM.DEPT_CD
+							 AND PREV_ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT PREV_DEPT
+		    ON PREV_DEPT.TEN_ID     = PREV_ODM.TEN_ID
+		   AND PREV_DEPT.DEPT_CD    = PREV_ODM.DEPT_CD
+		   AND PREV_DEPT.STS != 'D'
+		  LEFT OUTER JOIN USR POST_PR_REQ
+		    ON POST_PR_REQ.TEN_ID = POST_PRHD.TEN_ID
+		   AND POST_PR_REQ.USR_ID = POST_PRHD.PR_CRTR_ID
+		  LEFT OUTER JOIN LOGIC_ORG POST_OGMG
+		    ON POST_OGMG.TEN_ID      = POST_PR_REQ.TEN_ID
+		   AND POST_OGMG.LOGIC_ORG_CD      = POST_PR_REQ.CO_CD
+		   AND POST_OGMG.LOGIC_ORG_TYP_CCD  = 'COMPANY'
+		   AND POST_OGMG.STS        != 'D'
+		 LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG POST_ODM
+						 ON PREV_PR_REQ.TEN_ID = POST_ODM.TEN_ID
+							 AND PREV_PR_REQ.CO_CD = POST_ODM.LOGIC_ORG_CD
+							 AND PREV_PRHD.PR_CRTR_DEPT_CD = POST_ODM.DEPT_CD
+							 AND POST_ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT POST_DEPT
+		    ON POST_DEPT.TEN_ID     = POST_ODM.TEN_ID
+		   AND POST_DEPT.DEPT_CD    = POST_ODM.DEPT_CD
+		  AND POST_DEPT.STS != 'D'
+		 WHERE PREV_PRHD.TEN_ID = #{g.tenant}
+		   AND PREV_PRHD.PR_NO  = #{p.pr_no}
+		   AND PREV_PRHD.PR_REVNO = CAST(#{p.prev_pr_rev} AS INT)
+		   AND PREV_PRHD.STS   != 'D'
+	</select>
+	<resultMap id="resultMap-findPreviousPrInfo" type="map">
+		<result column="PR_CHG_RSN" javaType="string" property="pr_chg_rsn" typeHandler="stringClob"/>
+	</resultMap>
+	<select id="findPreviousPrInfo" resultMap="resultMap-findPreviousPrInfo">
+		/* pr.xml : findPreviousPrInfo  : 이전차수 구매 조회 결재서식생성시 사용 */
+		SELECT PHD.TEN_ID
+		     , PHD.PR_UUID
+		     , PHD.PR_NO
+		     , PHD.PR_REVNO
+		     , PHD.OORG_CD
+		     , PHD.PR_TIT
+		     , PHD.PURC_TYP_CCD
+		     , PHD.PR_PURP_CCD
+		     , PHD.PR_REQ_DT
+		     , PHD.PR_CRTR_ID
+		     , PHD.PR_CRTR_TEL
+		     , PHD.PR_CRTR_DEPT_CD
+		     , PHD.PR_AMT
+		     , PHD.CUR_CCD
+		     , PHD.PR_RMK
+		     , PHD.PR_CHG_RSN
+		     , PHD.ATHG_UUID
+		     , PHD.PR_STS_CCD
+		     , PHD.PR_CHG_YN
+		     , PHD.PR_CHG_PIC_ID
+		     , PHD.MIGR_YN
+		     , PHD.STS
+			, CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN ELSE USR.USR_NM END AS PR_CRTR_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS PR_REQ_DEPT_NM               /* 부서명 */
+		  FROM PR PHD
+		  LEFT OUTER JOIN USR USR        /* USR : 구매요청자 */
+		    ON PHD.TEN_ID    = USR.TEN_ID
+		   AND PHD.PR_CRTR_ID = USR.USR_ID
+			AND USR.STS != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG B         /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+		  LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+						  ON USR.TEN_ID = ODM.TEN_ID
+							  AND USR.CO_CD = ODM.LOGIC_ORG_CD
+							  AND PHD.PR_CRTR_DEPT_CD = ODM.DEPT_CD
+							  AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD = DEPT.DEPT_CD
+		   AND DEPT.STS        != 'D'
+		 WHERE PHD.TEN_ID = #{g.tenant}
+		   AND PHD.PR_REVNO = CAST(#{p.pr_revno} AS INT)
+		   AND PHD.PR_NO  = #{p.pr_no}
+	</select>
+	<select id="comparePrHdSts" resultType="map">
+		/* pr.comparePrHdSts */
+		SELECT PRHD.PR_UUID
+		     , PRHD.PR_NO
+		     , PRHD.PR_REVNO
+		     , PRHD.PR_STS_CCD
+		     , CDDL.DTLCD_NM AS PR_APRV_STS_NM
+		     , CASE WHEN PRHD.PR_STS_CCD = #{p.pr_sts_ccd} THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM PR PRHD
+		 INNER JOIN DTLCD CDDT
+		    ON CDDT.TEN_ID = PRHD.TEN_ID
+		   AND CDDT.CCD = 'P011'
+		   AND CDDT.DTLCD = PRHD.PR_STS_CCD
+		   AND CDDT.USE_YN = 'Y'
+		   AND CDDT.STS   != 'D'
+		 INNER JOIN DTLCD_MULTLANG CDDL
+		    ON CDDL.TEN_ID  = CDDT.TEN_ID
+		   AND CDDL.CCD  = CDDT.CCD
+		   AND CDDL.DTLCD  = CDDT.DTLCD
+		   AND CDDL.LANG_CCD = #{g.locale}
+		   AND CDDL.STS    != 'D'
+		 WHERE PRHD.TEN_ID = #{g.tenant}
+		   AND PRHD.PR_UUID  = #{p.pr_uuid}
+	</select>
+	<update id="updatePrTotAmt">
+		/* pr.updatePrTotAmt */
+		UPDATE PR
+		   SET PR_AMT = #{p.pr_amt}
+		     , MODR_ID     = #{g.username}
+		     , MOD_DTTM     = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND PR_UUID  = #{p.pr_uuid}
+	</update>
+	<select id="findListPrByPrItems" resultType="map">
+		/* pr.findListPrByPrItems */
+		SELECT PR.PR_UUID
+		FROM PR_ITEM
+		INNER JOIN PR
+		ON PR.TEN_ID = PR_ITEM.TEN_ID
+		AND PR.PR_UUID = PR_ITEM.PR_UUID
+		AND PR.STS != 'D'
+		WHERE PR_ITEM.TEN_ID = #{g.tenant}
+		AND PR_ITEM.STS != 'D'
+		AND PR_ITEM.PR_ITEM_UUID IN
+						   <foreach close=")" collection="p.pr_item_uuids" item="pr_item_uuid" open="(" separator=",">
+							   #{pr_item_uuid}
+						   </foreach>
+	</select>
+	<select id="findPrItemUuid" resultType="map">
+		SELECT *
+		FROM PR_ITEM
+		WHERE TEN_ID = #{g.tenant}
+		  AND PR_ITEM_UUID = #{p.pr_uuid}
+	</select>
+</mapper>

@@ -1,0 +1,325 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/contract/contractcnd/es-purc-cntr-cnd.html"></sc-link>
+
+<dom-module id="es-po-chg-req-cntr">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 코드 -->
+		<sc-code-group>
+			<!-- 계약 발주 선택 유형 -->
+			<sc-code code="P070" value="{{codes.cntrChgTypCcd}}"></sc-code>
+			<!-- 발주 계약 변경 요청상태 -->
+			<sc-code code="P254" value="{{codes.reqStsCcd}}"></sc-code>
+		</sc-code-group>
+		
+		<sc-ajax id="findDefaultPoCntrReq"
+				 url="findDefaultPoCntrReq.do"
+				 on-response="completeFindDefaultPoCntrReq">
+		</sc-ajax>
+		
+		<sc-ajax id="findPoCntrReq"
+				 url="findPoCntrReq.do"
+				 on-response="completeFindPoCntrReq">
+		</sc-ajax>
+		
+		<sc-ajax id="requestPoCntrReq"
+				 url="requestPoCntrReq.do"
+				 on-response="completeRequestPoCntrReq">
+		</sc-ajax>
+		
+		<sc-ajax id="deletePoCntrReq"
+				 url="deletePoCntrReq.do"
+				 on-response="completeDeletePoCntrReq">
+		</sc-ajax>
+		
+		<cc-page-title-bar title-text="계약 변경 요청">
+			<sc-button text="요청" on-click="onRequest" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel title-text="조건 정보" validation-group="cndInfo">
+				<cc-fieldset>
+					<sc-label text="요청 유형"></sc-label>
+					<sc-combobox-field class="w-150" display-field="label" value-field="data" items="{{codes.cntrChgTypCcd}}" value="{{poCntrReqData.cntr_req_typ_ccd}}" readonly="true">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<!--<cc-fieldset>
+					<sc-label text="계약 담당자"></sc-label>
+					<cc-user-search id="userSearch" class="w-300" value="{{poCntrReqData.disp_cntr_pic_nm}}" result-value="{{poCntrReqData.cntr_pic_id}}" result-field="usr_id"
+									readonly="[[!formula('editable')]]" hide-trigger="[[!formula('editable')]]" required="[[formula('editable')]]"></cc-user-search>
+				</cc-fieldset>-->
+				<cc-fieldset>
+					<sc-label text="계약 구매 그룹"></sc-label>
+					<cc-purc-grp class="w-300" value="{{poCntrReqData.disp_purc_grp_nm}}" result-value="{{poCntrReqData.purc_grp_cd}}" purc-grp-typ="PURC" placeholder="검색"
+								 readonly="[[!formula('editable')]]" hide-trigger="[[!formula('editable')]]" required="[[formula('editable')]]">
+					</cc-purc-grp>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="요청 상태"></sc-label>
+					<sc-combobox-field class="w-150" display-field="label" value-field="data" items="{{codes.reqStsCcd}}" value="{{poCntrReqData.req_sts_ccd}}" readonly="true">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="요청 사유"></sc-label>
+					<sc-textarea-field style="height: 150px;" value="{{poCntrReqData.cntr_req_rsn}}" readonly="[[!formula('editable')]]" required="true" max-length="500"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('isReturn')]]" column-span="2">
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field style="height: 100px;" value="{{poCntrReqData.ret_rsn}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			<es-purc-cntr-cnd id="purcCntrCnd"
+							  internal-button="false"
+							  view-mode="[[!formula('editable')]]"
+							  purc-typ-selection="false"
+							  vendor-selection="false"
+							  cntr-terms-selection="true"
+							  req-dlvy-dt-selection="false"
+							  dlvy-dt-selection="true"
+							  shipper-typ-selection="false"
+							  cur-selection="false"
+							  cntr-info-selection="true"
+							  item-add-remove="false"
+							  item-uom-selection="false"
+							  item-qty-selection="true"
+							  item-uprc-selection="true"
+							  dlvy-selection="true"
+							  hidden="[[formula('isTerminate')]]">
+			</es-purc-cntr-cnd>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-po-chg-req-cntr",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							taxTypCcdParam: {
+								ccd: "C031",
+								cstr_cnd_cd: "TAXN_RATE"
+							},
+						};
+					}
+				},
+				
+				poCntrReqData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				currentUser: {
+					type: Object,
+					value: function() {
+						return SCSessionManager.currentUser;
+					}
+				}
+			},
+			
+			formulas: {
+				editable: function() {
+					return UT.isEmpty(this.poCntrReqData.req_sts_ccd) || this.poCntrReqData.req_sts_ccd === "RET";
+				},
+				possibleChgQty: function() {
+					return !this.poCntrReqData.exist_pr_item && !this.poCntrReqData.exist_rfx_item;
+				},
+				possibleChgUprc: function() {
+					return !this.poCntrReqData.exist_rfx_item;
+				},
+				isReturn: function() {
+					return this.poCntrReqData.req_sts_ccd === "RET";
+				},
+				isTerminate: function() {
+					return this.poCntrReqData.cntr_req_typ_ccd === "TRMN";
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				if(UT.isNotEmpty(param.po_cntr_req_uuid)) {
+					me.findPoCntrReq(param);
+				} else if(UT.isNotEmpty(param.po_uuid) && UT.isNotEmpty(param.cntr_req_typ_ccd)) {
+					// cntr_req_typ_ccd : CHG 변경
+					me.findDefaultPoCntrReq(param);
+				}
+			},
+			
+			findPoCntrReq: function(param) {
+				var me = this;
+				me.$.findPoCntrReq.body = param;
+				UT.request(me.$.findPoCntrReq);
+			},
+			
+			completeFindPoCntrReq: function(e, res) {
+				var me = this;
+				me.set("poCntrReqData", res.response);
+				
+				if(UT.isNotEmpty(me.get("poCntrReqData.purc_cntr_uuid"))) {
+					me.$.purcCntrCnd.load(me.get("poCntrReqData.purc_cntr_uuid"));
+				}
+				
+				me.applyFormula();
+			},
+			
+			findDefaultPoCntrReq: function(param) {
+				var me = this;
+				me.$.findDefaultPoCntrReq.body = param;
+				UT.request(me.$.findDefaultPoCntrReq);
+			},
+			
+			completeFindDefaultPoCntrReq: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				me.set("poCntrReqData", response.poCntrReqData);
+				if(!me.formula("isTerminate")) {
+					me.$.purcCntrCnd.load({
+						purcCntrData: response.purcCntrData,
+						purcCntrInfoData: response.purcCntrInfoData,
+						purcCntrItemList: response.purcCntrItemList,
+						purcCntrPymtExptList: response.purcCntrPymtExptList
+					});
+				}
+				
+				me.applyFormula();
+			},
+			
+			// 구매그룹 팝업 호출
+			showJobPopup: function(param, autoComplete) {
+				var me = this;
+				
+				var defaultParam = {
+					co_cd: me.currentUser.co_cd,
+					purc_grp_typ_ccd: 'PURC'	//직무유형이 구매
+				};
+				if(UT.isObject(param)) {
+					for(var keys in param) {
+						defaultParam[keys] = param[keys];
+					}
+				}
+				
+				var jobPopup = me.createJobPopup();
+				jobPopup.show();
+				jobPopup.getWindowContent().load({singleSelect: true, defaultParam: defaultParam, autoComplete: autoComplete});
+			},
+			// 구매그룹 팝업 생성
+			createJobPopup: function() {
+				var me = this;
+				
+				return UT.popup("ep-job-list", me, 800, 500, {
+					'selected-items': function(popup, e) {
+						var result   = e.detail,
+							selected = result[0];
+						
+						me.set("poCntrReqData.purc_grp_cd", selected.purc_grp_cd);
+						me.set("poCntrReqData.disp_purc_grp_nm", selected.disp_purc_grp_nm);
+						popup.close();
+					}
+				}, {titleText: me.translate("구매 그룹 검색")});
+			},
+			
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data, provider) {
+				var me = this;
+				
+				var readonly = true;
+				var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 240 : 260), {
+					"clear-dtl-spec": function(popup, e) {
+						provider.setItemAt(me.rowIndex, {
+							"item_spec_dtl": null
+						});
+						popup.close();
+					},
+					"apply-dtl-spec": function(popup, e) {
+						var dtlSpec = e.detail.item_spec_dtl;
+						
+						provider.setItemAt(me.rowIndex, {
+							"item_spec_dtl": dtlSpec
+						});
+						popup.close();
+					}
+				});
+				popup.show();
+				popup.getWindowContent().load(data, readonly);
+			},
+			
+			onRequest: function() {
+				var me = this;
+				if(!me.validate("cndInfo")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				if(!me.$.purcCntrCnd.confirmValidate()) {
+					return;
+				}
+				UT.confirm("STD.N1210", function() {
+					me.onSave(me.$.requestPoCntrReq);
+				});
+			},
+			
+			completeRequestPoCntrReq: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.fire("reload");
+					me.onClose();
+				}
+			},
+			
+			onSave: function(ajax) {
+				var me = this;
+				var poCntrReqData = me.get("poCntrReqData");
+				var saveParameter = me.$.purcCntrCnd.saveParameter();
+				saveParameter.poCntrReqData = poCntrReqData;
+				
+				ajax.body = saveParameter;
+				UT.request(ajax);
+			},
+			
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {
+					var poCntrReqData = me.get("poCntrReqData");
+					me.$.deletePoCntrReq.body = poCntrReqData;
+					UT.request(me.$.deletePoCntrReq);
+				});
+			},
+			
+			completeDeletePoCntrReq: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.fire("reload");
+					me.onClose();
+				}
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.fire("close");
+			}
+		});
+	</script>
+</dom-module>

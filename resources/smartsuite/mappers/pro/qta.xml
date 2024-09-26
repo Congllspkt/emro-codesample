@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="qta">
+    <select id="findListQta" resultType="map">
+        /* qta.findListQta */
+        SELECT
+            HD.TEN_ID
+             , HD.QTA_UUID
+             , HD.QTA_NO
+             , HD.OORG_CD
+             , HD.QTA_TIT
+             , HD.QTA_CRTR_ID
+             , HD.QTA_CRTR_TEL
+             , HD.QTA_CRTR_DEPT_CD
+             , HD.APPL_DT
+             , HD.QTA_RMK
+             , HD.ATHG_UUID
+             , HD.RMK, HD.STS, HD.REGR_ID, HD.REG_DTTM, HD.MODR_ID, HD.MOD_DTTM, HD.QTA_STS_CCD
+        , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS QTA_CRTR_NM
+            FROM QTA HD
+            LEFT OUTER JOIN USR USR  /* USR : 구매요청자 */
+		    ON HD.TEN_ID    = USR.TEN_ID
+		   AND HD.QTA_CRTR_ID = USR.USR_ID
+        WHERE HD.TEN_ID = #{g.tenant}
+        <if test="p.qta_crtr_nm != null and p.qta_crtr_nm != ''">
+		       <bind name="userNamePattern" value="'%' + p.qta_crtr_nm + '%'"/>
+			   AND (UPPER(USR.USR_NM) LIKE UPPER(#{userNamePattern}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{userNamePattern}) )
+		   </if>
+		   <if test="p.qta_crtr_id != null and p.qta_cntrcrtr_id != ''">
+		       AND HD.QTA_CRTR_ID = #{p.qta_crtr_id}
+		   </if>
+        <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND UPPER(HD.OORG_CD) IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_reg_dttm != null">
+		       AND HD.REG_DTTM &gt;= #{p.from_reg_dttm}
+		   </if>
+		   <if test="p.to_reg_dttm != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_reg_dttm,1)"/>
+		       AND HD.REG_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+          <choose>
+		   <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+        AND    EXISTS (
+						 SELECT 1
+					     FROM   QTA_ITEM A
+					     WHERE  A.TEN_ID    = HD.TEN_ID
+					     AND    A.QTA_UUID    = HD.QTA_UUID
+					     AND    A.ITEM_CD IN
+						   <foreach close=")" collection="p.item_cds" item="item_cd" open="(" separator=",">
+						   #{item_cd}
+						   </foreach>
+					   )
+		   </when>
+		   <otherwise>
+          <if test="p.item_cd != null and p.item_cd != ''">
+		       <bind name="cdPattern" value="'%' + g.trim(p.item_cd) + '%'"/>
+          		AND    EXISTS (
+						 SELECT 1
+					     FROM   QTA_ITEM A
+					     WHERE  A.TEN_ID    = HD.TEN_ID
+					     AND    A.QTA_UUID    = HD.QTA_UUID
+					      AND ITEM_CD  LIKE UPPER(#{cdPattern})
+					   )
+		     </if>
+		   </otherwise>
+		 </choose>
+         <if test="p.item_nm != null and p.item_nm != ''">
+          <bind name="itemNmPattern" value="'%' + g.trim(p.item_nm) + '%'"/>
+        AND    EXISTS (
+						 SELECT 1
+					     FROM   QTA_ITEM QI INNER JOIN ITEM MTGL
+					     ON (MTGL.TEN_ID = QI.TEN_ID
+					         AND MTGL.ITEM_CD = QI.ITEM_CD
+					         AND  MTGL.STS != 'D')
+					     WHERE  QI.TEN_ID    = HD.TEN_ID
+					     AND    QI.QTA_UUID    =  HD.QTA_UUID
+						   <bind name="itemNamePattern" value="'%' + g.trim(p.item_nm) + '%'"/>
+						   AND (UPPER(MTGL.ITEM_NM) LIKE UPPER(#{itemNamePattern}) OR UPPER(MTGL.ITEM_NM_EN) LIKE UPPER(#{itemNamePattern}))
+					   )
+		     </if>
+		   <choose>
+		       <when test="p.qta_nos != null and p.qta_nos.size() != 0">
+		           AND UPPER(HD.QTA_NO) IN
+		           <foreach close=")" collection="p.qta_nos" item="qta_no" open="(" separator=",">
+		               #{qta_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.qta_no != null and p.qta_no != ''">
+		               <bind name="noPattern" value="'%' + p.qta_no + '%'"/>
+		               AND UPPER(HD.QTA_NO) LIKE UPPER(#{noPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.qta_sts_ccd != null and p.qta_sts_ccd != ''">
+		       AND HD.QTA_STS_CCD = #{p.qta_sts_ccd}
+		   </if>
+		   <if test="p.qta_tit != null and p.qta_tit != ''">
+		       <bind name="namePattern" value="'%' + p.qta_tit + '%'"/>
+		       AND UPPER(HD.QTA_TIT) LIKE UPPER(#{namePattern})
+		   </if>
+        ORDER BY HD.QTA_NO DESC
+    </select>
+    <insert id="insertQtaHeader">
+        /* qta.insertQtaHeader */
+        INSERT INTO QTA ( TEN_ID, QTA_UUID, QTA_NO, OORG_CD, QTA_TIT, QTA_CRTR_ID, QTA_CRTR_TEL, QTA_CRTR_DEPT_CD
+                        , APPL_DT, QTA_RMK, ATHG_UUID, RMK
+                        , REGR_ID, REG_DTTM, MODR_ID, MOD_DTTM)
+        VALUES (
+            #{g.tenant}
+           , #{p.qta_uuid}
+           , #{p.qta_no}
+           , #{p.oorg_cd}
+           , #{p.qta_tit}
+           , #{p.qta_crtr_id}
+           , #{p.qta_crtr_tel}
+           , #{p.qta_crtr_dept_cd}
+           , #{p.appl_dt}
+           , #{p.qta_rmk}
+           , #{p.athg_uuid}
+           , #{p.rmk}
+           , #{g.username}
+           , #{g.now}
+           , #{g.username}
+           , #{g.now}
+               )
+    </insert>
+    <delete id="deleteQtaHeader">
+        /* qta.deleteQtaHeader */
+        DELETE FROM QTA WHERE TEN_ID = #{g.tenant} AND QTA_UUID = #{p.qta_uuid}
+    </delete>
+    <update id="updateQtaHeader">
+        /* qta.updateQtaHeader */
+        UPDATE QTA
+        SET QTA_TIT = #{p.qta_tit}
+        , APPL_DT = #{p.appl_dt}
+        , QTA_RMK  = #{p.qta_rmk}
+        , ATHG_UUID = #{p.athg_uuid}
+        , MODR_ID = #{g.username}
+			, MOD_DTTM = #{g.now}
+        WHERE TEN_ID = #{g.tenant}
+        AND QTA_UUID  = #{p.qta_uuid}
+    </update>
+    <select id="findQta" resultType="map">
+        /* qta.findQta */
+        SELECT
+            HD.TEN_ID
+             , HD.QTA_UUID
+             , HD.QTA_NO
+             , HD.OORG_CD
+             , HD.QTA_TIT
+             , HD.QTA_CRTR_ID
+             , HD.QTA_CRTR_TEL
+             , HD.QTA_CRTR_DEPT_CD
+             , HD.APPL_DT
+             , HD.QTA_RMK
+             , HD.ATHG_UUID
+             , HD.RMK, HD.STS, HD.REGR_ID, HD.REG_DTTM, HD.MODR_ID, HD.MOD_DTTM, HD.QTA_STS_CCD
+        , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS QTA_CRTR_NM
+        , CASE WHEN 'en_US' = #{g.locale} THEN DEPT.DEPT_NM_EN
+		            ELSE DEPT.DEPT_NM
+		        END AS QTA_CRTR_DEPT_NM
+    FROM QTA HD
+            LEFT OUTER JOIN USR USR  /* USR : 구매요청자 */
+		    ON HD.TEN_ID    = USR.TEN_ID
+		   AND HD.QTA_CRTR_ID = USR.USR_ID
+        LEFT OUTER JOIN LOGIC_ORG B    /* B : 조직 */
+		    ON USR.TEN_ID   = B.TEN_ID
+		   AND USR.CO_CD  = B.LOGIC_ORG_CD
+		   AND B.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		   AND B.STS       != 'D'
+			LEFT OUTER JOIN LOGIC_ORG_DEPT_MAPG ODM
+		      ON USR.TEN_ID = ODM.TEN_ID
+		      AND B.LOGIC_ORG_TYP_CCD = ODM.LOGIC_ORG_TYP_CCD
+		      AND USR.CO_CD = ODM.LOGIC_ORG_CD
+			  AND HD.QTA_CRTR_DEPT_CD = ODM.DEPT_CD
+		      AND ODM.STS != 'D'
+		  LEFT OUTER JOIN DEPT DEPT
+		    ON ODM.TEN_ID      = DEPT.TEN_ID
+		   AND ODM.DEPT_CD     = DEPT.DEPT_CD
+		   AND HD.QTA_CRTR_DEPT_CD = DEPT.DEPT_CD
+		   AND USR.STS        != 'D'
+        WHERE HD.TEN_ID = #{g.tenant}
+        AND QTA_UUID = #{p.qta_uuid}
+    </select>
+    <select id="compareQtaHdSts" resultType="map">
+		/* qta.compareQtaHdSts */
+		SELECT QTAHD.QTA_UUID
+		     , QTAHD.QTA_NO
+		     , QTAHD.QTA_STS_CCD
+		     , CDDL.DTLCD_NM AS PR_APRV_STS_NM
+		     , CASE WHEN QTAHD.QTA_STS_CCD = #{p.qta_sts_ccd} THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM QTA QTAHD
+		 INNER JOIN DTLCD CDDT
+		    ON CDDT.TEN_ID = QTAHD.TEN_ID
+		   AND CDDT.CCD = 'P011'
+		   AND CDDT.DTLCD = QTAHD.QTA_STS_CCD
+		   AND CDDT.USE_YN = 'Y'
+		   AND CDDT.STS   != 'D'
+		 INNER JOIN DTLCD_MULTLANG CDDL
+		    ON CDDL.TEN_ID  = CDDT.TEN_ID
+		   AND CDDL.CCD  = CDDT.CCD
+		   AND CDDL.DTLCD  = CDDT.DTLCD
+		   AND CDDL.LANG_CCD = #{g.locale}
+		   AND CDDL.STS    != 'D'
+		 WHERE QTAHD.TEN_ID = #{g.tenant}
+		   AND QTAHD.QTA_UUID  = #{p.qta_uuid}
+	</select>
+</mapper>

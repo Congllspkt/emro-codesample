@@ -1,0 +1,694 @@
+<sc-link rel="import" href="/ui/bp/edoc/template/popup/ep-cntrdoc-template-list.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/shared/ep-vendor-list.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/edoc/template/popup/ep-cntrpreview.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/contract/common/popup/ep-cntr-apply.html"></sc-link>
+
+<dom-module id="es-write-multiple-contract">
+	<style>
+		:host {
+			@apply (--vbox-layout);
+		}
+	</style>
+
+	<template>
+		
+		<sc-ajax id="validateCompanyList"
+				 url="validateCompanyList.do"
+				 on-response="completeValidateCompanyList">
+		</sc-ajax>
+		
+		<sc-ajax id="createContractDocumentList"
+				 url="createContractDocumentList.do"
+				 on-response="completeCreateDocumentList">
+		</sc-ajax>
+		
+		<!-- 공통코드 조회 -->
+		<sc-request-group init>
+			
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			
+			<sc-code-group>
+				<sc-code code="C001" value="{{codes.ctry_ccd}}"></sc-code><!-- 국가 코드 -->
+				<sc-code code="D022" value="{{codes.cntrTmplTyp}}"></sc-code><!-- 템플릿 유형 코드 -->
+			</sc-code-group>
+			
+			<!-- 서명방법 코드 -->
+			<sc-ajax id="findListCommonCodeCntrSgnMeth"
+					 url="findListCommonCodeCntrSgnMeth.do"
+					 body="{{codes.cntrSgnMethParam}}"
+					 last-response="{{codes.cntrSgnMeth}}">
+			</sc-ajax>
+			
+			<!-- 계약서 유형 코드 -->
+			<sc-ajax id="findCommonCodeAttrCdList"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.cntrdocTypParam.param}}"
+					 last-response="{{codes.cntrdocTyp}}"></sc-ajax>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<cc-page-title-bar></cc-page-title-bar>
+		<div class="hbox fit">
+			<div class="vbox flex-3">
+				<cc-form-panel label-width="120" column="1" validation-group="save" title-text="계약 설정">
+					<cc-fieldset>
+						<sc-label text="계약서 유형"></sc-label>
+						<sc-combobox-field value="{{cntrInfo.cntrdoc_typ_ccd}}" required="true" readonly="false"
+										   items="{{codes.cntrdocTyp}}" display-field="label" value-field="data"
+										   on-change="onChangeCntrdocTypCcd"></sc-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="계약 서명방법"></sc-label>
+						<sc-combobox-field value="{{cntrInfo.cntr_sgnmeth_ccd}}" placeholder="필수" required="true" items="{{codes.cntrSgnMeth}}" display-field="label" value-field="data"
+										   on-change="onChangeCntrSgnMethCcd"></sc-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="계약 템플릿 유형"></sc-label>
+						<sc-combobox-field value="{{cntrInfo.cntr_tmpl_typ_ccd}}" placeholder="필수" required="true" readonly="[[formula('readonlyCntrTmplTyp')]]"
+										   items="{{codes.cntrTmplTyp}}" display-field="label" value-field="data"
+										   on-change="onChangeCntrTmplTypCcd"></sc-combobox-field>
+					</cc-fieldset>
+					<cc-fieldset hidden="[[!formula('isTmplUse')]]">
+						<sc-label text="계약서 템플릿"></sc-label>
+						<div class="field-box">
+							<sc-text-field value="{{cntrInfo.cntrdoc_tmpl_nm}}" readonly="true"></sc-text-field>
+							<div class="hspace-5"></div>
+							<sc-trigger-field trigger-cls="field-search" on-trigger-click="popupCntrDocTemplate" hide-trigger="[[readonly]]"></sc-trigger-field>
+							<sc-text-field value="{{cntrInfo.cntrdoc_tmpl_uuid}}" hidden="true"></sc-text-field>
+						</div>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="운영조직"></sc-label>
+						<sc-combobox-field id="operorgcombobox" placeholder="필수" value="{{cntrInfo.oorg_cd}}" required="true" readonly="false"
+										   items="{{codes.oorgCd}}" display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-field>
+					</cc-fieldset>
+				</cc-form-panel>
+			</div>
+			
+			<div class="hspace-5"></div>
+			
+			<div class="vbox flex-7">
+				<div class="vbox flex-6">
+					<sc-grid id="gridCompanyInfo" class="flex" use-state="false" data-provider="{{findListCompanyInfo.result}}">
+						<cc-grid-toolbar title-text="계약자">
+							<sc-button text="양식 다운로드" on-click="onExcelDownload"></sc-button>
+							<sc-button text="엑셀 업로드" on-click="onPopupExcelUpload"></sc-button>
+							<sc-button text="협력사 검색" on-click="onShowVendorPopup"></sc-button>
+							<sc-button text="선택" on-click="onSelectCompanyInfo"></sc-button>
+							<sc-button text="삭제" on-click="onDeleteVendorList" auth-s></sc-button>
+						</cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-data-column data-field="erp_vd_cd" 	header-text="협력사코드" 	 width="100" text-align="center"></sc-data-column><!--협력사코드-->
+							<sc-data-column data-field="vd_nm" 	header-text="협력사명" 	width="200" text-align="left"></sc-data-column><!--협력사명-->
+							<sc-data-column data-field="bizregno" header-text="사업자등록번호"	width="150" text-align="center"></sc-data-column><!--사업자등록번호-->
+							<sc-combobox-column data-field="ctry_ccd" header-text="국가"  width="100" text-align="center" display-field="label" value-field="data" items="{{codes.ctry_ccd}}"></sc-combobox-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="cntr_nm"></sc-grid-field>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</div>
+				
+				<sc-splitter split-type="horizontal"></sc-splitter>
+				
+				<div class="vbox flex-4">
+					<sc-grid id="gridCntrInfo" use-selection="true" use-state="false" selection-mode="check" class="flex" editable="true" on-item-click="onCntrItemClick">
+						<cc-grid-toolbar title-text="계약 정보">
+							<sc-button text="작성" on-click="createContractList" mode="CCMPLD" auth-s></sc-button>
+							<sc-button text="발송" on-click="createContractList" mode="SND" auth-s></sc-button>
+							<sc-button text="일괄 적용" on-click="onPopupCntrApply" auth-s></sc-button>
+							<sc-button text="삭제" on-click="onDeleteCntrList" auth-s></sc-button>
+						</cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-group-column hide-child-headers="false" header-text="협력사"	width="450" text-align="center">
+								<sc-data-column data-field="erp_vd_cd"	header-text="협력사코드"	width="100" text-align="center"></sc-data-column>
+								<sc-data-column data-field="vd_nm" 	header-text="협력사명"	width="200" text-align="left"></sc-data-column>
+								<sc-data-column data-field="bizregno"	header-text="사업자등록번호"	width="150" text-align="center"></sc-data-column>
+								<sc-combobox-column data-field="ctry_ccd" header-text="국가"   width="100" text-align="center" display-field="label" value-field="data" items="{{codes.ctry_ccd}}"></sc-combobox-column>
+							</sc-group-column>
+							<sc-data-column data-field="cntr_nm"   header-text="계약명"	width="250"	text-align="left"	editable="true"	required="true" max-length="80"></sc-data-column>
+							<sc-date-column data-field="cntr_dt"	header-text="계약일"	width="100" text-align="center"	editable="true"	required="true"></sc-date-column>
+							<sc-group-column hide-child-headers="false" header-text="계약기간"	width="200" text-align="center">
+								<sc-date-column data-field="cntr_st_dt" header-text="계약시작일"	width="100"	text-align="center"	editable="true"	required="true"></sc-date-column>
+								<sc-date-column data-field="cntr_exp_dt"	header-text="계약종료일"	width="100"	text-align="center"	editable="true"	required="true"	validator-function="gridValidator"></sc-date-column>
+							</sc-group-column>
+							<sc-image-column data-field="preview_btn" style-name="link" image-cls="search" header-text="미리보기" width="80" text-align="center"></sc-image-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="vd_cd"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</div>
+			</div>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-write-multiple-contract',
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							cntrdocTypParam: {
+								param : {
+									ccd: 'D003',
+									cstr_cnd_cd: 'MULTIPLE_WRITE',
+									cstr_cnd_val: 'Y'
+								}
+							},
+							cntrStsCcd: [],
+							cntrSgnMethParam: {
+								ccd: "D020",
+								cstr_cnd_cd: 'MULTIPLE_WRITE',
+								cstr_cnd_val: 'Y'
+							},
+							cntrSgnMeth: [],
+							cntrTmplTypCcd: [],
+							cntrdocTyp: [],
+							oorgCd: [],
+							ctry_ccd: []
+						};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+			},
+			
+			formulas: {
+				isTmplUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "TMPL";
+				},
+				isUserFileUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "USR_FILE";
+				},
+				readonlyCntrTmplTyp: function() {
+					return this.readonly || this.get("cntrInfo.cntr_sgnmeth_ccd") === "PKI";
+				},
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.load();
+			},
+			
+			load: function() {
+				var me = this;
+			},
+			
+			completeFindListCommonCodeCntrSgnMeth: function(e, res) {
+				var me = this;
+				var cntrSgnMethList = me.get("codes.cntrSgnMeth");
+				me.set("codes.orgnCntrSgnMeth", cntrSgnMethList);
+			},
+			
+			// 계약서 우형 변경 시 이벤트
+			onChangeCntrdocTypCcd: function(e) {
+				var me = this;
+				me.set("cntrInfo.cntrdoc_tmpl_uuid", null);
+				me.set("cntrInfo.cntrdoc_tmpl_nm", null);
+			},
+			
+			// 계약 서명방법 변경 시 이벤트
+			onChangeCntrSgnMethCcd: function(e) {
+				var me = this;
+				var sgnmethCcd = me.get("cntrInfo.cntr_sgnmeth_ccd");
+				
+				if(sgnmethCcd == "OFFLINE") {
+					me.set("cntrInfo.cntr_tmpl_typ_ccd", "USR_FILE");
+				}
+				if((sgnmethCcd == "DOCUSIGN" || sgnmethCcd == "EFORM") || sgnmethCcd == "ADOBESIGN") {
+					// 추후 다자계약 개발 완료시 제거
+					UT.alert('"DOCUSIGN 서명",  "ADOBESIGN 서명", "간편 서명"은 일괄 계약 작성 기능 개발중입니다. 공동인증서 서명 방식을 선택해주세요.', null, true);
+					me.set("cntrInfo.cntr_sgnmeth_ccd", "PKI");
+					return;
+				}
+				
+				if(sgnmethCcd == "PKI") {
+					// 공동인증서 서명 방법 선택 시 계약 템플릿 유형 : 템플릿 고정
+					me.set("cntrInfo.cntr_tmpl_typ_ccd", "TMPL");
+					me.onChangeCntrTmplTypCcd();
+				}
+				me.applyFormula();
+			},
+			
+			// 계약 템플릿 유형 변경 시 이벤트
+			onChangeCntrTmplTypCcd: function(e) {
+				var me = this;
+				if(me.get("cntrInfo.cntr_tmpl_typ_ccd") == "TMPL") {
+					me.set("cntrInfo.tmpl_unud_cntrdoc_athg_uuid", null);
+				} else {
+					me.set("cntrInfo.cntrdoc_tmpl_uuid", null);
+					me.set("cntrInfo.cntrdoc_tmpl_nm", null);
+				}
+				me.applyFormula();
+			},
+			
+			// 계약서 템플릿 선택 팝업
+			popupCntrDocTemplate: function() {
+				var me = this;
+				var cntrdocTypCcd = me.get("cntrInfo.cntrdoc_typ_ccd");
+				var sgnmethCcd = me.get("cntrInfo.cntr_sgnmeth_ccd");
+				
+				if(UT.isEmpty(cntrdocTypCcd)) {
+					UT.alert("STD.EDO3015"); // 계약서 유형을 선택해야 합니다.
+					return;
+				}
+				if(UT.isEmpty(sgnmethCcd)) {
+					UT.alert("STD.EDO3018"); // 계약 서명방법을 선택해야 합니다.
+					return;
+				}
+				
+				var sgnordTypCcd = "";
+				if(["DOCUSIGN", "EFORM", "ADOBESIGN"].indexOf(sgnmethCcd) > -1) {
+					sgnordTypCcd = "BUYER_VD";
+				} else {
+					sgnordTypCcd = "";
+				}
+				
+				var templatePopup = UT.popup("ep-cntrdoc-template-list", me, "80%", "70%", {
+					"selected": function(popup, e) {
+						popup.close();
+						me.set("cntrInfo.cntrdoc_tmpl_uuid", e.detail.cntrdoc_tmpl_uuid);
+						me.set("cntrInfo.cntrdoc_tmpl_nm", e.detail.cntrdoc_tmpl_nm);
+					}
+				});
+				
+				var param = {
+					cntrdoc_typ_ccd: cntrdocTypCcd,
+					use_yn: "Y",
+					sgnord_typ_ccd: sgnordTypCcd
+				};
+				templatePopup.show();
+				templatePopup.getWindowContent().load(param);
+			},
+			
+			onShowVendorPopup: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				if(UT.isEmpty(cntrInfo.oorg_cd)) {
+					UT.alert("STD.N3400"); // 운영조직을 선택해주세요.
+					return;
+				}
+				
+				var defaultParam = {
+					co_cd: SCSessionManager.currentUser.co_cd,
+					oorg_cd: cntrInfo.oorg_cd,
+					ounit_cd: 'PO',
+					conn_typ_ccd: "POEO",
+					task_typ_ccd: "RX",	// RFX 담당자 정보 조회
+					item_sgs: [],
+					obd_job_type_code : "RFI_TARGET" // 온보딩 유형
+				};
+				
+				var vendorPopup = UT.popup("ep-vendor-list", me, "65%", "95%", {
+					'selected-items': function(popup, e) {
+						var selectedList = e.detail;
+						if(!me.checkDupVendor(selectedList)) {
+							me.addVendorList(selectedList);
+							popup.close();
+						} else {
+							UT.alert("STD.N1900"); // 중복 데이터가 있습니다.
+						}
+					}
+				}, {maximizable: true, titleText: "협력사 검색"});
+				vendorPopup.show();
+				vendorPopup.getWindowContent().load({'defaultParam': defaultParam});
+			},
+			
+			// 협력사 중복 검사
+			checkDupVendor: function(selectedList) {
+				var me = this;
+				var newList = selectedList;
+				var existList = me.$.gridCompanyInfo.getDataProvider().getItems() || [];
+				
+				for(var i=0; i<newList.length; i++) {
+					for(var j=0; j<existList.length; j++) {
+						if(newList[i].erp_vd_cd == existList[j].erp_vd_cd) {
+							return true;
+						}
+					}
+				}
+				return false;
+			},
+			
+			addVendorList: function(selectedList) {
+				var me = this;
+				var provider = me.$.gridCompanyInfo.getDataProvider();
+				
+				if(selectedList.length > 0) {
+					for(var i = 0; i < selectedList.length; i++) {
+						provider.addItem(selectedList[i]);
+					}
+				}
+			},
+			
+			// 협력사 선택(계약자 그리드 -> 계약 정보 그리드로 이동)
+			onSelectCompanyInfo: function() {
+				var me = this;
+				var comInfoProvider = me.$.gridCompanyInfo.getDataProvider();
+				var cntrInfoProvider = me.$.gridCntrInfo.getDataProvider();
+				
+				// 체크된 협력사
+				var items = comInfoProvider.selectionCheckedItems() || [];
+				
+				// 선택된 항목이 없을 경우 예외
+				if (items.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				for(var i=0, itemsLen=items.length; i<itemsLen; i++) {
+					var checkItem = items[i];
+					checkItem.cntr_nm = checkItem.vd_nm.trim() + "의 계약서";
+				}
+				cntrInfoProvider.addItems(items);
+				
+				// 계약자 그리드에서 선택된 데이터 삭제
+				var removeNoList = comInfoProvider.selectionCheckedIndexes();
+				for (var i=removeNoList.length; i>0; i--) {
+					comInfoProvider.removeItemAt(removeNoList[i - 1]);
+				}
+			},
+			
+			onDeleteCntrList: function() {
+				var me = this;
+				var cntrInfoProvider = me.$.gridCntrInfo.getDataProvider();
+				var removeNoList = cntrInfoProvider.selectionCheckedIndexes();
+				var removeItems = cntrInfoProvider.selectionCheckedItems() || [];
+				
+				// 삭제 항목 미선택 시
+				if (removeNoList.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				// 체크된 목록 삭제
+				for (var i = removeNoList.length; i > 0; i--) {
+					cntrInfoProvider.removeItemAt(removeNoList[i - 1]);
+				}
+				
+				// 계약자 선택 그리드로 데이터 이동
+				var companyInfoProvider = me.$.gridCompanyInfo.getDataProvider();
+				companyInfoProvider.addItems(removeItems);
+			},
+			
+			onDeleteVendorList: function() {
+				var me = this;
+				var companyInfoProvider = me.$.gridCompanyInfo.getDataProvider();
+				var removeNoList = companyInfoProvider.selectionCheckedIndexes();
+				
+				// 삭제 항목 미선택 시
+				if (removeNoList.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				// 체크된 목록 삭제
+				for (var i = removeNoList.length; i > 0; i--) {
+					companyInfoProvider.removeItemAt(removeNoList[i - 1]);
+				}
+			},
+			
+			// 계약서 미리보기
+			onCntrItemClick: function (e) {
+				var me = this;
+				var data = e.detail.data;
+				var cntrInfo = me.get("cntrInfo");
+				var item = e.detail.item;
+				
+				if (item.dataField === "preview_btn") {
+					if(cntrInfo.cntrdoc_tmpl_uuid == null || cntrInfo.cntrdoc_tmpl_uuid == "") {
+						UT.alert("STD.EDO1014"); // 계약서 템플릿을 선택해야 합니다.
+						return;
+					}
+					
+					data.cntrdoc_tmpl_uuid = cntrInfo.cntrdoc_tmpl_uuid;
+					data.oorg_cd = cntrInfo.oorg_cd;
+					
+					var cntrPreviewPopup = UT.popup("ep-cntrpreview", me, "90%", "80%", {}, {titleText: "계약서미리보기"});
+					cntrPreviewPopup.show();
+					cntrPreviewPopup.getWindowContent().load(data, "preview");
+				}
+			},
+			
+			onPopupCntrApply: function() {
+				var me = this;
+				var provider = me.$.gridCntrInfo.getDataProvider();
+				var items = provider.selectionCheckedItems();
+				
+				if(items.length < 1) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				var epCntrApplyPopup = UT.popup("ep-cntr-apply", me, "450", "200", {
+					"close": function (popup, e) {
+						popup.close();
+					},
+					"apply": function(popup,e){
+						popup.close();
+						me.onAllApply(e.detail);
+					}
+				}, {titleText: "일괄 적용"});
+				epCntrApplyPopup.show();
+				epCntrApplyPopup.getWindowContent().load();
+			},
+			
+			onAllApply: function(param) {
+				var me = this;
+				var provider = me.$.gridCntrInfo.getDataProvider();
+				var itemIndex = provider.selectionCheckedIndexes();
+				
+				provider.setItemAtBatch(itemIndex, function(index, data) {
+					var obj = {};
+					obj.cntr_dt = param.cntr_dt;
+					obj.cntr_st_dt = param.cntr_st_dt;
+					obj.cntr_exp_dt = param.cntr_exp_dt;
+					return obj;
+				});
+			},
+			
+			// 엑셀 업로드
+			onPopupExcelUpload: function() {
+				var me = this, codes = me.get("codes");
+				var grid = me.$.gridCompanyInfo;
+				
+				// 엑셀 업로드 팝업
+				var popup = UT.popup('cc-excel-import', me, 800, 600, null, {closable: true, titleText: me.translate("엑셀 업로드")});
+				
+				var importer = popup.getContent();
+				importer.autoColumnMapping = true;
+				importer.doImport(grid, function(rows) {
+					
+					const comboFields = Object.keys(rows[0])
+							.filter(field => UT.isNotEmpty(codes[field]));
+					
+					rows.forEach(function(row) {
+						comboFields.forEach(field => {
+							const selectedCode = codes[field].find(code => code.label === row[field]);
+							if(UT.isEmpty(selectedCode)){
+								row[field] = null;
+							}else {
+								row[field] = selectedCode.data;
+							}
+						});
+					});
+					
+					// 협력사 체크 : VD 테이블에 데이터 존재 여부 확인
+					me.$.validateCompanyList.body = {
+						vendorList: rows
+					};
+					UT.request(me.$.validateCompanyList);
+				}, me);
+				
+				// 엑셀 업로드 팝업 열기
+				popup.show();
+			},
+			
+			// 협력사 체크 완료 후 계약자 그리드에 추가
+			completeValidateCompanyList: function(e, res) {
+				var me = this;
+				var result = res.response;
+				var grid = me.$.gridCompanyInfo;
+				
+				if(result.success) {
+					var notExistVendorList = result.resultData.notExistVendorList;
+					if(notExistVendorList != null) {
+						if(notExistVendorList.length == 1) {
+							UT.alert(me.translate("STD.EDO3027", null, notExistVendorList[0].erp_vd_cd)); // 협력사 코드 {0}은(는) 존재하지 않습니다.
+						} else if(notExistVendorList.length == 2) {
+							UT.alert(me.translate("STD.EDO3028", null, notExistVendorList[0].erp_vd_cd, notExistVendorList[1].erp_vd_cd)); // 협력사 코드 {0}, {1}는 존재하지 않습니다.
+						} else if(notExistVendorList.length >= 3){
+							UT.alert(me.translate("STD.EDO3029", null, notExistVendorList[0].erp_vd_cd, notExistVendorList.length)); // 협력사 코드 {0}를 포함한 총 {1}건은 존재하지 않습니다.
+						}
+					}
+					grid.setDataProvider(result.resultData.existVendorList);
+				} else {
+					if(UT.isNotEmpty(result.resultMessage)){
+						UT.alert(result.resultMessage);
+					} else {
+						UT.alert("STD.E9999");
+					}
+				}
+			},
+			
+			// 양식 다운로드
+			onExcelDownload: function() {
+				const me = this, codes = me.get("codes");
+				const exporter = new Export_MultiSheetExportUtil();
+				
+				// Grid 값 읽어오기
+				let excelSheetList = [{
+					headers: gridCompanyInfo._gridColumns.getColumns()
+							.filter(data => data.visible)
+							.map(data => {
+								let headerObj = {text: data.header.text, key: data.fieldName, width: data.width};
+								if(!UT.isEmpty(codes[data.fieldName])) {
+									headerObj.dropdown = codes.ctry_ccd.map(data => data.label);
+								}
+								return headerObj;
+							}),
+					rows: [],
+					name: '계약자 정보'
+				}];
+				
+				// 국가유형
+				let ctryHeaders = [
+					{text: "코드", key: "data", width: 120},
+					{text: "명", key: "label", width: 200}
+				];
+				
+				excelSheetList.push({headers: ctryHeaders, rows: codes.ctry_ccd, name: '국가 참고정보'});
+				
+				// 엑셀다운로드
+				exporter.doExport(excelSheetList, 'company_list.xlsx');
+			},
+			
+			// 계약서 작성 및 발송
+			createContractList: function(e) {
+				var me = this;
+				var mode = e.target.attributes['mode'].value; // 작성 또는 발송
+				
+				// 체크된 계약정보
+				var cntrInfoProvider = me.$.gridCntrInfo.getDataProvider();
+				var items = cntrInfoProvider.selectionCheckedItems() || [];
+				
+				if(items.length == 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				
+				if(!me.validateOnCreateDocument()) { // 계약조건 정보 유효성 검증
+					return;
+				}
+				
+				UT.confirm("STD.EDO2004", function() { // 작성하시겠습니까?
+					me.$.createContractDocumentList.body = {
+						vendorList : items,
+						cntrInfo : me.get("cntrInfo"),
+						cntrStsCcd : mode
+					}
+					
+					UT.request(me.$.createContractDocumentList);
+				});
+			},
+			
+			completeCreateDocumentList: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.success) {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.clear();
+				} else {
+					if(UT.isNotEmpty(result.resultMessage)){
+						UT.alert(result.resultMessage);
+					}else{
+						UT.alert("STD.E9999");
+					}
+				}
+			},
+			
+			// 계약서 생성 유효성 검사
+			validateOnCreateDocument: function() {
+				var me = this;
+				
+				if(UT.isEmpty(me.get("cntrInfo.cntrdoc_typ_ccd"))) {
+					UT.alert(me.translate("STD.E1001", null, me.translate("계약서 유형")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+					return false;
+				}
+				
+				if(UT.isEmpty(me.get("cntrInfo.cntr_sgnmeth_ccd"))) {
+					UT.alert(me.translate("STD.E1001", null, me.translate("계약 서명방법")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+					return false;
+				}
+				
+				if(me.formula("isTmplUse")) {
+					if(UT.isEmpty(me.get("cntrInfo.cntrdoc_tmpl_uuid"))) {
+						UT.alert(me.translate("STD.E1001",null,me.translate("계약서 템플릿")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+						return false;
+					}
+				}
+				
+				if(UT.isEmpty(me.get("cntrInfo.oorg_cd"))) {
+					UT.alert(me.translate("STD.E1001", null, me.translate("운영조직")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+					return false;
+				}
+				
+				if(me.formula("isUserFileUse") && me.$.uploadCntrdoc.allFiles.length == 0) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("계약서")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return false;
+				}
+				
+				// 체크된 계약정보
+				var cntrInfoProvider = me.$.gridCntrInfo.getDataProvider();
+				var items = cntrInfoProvider.selectionCheckedItems() || [];
+				
+				if(me.get("cntrInfo.cntr_sgnmeth_ccd") === "PKI") {
+					for(var i = 0; i < items.length; i++) {
+						var item = items[i];
+						if(UT.isEmpty(item.bizregno)) {
+							UT.alert("STD.EDO3016"); // 공동인증서 서명은 사업자번호가 필수 항목입니다. 협력사의 사업자번호를 확인해 주시기 바랍니다.
+							return false;
+						}
+						
+						if(UT.isEmpty(item.cntr_nm)) {
+							UT.alert(me.translate("STD.E1001", null, me.translate("계약명")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+							return false;
+						}
+						
+						if(UT.isEmpty(item.cntr_dt)) {
+							UT.alert(me.translate("STD.E1001", null, me.translate("계약일")), null, true); // '{0}'은(는) 필수 입력 항목입니다.
+							return false;
+						}
+						
+						if(UT.isEmpty(item.cntr_st_dt) || UT.isEmpty(item.cntr_exp_dt)) {
+							UT.alert(me.translate("STD.E1001",null,me.translate("계약시작일과 계약종료일")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+							return false;
+						}
+					}
+				}
+				return true;
+			},
+			
+			clear: function() {
+				var me = this;
+				me.reset();
+			}
+		});
+	</script>
+</dom-module>

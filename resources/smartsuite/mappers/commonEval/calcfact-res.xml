@@ -1,0 +1,1247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="calcfact-res">
+    <update id="updateNullValueYn">
+    /* calcfact-res.updateNullValueYn : 계산항목 결과 무실적 처리 */
+    MERGE INTO EVAL_SUBJ_CALCFACT_RES SRC
+    USING (SELECT CFACT_RES.TEN_ID
+                , CFACT_RES.EVAL_SUBJ_CALCFACT_RES_UUID
+                , CASE WHEN CFACT.NMTR_DNTR_DIV_CCD  = 'NMTR'  /* 분자인경우 무실적 처리 */
+                       THEN (CASE CFACT.NMTR_VAL_NULLV_DATFIL_METH_CCD
+                                  WHEN 'VAL_0_APPL' THEN 0
+                                  WHEN 'VAL_1_APPL'  THEN 1
+                                  WHEN 'AVG_VAL'  THEN CFACT_VAL.AVG_VAL
+                                  WHEN 'MAX_VAL'  THEN CFACT_VAL.MAX_VAL
+                                  WHEN 'MIN_VAL'  THEN CFACT_VAL.MIN_VAL
+                             END)
+                       ELSE NULL
+                  END AS NULLV
+                , 'Y' AS NULLV_YN     /* 무실적 여부 */
+            FROM EVAL_SUBJ_RES ESUBJ_RES
+           INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES
+              ON ESUBJ_RES.TEN_ID = CFACT_RES.TEN_ID
+             AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+           INNER JOIN CALCFACT CFACT
+              ON CFACT_RES.TEN_ID = CFACT.TEN_ID
+             AND CFACT_RES.CALCFACT_UUID = CFACT.CALCFACT_UUID
+            LEFT OUTER JOIN (
+                      SELECT ESUBJ_RES.TEN_ID
+                           , ESUBJ_RES.EVAL_REQ_UUID
+                           , CFACT_RES.CALCFACT_UUID
+                           , ROUND(AVG(CFACT_RES.CALCFACT_VAL), 2) AS AVG_VAL
+                           , MAX(CFACT_RES.CALCFACT_VAL) AS MAX_VAL
+                           , MIN(CFACT_RES.CALCFACT_VAL) AS MIN_VAL
+                        FROM EVAL_SUBJ_RES ESUBJ_RES
+                       INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES
+                          ON ESUBJ_RES.TEN_ID = CFACT_RES.TEN_ID
+                         AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+                       WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                         AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                       GROUP BY ESUBJ_RES.TEN_ID, ESUBJ_RES.EVAL_REQ_UUID, CFACT_RES.CALCFACT_UUID
+               ) CFACT_VAL
+              ON ESUBJ_RES.TEN_ID = CFACT_VAL.TEN_ID
+             AND ESUBJ_RES.EVAL_REQ_UUID = CFACT_VAL.EVAL_REQ_UUID
+             AND CFACT_RES.CALCFACT_UUID = CFACT_VAL.CALCFACT_UUID
+           WHERE CFACT_RES.TEN_ID = #{p.ten_id}
+             AND CFACT_RES.CALCFACT_VAL IS NULL
+             <if test="p.xcept_calcfact_list != null and p.xcept_calcfact_list.size() != 0">
+                 /* 수집 대상 제외 계산항목 목록 */
+                 AND CFACT_RES.CALCFACT_UUID NOT IN
+                 <foreach close=")" collection="p.xcept_calcfact_list" item="cfact" open="(" separator=",">
+                     #{cfact}
+                 </foreach>
+             </if>
+             <if test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+                 /* 평가대상 단 건 */
+                 AND CFACT_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+             </if>
+        ) TARG
+       ON (     SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_CALCFACT_RES_UUID = TARG.EVAL_SUBJ_CALCFACT_RES_UUID
+            )
+     WHEN MATCHED THEN
+          UPDATE
+             SET CALCFACT_VAL   = TARG.NULLV
+               , NULLV_YN       = TARG.NULLV_YN </update>
+    <select id="findListEvalSubjCalcfact" resultType="map">
+    /* calcfact-res.findListEvalSubjCalcfact : 평가대상 계산항목 목록 조회*/
+    SELECT ESUBJ_RES.TEN_ID
+         , ESUBJ_RES.EVAL_TASK_TYP_CCD
+         , ESUBJ_RES.OORG_CD
+         , ESUBJ_RES.EVAL_REQ_UUID
+         , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+         , CFACT.CALCFACT_UUID
+         , CFACT.CALCFACT_TYP_CCD
+         , CFACT.DAT_COLLMETH_CCD   /* [R800] 데이터 수집방법 공통코드 */
+         , CFACT.VAL_COLL_TYP_CCD   /* [R801] 값 수집 유형 공통코드 */
+         , CFACT.PRCR_CD
+         , CFACT.EVAL_TASK_TYP_CCD AS CALCFACT_EVAL_TASK_TYP_CCD
+         , CFACT.EVALFACT_CD
+         , PRCR.PRCR_NM
+         , DB_TBL.DB_TBL_PHYC_NM
+         , DB_COL.DB_COL_PHYC_NM
+      FROM EVAL_SUBJ_RES ESUBJ_RES
+     INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES
+        ON ESUBJ_RES.TEN_ID = CFACT_RES.TEN_ID
+       AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+       AND CFACT_RES.STS != 'D'
+     INNER JOIN CALCFACT CFACT
+        ON CFACT_RES.TEN_ID = CFACT.TEN_ID
+       AND CFACT_RES.CALCFACT_UUID = CFACT.CALCFACT_UUID
+      LEFT OUTER JOIN PRCR                         /* 수집 프로시저 목록 */
+        ON CFACT.TEN_ID = PRCR.TEN_ID
+       AND CFACT.DAT_COLLMETH_CCD = 'PRCR'   /* 데이터 수집방법이 프로시저인 경우 */
+       AND CFACT.PRCR_CD = PRCR.PRCR_CD
+      LEFT OUTER JOIN DB_TBL                       /* 수집 테이블 목록 */
+        ON CFACT.TEN_ID = DB_TBL.TEN_ID
+       AND CFACT.DAT_COLLMETH_CCD = 'DAT_TBL'   /* 데이터 수집방법이 테이블인 경우 */
+       AND CFACT.DB_TBL_CD = DB_TBL.DB_TBL_CD
+       AND DB_TBL.STS != 'D'
+      LEFT OUTER JOIN DB_COL
+        ON CFACT.TEN_ID = DB_COL.TEN_ID
+       AND CFACT.DAT_COLLMETH_CCD = 'DAT_TBL'
+       AND CFACT.DB_TBL_VAL_COL_CD = DB_COL.DB_COL_CD
+       AND CFACT.DB_TBL_CD = DB_COL.DB_TBL_CD
+       AND DB_COL.STS != 'D'
+     WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+       AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+       AND ESUBJ_RES.STS != 'D'
+    <if test="p.calcfact_re_coll_req_yn != null and p.calcfact_re_coll_req_yn neq 'Y'.toString()">
+       /* 재수집 요청 아닌 경우, 계산 필요 여부가 Y인 항목만 계산. 재수집 요청인 경우 계산 필요 여부와 상관없이 전체 대상.*/
+       AND CFACT_RES.CALC_REQD_YN = 'Y'
+    </if>
+    <if test="p.dat_coll_xcept_calcfact_list != null and p.dat_coll_xcept_calcfact_list.size() != 0">
+        /* 수집 대상 제외 계산항목 목록 */
+        AND CFACT.CALCFACT_UUID NOT IN
+        <foreach close=")" collection="p.dat_coll_xcept_calcfact_list" item="cfact" open="(" separator=",">
+            #{cfact.calcfact_uuid}
+        </foreach>
+    </if>
+    <if test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+        /* 평가대상 단 건 */
+        AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+    </if>
+    ORDER BY CFACT.DAT_COLLMETH_CCD
+    </select>
+    <select id="findListProcedureParameter" resultType="map">
+    /* calcfact-res.findListProcedureParameter :  수집 Procedure 파라미터 목록을 조회한다. */
+    SELECT PARM.PARM_NM     AS PARAMETER
+      FROM PRCR
+     INNER JOIN PRCR_PARM PPARM
+        ON PRCR.TEN_ID = PPARM.TEN_ID
+       AND PRCR.PRCR_CD = PPARM.PRCR_CD
+       AND PPARM.STS != 'D'
+     INNER JOIN PARM
+        ON PPARM.TEN_ID = PARM.TEN_ID
+       AND PPARM.PARM_CD = PARM.PARM_CD
+       AND PARM.STS != 'D'
+     WHERE PRCR.TEN_ID = #{p.ten_id}
+       AND PRCR.PRCR_CD = #{p.prcr_cd}
+     ORDER BY PPARM.ORD ASC
+    </select>
+    <select id="updateCalcfactValByProcedure" resultType="map" statementType="CALLABLE">
+        /* calcfact-res.updateCalcfactValByProcedure : 계산항목 값 수집 프로시저 호출 */
+            CALL ${p.prcr_nm}
+                <foreach close=")" collection="p.prcr_values" item="prcr_value" open="(" separator=",">
+                    #{prcr_value}
+                </foreach>
+    </select>
+    <select id="findListQuantEvalfactCalcfactRes" resultType="map">
+    /* calcfact-res.findListQuantEvalfactCalcfactRes : 정량평가 항목의 실적항목 결과 목록을 조회한다. */
+    SELECT ESUBJ_RES.TEN_ID
+         , ESUBJ_RES.OORG_CD
+         , ESUBJ_RES.EVAL_REQ_UUID
+         , ESUBJ_RES.EVAL_SUBJ_RES_UUID
+         , ESUBJ_RES.EVAL_TASK_TYP_CCD
+         , ESUBJ_RES.VD_CD
+         , ESUBJ_RES.VMG_OORG_UUID
+         , ESUBJ_RES.EVALTMPL_UUID
+         , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+         , EFACT_RES.EVALFACT_UUID
+         , EFACT_RES.EVALTMPL_EVALFACT_UUID
+         , EFACT_RES.QUANT_FMLA
+         , EFACT_RES.QUANT_FMLA_EXPLN
+         , EFACT_RES.QUANT_FMLA_VAL
+         , ET_EFACT.EVALFACT_WGT
+         , ET_EFACTG.EFACTG_WGT
+         , EFACT.NULLV_DATFIL_METH_CCD
+         , EFACT.SCALE_APPL_YN
+         --     , EFACT.NULLV_ELRM_SC   /* 널 값 기본 점수 */
+         , EFACT.QUANT_VAL_UNIT
+         , CASE WHEN CFACT_RES.CALCFACT_VAL IS NULL THEN 0 ELSE CFACT_RES.CALCFACT_VAL END CALCFACT_VAL
+         , CFACT_RES.CALCFACT_UUID
+    FROM EVAL_SUBJ_RES ESUBJ_RES                 /* 평가대상 결과 */
+   INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES   /* 평가대상 평가항목 결과 */
+      ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+     AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+     AND EFACT_RES.STS != 'D'
+   INNER JOIN EVALTMPL_EVALFACT ET_EFACT         /* 평가템플릿 평가항목 */
+      ON EFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+     AND EFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EFACT.EVALTMPL_EVALFACT_UUID
+   INNER JOIN EVALTMPL_EFACTG ET_EFACTG          /* 평가템플릿 평가항목군 */
+      ON ET_EFACT.TEN_ID = ET_EFACTG.TEN_ID
+     AND ET_EFACT.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+   INNER JOIN EVALFACT EFACT                     /* 평가항목 */
+      ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+     AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+     AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+   INNER JOIN EVALFACT_CALCFACT EFACT_CFACT      /* 평가항목 계산항목 */
+      ON EFACT.TEN_ID = EFACT_CFACT.TEN_ID
+     AND EFACT.EVALFACT_UUID = EFACT_CFACT.EVALFACT_UUID
+     AND EFACT_CFACT.STS != 'D'
+   INNER JOIN CALCFACT CFACT                     /* 계산항목 */
+      ON EFACT_CFACT.TEN_ID = CFACT.TEN_ID
+     AND EFACT_CFACT.CALCFACT_UUID = CFACT.CALCFACT_UUID
+   INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES   /* 평가대상 계산항목 결과 */
+      ON EFACT_RES.TEN_ID = CFACT_RES.TEN_ID
+     AND EFACT_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+     AND CFACT.CALCFACT_UUID  = CFACT_RES.CALCFACT_UUID
+   WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+     AND ESUBJ_RES.STS != 'D'
+   <choose>
+    <when test="p.req_type != null and p.req_type eq 'ALL'.toString()">
+        /* 평가요청 기준 */
+        AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+    </when>
+    <when test="p.req_type != null and p.req_type eq 'SUBJ'.toString()">
+        /* 평가대상 단 건 */
+        AND CFACT_RES.EVAL_SUBJ_RES_UUID = #{p.eval_subj_res_uuid}
+    </when>
+    <otherwise>
+        AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+    </otherwise>
+   </choose>
+   <if test="p.calcfact_re_calc_req_yn != null and p.calcfact_re_calc_req_yn eq 'Y'.toString()">
+       AND EXISTS (SELECT 'X'
+                      FROM EVAL_SUBJ_CALCFACT_RES CALC_SUBJ
+                     WHERE CALC_SUBJ.TEN_ID = CFACT_RES.TEN_ID
+                       AND CALC_SUBJ.CALCFACT_UUID = EFACT_CFACT.CALCFACT_UUID
+                       AND CALC_SUBJ.CALC_REQD_YN = 'Y'  -- 평가항목 계산 필요 여부가 Y 인 계산항목만 조회.
+                       AND CALC_SUBJ.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID)
+   </if>
+   ORDER BY EFACT.EVALFACT_CD, ESUBJ_RES.EVAL_SUBJ_RES_UUID
+    </select>
+    <update id="updateQuantEvalFactQuantFmlaVal">
+    /* calcfact-res.updateQuantEvalFactQuantFmlaVal : 정량항목 정량계산식 값 업데이트 */
+    UPDATE EVAL_SUBJ_EVALFACT_RES
+      SET QUANT_EVALFACT_NULLV_YN = 'N'
+        , QUANT_FMLA_VAL = CAST(#{p.quant_fmla_val} AS NUMBER)  WHERE TEN_ID = #{p.ten_id}
+      AND EVAL_SUBJ_EVALFACT_RES_UUID = #{p.eval_subj_evalfact_res_uuid}
+    </update>
+    <update id="updateQuantEvalfactQuantFmlaValNullv">
+    /*  calcfact-res.updateQuantEvalfactQuantFmlaValNullv */
+    UPDATE EVAL_SUBJ_EVALFACT_RES
+       SET QUANT_EVALFACT_NULLV_YN = 'Y'
+     WHERE TEN_ID = #{p.ten_id}
+       AND EVAL_SUBJ_RES_UUID IN (SELECT ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                                   FROM EVAL_SUBJ_RES ESUBJ_RES
+                                  WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                    AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid})
+       AND EVALFACT_UUID IN (SELECT EVALFACT_UUID
+                              FROM EVALFACT EFACT
+                             WHERE EFACT.TEN_ID = #{p.ten_id}
+                               AND EFACT.EVALFACT_TYP_CCD = 'QUANT')
+      AND QUANT_FMLA_VAL IS NULL
+    </update>
+    <update id="updateQuantEvalfactRealApply">
+    /* calcfact-res.updateQuantEvalfactRealApply : 평가항목 스케일 구분 해당없음 : 결과값 저장 */
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT EFACT_RES.TEN_ID
+                , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                , EFACT_RES.QUANT_FMLA_VAL
+             FROM EVALFACT EFACT
+            INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+               ON EFACT.TEN_ID = EFACT_rES.TEN_ID
+              AND EFACT.EVALFACT_UUID = EFACT_RES.EVALFACT_UUID
+            INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+               ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+              AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+            WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+              AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+              AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+              AND EFACT.SCALE_APPL_YN = 'N'
+        ) TARG
+       ON (     SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+           )
+     WHEN MATCHED THEN
+            UPDATE
+               SET SCALE_SC = (CASE WHEN TARG.QUANT_FMLA_VAL &gt; 100 THEN 100 ELSE TARG.QUANT_FMLA_VAL END)   /* 계산값을 그대로 반영하기 때문에 범주회 최대값 100을 반영 */ </update>
+    <update id="updateQuantEvalfactScaleAvdUd">
+    /* calcfact-res.updateQuantEvalfactScaleAvdUd : 평가항목 스케일 구분 적용 : 이상-미만 */
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT QUANT_EFACT.TEN_ID
+                , QUANT_EFACT.EVAL_SUBJ_EVALFACT_RES_UUID
+                , QUANT_EFACT.QUANT_VAL
+                , ET_EF_SCALE.SC AS SCALE_SC
+             FROM (SELECT EFACT_RES.TEN_ID
+                        , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                        , EFACT_RES.QUANT_FMLA_VAL
+                        , ESUBJ_RES.EVAL_REQ_UUID
+                        , EFACT_RES.EVALFACT_UUID
+                        , EFACT_RES.EVALTMPL_EVALFACT_UUID
+                        , EFACT_RES.EVALTMPL_UUID
+                        , EFACT.SCALE_APPL_YN
+                        , EFACT.SCALE_RNG_SETUP_CCD
+                        , CASE WHEN EFACT.SCALE_RNG_SETUP_CCD  = 'ABV_UD'   /* 이상 미만 */
+                               THEN (CASE WHEN EFACT_RES.QUANT_FMLA_VAL &gt;= SCALE.MAX_VAL THEN SCALE.MAX_VAL - 1
+                                          WHEN EFACT_RES.QUANT_FMLA_VAL <![CDATA[<]]> SCALE.MIN_VAL THEN SCALE.MIN_VAL
+                                          ELSE EFACT_RES.QUANT_FMLA_VAL
+                                      END )
+                               ELSE (CASE WHEN EFACT_RES.QUANT_FMLA_VAL &gt; SCALE.MAX_VAL THEN SCALE.MAX_VAL
+                                          WHEN EFACT_RES.QUANT_FMLA_VAL <![CDATA[<=]]>  SCALE.MIN_VAL THEN SCALE.MIN_VAL - 1
+                                          ELSE EFACT_RES.QUANT_FMLA_VAL
+                                      END )
+                          END AS QUANT_VAL
+                    FROM EVALFACT EFACT
+                   INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                      ON EFACT.TEN_ID = EFACT_RES.TEN_ID
+                     AND EFACT.EVALFACT_UUID = EFACT_RES.EVALFACT_UUID
+                   INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+                      ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+                     AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                   INNER JOIN (SELECT ET_EF_SCALE.TEN_ID
+                                    , ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+                                    , MAX(ET_EF_SCALE.STP_VAL) AS MAX_VAL
+                                    , MIN(ET_EF_SCALE.ST_VAL) AS MIN_VAL
+                                 FROM EVALTMPL_EVALFACT_SCALE ET_EF_SCALE
+                                INNER JOIN EVALTMPL_EVALFACT ET_EF
+                                   ON ET_EF_SCALE.TEN_ID = ET_EF.TEN_ID
+                                  AND ET_EF_SCALE.EVALTMPL_EVALFACT_UUID = ET_EF.EVALTMPL_EVALFACT_UUID
+                                WHERE ET_EF_SCALE.TEN_ID = #{p.ten_id}
+                                  AND EXISTS (SELECT EVALFACT_UUID
+                                                 FROM EVAL_SUBJ_RES ESUBJ_RES
+                                                INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                                                   ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+                                                  AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+                                                WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                  AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                                  AND EFACT_RES.QUANT_EVALFACT_NULLV_YN  = 'N')
+                                GROUP BY ET_EF_SCALE.TEN_ID, ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+                       ) SCALE
+                      ON EFACT_RES.TEN_ID = SCALE.TEN_ID
+                     AND EFACT_RES.EVALTMPL_EVALFACT_UUID = SCALE.EVALTMPL_EVALFACT_UUID
+                   WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+                     AND ESUBJ_RES.EVAL_REQ_UUID =  #{p.eval_req_uuid}
+                     AND EFACT_RES.QUANT_EVALFACT_NULLV_YN = 'N'
+                     AND EFACT.SCALE_APPL_YN = 'Y'
+                     AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+                     AND EFACT.SCALE_RNG_SETUP_CCD = 'ABV_UD'    /* 이상 미만 */
+                ) QUANT_EFACT
+            INNER JOIN EVALTMPL_EVALFACT_SCALE ET_EF_SCALE
+               ON QUANT_EFACT.TEN_ID = ET_EF_SCALE.TEN_ID
+              AND QUANT_EFACT.EVALTMPL_EVALFACT_UUID = ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+              AND ET_EF_SCALE.STP_VAL &gt; QUANT_EFACT.QUANT_FMLA_VAL
+              AND ET_EF_SCALE.ST_VAL <![CDATA[<=]]> QUANT_EFACT.QUANT_FMLA_VAL
+          ) TARG
+         ON (    SRC.TEN_ID = TARG.TEN_ID
+             AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+            )
+        WHEN MATCHED THEN
+              UPDATE
+                 SET SCALE_SC = TARG.SCALE_SC </update>
+    <update id="updateQuantEvalfactScaleOvBlw">
+    /* calcfact-res.updateQuantEvalfactScaleOvBlw : 평가항목 스케일 구분 적용 : 초과 이하 */
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT QUANT_EFACT.TEN_ID
+                , QUANT_EFACT.EVAL_SUBJ_EVALFACT_RES_UUID
+                , QUANT_EFACT.QUANT_VAL
+                , ET_EF_SCALE.SC AS SCALE_SC
+             FROM (SELECT EFACT_RES.TEN_ID
+                       , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                       , EFACT_RES.QUANT_FMLA_VAL
+                       , ESUBJ_RES.EVAL_REQ_UUID
+                       , EFACT_RES.EVALFACT_UUID
+                       , EFACT_RES.EVALTMPL_EVALFACT_UUID
+                       , EFACT_RES.EVALTMPL_UUID
+                       , EFACT.SCALE_APPL_YN
+                       , EFACT.SCALE_RNG_SETUP_CCD
+                       , CASE WHEN EFACT.SCALE_RNG_SETUP_CCD  = 'OV_BLW'   /* 초과-이하 */
+                              THEN (CASE WHEN EFACT_RES.QUANT_FMLA_VAL &gt;= SCALE.MAX_VAL THEN SCALE.MAX_VAL - 1
+                                         WHEN EFACT_RES.QUANT_FMLA_VAL <![CDATA[<]]> SCALE.MIN_VAL THEN SCALE.MIN_VAL
+                                         ELSE EFACT_RES.QUANT_FMLA_VAL
+                                    END )
+                              ELSE (CASE WHEN EFACT_RES.QUANT_FMLA_VAL &gt; SCALE.MAX_VAL THEN SCALE.MAX_VAL
+                                         WHEN EFACT_RES.QUANT_FMLA_VAL <![CDATA[<=]]> SCALE.MIN_VAL THEN SCALE.MIN_VAL - 1
+                                         ELSE EFACT_RES.QUANT_FMLA_VAL
+                                    END )
+                         END AS QUANT_VAL
+                   FROM EVALFACT EFACT
+                  INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                     ON EFACT.TEN_ID = EFACT_RES.TEN_ID
+                    AND EFACT.EVALFACT_UUID = EFACT_RES.EVALFACT_UUID
+                  INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+                     ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+                    AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                  INNER JOIN (SELECT ET_EF_SCALE.TEN_ID
+                                   , ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+                                   , MAX(ET_EF_SCALE.STP_VAL) AS MAX_VAL
+                                   , MIN(ET_EF_SCALE.ST_VAL) AS MIN_VAL
+                                FROM EVALTMPL_EVALFACT_SCALE ET_EF_SCALE
+                               INNER JOIN EVALTMPL_EVALFACT ET_EF
+                                  ON ET_EF_SCALE.TEN_ID = ET_EF.TEN_ID
+                                 AND ET_EF_SCALE.EVALTMPL_EVALFACT_UUID = ET_EF.EVALTMPL_EVALFACT_UUID
+                               WHERE ET_EF_SCALE.TEN_ID = #{p.ten_id}
+                                 AND EXISTS (SELECT EVALFACT_UUID
+                                               FROM EVAL_SUBJ_RES ESUBJ_RES
+                                              INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                                                 ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+                                                AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+                                              WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                                AND EFACT_RES.QUANT_EVALFACT_NULLV_YN  = 'N')
+                              GROUP BY ET_EF_SCALE.TEN_ID, ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+                      ) SCALE
+                     ON EFACT_RES.TEN_ID = SCALE.TEN_ID
+                    AND EFACT_RES.EVALTMPL_EVALFACT_UUID = SCALE.EVALTMPL_EVALFACT_UUID
+                  WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+                    AND ESUBJ_RES.EVAL_REQ_UUID =  #{p.eval_req_uuid}
+                    AND EFACT_RES.QUANT_EVALFACT_NULLV_YN = 'N'
+                    AND EFACT.SCALE_APPL_YN = 'Y'
+                    AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+                    AND EFACT.SCALE_RNG_SETUP_CCD = 'OV_BLW'    /* 초과-이하 */
+                ) QUANT_EFACT
+            INNER JOIN EVALTMPL_EVALFACT_SCALE ET_EF_SCALE
+               ON QUANT_EFACT.TEN_ID = ET_EF_SCALE.TEN_ID
+              AND QUANT_EFACT.EVALTMPL_EVALFACT_UUID = ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+              AND ET_EF_SCALE.STP_VAL &gt;= QUANT_EFACT.QUANT_FMLA_VAL
+              AND ET_EF_SCALE.ST_VAL <![CDATA[<]]> QUANT_EFACT.QUANT_FMLA_VAL
+        ) TARG
+       ON (    SRC.TEN_ID = TARG.TEN_ID
+           AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+          )
+     WHEN MATCHED THEN
+          UPDATE
+             SET SCALE_SC = TARG.SCALE_SC </update>
+    <update id="updateQuantEvalfactScaleScNullvElemSc">
+    /* calcfact-res.updateQuantEvalfactScaleScNullvElemSc : 정량항목의 스케일 점수가 null값인 경우 기본점수로 업데이트 한다. */
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT EFACT_RES.TEN_ID
+                , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                , ROUND(CASE WHEN EFACT.NULLV_ELEM_SC IS NULL THEN 0 ELSE EFACT.NULLV_ELEM_SC END, 2) NULLV_ELEM_SC
+             FROM EVAL_SUBJ_EVALFACT_RES EFACT_RES
+            INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+               ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+              AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+              AND ESUBJ_RES.STS != 'D'
+            INNER JOIN EVALFACT EFACT
+               ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+              AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+            WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+              AND EFACT_RES.STS != 'D'
+              AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+              AND EFACT_RES.QUANT_EVALFACT_NULLV_YN = 'Y'
+              AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+              AND EFACT.NULLV_DATFIL_METH_CCD = 'ELEM_SC_APPL' /* [R006]  기본 점수 적용 */
+         ) TARG
+        ON (    SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+           )
+      WHEN MATCHED THEN
+            UPDATE
+               SET SCALE_SC = TARG.NULLV_ELEM_SC </update>
+    <update id="updateQuantEvalfactScaleScNullvAvgSc">
+    /* calcfact-res.updateQuantEvalfactScaleScNullvAvgSc : 정량항목의 스케일 점수가 null값인 경우 평균 점수로 업데이트 한다.*/
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING ( SELECT EFACT_RES.TEN_ID
+                 , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                 , AVG_SCALE.SCALE_SC
+              FROM EVAL_SUBJ_EVALFACT_RES EFACT_RES
+             INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+                ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+               AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+               AND ESUBJ_RES.STS != 'D'
+             INNER JOIN EVALFACT EFACT
+                ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+               AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+             INNER JOIN ( SELECT EF_RES.TEN_ID
+                               , EF_RES.EVALFACT_UUID
+                               , ES_RES.EVAL_REQ_UUID
+                               , ROUND(AVG(EF_RES.SCALE_SC), 2) AS SCALE_SC
+                            FROM EVAL_SUBJ_EVALFACT_RES EF_RES
+                           INNER JOIN EVAL_SUBJ_RES ES_RES
+                              ON EF_RES.TEN_ID = ES_RES.TEN_ID
+                             AND EF_RES.EVAL_SUBJ_RES_UUID = ES_RES.EVAL_SUBJ_RES_UUID
+                             AND ES_RES.STS != 'D'
+                           WHERE ES_RES.TEN_ID = #{p.ten_id}
+                             AND ES_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                             AND EF_RES.QUANT_EVALFACT_NULLV_YN = 'N'
+                           GROUP BY EF_RES.TEN_ID, ES_RES.EVAL_REQ_UUID , EF_RES.EVALFACT_UUID
+                 ) AVG_SCALE
+                ON EFACT_RES.TEN_ID = AVG_SCALE.TEN_ID
+               AND ESUBJ_RES.EVAL_REQ_UUID = AVG_SCALE.EVAL_REQ_UUID
+               AND EFACT_RES.EVALFACT_UUID = AVG_SCALE.EVALFACT_UUID
+             WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+               AND EFACT_RES.STS != 'D'
+               AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+               AND EFACT_RES.QUANT_EVALFACT_NULLV_YN = 'Y'
+               AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+               AND EFACT.NULLV_DATFIL_METH_CCD = 'AVG_SC' /* [R006]  평균 점수 적용 */
+         ) TARG
+        ON (    SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+           )
+      WHEN MATCHED THEN
+            UPDATE
+               SET SCALE_SC = TARG.SCALE_SC </update>
+    <update id="updateQuantEvalfactScaleScNullvScaleSc">
+    /* calcfact-res.updateQuantEvalfactScaleScNullvAvgSc : 정량항목의 스케일 점수가 null값인 경우 null값 스케일 대상의 점수로 업데이트 한다.*/
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT EFACT_RES.TEN_ID
+                , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                , ET_EF_SCALE.SC
+             FROM EVAL_SUBJ_EVALFACT_RES EFACT_RES
+            INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+               ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+              AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+              AND ESUBJ_RES.STS != 'D'
+            INNER JOIN EVALFACT EFACT
+               ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+              AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+            INNER JOIN EVALTMPL_EVALFACT_SCALE ET_EF_SCALE
+               ON EFACT_RES.TEN_ID = ET_EF_SCALE.TEN_ID
+              AND EFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EF_SCALE.EVALTMPL_EVALFACT_UUID
+            WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+              AND EFACT_RES.STS != 'D'
+              AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+              AND EFACT_RES.QUANT_EVALFACT_NULLV_YN = 'Y'
+              AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+              AND ET_EF_SCALE.NULLV_APPL_SUBJ_SCALE_YN = 'Y'
+              AND EFACT.SCALE_APPL_YN != 'N'
+              AND EFACT.NULLV_DATFIL_METH_CCD = 'SCALE_SEL_APPL' /* [R006]  스케일 선택 적용 */
+         ) TARG
+        ON (    SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+            )
+        WHEN MATCHED THEN
+              UPDATE
+                 SET SCALE_SC = TARG.SC </update>
+    <update id="updateQuantEvalfactScWgt">
+    /* calfact-res.updateQuantEvalfactScWgt :  정량평가 항목 가중치 계산  */
+    MERGE INTO EVAL_SUBJ_EVALFACT_RES SRC
+    USING (SELECT EF_RES.TEN_ID
+                , EF_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                , (CASE WHEN 100 <![CDATA[<]]> EF_RES.SCALE_SC THEN 100 * (EF_RES.EVALFACT_WGT / 100) * (EF_RES.EFACTG_WGT / 100)
+                        WHEN 0 &gt; EF_RES.SCALE_SC THEN 0
+                        ELSE EF_RES.SCALE_SC * (EF_RES.EVALFACT_WGT / 100) * (EF_RES.EFACTG_WGT / 100)
+                    END ) * EF_RES.PN_SIGN    AS EVALFACT_SC
+            FROM (SELECT EFACT_RES.TEN_ID
+                       , EFACT_RES.EVAL_SUBJ_EVALFACT_RES_UUID
+                       , CASE WHEN ET_EFACT.EVALFACT_WGT  IS NULL THEN 100 ELSE ET_EFACT.EVALFACT_WGT END EVALFACT_WGT
+                       , CASE WHEN ET_EFACTG.EFACTG_WGT IS NULL THEN 100 ELSE ET_EFACTG.EFACTG_WGT END AS EFACTG_WGT
+                       , CASE WHEN EFACT.ADD_CND_CCD = 'DEDTN' THEN -1 ELSE 1 END AS PN_SIGN
+                       , EFACT_RES.SCALE_SC
+                    FROM EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                   INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+                      ON EFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+                     AND EFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                     AND ESUBJ_RES.STS != 'D'
+                    LEFT OUTER JOIN EVALTMPL_EVALFACT ET_EFACT
+                      ON EFACT_RES.TEN_ID = ET_EFACT.TEN_ID
+                     AND EFACT_RES.EVALTMPL_EVALFACT_UUID = ET_EFACT.EVALTMPL_EVALFACT_UUID
+                    LEFT OUTER JOIN EVALTMPL_EFACTG ET_EFACTG
+                     ON EFACT_RES.TEN_ID = ET_EFACTG.TEN_ID
+                    AND EFACT_RES.EVALTMPL_EFACTG_UUID = ET_EFACTG.EVALTMPL_EFACTG_UUID
+                  INNER JOIN EVALFACT EFACT
+                     ON EFACT_RES.TEN_ID = EFACT.TEN_ID
+                    AND EFACT_RES.EVALFACT_UUID = EFACT.EVALFACT_UUID
+                  WHERE EFACT_RES.TEN_ID = #{p.ten_id}
+                    AND EFACT_RES.STS != 'D'
+                    AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                    AND EFACT.EVALFACT_TYP_CCD = 'QUANT'
+                ) EF_RES
+        ) TARG
+       ON (     SRC.TEN_ID = TARG.TEN_ID
+            AND SRC.EVAL_SUBJ_EVALFACT_RES_UUID = TARG.EVAL_SUBJ_EVALFACT_RES_UUID
+           )
+      WHEN MATCHED THEN
+            UPDATE
+               SET EVALFACT_SC = TARG.EVALFACT_SC
+                 , STS = 'U'
+                 , MODR_ID = 'ADMIN'
+                 , MOD_DTTM = SYSDATE </update>
+    <update id="updateCalcfactCalcRequiredYn">
+    /* calcfact-res.updateCalcfactCalcRequiredYn : 계산항목 계산 필요여부를 N으로 업데이트한다. */
+    UPDATE EVAL_SUBJ_CALCFACT_RES
+       SET CALC_REQD_YN = 'N'
+     WHERE TEN_ID       = #{p.ten_id}
+       AND STS         != 'D'
+       AND CALC_REQD_YN       = 'Y'
+       AND EVAL_SUBJ_RES_UUID IN (
+           SELECT EVAL_SUBJ_RES_UUID
+             FROM EVAL_SUBJ_RES ESUBJ_RES
+             WHERE ESUBJ_RES.TEN_ID = EVAL_SUBJ_CALCFACT_RES.TEN_ID
+               AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EVAL_SUBJ_CALCFACT_RES.EVAL_SUBJ_RES_UUID
+               AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+       )
+    </update>
+    <select id="findListCalcfactCondCol" resultType="map">
+    /* calcfact-res.findListCalcfactCondCol : 계산항목의 조건 컬럼 조회 */
+    SELECT CND_COL.TEN_ID
+         , CND_COL.CALCFACT_UUID
+         , CND_COL.DB_COL_CD
+         , CND_COL.CND_DIV_CCD
+         , DB_COL.DB_COL_CD
+         , DB_COL.DB_COL_PHYC_NM
+         , DB_TBL.DB_TBL_PHYC_NM
+         , CND_VAL.DTLCD
+         , CND_VAL.CSTR_CND_VAL
+    FROM CALCFACT_CND_COL CND_COL
+     INNER JOIN DB_COL
+        ON DB_COL.TEN_ID = CND_COL.TEN_ID
+       AND DB_COL.DB_COL_CD = CND_COL.DB_COL_CD
+       AND DB_COL.USE_YN = 'Y'
+     INNER JOIN DB_TBL
+        ON DB_COL.TEN_ID = DB_TBL.TEN_ID
+       AND DB_COL.DB_TBL_CD = DB_TBL.DB_TBL_CD
+     LEFT OUTER JOIN CCD_CSTR_CND_VAL CND_VAL
+       ON CND_COL.TEN_ID = CND_VAL.TEN_ID
+      AND CND_COL.CND_DIV_CCD = CND_VAL.DTLCD
+      AND CND_VAL.CCD = 'R802'  /* 정량항목 수집 조건 */
+      AND CND_VAL.DTLCD = CND_COL.CND_DIV_CCD
+      AND CND_VAL.CSTR_CND_CD = 'TGCOL'
+      AND CND_VAL.STS != 'D'
+    WHERE CND_COL.TEN_ID = #{p.ten_id}
+      AND CND_COL.CALCFACT_UUID = #{p.calcfact_uuid}
+    </select>
+    <update id="updateCalcfactValByTable">
+    /* clacfact-res.updateCalcfactValByTable : 계산항목 값 수집을 테이블 기준으로 실행  */
+    MERGE INTO EVAL_SUBJ_CALCFACT_RES SRC
+    USING ( SELECT CFACT_RES.TEN_ID
+                 , CFACT_RES.EVAL_SUBJ_CALCFACT_RES_UUID
+                 , DAT_COLL.CALCFACT_VAL AS CALCFACT_VAL
+                 , 'N'                   AS NULLV_YN
+              FROM EVAL_SUBJ_CALCFACT_RES CFACT_RES
+             INNER JOIN EVAL_SUBJ_RES ESUBJ_RES
+                ON CFACT_RES.TEN_ID = ESUBJ_RES.TEN_ID
+               AND CFACT_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+               AND ESUBJ_RES.STS != 'D'
+              LEFT OUTER JOIN (
+                       SELECT TBL.TEN_ID
+                              <if test="p.conditions != null and p.conditions.size() != 0">
+                                  <foreach collection="p.conditions" item="cond">
+                                      <if test="cond.cnd_div_ccd != null and cond.cnd_div_ccd neq 'DT'.toString() and cond.cnd_div_ccd neq 'OP'.toString()">
+                                      , TBL.${cond.db_col_phyc_nm}
+                                      </if>
+                                  </foreach>
+                              </if>
+                              <choose>
+                                  <when test="p.val_coll_typ_ccd eq 'AVG'.toString()">
+                                      , ROUND(AVG(${p.db_col_phyc_nm}), 2)   AS CALCFACT_VAL
+                                  </when>
+                                  <when test="p.val_coll_typ_ccd eq 'SUM'.toString()">
+                                      , SUM(${p.db_col_phyc_nm})             AS CALCFACT_VAL
+                                  </when>
+                                  <when test="p.val_coll_typ_ccd eq 'CNT'.toString()">
+                                      , COUNT(1)                              AS CALCFACT_VAL
+                                  </when>
+                                  <when test="p.val_coll_typ_ccd eq 'MAX'.toString()">
+                                      , MAX(${p.db_col_phyc_nm})             AS CALCFACT_VAL
+                                  </when>
+                                  <when test="p.val_coll_typ_ccd eq 'MIN'.toString()">
+                                      , MIN(${p.db_col_phyc_nm})             AS CALCFACT_VAL
+                                  </when>
+                                  <when test="p.val_coll_typ_ccd eq 'NEA'.toString()">
+                                      , MAX(${p.db_col_phyc_nm})             AS CALCFACT_VAL
+                                  </when>
+                              </choose>
+                        FROM ${p.db_tbl_phyc_nm} TBL
+                       WHERE TBL.TEN_ID = #{p.ten_id}
+                         AND EXISTS (SELECT 1
+                                       FROM EVAL_SUBJ_CALCFACT_RES CFACT_RES
+                                       WHERE TBL.TEN_ID = CFACT_RES.TEN_ID
+                                       <if test="p.conditions != null and p.conditions.size() != 0">
+                                           <foreach collection="p.conditions" item="cond">
+                                               <choose>
+                                                   <when test="cond.cnd_div_ccd eq 'DT'.toString()">
+                                                       <choose>
+                                                           <when test="p.dat_coll_st_yymm != null and p.dat_coll_ed_yymm != null">
+                                                               AND substr(to_char(cast(${cond.db_col_phyc_nm} AS date), 'yyyyMMdd'), 0, 6)  BETWEEN #{p.dat_coll_st_yymm} AND #{p.dat_coll_ed_yymm}
+                                                           </when>
+                                                       </choose>
+                                                   </when>
+                                                   <otherwise>
+                                                       AND TBL.${cond.db_col_phyc_nm} IS NOT NULL -- 20230810 장혜지 조건컬럼에 값이 없는 데이터의 경우 수집 제외 </otherwise>
+                                               </choose>
+                                           </foreach>
+                                       </if>
+                                    )
+                                    <if test="p.val_coll_typ_ccd eq 'NEA'.toString()">  /* 값 수집 유형 : 최근값 */
+                                        <choose>
+                                            <when test="p.calc_dt_col  != null and p.calc_dt_col != ''">
+                                                AND TBL.${p.calc_dt_col}
+                                            </when>
+                                            <otherwise>
+                                                AND TBL.MOD_DTTM
+                                            </otherwise>
+                                        </choose>
+                                                                  = ( SELECT
+                                                                      <choose>
+                                                                          <when test="p.calc_dt_col != null and p.calc_dt_col != ''">
+                                                                            MAX(TBL.${p.calc_dt_col})
+                                                                          </when>
+                                                                          <otherwise>
+                                                                            MAX(TBL.MOD_DTTM)
+                                                                          </otherwise>
+                                                                      </choose>
+                                                                        FROM ${p.db_tbl_phyc_nm} TBL
+                                                                       WHERE TBL.TEN_ID   = #{g.tenant}
+                                                                         AND EXISTS (
+                                                                             SELECT 1
+                                                                               FROM EVAL_SUBJ_CALCFACT_RES CFACT_RES
+                                                                              WHERE CFACT_RES.TEN_ID  = TBL.TEN_ID
+                                                                                    <if test="p.conditions != null and p.conditions.size() != 0">
+                                                                                        <foreach collection="p.conditions" item="cond">
+                                                                                            <choose>
+                                                                                                <when test="cond.cnd_div_ccd eq 'DT'.toString()">
+                                                                                                    <choose>
+                                                                                                        <when test="p.dat_coll_st_yymm != null and p.dat_coll_ed_yymm != null">
+                                                                                                                AND SUBSTR(to_char(CAST(${cond.db_col_phyc_nm} AS DATE), 'yyyyMMdd'), 0, 6)  BETWEEN #{p.dat_coll_st_yymm} AND #{p.dat_coll_ed_yymm}
+                                                                                                        </when>
+                                                                                                        <otherwise>
+                                                                                                            AND 1 = 0
+                                                                                                        </otherwise>
+                                                                                                    </choose>
+                                                                                                </when>
+                                                                                                <otherwise>
+                                                                                                    AND TBL.${cond.db_col_phyc_nm} IS NOT NULL </otherwise>
+                                                                                            </choose>
+                                                                                        </foreach>
+                                                                                    </if>
+                                                                          )
+                                                                    )
+                                    </if>
+                      GROUP BY TBL.TEN_ID
+                              <if test="p.conditions != null and p.conditions.size() != 0">
+                                  <foreach collection="p.conditions" item="cond">
+                                     <if test="cond.cnd_div_ccd != null and cond.cnd_div_ccd neq 'DT'.toString() and cond.cnd_div_ccd neq 'OP'.toString()">
+                                      , TBL.${cond.db_col_phyc_nm}
+                                     </if>
+                                  </foreach>
+                              </if>
+                 ) DAT_COLL
+                ON ( CFACT_RES.TEN_ID = DAT_COLL.TEN_ID
+                     <if test="p.conditions != null and p.conditions.size() != 0">
+                         <foreach collection="p.conditions" item="cond">
+                             <choose>
+                                 <when test="cond.cnd_div_ccd eq 'DT'.toString()">
+                                     AND 1 = 1
+                                 </when>
+                                 <when test="cond.cnd_div_ccd eq 'OP'.toString()">
+                                     AND 1 = 1
+                                 </when>
+                                 <when test="cond.cnd_div_ccd eq 'SG'.toString()">
+                                     AND ESUBJ_RES.VMG_OORG_UUID IN (
+                                        SELECT VO.VMG_OORG_UUID
+                                          FROM VMG_OORG VO
+                                         INNER JOIN VMG
+                                            ON VMG.TEN_ID = VO.TEN_ID
+                                           AND VMG.VMG_UUID = VO.VMG_UUID
+                                         WHERE VMG.VMG_CD = DAT_COLL.${cond.db_col_phyc_nm}
+                                        )
+                                 </when>
+                                 <otherwise>
+                                     AND ESUBJ_RES.${cond.cstr_cnd_val} = DAT_COLL.${cond.db_col_phyc_nm}
+                                 </otherwise>
+                             </choose>
+                         </foreach>
+                     </if>
+                   )
+             WHERE CFACT_RES.TEN_ID = #{p.ten_id}
+               AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+               AND CFACT_RES.CALCFACT_UUID = #{p.calcfact_uuid}
+             ) TARG
+       ON (    SRC.TEN_ID                      = TARG.TEN_ID
+           AND SRC.EVAL_SUBJ_CALCFACT_RES_UUID = TARG.EVAL_SUBJ_CALCFACT_RES_UUID
+          )
+     WHEN MATCHED THEN
+          UPDATE
+            SET CALCFACT_VAL = TARG.CALCFACT_VAL
+              , NULLV_YN     = TARG.NULLV_YN </update>
+    <update id="updateCalcfactValByEvalSc">
+    /* calcfact-res.updateCalcfactValByEvalSc : 계산항목 값 수집을 평가점수 기준으로 실행 */
+    MERGE INTO EVAL_SUBJ_CALCFACT_RES SRC
+    USING (
+           SELECT CFACT_RES.TEN_ID
+                , CFACT_RES.EVAL_SUBJ_CALCFACT_RES_UUID
+                , DAT_COLL.CALCFACT_VAL AS CALCFACT_VAL
+                , 'N'                   AS NULLV_YN
+             FROM EVAL_SUBJ_RES ESUBJ_RES
+            INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES
+               ON ESUBJ_RES.TEN_ID = CFACT_RES.TEN_ID
+              AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+              AND CFACT_RES.STS != 'D'
+             LEFT OUTER JOIN (
+                      SELECT SC.TEN_ID
+                           , SC.EVAL_TASK_TYP_CCD
+                           , SC.VD_CD
+                           , SC.VMG_OORG_UUID
+                       <choose>
+                         <when test="p.val_coll_typ_ccd eq 'AVG'.toString()">
+                           , ROUND(AVG(SC.EVAL_SC), 2)   AS CALCFACT_VAL  /* 평균 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'SUM'.toString()">
+                           , SUM(SC.EVAL_SC)             AS CALCFACT_VAL  /* 합 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'CNT'.toString()">
+                           , COUNT(1)                    AS CALCFACT_VAL  /* 개수 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'MAX'.toString()">
+                           , MAX(SC.EVAL_SC)             AS CALCFACT_VAL  /* 최대값 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'MIN'.toString()">
+                           , MIN(SC.EVAL_SC)             AS CALCFACT_VAL  /* 최소값 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'NEA'.toString()">
+                           , MAX(SC.EVAL_SC)             AS CALCFACT_VAL  /* 최근값*/
+                         </when>
+                       </choose>
+                        FROM (
+                          <choose>
+                            <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'OE'.toString() and g.existModule('VS')">
+                            /* -- 평가업무유형이 'OE' 이고 VS 모듈 존재하는 경우 -- */
+                                SELECT OE_SC.TEN_ID
+                                     , AVG(OE_SC.PRCS_EVAL_SC) AS EVAL_SC   /* OE 평가 점수 : 평균(평가를 수행한 프로세스의 점수)*/
+                                     , 'OE' AS EVAL_TASK_TYP_CCD
+                                     , OE_SC.VD_CD
+                                     , OE_SC.VMG_OORG_UUID
+                                  FROM (
+                                        SELECT OE.TEN_ID
+                                             , OE.OE_UUID
+                                             , OE_PRCS.PRCS_EVAL_SC
+                                             , OE.OORG_CD
+                                             , OE.VD_CD
+                                             , OE_VMG.VMG_OORG_UUID
+                                             , ROW_NUMBER() OVER(PARTITION BY OE.VD_CD, (CASE WHEN OE_VMG.VMG_OORG_UUID IS NULL OR OE_VMG.VMG_OORG_UUID = '' THEN '1' ELSE OE_VMG.VMG_OORG_UUID END) ORDER BY OE.OE_ED_DT DESC) NEA_RK   /*  최근 순위 */
+                                          FROM OE
+                                         INNER JOIN OE_VMG
+                                            ON OE.TEN_ID = OE_VMG.TEN_ID
+                                           AND OE.OE_UUID = OE_VMG.OE_UUID
+                                           AND OE_VMG.STS != 'D'
+                                          INNER JOIN OE_PRCS
+                                             ON OE.TEN_ID = OE_PRCS.TEN_ID
+                                            AND OE.OE_UUID = OE_PRCS.OE_UUID
+                                            AND OE_PRCS.STS != 'D'
+                                            AND OE_PRCS.PRCS_EVAL_SC IS NOT NULL
+                                            /* -- 프로세스 평가 진행된 건만 점수추출 대상으로 간주. [E007] 프로세스 불합격, 프로세스 합격, 프로세스 조건부 합격, 이전 온보딩평가 결과 적용 -- */
+                                            AND OE_PRCS.OE_PRCS_STS_CCD IN ('PRCS_FLR', 'PRCS_PASS', 'PRCS_CONL_PASS', 'PRE_OE_RES_APPL')
+                                          WHERE OE.TEN_ID = #{p.ten_id}
+                                            AND OE.STS != 'D'
+                                            AND OE.PRCSG_ED_YN = 'Y'
+                                            AND (   OE.OORG_CD = #{p.oorg_cd}
+                                                 OR EXISTS (SELECT 1
+                                                              FROM OORG_MAPG OMAPG
+                                                             WHERE OMAPG.TEN_ID = #{p.ten_id}
+                                                               AND OMAPG.CONN_YN = 'Y'
+                                                               AND OMAPG.STS != 'D'
+                                                               AND OMAPG.CONNSRC_OORG_CD = #{p.oorg_cd}
+                                                               AND OMAPG.CONNSUBJ_OORG_CD = OE.OORG_CD
+                                                        )
+                                                )
+                                            /* 평가 대상 일치하는 데이터만 필터링 */
+                                            AND EXISTS (SELECT 1
+                                                          FROM EVAL_SUBJ_RES ESUBJ_RES
+                                                         WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                           AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                                           AND OE.VD_CD = ESUBJ_RES.VD_CD
+                                                           AND CASE WHEN OE_VMG.VMG_OORG_UUID IS NULL OR OE_VMG.VMG_OORG_UUID = '-1' THEN 'T'
+                                                                    WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '-1' THEN 'T'
+                                                                    WHEN OE_VMG.VMG_OORG_UUID = ESUBJ_RES.VMG_OORG_UUID THEN 'T'
+                                                                    ELSE 'F'
+                                                               END = 'T'
+                                                       )
+                                     ) OE_SC
+                                  <if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd eq 'NEA'">
+                                  /* -- 값 수집 유형이 '최근값' 인 경우, oe 평가 종료일이 가장 최근인 데이터 사용 -- */
+                                 WHERE OE_SC.NEA_RK = 1
+                                  </if>
+                                 GROUP BY OE_SC.TEN_ID, OE_SC.OE_UUID, OE_SC.VD_CD, OE_SC.VMG_OORG_UUID
+                            </when>
+                            <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'PE'.toString() and g.existModule('SRM')">
+                                 /* -- 평가업무유형이 'PE' 이고 SRM 모듈 존재하는 경우 -- */
+                                 SELECT PE_SC.TEN_ID
+                                      , PE_SC.EVAL_SC
+                                      , 'PE' AS EVAL_TASK_TYP_CCD
+                                      , PE_SC.VD_CD
+                                      , PE_SC.VMG_OORG_UUID
+                                  FROM (
+                                         SELECT PE.TEN_ID
+                                              , PE.PE_UUID
+                                              , PSUBJ_RES.EVAL_SC
+                                              , PSUBJ.VD_CD
+                                              , PSUBJ.VMG_OORG_UUID
+                                              , ROW_NUMBER() OVER(PARTITION BY PSUBJ.VD_CD, (CASE WHEN PSUBJ.VMG_OORG_UUID IS NULL OR PSUBJ.VMG_OORG_UUID = '' THEN '-1' ELSE PSUBJ.VMG_OORG_UUID END) ORDER BY PE.MOD_DTTM DESC) NEA_RK   /*  최근 순위 */
+                                           FROM PE
+                                          INNER JOIN PE_PEG PPEG
+                                             ON PE.TEN_ID = PPEG.TEN_ID
+                                            AND PE.PE_UUID = PPEG.PE_UUID
+                                            AND PPEG.STS != 'D'
+                                          INNER JOIN PE_SUBJ PSUBJ
+                                             ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                                            AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                                            AND PSUBJ.STS != 'D'
+                                          INNER JOIN PE_SUBJ_RES PSUBJ_RES
+                                             ON PSUBJ.TEN_ID = PSUBJ_RES.TEN_ID
+                                            AND PSUBJ.PE_SUBJ_UUID = PSUBJ_RES.PE_SUBJ_UUID
+                                            AND PSUBJ_RES.STS != 'D'
+                                            AND (CASE WHEN PSUBJ_RES.SLFCK_RES_YN IS NULL OR PSUBJ_RES.SLFCK_RES_YN = '' THEN 'N' ELSE PSUBJ_RES.SLFCK_RES_YN END) = 'N'
+                                            AND PSUBJ_RES.EVAL_SC IS NOT NULL
+                                          WHERE PE.TEN_ID = #{p.ten_id}
+                                            AND PE.STS != 'D'
+                                            AND PE.PE_STS_CCD = 'APVD'
+                                            AND (   PE.OORG_CD = #{p.oorg_cd}
+                                                 OR EXISTS (SELECT 1
+                                                              FROM OORG_MAPG OMAPG
+                                                             WHERE OMAPG.TEN_ID = #{p.ten_id}
+                                                               AND OMAPG.CONN_YN = 'Y'
+                                                               AND OMAPG.STS != 'D'
+                                                               AND OMAPG.CONNSRC_OORG_CD = #{p.oorg_cd}
+                                                               AND OMAPG.CONNSUBJ_OORG_CD = PE.OORG_CD
+                                                           )
+                                                )
+                                            /* 평가 대상 일치하는 데이터만 필터링 */
+                                            AND EXISTS (SELECT 1
+                                                          FROM EVAL_SUBJ_RES ESUBJ_RES
+                                                         WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                           AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                                           AND PSUBJ.VD_CD = ESUBJ_RES.VD_CD
+                                                           AND CASE WHEN PSUBJ.VMG_OORG_UUID IS NULL OR PSUBJ.VMG_OORG_UUID = '-1' THEN 'T'
+                                                                    WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '-1' THEN 'T'
+                                                                    WHEN PSUBJ.VMG_OORG_UUID = ESUBJ_RES.VMG_OORG_UUID THEN 'T'
+                                                                    ELSE 'F'
+                                                                END = 'T'
+                                                       )
+                                      ) PE_SC
+                                 <if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd eq 'NEA'">
+                                  WHERE PE_SC.NEA_RK = 1
+                                 </if>
+                               </when>
+                            <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'NPE'.toString() and g.existModule('RFX')">
+                                /* -- 평가업무유형이 'NPE' 이고 RFX 모듈 존재하는 경우 -- */
+                                 SELECT NPE_SC.TEN_ID
+                                      , NPE_SC.EVAL_SC
+                                      , 'NPE' AS EVAL_TASK_TYP_CCD
+                                      , NPE_SC.VD_CD
+                                      , NPE_SC.VMG_OORG_UUID
+                                   FROM (
+                                         SELECT RBID.TEN_ID
+                                              , RBID.RFX_BID_UUID
+                                              , RBID.EVAL_TTL_SC AS EVAL_SC
+                                              , RFX.OORG_CD
+                                              , RBID.VD_CD
+                                              , '-1' AS VMG_OORG_UUID
+                                              , ROW_NUMBER() OVER(PARTITION BY RBID.VD_CD ORDER BY RBID.MOD_DTTM DESC) NEA_RK   /*  최근 순위 */
+                                           FROM RFX_BID RBID
+                                          INNER JOIN RFX
+                                             ON RFX.TEN_ID = RBID.TEN_ID
+                                            AND RFX.RFX_NO = RBID.RFX_NO
+                                            AND RFX.RFX_RND = RBID.RFX_RND
+                                            AND RFX.NPE_STS_CCD = 'EVAL_ED'    /*[P084] EVAL_ED 평가 종료*/
+                                            AND RFX.RFX_STS_CCD = 'ED'         /* [P013] ED 종료 */
+                                           WHERE RBID.TEN_ID = #{p.ten_id}
+                                            AND RBID.STS != 'D'
+                                            AND RBID.RFX_BID_EFCT_YN = 'Y'
+                                            AND RBID.EVAL_TTL_SC IS NOT NULL
+                                            AND (   RFX.OORG_CD = #{p.oorg_cd}
+                                                 OR EXISTS (SELECT 1
+                                                              FROM OORG_MAPG OMAPG
+                                                             WHERE OMAPG.TEN_ID = #{p.ten_id}
+                                                               AND OMAPG.CONN_YN = 'Y'
+                                                               AND OMAPG.STS != 'D'
+                                                               AND OMAPG.CONNSRC_OORG_CD = #{p.oorg_cd}
+                                                               AND OMAPG.CONNSUBJ_OORG_CD = RFX.OORG_CD
+                                                           )
+                                                )
+                                            /* 평가 대상 일치하는 데이터만 필터링 */
+                                            AND EXISTS (SELECT 1
+                                                          FROM EVAL_SUBJ_RES ESUBJ_RES
+                                                         WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                           AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                                           AND RBID.VD_CD = ESUBJ_RES.VD_CD
+                                                       )
+                                       ) NPE_SC
+                                  <if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd eq 'NEA'">
+                                   WHERE NPE_SC.NEA_RK = 1
+                                  </if>
+                            </when>
+                            <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'GE'.toString() and g.existModule('PRO')">
+                            /* -- 평가업무유형이 'GE' 이고 PRO 모듈 존재하는 경우 -- */
+                                SELECT GE_SC.TEN_ID
+                                     , GE_SC.EVAL_SC
+                                     , 'GE' AS EVAL_TASK_TYP_CCD
+                                     , GE_SC.VD_CD
+                                     , GE_SC.VMG_OORG_UUID
+                                  FROM (
+                                        SELECT GE.TEN_ID
+                                             , GE.GE_UUID
+                                             , GE.EVAL_SC
+                                             , GE.OORG_CD
+                                             , GE.VD_CD
+                                             , '-1' AS VMG_OORG_UUID
+                                             , ROW_NUMBER() OVER(PARTITION BY GE.VD_CD ORDER BY GE.GE_ED_DT DESC) NEA_RK   /*  최근 순위 */
+                                          FROM GE
+                                          LEFT OUTER JOIN GR_GE_MAPG GRMAP
+                                            ON GE.TEN_ID = GRMAP.TEN_ID
+                                           AND GE.GE_UUID = GRMAP.GE_UUID
+                                          LEFT OUTER JOIN GR
+                                            ON GRMAP.TEN_ID = GR.TEN_ID
+                                           AND GRMAP.GR_UUID = GR.GR_UUID
+                                           AND GR.STS != 'D'
+                                           AND GR.GR_STS_CCD = 'GI_CMPLD'
+                                           AND GR.GE_SUBJ_YN = 'Y'
+                                          LEFT OUTER JOIN PO_GE_MAPG POMAP
+                                            ON GE.TEN_ID = POMAP.TEN_ID
+                                           AND GE.GE_UUID = POMAP.GE_UUID
+                                          LEFT OUTER JOIN PO
+                                            ON POMAP.TEN_ID = PO.TEN_ID
+                                           AND POMAP.PO_UUID = PO.PO_UUID
+                                           AND PO.STS != 'D'
+                                           AND PO.EFCT_PO_YN = 'Y'
+                                         WHERE GE.TEN_ID = #{p.ten_id}
+                                           AND GE.STS != 'D'
+                                           AND GE.GE_ED_YN = 'Y'
+                                           AND GE.GE_STS_CCD = 'EVAL_ED'
+                                           AND GE.EVAL_SC IS NOT NULL
+                                           /* 입고평가 혹은 준공평가 */
+                                           AND (#{p.ten_id}) IN ((CASE WHEN GR.TEN_ID IS NULL OR GR.TEN_ID = '' GR.TEN_ID THEN '-1' ELSE GR.TEN_ID END), (CASE WHEN PO.TEN_ID IS NULL OR PO.TEN_ID = '' PO.TEN_ID THEN '-1' ELSE PO.TEN_ID END))
+                                           AND (   GE.OORG_CD = #{p.oorg_cd}
+                                                OR EXISTS (SELECT OMAPG.CONNSUBJ_OORG_CD
+                                                            FROM OORG_MAPG OMAPG
+                                                           WHERE OMAPG.TEN_ID = #{p.ten_id}
+                                                             AND OMAPG.CONN_YN = 'Y'
+                                                             AND OMAPG.STS != 'D'
+                                                             AND OMAPG.CONNSRC_OORG_CD = #{p.oort_cd}
+                                                             AND OMAPG.CONNSUBJ_OORG_CD = GE.OORG_CD
+                                                           )
+                                               )
+                                           /* 평가 대상 일치하는 데이터만 필터링 */
+                                           AND EXISTS (SELECT 1
+                                                         FROM EVAL_SUBJ_RES ESUBJ_RES
+                                                        WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                                                          AND ESUBJ_RES.EVAL_REQ_UUID =  #{p.eval_req_uuid}
+                                                          AND GE.VD_CD = ESUBJ_RES.VD_CD
+                                           )
+                                     ) GE_SC
+                               <if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd eq 'NEA'">
+                                 WHERE GE_SC.NEA_RK = 1
+                               </if>
+                            </when>
+                            <otherwise>
+                                SELECT NULL AS TEN_ID
+                                     , NULL AS EVAL_SC
+                                     , NULL AS EVAL_TASK_TYP_CCD
+                                     , NULL AS VD_CD
+                                     , NULL AS VMG_OORG_UUID
+                                  FROM DUM_TBL
+                            </otherwise>
+                        </choose>
+                           ) SC
+                       WHERE SC.TEN_ID = #{p.ten_id}
+                       GROUP BY SC.TEN_ID, SC.EVAL_TASK_TYP_CCD, SC.VD_CD, SC.VMG_OORG_UUID
+                ) DAT_COLL
+               ON CFACT_RES.TEN_ID = DAT_COLL.TEN_ID
+              AND ESUBJ_RES.VD_CD = DAT_COLL.VD_CD
+              AND /*  -- 수집 대상 데이터의 VMG_OORG_UUID 가 '-1' 이면 평가대상 데이터의 VMG_OORG_UUID와 비교하지 않고 바로 적옹.  -- */
+                  CASE WHEN DAT_COLL.VMG_OORG_UUID = '-1' THEN 'T'
+                       WHEN (CASE WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '' THEN '-1' ELSE ESUBJ_RES.VMG_OORG_UUID END) = DAT_COLL.VMG_OORG_UUID THEN 'T'
+                       ELSE 'F'
+                   END = 'T'
+            WHERE CFACT_RES.TEN_ID = #{p.ten_id}
+              AND ESUBJ_RES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+              AND CFACT_RES.CALCFACT_UUID = #{p.calcfact_uuid}
+              AND DAT_COLL.CALCFACT_VAL IS NOT NULL
+        ) TARG
+      ON (    SRC.TEN_ID = TARG.TEN_ID
+          AND SRC.EVAL_SUBJ_CALCFACT_RES_UUID = TARG.EVAL_SUBJ_CALCFACT_RES_UUID
+        )
+    WHEN MATCHED THEN
+         UPDATE
+            SET CALCFACT_VAL = TARG.CALCFACT_VAL
+              , NULLV_YN     = TARG.NULLV_YN </update>
+    <update id="updateCalcfactValByEvalfactSc">
+    /* calcfact-res.updateCalcfactValByEvalfactSc : 계산항목 값 수집을 평가항목 점수 기준으로 실행 */
+    MERGE INTO EVAL_SUBJ_CALCFACT_RES SRC
+    USING (
+           SELECT CFACT_RES.TEN_ID
+                , CFACT_RES.EVAL_SUBJ_CALCFACT_RES_UUID
+                , DAT_COLL.CALCFACT_VAL AS CALCFACT_VAL
+                , 'N'                   AS NULLV_YN
+             FROM EVAL_SUBJ_RES ESUBJ_RES
+            INNER JOIN EVAL_SUBJ_CALCFACT_RES CFACT_RES
+               ON ESUBJ_RES.TEN_ID = CFACT_RES.TEN_ID
+              AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = CFACT_RES.EVAL_SUBJ_RES_UUID
+              AND CFACT_RES.STS != 'D'
+             LEFT OUTER JOIN (
+                      SELECT SC.TEN_ID
+                           , SC.VD_CD
+                           , SC.VMG_OORG_UUID
+                       <choose>
+                         <when test="p.val_coll_typ_ccd eq 'AVG'.toString()">
+                           , ROUND(AVG(SC.EVALFACT_SC), 2)   AS CALCFACT_VAL  /* 평균 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'SUM'.toString()">
+                           , SUM(SC.EVALFACT_SC)             AS CALCFACT_VAL  /* 합 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'CNT'.toString()">
+                           , COUNT(1)                    AS CALCFACT_VAL  /* 개수 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'MAX'.toString()">
+                           , MAX(SC.EVALFACT_SC)             AS CALCFACT_VAL  /* 최대값 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'MIN'.toString()">
+                           , MIN(SC.EVALFACT_SC)             AS CALCFACT_VAL  /* 최소값 */
+                         </when>
+                         <when test="p.val_coll_typ_ccd eq 'NEA'.toString()">
+                           , MAX(SC.EVALFACT_SC)             AS CALCFACT_VAL  /* 최근값*/
+                         </when>
+                       </choose>
+                        FROM (
+                              SELECT ESUBJ_RES.TEN_ID
+                                   , ESUBJ_RES.EVAL_TASK_TYP_CCD
+                                   , EFACT_RES.EVALFACT_SC
+                                   , ESUBJ_RES.VD_CD
+                                   , CASE WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '' THEN '-1' ELSE ESUBJ_RES.VMG_OORG_UUID END AS VMG_OORG_UUID
+                                   , ROW_NUMBER() OVER(PARTITION BY ESUBJ_RES.TEN_ID, ESUBJ_RES.VD_CD, ESUBJ_RES.VMG_OORG_UUID ORDER BY EFACT_RES.MOD_DTTM DESC) NEA_RK
+                                FROM EVAL_SUBJ_RES ESUBJ_RES
+                               INNER JOIN EVAL_SUBJ_EVALFACT_RES EFACT_RES
+                                 ON ESUBJ_RES.TEN_ID = EFACT_RES.TEN_ID
+                                AND ESUBJ_RES.EVAL_SUBJ_RES_UUID = EFACT_RES.EVAL_SUBJ_RES_UUID
+                                AND ESUBJ_RES.EVAL_TASK_TYP_CCD = #{p.calcfact_eval_task_typ_ccd}
+                                AND EXISTS (SELECT 'X'
+                                              FROM EVAL_SUBJ_RES TARG
+                                             WHERE TARG.TEN_ID = #{p.ten_id}
+                                               AND TARG.EVAL_REQ_UUID = #{p.eval_req_uuid}
+                                               AND ESUBJ_RES.VD_CD = TARG.VD_CD
+                                               AND CASE WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '-1' THEN 'T'
+                                                        WHEN TARG.VMG_OORG_UUID IS NULL OR TARG.VMG_OORG_UUID = '-1' THEN 'T'
+                                                        WHEN ESUBJ_RES.VMG_OORG_UUID = TARG.VMG_OORG_UUID THEN 'T'
+                                                        ELSE 'F'
+                                                   END = 'T')
+                                AND (   ESUBJ_RES.OORG_CD = #{p.oorg_cd}
+                                     OR EXISTS (SELECT 1
+                                                  FROM OORG_MAPG OMAPG
+                                                 WHERE OMAPG.TEN_ID = #{p.ten_id}
+                                                   AND OMAPG.CONN_YN = 'Y'
+                                                   AND OMAPG.STS != 'D'
+                                                   AND OMAPG.CONNSRC_OORG_CD = #{p.oorg_cd}
+                                                   AND OMAPG.CONNSUBJ_OORG_CD = ESUBJ_RES.OORG_CD)
+                                   )
+                            <choose>
+                              <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'OE'.toString() and g.existModule('VS')">
+                                AND EXISTS (SELECT 'X'
+                                             FROM OE
+                                            INNER JOIN OE_PRCS
+                                               ON OE.TEN_ID = OE_PRCS.TEN_ID
+                                              AND OE.OE_UUID = OE_PRCS.OE_UUID
+                                              AND OE_PRCS.STS != 'D'
+                                              AND OE_PRCS.PRCS_EVAL_SC IS NOT NULL
+                                              /* -- 프로세스 평가 진행된 건만 점수추출 대상으로 간주. [E007] 프로세스 불합격, 프로세스 합격, 프로세스 조건부 합격, 이전 온보딩평가 결과 적용 -- */
+                                              AND OE_PRCS.OE_PRCS_STS_CCD IN ('PRCS_FLR', 'PRCS_PASS', 'PRCS_CONL_PASS', 'PRE_OE_RES_APPL')
+                                            WHERE OE.TEN_ID = #{p.ten_id}
+                                              AND OE.STS != 'D'
+                                              AND OE.PRCSG_ED_YN = 'Y'
+                                              AND OE_PRCS.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                                          )
+                              </when>
+                              <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'PE'.toString() and g.existModule('SRM')">
+                                AND EXISTS (SELECT 'X'
+                                              FROM PE
+                                             INNER JOIN PE_PEG PPEG
+                                                ON PE.TEN_ID = PPEG.TEN_ID
+                                               AND PE.PE_UUID = PPEG.PE_UUID
+                                               AND PPEG.STS != 'D'
+                                             INNER JOIN PE_SUBJ PSUBJ
+                                                ON PPEG.TEN_ID = PSUBJ.TEN_ID
+                                               AND PPEG.PE_PEG_UUID = PSUBJ.PE_PEG_UUID
+                                               AND PSUBJ.STS != 'D'
+                                             INNER JOIN PE_SUBJ_RES PSUBJ_RES
+                                               ON PSUBJ.TEN_ID = PSUBJ_RES.TEN_ID
+                                               AND PSUBJ.PE_SUBJ_UUID = PSUBJ_RES.PE_SUBJ_UUID
+                                               AND PSUBJ_RES.STS != 'D'
+                                               AND (CASE WHEN PSUBJ_RES.SLFCK_RES_YN IS NULL OR PSUBJ_RES.SLFCK_RES_YN = '' THEN 'N' ELSE PSUBJ_RES.SLFCK_RES_YN END) = 'N'
+                                               AND PSUBJ_RES.EVAL_SC IS NOT NULL
+                                             WHERE PE.TEN_ID = #{p.ten_id}
+                                               AND PE.STS != 'D'
+                                               AND PE.PE_STS_CCD = 'APVD'
+                                               AND PSUBJ_RES.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                                           )
+                              </when>
+                              <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'NPE'.toString() and g.existModule('RFX')">
+                                AND EXISTS (SELECT 'X'
+                                              FROM RFX_BID RBID
+                                             INNER JOIN RFX
+                                                ON RFX.TEN_ID = RBID.TEN_ID
+                                               AND RFX.RFX_NO = RBID.RFX_NO
+                                               AND RFX.RFX_RND = RBID.RFX_RND
+                                               AND RFX.NPE_STS_CCD = 'EVAL_ED'    /*[P084] EVAL_ED 평가 종료*/
+                                               AND RFX.RFX_STS_CCD = 'ED'         /* [P013] ED 종료 */
+                                             WHERE RBID.TEN_ID = #{p.ten_id}
+                                               AND RBID.STS != 'D'
+                                               AND RBID.RFX_BID_EFCT_YN = 'Y'
+                                               AND RBID.EVAL_TTL_SC IS NOT NULL
+                                               AND RBID.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                                            )
+                                </when>
+                                <when test="p.calcfact_eval_task_typ_ccd != null and p.calcfact_eval_task_typ_ccd eq 'GE'.toString() and g.existModule('PRO')">
+                                  AND EXISTS (SELECT 'X'
+                                               FROM GE
+                                               LEFT OUTER JOIN GR_GE_MAPG GRMAP
+                                                 ON GE.TEN_ID = GRMAP.TEN_ID
+                                                AND GE.GE_UUID = GRMAP.GE_UUID
+                                               LEFT OUTER JOIN GR
+                                                 ON GRMAP.TEN_ID = GR.TEN_ID
+                                                AND GRMAP.GR_UUID = GR.GR_UUID
+                                                AND GR.STS != 'D'
+                                                AND GR.GR_STS_CCD = 'GI_CMPLD'
+                                                AND GR.GE_SUBJ_YN = 'Y'
+                                               LEFT OUTER JOIN PO_GE_MAPG POMAP
+                                                 ON GE.TEN_ID = POMAP.TEN_ID
+                                                AND GE.GE_UUID = POMAP.GE_UUID
+                                               LEFT OUTER JOIN PO
+                                                 ON POMAP.TEN_ID = PO.TEN_ID
+                                                AND POMAP.PO_UUID = PO.PO_UUID
+                                                AND PO.STS != 'D'
+                                                AND PO.EFCT_PO_YN = 'Y'
+                                              INNER JOIN GE_PRCS
+                                                 ON GE.TEN_ID = GE_PRCS.TEN_ID
+                                                AND GE.GE_UUID = GE_PRCS.GE_UUID
+                                                AND GE_PRCS.STS != 'D'
+                                              WHERE GE.TEN_ID = #{p.ten_id}
+                                                AND GE.STS != 'D'
+                                                AND GE.GE_ED_YN = 'Y'
+                                                AND GE.GE_STS_CCD = 'EVAL_ED'
+                                                AND GE.EVAL_SC IS NOT NULL
+                                                AND (#{p.ten_id} IN ((CASE WHEN GR.TEN_ID IS NULL OR GR.TEN_ID = '' THEN '-1' ELSE GR.TEN_ID END), (CASE WHEN PO.TEN_ID IS NULL OR PO.TEN_ID = '' THEN '-1' ELSE PO.TEN_ID END))
+                                                AND GE_PRCS.EVAL_SUBJ_RES_UUID = ESUBJ_RES.EVAL_SUBJ_RES_UUID
+                                             )
+                                </when>
+                              </choose>
+                       WHERE ESUBJ_RES.TEN_ID = #{p.ten_id}
+                         AND EFACT_RES.EVALFACT_UUID = #{p.eval_req_uuid}
+                 ) SC
+              <if test="p.val_coll_typ_ccd != null and p.val_coll_typ_ccd eq 'NEA'">
+                  WHERE SC.NEA_RK = 1
+              </if>
+                  GROUP BY SC.TEN_ID, SC.VD_CD, SC.VMG_OORG_UUID
+                ) DAT_COLL
+               ON CFACT_RES.TEN_ID = DAT_COLL.TEN_ID
+              AND ESUBJ_RES.VD_CD = DAT_COLL.VD_CD
+              AND /*  -- 수집 대상 데이터의 VMG_OORG_UUID 가 '-1' 이면 평가대상 데이터의 VMG_OORG_UUID와 비교하지 않고 바로 적옹.  -- */
+                  CASE WHEN DAT_COLL.VMG_OORG_UUID = '-1' THEN 'T'
+                       WHEN (CASE WHEN ESUBJ_RES.VMG_OORG_UUID IS NULL OR ESUBJ_RES.VMG_OORG_UUID = '' THEN '-1' ELSE ESUBJ_RES.VMG_OORG_UUID END) = DAT_COLL.VMG_OORG_UUID THEN 'T'
+                       ELSE 'F'
+                   END = 'T'
+            WHERE CFACT_RES.TEN_ID = #{p.ten_id}
+              AND ESUBJ_rES.EVAL_REQ_UUID = #{p.eval_req_uuid}
+              AND CFACT_RES.CALCFACT_UUID = #{p.calcfact_uuid}
+              AND DAT_COLL.CALCFACT_VAL IS NOT NULL
+        ) TARG
+      ON (    SRC.TEN_ID = TARG.TEN_ID
+          AND SRC.EVAL_SUBJ_CALCFACT_RES_UUID = TARG.EVAL_SUBJ_CALCFACT_RES_UUID
+        )
+    WHEN MATCHED THEN
+         UPDATE
+            SET CALCFACT_VAL = TARG.CALCFACT_VAL
+              , NULLV_YN     = TARG.NULLV_YN </update>
+</mapper>

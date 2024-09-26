@@ -1,0 +1,269 @@
+<sc-link rel="import" href="ep-sp-vendor-req-main-info-change.html"></sc-link>
+<!--
+    ******************************************************************************************
+    ** @Program-name    : 정보 변경 요청
+    ** @Description     : 협력사가 정보 변경을 요청합니다.
+    ** @Author          : yjpark
+    ** @Create Date     : 202.07.21
+    ******************************************************************************************
+-->
+<dom-module id="es-sp-vendor-req-main-info-change-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!--
+    ************************************************************************************************************
+    * Service Area
+    ************************************************************************************************************
+ -->
+        <!-- 협력사 정보 변경 요청 목록 조회 -->
+        <sc-ajax
+            id="findListVendorInfoChangeRequest"
+            url="findListVendorInfoChangeRequest.do"
+            body="{{searchParam}}"
+            last-response="{{changeRequestList}}">
+        </sc-ajax>
+        
+        <!-- 요청 생성 가능 여부 -->
+        <sc-ajax
+            id="checkChangeRequestYn"
+            url="checkChangeRequestYn.do"
+            body="{{searchParam}}">
+        </sc-ajax>
+        
+        <!-- 정보 변경 요청 저장 -->
+		<sc-ajax
+			id="copyVendorChangeRequestInfo"
+			url="copyVendorChangeRequestInfo.do"
+			on-response="completeCopyVendorChangeReqInfo">
+		</sc-ajax>
+		
+        <sc-request-group init>
+            <sc-code-group>
+                <sc-code code="E066" value="{{codes.chgReqStsCcd}}"></sc-code> <!-- 정보변경요청상태-->
+            </sc-code-group>
+        </sc-request-group>
+<!--
+    ************************************************************************************************************
+    * UI Area
+    ************************************************************************************************************
+-->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+        <!-- 조회 조건 -->
+		<cc-search-condition-panel on-search="onSearch" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="요청 상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.chgReqStsCcd}}" value="{{searchParam.chg_req_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청 일자"></sc-label>
+				<sc-period-date-field default-from-value="-1M" default-to-value="0d" from-value="{{searchParam.chg_req_from_dt}}" to-value="{{searchParam.chg_req_to_dt}}" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청 사유"></sc-label>
+				<sc-text-field value="{{searchParam.chg_req_rsn}}" on-enter="onSearch"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="true" on-item-click="onDataCellClicked" use-state="false" use-selection="true"
+                 data-provider="{{changeRequestList}}">
+            <cc-grid-toolbar title-text="변경 목록">
+                <sc-button text="복사" on-click="onCopyShowReq" hidden="[[!formula('isReq')]]" auth-s></sc-button>
+                <sc-button text="신규" on-click="onShowNewRequest" hidden="[[!formula('isReq')]]" auth-s></sc-button>
+            </cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-data-column		data-field="chg_req_revno"		header-text="차수"		width="70"></sc-data-column>
+                <sc-date-column		data-field="chg_req_dt"		header-text="변경 요청 일자"		width="100"></sc-date-column>
+                <sc-combobox-column	data-field="chg_req_sts_ccd"		header-text="변경 요청 상태"		width="120"
+                					items="{{codes.chgReqStsCcd}}"	display-field="label"	value-field="data"></sc-combobox-column>
+                <sc-data-column		data-field="chg_req_rsn"		header-text="변경 요청 사유"		width="300"	text-align="left"	style-name="link"></sc-data-column>
+                <sc-data-column		data-field="chg_req_ret_rsn"	header-text="변경 요청 반려 사유"		width="300"	text-align="left"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+                <sc-grid-field	data-field="vd_cd"></sc-grid-field>
+                <sc-grid-field	data-field="vd_info_chg_req_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+<!--
+    ************************************************************************************************************
+    * Script Area
+    ************************************************************************************************************
+-->
+    <script>
+        Polymer({
+            is: "es-sp-vendor-req-main-info-change-list",
+            
+            properties: {
+                /*공통코드 데이터 binding*/
+                codes: {
+                    type: Object,
+                    value: function(){
+                        return{
+                            reqSts: []
+                        };
+                    },
+                    reset: false
+                },
+                /* 조회조건 */
+                searchParam:{
+                    type: Object,
+                    value:function(){
+                        return {};
+                    }
+                },
+                /*조회 데이터 binding*/
+				changeRequestList: {
+                    type: Object,
+                    value:function(){
+                        return [];
+                    }
+                },
+				isProgressing: {
+					type: Boolean,
+					value : function(){
+						return false;
+					}
+				},
+				//completeAlert key 값(btn Name)
+				completeAlertKey : {
+					type : String,
+					value : function(){
+						return "";
+					}
+				}
+            },
+            formulas: {
+				isReq : function(){
+					var me = this;
+					return !me.get('isProgressing');
+				}
+			},
+            initialized : function(){
+				var me = this;
+				me.load();
+			},
+            load: function(param){
+                var me = this;
+                me.set("searchParam.vd_cd", SCSessionManager.currentUser.vd_cd);
+                
+                // 조회
+                me.onSearch();
+            },
+            /* 협력사 목록 조회 */
+            onSearch: function(){
+                var me = this;
+				
+				if(!me.validate("search")) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+                UT.request(me.$.findListVendorInfoChangeRequest, function(e, res){
+					
+					UT.request(me.$.checkChangeRequestYn, function(e, res) {
+						var result = res.response;
+						var status = result.resultStatus;
+						
+						if(UT.isNotEmpty(status) && status == "E") {
+							UT.alert("STD.VS1118");  // '자사정보 관리' 메뉴에서 협력사 정보를 변경할 수 있습니다.
+						} else {
+							var impossibleNum = result.resultData.impossible_num;
+							
+							if(impossibleNum != 0) {
+								me.set("isProgressing", true);	// 진행 중인 주요 정보 변경 요청이 존재.
+							} else {
+								me.set("isProgressing", false); // 진행 중인 주요 정보 변경 요청 없음.
+							}
+						}
+						
+						me.applyFormula();
+					});
+				});
+            },
+            
+            /* copy 후 callback */
+			completeCopyVendorChangeReqInfo: function (e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus == "S"){
+					UT.completeAlert(me.get("completeAlertKey"), me.onSearch.bind(me));  // 요청을 완료 하였습니다.
+					me.onSearch();
+				} else {
+					UT.alert("STD.E9999");
+					return;
+				}
+				
+				me.set("completeAlertKey", "");
+			},
+			
+            // 복사 변경내용 정보팝업
+            onCopyShowReq: function(e){
+            	var me = this;
+            	var provider = me.$.gridPanel.getDataProvider()
+            	var selectedList = provider.selectionCheckedItems();
+				
+				var btnName = e.target.text;
+            	
+            	if(selectedList.length == 0){
+            		UT.alert("STD.N1600");  // 선택된 항목이 없습니다.
+            	}else if(selectedList.length > 1){
+            		UT.alert("STD.N3700");  // 한 개의 항목만 선택해야 합니다.
+            	}else{
+            		me.set("searchParam.copyTarget", selectedList[0]);
+					
+					UT.confirm("STD.N2100", function() {  // 복사 하시겠습니까?
+						me.set("completeAlertKey", btnName);
+						// 복사 시 넘겨줄 파라미터 set
+						me.$.copyVendorChangeRequestInfo.body = {
+							basicInfo : me.searchParam.copyTarget
+						};
+						UT.request(me.$.copyVendorChangeRequestInfo);
+					});
+            	}
+            },
+            // 신규 변경내용 정보팝업
+			onShowNewRequest: function(){
+            	var me = this;
+            	var data = me.get("searchParam");
+            	
+				me.onShowReqPopup(data);  // 생성 가능
+            },
+            // 상세 변경내용 정보팝업
+            onDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+                
+                if(item.dataField === "chg_req_rsn"){
+                    me.onShowReqPopup(data);
+                }
+            },
+            
+            // 상세 변경내용 정보팝업
+            onShowReqPopup: function(data){
+            	var me = this;
+            	
+            	var modReqInfoPopup = UT.popup("ep-sp-vendor-req-main-info-change",me,'1000','900', {
+                    "complete-save" : function(popup, e){
+						me.onSearch();
+                    },
+                    "close-popup" : function(popup, e){
+						me.onSearch();
+                        me.reset();
+                        popup.close();
+                    }
+                }, {titleText:"주요 정보 변경 요청"});
+            	modReqInfoPopup.show();
+            	modReqInfoPopup.getWindowContent().load(data);
+            }
+        });
+    </script>
+
+</dom-module>

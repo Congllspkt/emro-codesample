@@ -1,0 +1,465 @@
+<dom-module id="es-evaltmpl-detail">
+
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+<!-- 
+    ************************************************************************************************************
+    * Service Area
+    ************************************************************************************************************
+ -->
+        <sc-request-group init>
+            <sc-code-group>
+			</sc-code-group>
+            <!-- 평가업무유형 -->
+            <sc-ajax 
+                id="findListCommonCodeAttributeCode"
+                url="findListCommonCodeAttributeCode.do"
+                body="{{codes.R704.param}}"
+                last-response="{{codes.R704.result}}">
+            </sc-ajax>
+        </sc-request-group>
+        
+        <!-- 평가템플릿 정보 조회 -->
+        <sc-ajax
+            id="findEvalTmplInfo"
+            url="findEvalTmplInfo.do"
+            body="{{evalTmplInfo}}"
+            on-response="completeFindEvalTmplInfo">
+        </sc-ajax>
+        
+        <!-- 평가템플릿 정보 삭제 -->
+        <sc-ajax
+            id="deleteListEvalTmpl"
+            url="deleteListEvalTmpl.do"
+            on-response="deleteResultHandler">
+        </sc-ajax>
+
+        <!-- 평가템플릿 확정상태(확정/취소) 저장 -->
+        <sc-ajax
+            id="saveCnfdYnEvalTmpl"
+            url="saveCnfdYnEvalTmpl.do"
+            on-response="saveCnfdYnEvalTmplResultHandler">
+        </sc-ajax>
+		
+		<!-- 평가템플릿 정보 저장 -->
+        <sc-ajax
+			id="saveEvalTmplInfo"
+            url="saveEvalTmplInfo.do"
+            on-response="saveResultHandler">
+        </sc-ajax>
+
+        <!-- 평가템플릿 복사 -->
+        <sc-ajax
+            id="saveCopyEvalTmpl"
+            url="saveCopyEvalTmpl.do"
+            on-response="onCopyResultHandler">
+        </sc-ajax>
+		
+        <!-- 평가템플릿 확정 가능 여부 체크 -->
+        <sc-ajax
+            id="checkEvalTmplConfirmYn"
+            url="checkEvalTmplConfirmYn.do">
+        </sc-ajax>
+        
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+<!--  
+    ************************************************************************************************************
+    * UI Area
+    ************************************************************************************************************
+-->
+		<cc-page-title-bar >
+			<sc-button text="복사"         on-click="onCopyTmpl"      auth-s hidden="[[formula('isNewData')]]"                           ></sc-button>
+            <sc-button text="삭제"         on-click="onDeleteTmpl"    auth-s hidden="[[!formula('isTempSaved')]]"                        ></sc-button>
+            <sc-button text="저장"     on-click="onSaveTmpl"      auth-s hidden="[[formula('isConfirmed')]]"        id="tempSave"     ></sc-button>
+            <sc-button text="확정"         on-click="onSaveTmpl"      auth-s hidden="[[formula('isConfirmed')]]"       id="confirmSave"  ></sc-button>
+            <sc-button text="확정 취소"     on-click="onCancelConfirm"  auth-s hidden="[[!formula('isConfirmed')]]"      id="cancelSave"   ></sc-button>
+            <sc-button text="닫기"         on-click="onClose"                                                             ></sc-button>
+		</cc-page-title-bar>
+		
+        <div class="vbox flex">
+			<cc-form-panel form-cls="label-row">
+				<cc-fieldset>
+					<sc-label text="평가 업무 유형"></sc-label>
+					<sc-text-field value="[[formula('evalTypNameText')]]" readonly="true"></sc-text-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<div class="vspace-10"></div>
+			
+			<!-- 평가항목, 평가 세부항목-->
+			<cc-evaltmpl-evalfact class="flex" id="evalTmplFact"></cc-evaltmpl-evalfact>
+        </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is : 'es-evaltmpl-detail',
+            properties: {
+				// 평가템플릿 저장모드
+				saveMode:{
+					type: String,
+					value: null
+				},
+                // 공통코드목록
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            R704 : {
+                                param : {
+									ccd : 'R704',
+									cstr_cnd_cd : 'MDCD'  //모듈구분속성 조회
+                                },
+                                result : []
+                            },                    // 평가업무구분 (공통코드 속성 조회)
+                        };
+                    }
+                },
+                // 평가템플릿 Object
+				evalTmplInfo : {
+                    type : Object,
+                    value : function() {
+                        return {};
+                    }
+                },
+				evalTmplFactorList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				evalTmplFactorGrpList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+                reloadable : {
+                    type: Boolean,
+                    value : false
+                }
+            },
+
+            formulas: {
+                isNewData : function(){
+                    var me = this;
+                    var evaltmplUuid = me.get("evalTmplInfo.evaltmpl_uuid");
+                    // 신규 데이터 여부 설정
+                    return !(!UT.isEmpty(evaltmplUuid) && evaltmplUuid != "");
+                },          // 신규 데이터 여부
+				isEditable: function(){
+					var me = this;
+                    var cnfdYn = me.get("evalTmplInfo.cnfd_yn");
+                    return !(!UT.isEmpty(cnfdYn) && cnfdYn == "Y");
+				},
+                isTempSaved : function(){
+                    var me = this;
+                    // 저장 여부 설정
+                    return (!me.formula("isNewData") && !me.formula("isConfirmed"));
+                },        // 저장여부
+                isConfirmed : function(){
+                    var me = this;
+                    var data = me.get("evalTmplInfo");
+                    // 확정 여부 설정
+                    return (data.cnfd_yn == 'Y');
+                },        // 확정여부
+                evalTypNameText : function(){
+                    var me = this;
+                    var list = me.get("codes.R704.result"),
+                        code = me.get("evalTmplInfo.eval_task_typ_ccd");
+                    return me.getCodeName(list, code, "data", "label");
+                },
+				positiveRegex: function(){
+					var me = this;
+					var efKindCd = me.get("evalTmplInfo.data.add_cnd_ccd")
+					return (efKindCd === "NA") ? "/[0-9.]/" : "";
+				},
+            },
+            //
+            initialized : function() {
+                var me = this;
+            },
+            
+            getCodeName: function(list, code, cdField, nmField){
+                var me = this;
+                var cdField = cdField || "data", nmField = nmField || "label";
+                var codeName = "", filtered = [];
+                
+                if(UT.isEmpty(list) || UT.isEmpty(code)){
+                    return codeName;
+                }
+                
+                filtered = list.filter(function(item) {
+                    if (item[cdField] === code) {
+                        return item;
+                    }
+                });
+                if(UT.isNotEmpty(filtered)){
+                    codeName = filtered[0][nmField];
+                }
+                return codeName;
+            },
+            
+            load: function(param) {
+                var me = this;
+                
+                me.set("evalTmplInfo", param);
+                me.applyFormula();
+                
+				if(!me.formula("isNewData")){
+					me.onSearch();
+				} else {
+					var param = {
+						evalTmplInfo : me.get("evalTmplInfo"),
+					};
+					me.$.evalTmplFact.load(param);
+				}
+            },
+
+			/**
+			 * 평가템플릿 정보 조회
+			 */
+			onSearch : function() {
+				var me = this;
+				UT.request(me.$.findEvalTmplInfo);
+			},
+			
+			/**
+			 * 조회 callback
+			 */
+			completeFindEvalTmplInfo : function(e, res){
+				var me = this;
+				var result = res.response || {};
+				
+				me.set("evalTmplInfo", result.resultData.evalTmplInfo);
+				me.set("evalTmplFactorGrpList", result.resultData.evalTmplFactorGrpList);
+				me.set("evalTmplFactorList", result.resultData.evalTmplFactorList);
+				
+				var param = {
+					evalTmplInfo : me.get("evalTmplInfo"),
+					evalTmplFactorGrpList : me.get("evalTmplFactorGrpList"),
+					evalTmplFactorList : me.get("evalTmplFactorList")
+				}
+				
+				me.$.evalTmplFact.load(param);
+				
+				me.applyFormula();
+			},
+			
+            //clear
+            onClear: function(){
+                var me = this;
+                me.set("evalTmplInfo",me.getPropertyInfo("evalTmplInfo").value());
+				me.reset();
+            },
+
+            /**
+             * 닫기 버튼 클릭
+             */
+            onClose : function() {
+                var me = this;
+                var reloadable = me.get("reloadable");
+                me.onClear();
+                me.fire("close", {reloadable: reloadable});
+            },
+            
+            /**
+             * 템플릿 복사
+             */
+			onCopyTmpl : function() {
+                var me = this;
+                var evalTmplInfo = UT.copy(me.get("evalTmplInfo"));
+                var message = me.translate("STD.N2100"); // 복사 하시겠습니까?
+				
+                UT.confirm(message, function(btn) {
+                    me.set("reloadable", true);
+                    evalTmplInfo.copy_nm = me.translate("STD.N2102");
+                    me.$.saveCopyEvalTmpl.set("body", evalTmplInfo);
+                    UT.request(me.$.saveCopyEvalTmpl);
+                }, null, true);
+            },
+            //복사 완료
+			onCopyResultHandler : function(el,res){
+            	var me = this;
+            	
+            	var result = res.response;
+               	if (UT.isObject(result) && result.resultStatus === "S") {
+               		if(UT.isNotEmpty(result.resultData)){
+                		me.set("evalTmplInfo.evaltmpl_uuid", result.resultData.evaltmpl_uuid);
+                		me.set("evalTmplInfo.evaltmpl_cd", result.resultData.evaltmpl_cd);
+                	}
+                    me.onSearch();
+               	}else{
+               		//저장실패
+               		UT.alert("STD.E9999");
+               	}
+            },
+            /**
+             * 템플릿 삭제
+             */
+            onDeleteTmpl : function() {
+                var me = this;
+                var deletes = [];
+				
+                /*if(me.formula("isNewData")){
+                    UT.alert("STD.SRM1308"); //	저장된 평가템플릿이 아닙니다.
+                    return;
+                }*/
+
+                /*if (me.get("evalTmplInfo.cnfd_yn") == "Y") {
+                    return UT.alert("STD.SRM1309"); // 확정된 평가템플릿은 삭제할 수 없습니다.
+                }*/
+                
+                UT.confirm("STD.N1300", function() {	//"삭제 하시겠습니까?"
+					deletes.push(me.get("evalTmplInfo"));
+     
+					me.$.deleteListEvalTmpl.set("body", {
+						deleteList : deletes,
+						eval_task_typ_ccd : me.evalTmplInfo.eval_task_typ_ccd
+					});
+					
+                	UT.request(me.$.deleteListEvalTmpl);
+                });
+            },
+			
+			getSaveEvaltmplInfo : function(saveMode) {
+				var me = this;
+				var evaltmplModule = me.$.evalTmplFact;
+				var evaltmplInfo = {};
+				
+				if(evaltmplModule){
+					evaltmplInfo = evaltmplModule.getSaveParameter(saveMode);
+				}
+				
+				return evaltmplInfo;
+			},
+            
+            /**
+             * 저장 - 저장/수정/확정 처리
+             */
+            onSaveTmpl : function(e){
+                var me = this;
+                var saveMode = e.target.id;
+				me.set("saveMode", saveMode);
+    
+				if(!me.validate()){
+					UT.alert("STD.E9000");
+					return;
+				}
+				
+				var gettedEvalTmplInfo = me.getSaveEvaltmplInfo(saveMode);
+				if(!gettedEvalTmplInfo || gettedEvalTmplInfo.isValid === false){
+					UT.alert(gettedEvalTmplInfo.resultMessage, null, true);
+					return;
+				}
+				
+				var message = me.translate("STD.N1200");    // 저장하시겠습니까?
+				if(saveMode == "confirmSave") {
+					message = me.translate("STD.N5000"); // 확정 하시겠습니까?
+				}
+				
+                //평가템플릿 저장 요청
+                UT.confirm(message, function() {
+                    me.$.saveEvalTmplInfo.body = gettedEvalTmplInfo.evalTmplInfo;
+                    UT.request(me.$.saveEvalTmplInfo);
+                },null,true);
+            },
+            
+            
+            /**
+             * 확정 취소
+             */
+            onCancelConfirm : function() {
+                var me = this;
+				
+				var evalTmplInfo = me.get("evalTmplInfo");
+				evalTmplInfo.cnfd_yn = "N";
+				
+                UT.confirm("STD.N1111", function() {  // 확정 취소하시겠습니까?
+                    me.$.saveCnfdYnEvalTmpl.body = evalTmplInfo;
+                    UT.request(me.$.saveCnfdYnEvalTmpl);
+                });
+            },
+            
+            /**
+             * 확정상태(확정/취소) 저장 후 callback
+             */
+            saveCnfdYnEvalTmplResultHandler : function(e, res) {
+                var me = this;
+                var result = res.response || {};
+				
+                if(result.resultStatus === "S"){
+                    var resultMessage = (result.resultData.cnfd_yn === "Y") ? "확정" : "확정 취소";
+                    UT.completeAlert(resultMessage, function() {
+                        var evalTmplInfo = result.resultData;
+                        me.set("reloadable", true);
+                        me.set("evalTmplInfo", evalTmplInfo);
+                        me.onSearch();
+                    });
+                } else if (result.resultStatus === "INVALID_STATUS_ERR") {
+                    return UT.alert("STD.SRM1305"); // 평가시트에 사용된 평가템플릿은 확정 취소할 수 없습니다.
+                }/* else if(result.resultStatus === "E"){
+					return UT.alert("STD.SRM1310"); // 평가템플릿이 적용된 평가시트가 확정상태가 아니므로 확정할 수 없습니다.
+				}*/ else {
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+            
+            /**
+             * 평가템플릿 삭제 후 처리
+             */
+            deleteResultHandler : function(e, res){
+                var me = this;
+                var result = res.response || {};
+                if (UT.isObject(result) && result.resultStatus === "S") {
+                    UT.completeAlert("삭제", function() {
+                        me.set("reloadable", true);
+                        me.onClose();
+                    });
+                } else if (result.resultStatus === "INVALID_STATUS_ERR") {
+					return UT.alert("STD.SRM1304"); // 평가시트에 사용된 평가템플릿은 삭제할 수 없습니다.
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+            
+            /**
+             * 평가템플릿 저장 후 처리
+             */
+            saveResultHandler : function(e, res) {
+                var me = this;
+                var result = res.response;
+				
+                if (UT.isObject(result) && result.resultStatus === "S") {
+					var saveMode = me.get("saveMode");
+					var evalTmplInfo = result.resultData.evalTmplInfo;
+                    me.set("reloadable", true);
+					if(!UT.isEmpty(saveMode) && saveMode == "confirmSave"){
+						// 확정
+						evalTmplInfo.cnfd_yn = "Y";
+						me.$.saveCnfdYnEvalTmpl.body = evalTmplInfo;
+						UT.request(me.$.saveCnfdYnEvalTmpl);
+						
+						me.set("saveMode", null);  // 초기화
+					}else{
+                        UT.completeAlert("저장", function() {
+							me.set("evalTmplInfo", evalTmplInfo);
+							me.onSearch();
+						});
+					}
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            }
+        });
+    </script>
+</dom-module>

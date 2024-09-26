@@ -1,0 +1,654 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-econtract">
+	<select id="getCntrAppFormListInSts" resultType="map">
+	/* sp-econtract.getCntrAppFormListInSts : 계약서에 첨부된 첨부서식 리스트 조회 */
+		 SELECT A.ECNTR_UUID,
+        	A.CNTR_APPX_NM,						/*첨부양식명*/
+        	A.CNTR_APPX_UUID,						/*첨부서류번호*/
+        	A.APPX_TMPL_UUID, 					/*첨부자구분*/
+        	A.CNTR_APPX_TYP_CCD,						/*문서구분*/
+        	A.CNTR_APPX_CRTR_TYP_CCD,							/*첨부자구분*/
+        	A.CNTR_APPX_STS_CCD,						/*첨부서식입력여부*/
+	        COALESCE(A.ATHG_UUID, '') AS ATHG_UUID,					/*파일그룹코드*/
+        	A.MAND_YN,							/*필수여부*/
+        	A.CNTR_APPX_ORD
+        FROM CNTR_APPX A
+        WHERE A.TEN_ID = #{g.tenant}
+        	AND A.ECNTR_UUID = #{p.ecntr_uuid}
+        ORDER BY A.CNTR_APPX_ORD
+	</select>
+	<select id="getSignCheck" resultType="String">
+	/* sp-econtract.getSignCheck : 서명대상여부 확인 */
+		SELECT SGN_YN
+		FROM CNTR_SGNDUSR
+		WHERE TEN_ID     = #{g.tenant}
+			AND ECNTR_UUID  = #{p.ecntr_uuid}
+			AND VD_CD    = #{g.vd_cd}
+	</select>
+	<resultMap id="resultMap-cntrView" type="map">
+		<result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+		<result column="EDIT_CONTENT" javaType="string" property="edit_content" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="cntrView" resultMap="resultMap-cntrView">
+	/* sp-econtract.cntrView : 계약서 내용 조회 */
+		SELECT
+           	RMR.CNTRDOC_TYP_CCD,
+           	RCT.CNTRDOC_CCMPLD_CONT AS CONTENT,
+           	RCT.CNTRDOC_CRNG_CONT AS EDIT_CONTENT,
+           	TOR.VD_CD
+        FROM
+        	CNTRDOC_CONT RCT
+        INNER JOIN  ECNTR RMR
+           ON ( RCT.TEN_ID = RMR.TEN_ID AND RCT.ECNTR_UUID = RMR.ECNTR_UUID)
+        INNER JOIN  CNTR_SGNDUSR TOR
+           ON ( TOR.TEN_ID = RMR.TEN_ID AND TOR.ECNTR_UUID = RMR.ECNTR_UUID)
+        WHERE
+        		RCT.TEN_ID       = #{g.tenant}
+        	AND RCT.ECNTR_UUID      = #{p.ecntr_uuid}
+        	AND TOR.VD_CD		 = #{p.vd_cd}
+            AND TOR.CNTRR_TYP_CCD    = 'N'
+	</select>
+    <select id="getNonStandardSignContent" resultType="map">
+    /* sp-econtract.getNonStandardSignContent : 비표준계약정보 조회 */
+        SELECT A.OORG_CD
+             , A.ECNTR_UUID
+             , A.SGNCMPLD_CNTRDOC_ATHG_UUID
+		     , A.TMPL_UNUD_CNTRDOC_ATHG_UUID
+		     , A.TMPL_UNUD_APPX_ATHG_UUID
+             , A.OTRS_ATHG_UUID
+             , A.CO_CD
+             , A.CNTRDOC_TYP_CCD
+             , B.VD_CD
+             , B.CTRY_CCD
+             , B.BIZREGNO
+             , B.BIZREGNO AS SSN
+             , D.LOGIC_ORG_CD
+             , D.LOGIC_ORG_TYP_CCD
+             , D.LOGIC_ORG_NM
+			 , D.LOGIC_ORG_NM_EN
+          FROM ECNTR A
+    INNER JOIN VD B
+            ON A.TEN_ID = B.TEN_ID
+           AND A.VD_CD = B.VD_CD
+    INNER JOIN LOGIC_ORG D
+			ON A.TEN_ID = D.TEN_ID
+		   AND A.CO_CD = D.LOGIC_ORG_CD
+		   AND D.LOGIC_ORG_TYP_CCD = 'COMPANY'
+         WHERE A.TEN_ID = #{g.tenant}
+           AND A.ECNTR_UUID = #{p.ecntr_uuid}
+    </select>
+    <!-- 서명할 데이터 조회 -->
+	<resultMap id="resultMap-getCntrContent" type="map">
+		<result column="SIGN_SOURCE" javaType="string" property="sign_source" typeHandler="stringClob"/>
+		<result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="getCntrContent" resultMap="resultMap-getCntrContent">
+	/* sp-econtract.getCntrContent : 서명할 데이터 조회 (계약서) */
+		SELECT
+		       A.ECNTR_UUID						/*계약아이디*/
+		     , CNTR.CNTR_NO						/*계약번호*/
+		     , CNTR.CNTR_REVNO						/*계약차수*/
+		     , CNTR.LOGIC_ORG_CD						/*계약차수*/
+		     , CNTR.OORG_CD
+			 , A.CNTRDOC_TYP_CCD						/*계약종류*/
+			 , B.CNTRDOC_CCMPLD_CONT		AS SIGN_SOURCE
+			 , B.CNTRDOC_CCMPLD_CONT		AS CONTENT
+			 , '0'				AS SIGN_TARGET
+			 , B.REGR_ID
+			 , A.SGNORD_TYP_CCD
+			 , A.SGNCMPLD_CNTRDOC_ATHG_UUID					/*파일그룹코드*/
+			 , (SELECT VD.CTRY_CCD FROM VD VD WHERE VD.TEN_ID = A.TEN_ID AND VD.VD_CD = A.VD_CD) AS CTRY_CCD
+			 , A.OTRS_ATHG_UUID
+			 , (SELECT VD.VD_NM FROM VD VD WHERE VD.TEN_ID = A.TEN_ID AND VD.VD_CD = A.VD_CD) AS VD_NM
+			 , LOGIC_ORG.LOGIC_ORG_NM
+			 , LOGIC_ORG.LOGIC_ORG_NM_EN
+		     , LOGIC_ORG.LOGIC_ORG_CD
+			 , LOGIC_ORG.LOGIC_ORG_TYP_CCD
+		  FROM ECNTR A							/*계약마스터*/
+	INNER JOIN CNTR CNTR
+	        ON CNTR.TEN_ID = A.TEN_ID
+	       AND CNTR.CNTR_UUID = A.CNTR_UUID/*계약원본정보*/
+	INNER JOIN CNTRDOC_CONT B					/*계약원본정보*/
+			ON ( A.TEN_ID = B.TEN_ID
+		   AND A.ECNTR_UUID = B.ECNTR_UUID )
+	INNER JOIN LOGIC_ORG LOGIC_ORG
+			ON ( CNTR.TEN_ID = LOGIC_ORG.TEN_ID
+		   AND CNTR.LOGIC_ORG_CD = LOGIC_ORG.LOGIC_ORG_CD
+		   AND LOGIC_ORG.LOGIC_ORG_TYP_CCD = 'COMPANY' )
+		 WHERE A.TEN_ID   = #{g.tenant}
+		   AND A.ECNTR_UUID  = #{p.ecntr_uuid}
+	</select>
+	<!-- 계약파일, 해쉬값 수정-->
+	<update id="updateCntrFileHash">
+	/* sp-econtract.updateCntrFileHash : 계약서 파일 해쉬값 수정 */
+		UPDATE ECNTR
+   			SET
+   				SGNCMPLD_CNTRDOC_ATHG_UUID 	= #{p.sgncmpld_cntrdoc_athg_uuid}	/*파일그룹코드*/
+   			WHERE
+   				TEN_ID	= #{g.tenant}
+   			AND ECNTR_UUID = #{p.ecntr_uuid}
+	</update>
+	<select id="getVdBizRegNo" resultType="String">
+	/* sp-econtract.getVdBizRegNo  */
+            SELECT BIZREGNO
+              FROM VD
+             WHERE TEN_ID = #{g.tenant}
+               AND VD_CD  = #{g.vd_cd}
+	</select>
+	<!-- 전자서명 Insert -->
+    <insert id="insertSignValue">
+	/* sp-econtract.insertSignValue */
+	  INSERT INTO JOINT_CERT_SGN_VAL				/*서명값정보*/
+	            ( TEN_ID
+		        , JOINT_CERT_SGN_VAL_UUID
+	            , ECNTR_UUID				/*계약아이디*/
+	            , BIZREGNO		/*서명자사업번호*/
+	            , SGNDUSR_TYP_CCD		/*서명값구분*/
+	            , SGN_VAL			/*서명값*/
+	            , USR_ID					/*등록일시*/
+	            , REGR_ID	/*서명자아이디*/
+	            , REG_DTTM
+	            , MODR_ID
+	            , MOD_DTTM)
+	     VALUES ( #{g.tenant}
+	            , #{p.joint_cert_sgn_val_uuid}
+	     		, #{p.ecntr_uuid}
+	            , #{p.signer_biz_reg_no}
+	            , #{p.sgndusr_typ_ccd}
+	            , #{p.sign_value}
+	            , CASE WHEN #{p.cntrr_typ_ccd} = 'Y'
+	                   THEN #{p.usr_id}
+	                   ELSE #{g.vd_cd}
+	              END
+	            , #{g.username}
+	            , #{g.now}
+	            , #{g.username}
+	            , #{g.now})
+	</insert>
+	<!-- 반려처리 -->
+	<delete id="deleteSignValue">
+	/* sp-econtract.deleteSignValue */
+		DELETE FROM JOINT_CERT_SGN_VAL
+		WHERE TEN_ID = #{g.tenant}
+			AND ECNTR_UUID = #{p.ecntr_uuid}
+	</delete>
+	<!-- 첨부서류 입력 -->
+    <resultMap id="resultMap-getAppData" type="map">
+	    <result column="CNTR_APPX_CRNG_CONT" javaType="string" property="cntr_appx_crng_cont" typeHandler="stringClob"/>
+	    <result column="CNTR_APPX_CCMPLD_CONT" javaType="string" property="cntr_appx_ccmpld_cont" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="getAppData" resultMap="resultMap-getAppData">
+    /* sp-econtract.getAppData */
+    	SELECT
+    		CNTR_APPX_CRNG_CONT 	        /*계약 부속서류 작성중*/
+    		,CNTR_APPX_CCMPLD_CONT			/*계약 부속서류 작성완료*/
+    	FROM CNTR_APPX_CONT
+    	WHERE TEN_ID = #{g.tenant}
+    		AND CNTR_APPX_UUID = #{p.cntr_appx_uuid}	/*첨부서류 번호*/
+    </select>
+    <!-- 계약항목 가져오기 Name Select Input (숫자) -->
+	<resultMap id="resultMap-getAttrNum" type="map">
+		<result column="DFLT_VAL" javaType="string" property="dflt_val" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="getAttrNum" resultMap="resultMap-getAttrNum">
+    /* sp-econtract.getAttrNum */
+        SELECT CNTR_CL_ID
+             , DFLT_VAL
+             , DAT_TYP_CCD
+             , CNTR_CL_AKA
+             , MOD_POSS_YN
+             , CNTR_CL_NM
+          FROM CNTR_CL
+         WHERE TEN_ID   = #{g.tenant}
+           AND USE_YN   ='Y'
+           AND DAT_TYP_CCD = 'NUMC'
+	</select>
+	<select id="checkAttFileYn" resultType="String">
+	/* sp-econtract.checkAttFileYn : 실제 첨부파일 존재 여부 확인 */
+		SELECT
+	      CASE
+	        WHEN COUNT(*) &gt; 0 THEN 'Y'
+	          ELSE 'N'
+	        END AS CHECK_YN
+	    FROM ATHF
+	    WHERE TEN_ID = #{g.tenant}
+	      AND ATHG_UUID = #{p.athg_uuid}
+	      AND STS	!= 'D'
+	</select>
+	<update id="updateAppFormInSts">
+    /* sp-econtract.updateAppFormInSts : 계약서의 첨부서식(FILE) 갱신 */
+    	UPDATE CNTR_APPX
+    	SET
+    	<if test="p.athg_uuid != null and p.athg_uuid !=''">
+    		CNTR_APPX_STS_CCD = 'Y',
+    	</if>
+    	<if test="p.athg_uuid == null || p.athg_uuid == ''">
+    		CNTR_APPX_STS_CCD = 'N',
+    	</if>
+    		ATHG_UUID = #{p.athg_uuid}
+    	WHERE
+    		TEN_ID = #{g.tenant}
+    	AND	CNTR_APPX_UUID = #{p.cntr_appx_uuid}
+    </update>
+	<update id="updateAppFormFile">
+    /* sp-econtract.updateAppFormFile : 첨부서식(FILE) 갱신 */
+        UPDATE APPX_TMPL
+           SET STS             = 'U',
+               MODR_ID          = #{g.username},
+               MOD_DTTM          = #{g.now},
+               ATHG_UUID          = #{p.athg_uuid}
+         WHERE TEN_ID          = #{g.tenant}
+           AND APPX_TMPL_UUID = #{p.appx_tmpl_uuid}
+    </update>
+    <resultMap id="resultMap-findListCntrItem" type="map">
+	    <result column="DFLT_VAL" javaType="string" property="dflt_val" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="findListCntrItem" resultMap="resultMap-findListCntrItem">
+    /* sp-econtract.findListCntrItem : 계약항목 목록 조회 */
+        SELECT CNTR_CL_ID              /*항목명*/
+             , CNTR_CL_NM           /*항목명*/
+             , DAT_TYP_CCD             /*데이터유형*/
+             , USE_YN               /*사용여부*/
+             , MOD_POSS_YN          /*수정가능여부*/
+             , CNTR_CL_AKA             /*맵핑컬럼이름*/
+             , DFLT_VAL              /*기본값*/
+             , MAND_YN          /*필수여부*/
+          FROM CNTR_CL
+         WHERE TEN_ID = #{g.tenant}
+        <if test="p.cntr_cl_nm != null and p.cntr_cl_nm != &quot;&quot;">
+            <bind name="pattern" value="'%' + p.cntr_cl_nm + '%'"/>
+		   AND UPPER(CNTR_CL_NM) LIKE UPPER(#{pattern})
+        </if>
+        <if test="p.dat_typ_ccd != null and p.dat_typ_ccd != &quot;&quot;">
+           AND DAT_TYP_CCD = #{p.dat_typ_ccd}
+        </if>
+        <if test="p.use_yn != null and p.use_yn != &quot;&quot;">
+           AND USE_YN = #{p.use_yn}
+        </if>
+        <if test="p.mod_poss_yn != null and p.mod_poss_yn != &quot;&quot;">
+           AND MOD_POSS_YN = #{p.mod_poss_yn}
+        </if>
+        <if test="p.mand_yn != null and p.mand_yn != &quot;&quot;">
+           AND MAND_YN = #{p.mand_yn}
+        </if>
+        <if test="p.cntr_cl_aka != null and p.cntr_cl_aka != &quot;&quot;">
+            <bind name="pattern2" value="'%' + p.cntr_cl_aka + '%'"/>
+           AND UPPER(CNTR_CL_AKA) LIKE UPPER(#{pattern2})
+        </if>
+         ORDER BY UPPER(CNTR_CL_NM) ASC
+    </select>
+    <!-- 서명검증용 갑 조회 -->
+	<select id="selectCheckedSignForOwner" resultType="map">
+	/* sp-econtract.selectCheckedSignForOwner */
+    	SELECT TVL.ECNTR_UUID
+                  , TVL.SGNDUSR_TYP_CCD
+                  , TVL.REG_DTTM         AS REG_DTTM
+                  , CNTR.CNTR_NM AS CNTR_NM
+                  ,(SELECT A.ATHF_ORIG_NM
+                      FROM ATHF A
+                     WHERE A.TEN_ID = #{g.tenant}
+                       AND A.ATHG_UUID = RMR.SGNCMPLD_CNTRDOC_ATHG_UUID) AS FILE_NM
+                  , RMR.SGNCMPLD_CNTRDOC_ATHG_UUID AS ATHG_UUID
+               FROM JOINT_CERT_SGN_VAL TVL
+         INNER JOIN ECNTR RMR
+                 ON TVL.TEN_ID = RMR.TEN_ID
+                AND TVL.ECNTR_UUID = RMR.ECNTR_UUID
+		 INNER JOIN CNTR CNTR
+                 ON CNTR.TEN_ID = RMR.TEN_ID
+                AND CNTR.CNTR_UUID = RMR.CNTR_UUID
+              WHERE TVL.TEN_ID = #{g.tenant}
+                AND TVL.ECNTR_UUID  = #{p.ecntr_uuid}
+                AND TVL.SGNDUSR_TYP_CCD = 'BUYER'
+	</select>
+	<!-- 서명검증용 을 조회 -->
+	<select id="selectCheckedSignForVendor" resultType="map">
+	/* sp-econtract.selectCheckedSignForVendor */
+		SELECT TVL.ECNTR_UUID
+                  , TVL.SGNDUSR_TYP_CCD
+                  , TVL.REG_DTTM         AS REG_DTTM
+                  , CNTR.CNTR_NM AS CNTR_NM
+                  ,(SELECT A.ATHF_ORIG_NM
+                      FROM ATHF A
+                     WHERE A.TEN_ID = #{g.tenant}
+                       AND A.ATHG_UUID = RMR.SGNCMPLD_CNTRDOC_ATHG_UUID) AS FILE_NM
+                  , RMR.SGNCMPLD_CNTRDOC_ATHG_UUID AS ATHG_UUID
+               FROM JOINT_CERT_SGN_VAL TVL
+         INNER JOIN ECNTR RMR
+                 ON TVL.TEN_ID = RMR.TEN_ID
+                AND TVL.ECNTR_UUID = RMR.ECNTR_UUID
+         INNER JOIN CNTR CNTR
+                 ON CNTR.TEN_ID = RMR.TEN_ID
+                AND CNTR.CNTR_UUID = RMR.CNTR_UUID
+         INNER JOIN CNTR_SGNDUSR TOR
+                 ON TOR.TEN_ID = RMR.TEN_ID
+                AND TOR.ECNTR_UUID = RMR.ECNTR_UUID
+                AND TOR.VD_CD = TVL.USR_ID
+              WHERE TVL.TEN_ID = #{g.tenant}
+                AND TVL.ECNTR_UUID  = #{p.ecntr_uuid}
+                AND TVL.SGNDUSR_TYP_CCD = 'VD'
+                AND TOR.CNTRR_TYP_CCD = 'N'
+                AND TOR.VD_CD = #{g.vd_cd}
+	</select>
+	<!-- 서명값 가져오기 -->
+	<resultMap id="resultMap-signValue" type="string">
+		<result column="SGN_VAL" javaType="string" property="sgn_val" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="getSignValue" resultMap="resultMap-signValue">
+	/* sp-econtract.getSignValue */
+		SELECT SGN_VAL
+		  FROM JOINT_CERT_SGN_VAL
+		 WHERE TEN_ID = #{g.tenant}
+		   AND ECNTR_UUID = #{p.ecntr_uuid}
+		   AND SGNDUSR_TYP_CCD = #{p.sgndusr_typ_ccd}
+		   <if test=" p.sgndusr_typ_ccd == &quot;VD&quot; ">
+		   AND USR_ID = #{g.vd_cd}
+		   </if>
+	</select>
+    <select id="findCertManagerInfo" resultType="map">
+        /* sp-econtract.findCertManagerInfo : 협력사 인증서 조회 */
+        SELECT VDCE.TEN_ID           /* 시스템 아이디 */
+             , VDCE.CERT_ID          /* 인증서 번호 */
+             , VDCE.CERT_DM_NM         /* DN값 */
+             , VDCE.CERT_SEQNO      /* 인증서 시리얼번호 */
+             , VDCE.CERT_ST_DATE  /* 인증서 사용 시작일 */
+             , VDCE.CERT_ED_DATE    /* 인증서 만료일 */
+             , VDCE.STS              /* 상태 */
+             , VDCE.REGR_ID           /* 등록자 아이디 */
+             , VDCE.REG_DTTM           /* 등록 일시 */
+             , VDCE.MODR_ID           /* 수정자 아이디 */
+             , VDCE.MOD_DTTM           /* 수정 일시 */
+             <bind name="getFormatNow" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+             , CASE WHEN #{getFormatNow} BETWEEN VDCE.CERT_ST_DATE AND VDCE.CERT_ED_DATE
+                    THEN 'Y'
+                    ELSE 'N'
+               END                   AS CERT_VALID_YN /* 인증서 유효 여부 */
+        FROM   VD_CERT_MGMT VDCE
+        WHERE  VDCE.TEN_ID  = #{g.tenant}
+        AND    VDCE.VD_CD   = #{g.vd_cd}
+        AND    VDCE.STS    != 'D'
+    </select>
+    <!-- 서명할 데이터 조회 -->
+	<resultMap id="resultMap-getSignCntrContent" type="map">
+		<result column="SIGN_SOURCE" javaType="string" property="sign_source" typeHandler="stringClob"/>
+		<result column="CONTENT" javaType="string" property="content" typeHandler="stringClob"/>
+    </resultMap>
+	<select id="getSignCntrContent" resultMap="resultMap-getSignCntrContent">
+	/* sp-econtract.getSignCntrContent : 서명할 데이터 조회 (계약서) */
+		SELECT
+		       A.ECNTR_UUID						/*계약아이디*/
+			 , CNTR.OORG_CD					    /*운영조직*/
+			 , CNTR.LOGIC_ORG_CD					    /*논리조직코드*/
+			 , CNTR.CNTR_NO					        /*계약번호*/
+			 , CNTR.CNTR_REVNO					    /*계약차수*/
+			 , A.CNTRDOC_TYP_CCD						/*계약종류*/
+			 , B.CNTRDOC_CRNG_CONT		AS SIGN_SOURCE
+			 , B.CNTRDOC_CRNG_CONT		AS CONTENT
+			 , '0'				        AS SIGN_TARGET
+			 , B.REGR_ID
+			 , A.SGNORD_TYP_CCD
+			 , A.SGNCMPLD_CNTRDOC_ATHG_UUID					/*파일그룹코드*/
+			 , (SELECT VD.CTRY_CCD FROM VD VD WHERE VD.TEN_ID = #{g.tenant} AND VD.VD_CD = A.VD_CD) AS CTRY_CCD
+			 , A.OTRS_ATHG_UUID
+			 , (SELECT VD.VD_NM FROM VD VD WHERE VD.TEN_ID = A.TEN_ID AND VD.VD_CD = A.VD_CD) AS VD_NM
+			 , LOGIC_ORG.LOGIC_ORG_NM
+			 , LOGIC_ORG.LOGIC_ORG_NM_EN
+		     , LOGIC_ORG.LOGIC_ORG_CD
+			 , LOGIC_ORG.LOGIC_ORG_TYP_CCD
+			 , CNTR.CNTR_UUID
+			 , CNTR.CNTR_TMPL_TYP_CCD
+		  FROM CNTR CNTR							/*계약마스터*/
+	INNER JOIN ECNTR A							/*계약마스터*/
+		    ON A.TEN_ID = CNTR.TEN_ID
+		   AND A.CNTR_UUID = CNTR.CNTR_UUID
+	INNER JOIN LOGIC_ORG LOGIC_ORG
+			ON ( LOGIC_ORG.TEN_ID = CNTR.TEN_ID
+		   AND LOGIC_ORG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+		   AND LOGIC_ORG.LOGIC_ORG_TYP_CCD = 'COMPANY' )
+	 LEFT OUTER JOIN CNTRDOC_CONT B					/*계약원본정보*/
+			ON ( A.TEN_ID = B.TEN_ID
+		   AND A.ECNTR_UUID = B.ECNTR_UUID )
+		 WHERE A.TEN_ID   = #{g.tenant}
+		   AND A.ECNTR_UUID  = #{p.ecntr_uuid}
+		   AND CNTR.CNTR_STS_CCD IN ('SND', 'VD_RCPT_CONFM', 'RET', 'MULTLT_SGN')
+	</select>
+    <update id="updateBeforeSignContent">
+    /* sp-econtract.updateBeforeSignContent: 서명 하기전 계약서에 변경할 사항을 적용(계약일자를 서명일자로 변경 시) */
+    UPDATE CNTRDOC_CONT
+      SET CNTRDOC_CRNG_CONT = #{p.sign_source}
+    WHERE TEN_ID = #{g.tenant}
+      AND ECNTR_UUID = #{p.ecntr_uuid}
+    </update>
+    <select id="getVendorsSignState" resultType="string">
+    /* sp-econtract.getVendorsSignState 협력사들 서명상태 확인  */
+    SELECT CASE WHEN A.VENDOR_CNT - A.SIGN_VENDOR_CNT = 0
+                THEN 'A'	/* 협력사 모두 서명완료 */
+                WHEN A.VENDOR_CNT - A.SIGN_VENDOR_CNT = A.VENDOR_CNT
+                THEN 'NA'	/* 협력사 모두 서명안함 */
+                WHEN A.VENDOR_CNT - A.SIGN_VENDOR_CNT = (A.VENDOR_CNT - 1)
+                THEN 'FS'	/* 첫번째 협력사 서명 완료 */
+                ELSE 'SI'	/* 2개이상 협력사 서명 완료 */
+	       END VENDORS_SIGN_STATE
+	  FROM (SELECT
+	  				(SELECT COUNT(*)
+	  				   FROM CNTR_SGNDUSR CTOR
+	  				  WHERE CTOR.TEN_ID = #{g.tenant}
+	  				    AND CTOR.ECNTR_UUID = #{p.ecntr_uuid}
+	  				    AND CTOR.CNTRR_TYP_CCD = 'N') AS VENDOR_CNT
+    			   ,(SELECT COUNT(*)
+					   FROM CNTR_SGNDUSR CTOR
+					  WHERE CTOR.TEN_ID = #{g.tenant}
+					    AND CTOR.ECNTR_UUID = #{p.ecntr_uuid}
+					    AND CTOR.CNTRR_TYP_CCD = 'N'
+					    AND CTOR.SGN_YN = 'Y') AS SIGN_VENDOR_CNT
+			 FROM DUM_TBL ) A
+    </select>
+    <select id="findSignLock" resultType="string">
+    /* sp-econtract.findSignLock 락 확인 */
+    SELECT
+    	   SGN_LCKD_STS
+      FROM CNTR_SGNDUSR TOR
+     WHERE TOR.TEN_ID = #{g.tenant}
+       AND TOR.ECNTR_UUID = #{p.ecntr_uuid}
+ 	   AND TOR.VD_CD = #{g.vd_cd}
+    </select>
+    <select id="findSignLockCnt" resultType="int">
+    /* sp-econtract.findSignLockCnt 모두 락을 안걸었는지 확인 용도 */
+    SELECT
+    	   COUNT(*)
+      FROM CNTR_SGNDUSR TOR
+     WHERE TOR.TEN_ID = #{g.tenant}
+       AND TOR.ECNTR_UUID = #{p.ecntr_uuid}
+ 	   AND TOR.CNTRR_TYP_CCD = 'N'
+ 	   AND TOR.SGN_LCKD_STS = 'Y'
+    </select>
+    <update id="updateSignLock">
+    /* sp-econtract.updateSignLock 전자서명 락을 건다. */
+    UPDATE CNTR_SGNDUSR
+      SET SGN_LCKD_STS = 'Y'
+     WHERE TEN_ID = #{g.tenant}
+       AND ECNTR_UUID = #{p.ecntr_uuid}
+ 	   AND VD_CD = #{g.vd_cd}
+    </update>
+    <select id="findSignPdfFileCnt" resultType="int">
+    /* sp-econtract.findSignPdfFileCnt pdf파일 생성여부 확인 서명완료되면 PDF파일은 1개만 생성됨*/
+    SELECT
+    	   COUNT(*) AS FILE_CNT
+      FROM ECNTR RMR
+     INNER JOIN ATHF TTH
+        ON TTH.TEN_ID = RMR.TEN_ID
+       AND TTH.ATHG_UUID = RMR.SGNCMPLD_CNTRDOC_ATHG_UUID
+     WHERE RMR.TEN_ID = #{g.tenant}
+       AND RMR.ECNTR_UUID = #{p.ecntr_uuid}
+       AND TTH.STS != 'D'
+    </select>
+    <resultMap id="resultMap-getAppContent" type="map">
+	    <result column="CNTR_APPX_CRNG_CONT" javaType="string" property="cntr_appx_crng_cont" typeHandler="stringClob"/>
+	    <result column="APP_CONTENT" javaType="string" property="app_content" typeHandler="stringClob"/>
+    </resultMap>
+    <select id="getAppContent" resultMap="resultMap-getAppContent">
+    /* sp-econtract.getAppContent : */
+    SELECT A.CNTR_APPX_UUID                   AS SIGN_TARGET            /*첨부서류번호*/
+         , A.ATHG_UUID                                            /*첨부자구분*/
+         , A.CNTR_APPX_TYP_CCD                    AS DOC_TYPE
+         , C.CNTR_APPX_CRNG_CONT                    /* TEXT SIGN_SOURCE*/
+         , C.CNTR_APPX_CRNG_CONT                    AS APP_CONTENT            /*계약서원본*/
+         , A.CNTR_APPX_ORD
+      FROM ECNTR B
+     INNER JOIN CNTR_APPX A
+        ON (A.TEN_ID = B.TEN_ID
+        AND A.ECNTR_UUID = B.ECNTR_UUID)
+     INNER JOIN CNTR_APPX_CONT C
+        ON (C.TEN_ID = A.TEN_ID
+        AND C.CNTR_APPX_UUID = A.CNTR_APPX_UUID)
+     WHERE B.TEN_ID    = #{g.tenant}
+       AND B.ECNTR_UUID   = #{p.ecntr_uuid}
+       AND A.CNTR_APPX_STS_CCD = 'Y'
+     ORDER BY A.CNTR_APPX_ORD
+    </select>
+	<select id="getEcntrUUID" resultType="string">
+		/* sp-econtract.getEcntrUUID */
+		SELECT ECNTR.ECNTR_UUID
+		  FROM CNTR CNTR
+		 INNER JOIN ECNTR ECNTR
+		    ON ECNTR.TEN_ID = CNTR.TEN_ID
+		   AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+		 WHERE CNTR.TEN_ID     = #{g.tenant}
+		   AND CNTR.CNTR_UUID  = #{p}
+	</select>
+	<select id="getCntrUUID" resultType="string">
+		/* sp-econtract.getCntrUUID */
+		SELECT ECNTR.CNTR_UUID
+		  FROM ECNTR ECNTR
+		 WHERE ECNTR.TEN_ID     = #{g.tenant}
+		   AND ECNTR.ECNTR_UUID  = #{p}
+	</select>
+	<select id="findContract" resultType="map">
+	/* sp-econtract.findContract : 계약 정보 조회 */
+	SELECT CT.CNTR_UUID
+	     , CT.CNTR_REQ_RCPT_UUID
+	     , CT.CNTR_CND_UUID
+	     , CT.CNTR_NO
+	     , CT.CNTR_REVNO
+	     , CT.ORG_CD
+	     , CT.OORG_CD
+	     , CT.CNTR_NM
+	     , CT.VD_CD
+	     , VD.ERP_VD_CD
+	     , CASE WHEN 'ko_KR' = #{g.locale} THEN VD.VD_NM ELSE VD.VD_NM_EN END AS VD_NM
+	     , CT.CNTR_ST_DT
+	     , CT.CNTR_EXP_DT
+	     , CT.CNTR_DT
+	     , CT.CNTR_STS_CCD
+	     , CT.CNTRDOC_TYP_CCD
+	     , CT.CNTR_SGNMETH_CCD
+	     , CT.CNTR_TMPL_TYP_CCD
+	     , CT.CNTR_PIC_ID
+	     , CT.CNTR_AMT
+	     , CT.SUP_AMT
+	     , CT.CUR_CCD
+	     , CT.CNTRDOC_LGL_RV_UUID
+	     , CT.CNTR_TRMN_DT
+	     , CT.CNTR_TRMN_RSN
+	     , CT.CNTRPD_AUTO_EXT_USE_YN
+	     , CT.TMPL_UNUD_CNTRDOC_ATHG_UUID AS ORGN_TMPL_UNUD_ATHG_UUID
+	     , CT.CNTRDOC_TMPL_UUID
+	     , CT.SGNORD_TYP_CCD
+	     , CT.PURC_GRP_CD
+	     , CT.CNTR_RET_RSN
+	     , CT.LOGIC_ORG_CD
+	     , CT.CNTR_TYP_CCD
+	     , EC.ECNTR_UUID
+	     , EC.SGNCMPLD_CNTRDOC_ATHG_UUID
+	     , EC.TMPL_UNUD_CNTRDOC_ATHG_UUID
+	     , EC.TMPL_UNUD_APPX_ATHG_UUID
+	     , EC.OTRS_ATHG_UUID
+	     , EC.CNTR_HISTREC_ATHG_UUID
+	     , EC.BAT_CNTR_GRP_UUID
+	     , CTR.REP_VD_YN
+	  FROM CNTR CT
+	 INNER JOIN CNTRR CTR
+	    ON CTR.TEN_ID = CT.TEN_ID
+	   AND CTR.CNTR_UUID = CT.CNTR_UUID
+	   AND CTR.VD_CD = #{g.vd_cd}
+	 INNER JOIN VD VD
+	    ON VD.TEN_ID = CTR.TEN_ID
+	   AND VD.VD_CD =  CTR.VD_CD
+	  LEFT OUTER JOIN ECNTR EC
+	    ON EC.TEN_ID = CT.TEN_ID
+	   AND EC.CNTR_UUID = CT.CNTR_UUID
+	  LEFT OUTER JOIN CNTRDOC_TMPL TL
+	    ON TL.TEN_ID = CT.TEN_ID
+	   AND TL.CNTRDOC_TMPL_UUID = CT.CNTRDOC_TMPL_UUID
+	 WHERE CT.TEN_ID = #{g.tenant}
+	   AND CT.CNTR_UUID = #{p.cntr_uuid}
+	</select>
+	<select id="checkSignableContractor" resultType="java.lang.Boolean">
+	/* sp-econtract.checkSignableContractor */
+	SELECT CASE WHEN T.REP_VD_YN = 'Y' AND T.SGN_YN = 'N' THEN 1
+	            WHEN T.REP_VD_YN = 'N' AND T.REP_SGN_YN = 'Y' AND T.SGN_YN = 'N' THEN 1
+	            ELSE 0
+	        END
+	  FROM (
+		SELECT CASE WHEN REP.SGN_YN IS NULL OR REP.SGN_YN = ''
+			        THEN 'N'
+			        ELSE REP.SGN_YN
+			   END REP_SGN_YN
+			 , CASE WHEN TOR.SGN_YN IS NULL OR TOR.SGN_YN = ''
+			        THEN 'N'
+			        ELSE TOR.SGN_YN
+			   END SGN_YN
+		     , CASE WHEN REP.VD_CD = TOR.VD_CD THEN 'Y' ELSE 'N' END REP_VD_YN
+		  FROM ECNTR ECT
+		 INNER JOIN CNTR_SGNDUSR REP
+		    ON REP.TEN_ID = ECT.TEN_ID
+		   AND REP.ECNTR_UUID = ECT.ECNTR_UUID
+		   AND REP.VD_CD = ECT.VD_CD
+		 INNER JOIN CNTR_SGNDUSR TOR
+		    ON TOR.TEN_ID = ECT.TEN_ID
+		   AND TOR.ECNTR_UUID = ECT.ECNTR_UUID
+		   AND TOR.VD_CD = #{g.vd_cd}
+		 WHERE ECT.TEN_ID = #{g.tenant}
+		   AND ECT.ECNTR_UUID  = #{p.ecntr_uuid}
+	       ) T
+	</select>
+	<update id="updateVendorSignYN">
+	/* sp-econtract.updateVendorSignYN; : 서명 여부 변경 */
+	UPDATE CNTR_SGNDUSR
+	   SET SGN_YN  = #{p.sgn_yn}
+	 <choose>
+	   <when test="p.sgn_yn != null and p.sgn_yn == &quot;Y&quot;">
+	     , SGN_DTTM = #{g.now}
+	     , SGN_LCKD_STS = 'N'
+	   </when>
+	   <otherwise>
+	     , SGN_DTTM = NULL
+	   </otherwise>
+	</choose>
+	 WHERE TEN_ID = #{g.tenant}
+	   AND ECNTR_UUID = #{p.ecntr_uuid}
+	   AND CNTRR_TYP_CCD = 'N'
+	<choose>
+	   <when test="p.cntr_sgndusr_uuid != null and p.cntr_sgndusr_uuid !=''">
+	   AND CNTR_SGNDUSR_UUID = #{p.cntr_sgndusr_uuid}
+	   </when>
+	   <when test="p.vd_cd != null and p.vd_cd !=''">
+	   AND VD_CD = #{p.vd_cd}
+	   </when>
+	   <otherwise>
+	   AND VD_CD = #{g.vd_cd}
+	   </otherwise>
+	</choose>
+	</update>
+	<update id="updateAllSignN">
+	/* sp-econtract.updateAllSignN; : 서명 여부 변경 */
+	UPDATE CNTR_SGNDUSR
+	   SET SGN_YN = 'N'
+	     , SGN_LCKD_STS = 'N'
+	     , SGN_DTTM = NULL
+	 WHERE TEN_ID = #{g.tenant}
+	   AND ECNTR_UUID = #{p.ecntr_uuid}
+	</update>
+</mapper>

@@ -1,0 +1,301 @@
+<dom-module id="ep-apply">
+<!-- 
+/**
+ *
+ *	@description : 일괄 적용 팝업 화면
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName : 
+ * @Since 2016. 5. 20.
+ */
+-->
+    <style>
+       :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+		<sc-code-group>
+			<!-- 공통코드 조회( C007 : 수량단위 ) -->
+		    <sc-code code="C007" value="{{codes.comboUnitCode}}" ></sc-code>
+		</sc-code-group>
+        
+        <div class="vbox flex">
+        
+        	<cc-page-title-bar>
+	            <sc-button text="일괄 적용" on-click="onAllApply"></sc-button>
+        	</cc-page-title-bar>
+
+			<cc-form-panel column="1">
+				<cc-fieldset id="trUom">
+	                <sc-label text="UOM"></sc-label>
+						<div  class="field-box">
+	                	<sc-checkbox-field value="{{editable.unitCd}}" on-checkchange="onCheckchange" data-args="uom_ccd"></sc-checkbox-field>&nbsp;
+	                    <sc-combobox-field 
+	                        display-field="data" value-field="data"
+	                        items="{{codes.comboUnitCode}}" value="{{applyData.uom_ccd}}" placeholder="선택" readonly="[[!editable.unitCd]]" on-change="onChangeUnitCd">
+	                    </sc-combobox-field>
+	                    </div>
+	            </cc-fieldset>
+	            <cc-fieldset id="trQty">
+	                <sc-label text="수량"></sc-label>
+						<div  class="field-box">
+	               		 	<sc-checkbox-field value="{{editable.qty}}" on-checkchange="onCheckchange" data-args="qty"></sc-checkbox-field>&nbsp;
+	                		<sc-number-field id="qty" class="w-150 align-right" min-value="0" value="{{applyData.qty}}" readOnly="[[!editable.qty]]" max-length="9" input-cover="true" format-type="qty"></sc-number-field>
+	                	</div>
+	            </cc-fieldset>
+	            <cc-fieldset id="trPrice">
+	                <sc-label text="단가"></sc-label>
+						<div  class="field-box">
+			                <sc-checkbox-field value="{{editable.price}}" on-checkchange="onCheckchange" data-args="price"></sc-checkbox-field>&nbsp;
+			                	<sc-number-field id="price" class="w-150 align-right" min-value="0" value="{{applyData.price}}" input-cover="true" max-length="13" format-type="price" readOnly="[[!editable.price]]"></sc-number-field>
+	                	</div>
+	            </cc-fieldset>
+	            <cc-fieldset id="trPurcTypMT" style="display:none;">
+	                <sc-label text="요청 납품 일자"></sc-label>
+						<div  class="field-box">
+		                <sc-checkbox-field value="{{editable.rdDate}}" on-checkchange="onCheckchange" data-args="req_dlvy_dt"></sc-checkbox-field>&nbsp;
+		                	<sc-date-field class="w-150" value="{{applyData.req_dlvy_dt}}" readonly="[[!editable.rdDate]]"></sc-date-field>
+	                	</div>
+	            </cc-fieldset>
+	            <cc-fieldset id="trPurcTypCT">
+	                <sc-label text="공사 일자"></sc-label>
+						<div  class="field-box">
+		                <sc-checkbox-field value="{{editable.rdDate}}" on-checkchange="onCheckchange" data-args="const_exp_dt"></sc-checkbox-field>&nbsp;
+		                	<sc-period-date-field from-value="{{applyData.const_st_dt}}" to-value="{{applyData.const_exp_dt}}" readonly="[[!editable.rdDate]]" string-date="true"></sc-period-date-field>
+	                	</div>
+	            </cc-fieldset>
+	            <cc-fieldset id="trPurcTypMTLocat" style="display:none;">
+	                <sc-label text="{{uiBind.rd_local_title}}"></sc-label>
+						<div  class="field-box">
+			                <sc-checkbox-field value="{{editable.rdLocat}}" on-checkchange="onCheckchange" data-args="dlvy_plc"></sc-checkbox-field>&nbsp;
+			                <sc-text-field value="{{applyData.dlvy_plc}}" readonly="[[!editable.rdLocat]]" max-length="200"></sc-text-field>
+		                </div>
+	            </cc-fieldset>
+	            <cc-fieldset>
+	                <sc-label text="구매 그룹"></sc-label>
+						<div  class="field-box">
+			                <sc-checkbox-field value="{{editable.purcGrpCd}}" on-checkchange="onCheckchange" data-args="purc_grp"></sc-checkbox-field>&nbsp;
+			                <cc-purc-grp id="purcGrpCdCombo" value="{{applyData.purc_grp_nm}}" result-value="{{applyData.purc_grp_cd}}" purc-grp-typ="PURC" disabled="[[!editable.purcGrpCd]]" hide-trigger="[[!editable.purcGrpCd]]"></cc-purc-grp>
+	                    </div>
+	            </cc-fieldset>
+				<cc-fieldset id="trGrChr">
+	                <sc-label text="입고 담당자"></sc-label>
+					<div  class="field-box">
+						<sc-checkbox-field value="{{editable.grChr}}" on-checkchange="onCheckchange" data-args="gr_chr"></sc-checkbox-field>&nbsp;
+						<cc-user-search id="grChr" value="{{applyData.gr_pic_nm}}" result-field="usr_id" result-value="{{applyData.gr_pic_id}}"  disabled="[[!editable.grChr]]" hide-trigger="[[!editable.grChr]]"></cc-user-search>
+					</div>
+				</cc-fieldset>
+	        </cc-form-panel>
+	    </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: 'ep-apply',
+            properties: {
+            	uiBind : {
+            		type : Object,
+            		value : function(){
+            			return {
+            				isPurcTypMT    : true,
+            				isPurcTypCT    : false,
+            				hiddenGrChr    : false,
+            				hiddenPrice  : false,
+            				hiddenQty  : false,
+							hiddenUom  : false,
+            				rd_local_title : this.translate("수행 장소"),
+            				isPrPurpUC: false
+           				};
+            		}
+            	},
+            	editable : {
+            		type : Object,
+            		value : function(){
+            			return {
+            				unitCd    : true,
+                			qty   : true,
+                			price   : true,
+                			purcGrpCd : true,
+                			rdDate    : true,
+                			rdLocat   : true,
+                			grChr     : true
+            			};
+            		}
+            	},
+            	applyData  : {
+            		type : Object,
+            		value : function(){
+            			return {
+            				uom_ccd     : "",
+            				item_qty    : "",
+            				pr_uprc    : "",
+            				purc_grp_cd : "",
+            				purc_grp_nm : "",
+            				req_dlvy_dt     : "",
+            				const_st_dt      : "",
+            				const_exp_dt      : "",
+            				dlvy_plc    : "",
+            				gr_pic_id   : "",
+            				gr_pic_nm   : ""
+            			};
+            		}
+            	},
+                codes : {
+                	type : Object,
+                	value : function() {
+               			return {
+               				comboUnitCode : []
+               			}
+                	},
+                	reset : false
+                },
+                param: {
+                	type: Object,
+                	value: function(){
+                		return {};
+                	}
+                }
+            },
+            
+            //화면을 그리는 함수
+            uiBindView : function(){
+            	var me = this;
+            	
+            	var hiddenFn = function(ele,uiCheck){
+            		if(UT.isObject(ele)) {
+						ele.style.display = (uiCheck) ? "none" : "";
+					}
+            	};
+            	
+            	hiddenFn(me.$.trPurcTypMT , !me.get('uiBind.isPurcTypMT'));
+            	hiddenFn(me.$.trPurcTypMTLocat, me.get("uiBind.isPrPurpUC"));
+            	hiddenFn(me.$.trPurcTypCT , !me.get('uiBind.isPurcTypCT'));
+            	hiddenFn(me.$.trGrChr     , me.get('uiBind.hiddenGrChr'));
+            	hiddenFn(me.$.trPrice   , me.get('uiBind.hiddenPrice'));
+				hiddenFn(me.$.trUom   , me.get('uiBind.hiddenUom'));
+            	hiddenFn(me.$.trQty   , me.get('uiBind.hiddenQty'));
+            },
+
+            initialized : function() {
+                var me = this;
+                me.$.qty.regex = CCPrecManager.regex("qty");
+                me.$.price.regex = CCPrecManager.regex("price");
+            },
+         	// 체크해제 시 값 초기화
+            onCheckchange: function(e) {
+            	var me = this,
+            		checked = e.detail,
+            		fieldName = e.target.dataset.args;
+            	
+            	if(!checked) {
+            		if(fieldName === "purc_grp") {
+            			me.set("applyData."+fieldName+"_cd", null);
+            			me.set("applyData."+fieldName+"_nm", null);
+            		} else if(fieldName === "gr_chr") {
+            			me.set("applyData."+fieldName+"_id", null);
+            			me.set("applyData."+fieldName+"_nm", null);
+            		} else {
+            			me.set("applyData."+fieldName, null);
+            		}
+            	}
+            },
+            // UOM 변경 시
+            onChangeUnitCd: function() {
+				var me = this,
+						unitCd = me.get("applyData.uom_ccd");
+
+				// 수량 regex 변경
+				me.$.qty.regex = CCPrecManager.regex("qty", unitCd);
+
+				var qty = me.get("applyData.qty")
+				if(UT.isNotEmpty(qty)) {
+					// 변경된 단위에 따른 수량 소수점 처리
+					me.set("applyData.qty", CCPrecManager.format("qty", qty, unitCd));
+				}
+            },
+            //화면 로드 함수
+            load : function(condition){
+            	var me = this;
+            	if(condition){
+            		condition.purc_typ_ccd = condition.purc_typ_ccd || "QTY";
+            		condition.pr_purp_ccd = condition.pr_purp_ccd || "SPTPURC";
+            		if(condition.pr_purp_ccd==="UPRCCNTR_SGNG"){
+           				me.set("uiBind.isPurcTypMT", false);
+                   		me.set("uiBind.isPurcTypCT", false);
+                   		me.set("uiBind.hiddenGrChr", true);
+                   		me.set("uiBind.isPrPurpUC",true);
+            		}else{
+            			me.set("uiBind.isPurcTypMT", (condition.purc_typ_ccd==="QTY"));
+                		me.set("uiBind.isPurcTypCT", (condition.purc_typ_ccd==="CONSTSVC"));
+                		me.set("uiBind.hiddenGrChr", false);
+            		}
+            		if(condition.hiddenField){
+            			if(UT.isNotEmpty(condition.hiddenField["gr_chr"])) {
+            				me.set("uiBind.hiddenGrChr", condition.hiddenField["gr_chr"]);
+            			}
+            			if(UT.isNotEmpty(condition.hiddenField["price"])) {
+            				me.set("uiBind.hiddenPrice", condition.hiddenField["price"]);
+            			}
+            			if(UT.isNotEmpty(condition.hiddenField["rfx_qty"])) {
+            				me.set("uiBind.hiddenQty", condition.hiddenField["rfx_qty"]);
+            			}
+						if(UT.isNotEmpty(condition.hiddenField["uom_ccd"])) {
+							me.set("uiBind.hiddenUom", condition.hiddenField["uom_ccd"]);
+						}
+            		}
+            		if(condition.purc_typ_ccd==="CONSTSVC"){
+            			me.set("uiBind.rd_local_title", this.translate("수행 장소"));
+            		}
+                	//uiViewBind
+                	me.uiBindView();
+            	}
+            },
+            // 선택 값 일괄 적용
+            onAllApply: function() {
+                var me = this;
+                var applyData = {};
+                if(me.editable.unitCd && !me.uiBind.hiddenUom){
+                	applyData.uom_ccd = me.applyData.uom_ccd;
+                }
+                if(me.editable.qty && !me.uiBind.hiddenQty){
+                	applyData.qty = me.applyData.qty;
+                }
+                if(me.editable.price && !me.uiBind.hiddenPrice){
+                	applyData.price = me.applyData.price;
+                }
+                if(me.editable.purcGrpCd){
+                	applyData.purc_grp_cd = me.applyData.purc_grp_cd;
+                	applyData.purc_grp_nm = me.applyData.purc_grp_nm;
+                }
+                if(me.editable.rdDate){
+                	if(me.uiBind.isPurcTypMT){
+                		applyData.req_dlvy_dt = me.applyData.req_dlvy_dt;
+                	}else{
+                		applyData.const_st_dt = me.applyData.const_st_dt;
+                		applyData.const_exp_dt = me.applyData.const_exp_dt;
+                	}
+                }
+                if(me.editable.rdLocat){
+                	applyData.dlvy_plc = me.applyData.dlvy_plc;
+                }
+                if(me.editable.grChr && !me.uiBind.hiddenGrChr){
+                	applyData.gr_pic_nm = me.applyData.gr_pic_nm;
+                	applyData.gr_pic_id = me.applyData.gr_pic_id;
+                }
+    			
+                me.clearData();
+                me.fire('all-apply-items', applyData);
+            },
+            clearData : function() {
+            	var me = this;
+            	
+            	//properties 초기화
+				me.reset();
+            }
+        });
+    </script>
+
+</dom-module>

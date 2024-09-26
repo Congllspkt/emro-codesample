@@ -1,0 +1,675 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="ep-pr-mod-history">
+
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<sc-ajax
+			id="findPr"
+	        url="findPr.do"
+	        body="{{searchParam}}"
+	        on-response="completeFindPr">
+	    </sc-ajax>
+	    
+		<sc-ajax id="findListPrHistory"
+				 url="findListPrHistory.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindListPrHistory">
+		</sc-ajax>
+		
+		<sc-ajax id="findPrCompare"
+				 url="findPrCompare.do">
+		</sc-ajax>
+		
+		<sc-code-group>
+			<!-- 공통코드 : 통화 -->
+			<sc-code code="C004"	value="{{codes.commCurCd}}"></sc-code>
+			<!-- 공통 UOM 코드 -->
+			<sc-code code="C007"	value="{{codes.comboUnitCode}}"></sc-code>
+			<!-- 구매 유형 -->    
+			<sc-code code="P045"	value="{{codes.purcTypCcd}}"></sc-code>
+			<!-- 구매요청 목적 공통코드 -->
+			<sc-code code="P049"	value="{{codes.prPurpCd}}"></sc-code>
+		</sc-code-group>
+		
+		<cc-page-title-bar title-text="[[pageTitle]]" i18n-disabled>
+            <sc-button text="변경 이력" on-click="onShowPrHistory" hidden="[[!showHistoryBtn]]"></sc-button>
+        </cc-page-title-bar>
+        
+		<div id="div_pr_history" class="flex page">
+			<cc-form-panel title-text="일반 정보">
+				<cc-fieldset>
+							<sc-label text="운영조직"></sc-label>
+							<cc-operorg-combobox-field oper-unit-cd="PO" value="{{prData.oorg_cd}}" disabled="true"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="구매요청 번호"></sc-label>
+							<sc-text-field value="{{prData.pr_no}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+							<sc-label text="제목"></sc-label>
+							<sc-text-field value="{{prData.pr_tit}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="구매 유형"></sc-label>
+							<sc-combobox-field display-field="label" value-field="data" items="{{codes.purcTypCcd}}" value="{{prData.purc_typ_ccd}}" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="작성자"></sc-label>
+							<sc-text-field value="{{prData.pr_crtr_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="작성자 부서"></sc-label>
+							<sc-text-field value="{{prData.pr_req_dept_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="구매요청 목적"></sc-label>
+							<sc-combobox-field display-field="label" value-field="data" items="{{codes.prPurpCd}}" value="{{prData.pr_purp_ccd}}" readonly="true"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="prGridPanel" class="h-200" collapsible="true" use-dummy="false"
+					 use-selection="true"
+					 use-state="false"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="비교" on-click="onShowPrCompare"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column 	data-field="pr_tit"				header-text="제목"			width="300"	text-align="left"></sc-data-column>
+					<sc-data-column 	data-field="pr_revno"				header-text="차수"					width="50"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="pr_crtr_tel"	header-text="전화"	width="120"	text-align="center"></sc-data-column>
+					<sc-combobox-column	data-field="cur_ccd"				header-text="통화"					width="70"	text-align="center"
+										display-field="data"			value-field="data"					items="{{codes.commCurCd}}"></sc-combobox-column>
+					<sc-data-column		data-field="pr_amt"			header-text="요청 금액"				width="140"	text-align="right"
+										data-type="number"				format-type="amt"></sc-data-column>
+					<sc-image-column	data-field="img_pr_rem"			header-text="용도/비고"				width="80"	text-align="center"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-image-column	data-field="img_pr_txt"			header-text="변경 사유"				width="80"	text-align="center"	image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-attachment-column	shared-group-field="athg_uuid"
+											data-field="att_cnt"		header-text="첨부파일"				width="100"	text-align="right"></sc-attachment-column>
+				</sc-grid-columns>
+			</sc-grid>
+			
+			<sc-grid id="prItemGridPanel" class="h-300" collapsible="true" use-dummy="false"
+					 use-selection="false"
+					 use-state="false"
+					 on-item-click="onItemGridClick">
+				<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="pr_lno"			header-text="항번"				width="50"	text-align="center"	data-type="number"	mergeable="true"></sc-data-column>
+					<sc-data-column		data-field="pr_revno"			header-text="차수"				width="50"	text-align="center"	data-type="number"></sc-data-column>
+					<sc-data-column		data-field="item_mod_state"	header-text="상태"				width="80"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"			width="100"	text-align="center"	mergeable="true"	merge-based-field="pr_lno"></sc-data-column>
+					<sc-data-column		data-field="item_nm"		header-text="품목 명"			width="250"	text-align="left"	mergeable="true"	merge-based-field="pr_lno"></sc-data-column>
+					<sc-data-column		data-field="item_spec"			header-text="품목 규격"				width="250"	text-align="left"	mergeable="true"	merge-based-field="pr_lno"></sc-data-column>
+					<sc-image-column	data-field="img_dtl_spec"	header-text="품목 규격 상세"			width="80"	text-align="center"	mergeable="true"	merge-based-field="pr_lno"	visible="[[formula('hasNoCdItem')]]"
+										image-change-function="onItemImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="uom_ccd"		header-text="UOM"				width="60"	text-align="center"	mergeable="true"	merge-based-field="pr_lno"
+										display-field="data"		value-field="data"				items="{{codes.comboUnitCode}}" ></sc-combobox-column>
+					<sc-data-column		data-field="pr_qty"		header-text="수량"				width="80"	text-align="right"
+										data-type="number"			format-type="qty" 				></sc-data-column>
+					<sc-data-column		data-field="pr_uprc"		header-text="요청 단가"		width="100"	text-align="right"
+										data-type="number"			format-type="price"				></sc-data-column>
+					<sc-data-column		data-field="pr_amt"			header-text="요청 금액"		width="140"	text-align="right"
+										data-type="number"			format-type="amt"				></sc-data-column>
+					<sc-date-column		data-field="req_dlvy_dt"		header-text="요청 납품 일자"		width="120"	text-align="center"	visible="[[formula('showMTColumn')]]"></sc-date-column>
+					<sc-date-column		data-field="const_st_dt"			header-text="공사 시작 일자"		width="100"	text-align="center"	visible="[[formula('showCTColumn')]]"></sc-date-column>
+					<sc-date-column		data-field="const_exp_dt"			header-text="공사 종료 일자"		width="100"	text-align="center"	visible="[[formula('showCTColumn')]]"></sc-date-column>
+					<sc-group-column	hide-child-headers="true"	header-text="플랜트"			width="180"	text-align="center"	editable="false">
+						<sc-data-column		data-field="plt_cd"				width="70"	text-align="center"	></sc-data-column>
+						<sc-data-column		data-field="plt_nm"				width="70"	text-align="center"	></sc-data-column>
+					</sc-group-column>
+					<sc-data-column		data-field="dlvy_plc"		header-text="납품 장소"	width="150"	text-align="left"	visible="[[!formula('isPurcReqTyeUC')]]"></sc-data-column>
+					<sc-group-column	hide-child-headers="true"	header-text="구매 그룹"			width="180"	text-align="center"	>
+						<sc-data-column	data-field="purc_grp_cd"									width="50"	text-align="center"	></sc-data-column>
+						<sc-data-column	data-field="purc_grp_nm"									width="100"	text-align="center"	></sc-data-column>
+					</sc-group-column>
+					<sc-data-column		data-field="pr_realusr_nm"		header-text="구매요청 실수요자"	width="100"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="gr_pic_nm"		header-text="입고 담당자"		width="100"	text-align="center"	visible="[[!formula('isPurcReqTyeUC')]]"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_oorg_cd"			data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+					<sc-grid-field	data-field="item_spec_dtl"			data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<div id="div_pr_compare" class="page flex">
+			<cc-form-panel title-text="일반 정보" column="2">
+				<cc-fieldset>
+							<sc-label text="차수"></sc-label>
+							<sc-label text="{{comparePrData.prev_pr_rev}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="차수"></sc-label>
+							<sc-label colspan="2" text="{{comparePrData.post_pr_rev}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="제목"></sc-label>
+							<sc-label text="{{comparePrData.prev_pr_tit}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="제목"></sc-label>
+							<sc-label text="{{comparePrData.post_pr_tit}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="요청자"></sc-label>
+							<sc-label text="{{comparePrData.prev_pr_req_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="요청자"></sc-label>
+							<sc-label text="{{comparePrData.post_pr_req_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="요청 부서"></sc-label>
+							<sc-label text="{{comparePrData.prev_pr_req_dept_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="요청 부서"></sc-label>
+							<sc-label text="{{comparePrData.post_pr_req_dept_nm}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="전화"></sc-label>
+							<sc-label text="{{comparePrData.prev_pr_req_phone_no}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="전화"></sc-label>
+							<sc-label text="{{comparePrData.post_pr_req_phone_no}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="통화"></sc-label>
+							<sc-label text="{{comparePrData.prev_cur}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="통화"></sc-label>
+							<sc-label text="{{comparePrData.post_cur}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="합계 금액" ></sc-label>
+							<sc-label text="[[formatAmt(comparePrData.prev_pr_tot_amt)]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="합계 금액" ></sc-label>
+							<sc-label text="[[formatAmt(comparePrData.post_pr_tot_amt)]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="용도/비고"></sc-label>
+							<sc-textarea-field value="{{comparePrData.prev_pr_rem}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="용도/비고"></sc-label>
+							<sc-textarea-field value="{{comparePrData.post_pr_rem}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="변경 사유"></sc-label>
+							<sc-textarea-field value="{{comparePrData.prev_pr_txt}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset>
+							<sc-label text="변경 사유"></sc-label>
+							<sc-textarea-field value="{{comparePrData.post_pr_txt}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			<cc-form-panel form-cls="label-column">
+				<cc-fieldset>
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="prevAtt" class="h-200" value="{{comparePrData.prev_att_no}}" editable="false"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="postAtt" class="h-200" value="{{comparePrData.post_att_no}}" editable="false"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="compareItemGrid" class="h-300" collapsible="true" use-dummy="false"
+					 use-selection="false"
+					 use-state="false"
+					 on-item-click="onItemGridClick">
+				<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column			data-field="pr_lno"				header-text="항번"				width="50"	text-align="center"	data-type="number"	></sc-data-column>
+					<sc-data-column			data-field="disp_item_cd"		header-text="품목 코드"			width="100"	text-align="center"	></sc-data-column>
+					<sc-data-column			data-field="disp_item_nm"			header-text="품목 명"			width="250"	text-align="left"	></sc-data-column>
+					<sc-data-column			data-field="item_spec"				header-text="품목 규격"				width="250"	text-align="left"	></sc-data-column>
+					<sc-image-column		data-field="img_dtl_spec"		header-text="품목 규격 상세"			width="60"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+											image-change-function="onItemImageChangeFn"></sc-image-column>
+					<sc-combobox-column		data-field="uom_ccd"			header-text="UOM"				width="60"	text-align="center"
+											display-field="data"			value-field="data"				items="{{codes.comboUnitCode}}" ></sc-combobox-column>
+					<sc-group-column		header-text="수량"				width="160"	text-align="center">
+						<sc-data-column		data-field="prev_item_qty"		header-text="[[formula('prevRevText')]]"	width="80"	text-align="right"	data-type="number"	format-type="qty"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_item_qty"		header-text="[[formula('postRevText')]]"	width="80"	text-align="right"	data-type="number"	format-type="qty" 	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매요청 단가"		width="200"	text-align="center">
+						<sc-data-column		data-field="prev_pr_price"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="right"	data-type="number"	format-type="price"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_pr_price"		header-text="[[formula('postRevText')]]"	width="100"	text-align="right"	data-type="number"	format-type="price"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매요청금액"		width="280"	text-align="center">
+						<sc-data-column		data-field="prev_pr_amt"		header-text="[[formula('prevRevText')]]"	width="140"	text-align="right"	data-type="number"	format-type="amt"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_pr_amt"		header-text="[[formula('postRevText')]]"	width="140"	text-align="right"	data-type="number"	format-type="amt"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="요청 납품 일자"		width="200"	text-align="center"	visible="[[formula('showMTColumn')]]"	>
+						<sc-date-column		data-field="prev_rd_date"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_rd_date"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="공사 시작 일자"		width="200"	text-align="center"	visible="[[formula('showCTColumn')]]"	>
+						<sc-date-column		data-field="prev_prd_sd"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_prd_sd"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="공사 종료 일자"		width="200"	text-align="center"	visible="[[formula('showCTColumn')]]"	>
+						<sc-date-column		data-field="prev_prd_ed"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-date-column>
+						<sc-date-column		data-field="post_prd_ed"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-date-column>
+					</sc-group-column>
+					<sc-group-column		header-text="납품 장소"	width="300"	text-align="center"	visible="[[!formula('isPurcReqTyeUC')]]"	>
+						<sc-data-column		data-field="prev_rd_locat"		header-text="[[formula('prevRevText')]]"	width="150"	text-align="left"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_rd_locat"		header-text="[[formula('postRevText')]]"	width="150"	text-align="left"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매 그룹"			width="200"	text-align="center"	>
+						<sc-data-column		data-field="prev_purc_grp_nm"	header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_purc_grp_nm"	header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="구매요청 실수요자"	width="200"	text-align="center"	>
+						<sc-data-column		data-field="prev_pr_realusr_nm"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_pr_realusr_nm"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column		header-text="입고 담당자"		width="200"	text-align="center"	visible="[[!formula('isPurcReqTyeUC')]]"	>
+						<sc-data-column		data-field="prev_gr_pic_nm"		header-text="[[formula('prevRevText')]]"	width="100"	text-align="center"	i18n-disabled></sc-data-column>
+						<sc-data-column		data-field="post_gr_pic_nm"		header-text="[[formula('postRevText')]]"	width="100"	text-align="center"	i18n-disabled	item-style-function="onItemStyleFn"></sc-data-column>
+					</sc-group-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<!-- 용도/비고 dialog -->
+		<sc-dialog id="dialog_pr_rem" title-text="[[dialogTitle]]" title-align="left" style="width:400px;height:180px" modal="true" i18n-disabled>
+			<div style="display:flex; flex-direction:column; height:100%; width:100%;">
+	            <table class="tb-form">
+	            	<colgroup>
+	            		<col style="width:100px;">
+	            		<col>
+	            	</colgroup>
+	            	<tr>
+	            		<th>
+	            			<sc-label text="용도/비고"></sc-label>
+	            		</th>
+	            		<td>
+	            			<sc-textarea-field id="pr_rmk" class="h-100" max-length="1000" readonly></sc-textarea-field>
+	            		</td>
+	            	</tr>
+	            </table>
+            </div>
+        </sc-dialog>
+        
+		<!-- 변경사유 dialog -->
+		<sc-dialog id="dialog_pr_txt" title-text="[[dialogTitle]]" title-align="left" style="width:400px;height:180px" modal="true" i18n-disabled>
+			<div style="display:flex; flex-direction:column; height:100%; width:100%;">
+	            <table class="tb-form">
+	            	<colgroup>
+	            		<col style="width:100px;">
+	            		<col>
+	            	</colgroup>
+	            	<tr>
+	            		<th>
+	            			<sc-label text="변경 사유"></sc-label>
+	            		</th>
+	            		<td>
+	            			<sc-textarea-field id="pr_chg_rsn" class="h-100" max-length="1000" readonly></sc-textarea-field>
+	            		</td>
+	            	</tr>
+	            </table>
+            </div>
+        </sc-dialog>
+        
+    </template>
+    
+    <script>
+		Polymer({
+			is : 'ep-pr-mod-history',
+			properties : {
+				pageTitle : {
+					type : String,
+					value : function() {
+						return "";
+					}
+				},
+				dialogTitle : {
+					type : String,
+					value : function() {
+						return "";
+					}
+				},
+                codes : {
+                	type : Object,
+                	value :  function(){
+                		return {
+                			commCurCd     : [],
+                			comboUnitCode : [],
+                			purcTypCcd   : [],
+                			prPurpCd  : []
+                		};
+                	},
+                	reset: false
+                },
+                /*
+                prRevList: {
+                	type : Array,
+                	value : function() {
+                		return []
+                	}
+                },
+                */
+                showHistoryBtn : {
+                	type : Boolean,
+                	value : function() {
+                		return false;
+                	}
+                },
+                searchParam : {
+                	type : Object,
+                	value : function() {
+                		return {
+                			pr_uuid : "",
+                			pr_no : "",
+                			//pr_revs : []
+                		}
+                	}
+                },
+				prData : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				},
+				comparePrData : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				}
+			},
+			formulas : {
+				isPurcReqTyeUC : function() {
+					var me = this;
+					return (me.get("prData.pr_purp_ccd") === "UPRCCNTR_SGNG");
+				},
+				showMTColumn : function() {
+					var me = this;
+					return (me.get("prData.purc_typ_ccd") === "QTY" && me.get("prData.pr_purp_ccd") !== "UPRCCNTR_SGNG");
+				},
+				showCTColumn : function() {
+					var me = this;
+					return (me.get("prData.purc_typ_ccd") === "CONSTSVC" && me.get("prData.pr_purp_ccd") !== "UPRCCNTR_SGNG");
+				},
+				gridTitle : function() {
+					var me = this;
+					return (me.get("prData.purc_typ_ccd") === "QTY") ? this.translate("품목 정보") : this.translate("공사/용역정보");
+				},
+				rdLocatTitle : function() {
+					var me = this;
+					return (me.get("prData.purc_typ_ccd") === "QTY") ? me.translate("납품 장소") : me.translate("수행 장소");
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					
+					return me.get("prData.has_no_cd_item") === "Y";
+				},
+				prevRevText : function() {
+					var me = this;
+					
+					if(me.get("comparePrData.prev_pr_rev")) {
+						return me.translate("STD.PR1030", null, me.get("comparePrData.prev_pr_rev"));
+					}
+					return "";
+				},
+				postRevText : function() {
+					var me = this;
+					
+					if(me.get("comparePrData.post_pr_rev")) {
+						return me.translate("STD.PR1030", null, me.get("comparePrData.post_pr_rev"));
+					}
+					return "";
+				}
+			},
+			formatAmt : function(value) {
+				if(value)
+					return SCFormatter.format("amt", value);
+			},
+			// 1. 화면 initialized
+			initialized : function() {
+				
+			},
+			// 2. 화면 load
+			load : function(param) {
+				var me = this;
+				
+				me.set("searchParam.pr_uuid", param.pr_uuid);
+				me.onFindPr();
+			},
+			// PR 일반정보 조회
+			onFindPr : function() {
+				var me = this;
+				
+				UT.request(me.$.findPr);
+			},
+			// PR 일반정보 조회 완료
+			completeFindPr : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.set("prData", result.prData);
+				me.set("searchParam.pr_no", me.get("prData.pr_no"));
+				me.set("searchParam.last_pr_rev", me.get("prData.last_pr_rev"));
+				
+				me.applyFormula('isPurcReqTyeUC', 'showMTColumn', 'showCTColumn', 'gridTitle', 'rdLocatTitle', 'hasNoCdItem');
+				me.onShowPrHistory();
+				//me.initPrRevCombo();
+				me.onFindPrHistoryList();
+			},
+			/*
+			initPrRevCombo : function() {
+				var me = this;
+				
+				var prRevList = [], prRevs = [];
+				var lastPrRev = me.get("prData.last_pr_rev");
+				for(var i=1; i<=lastPrRev; i++) {
+					prRevList.push({pr_revno : i, pr_rev_nm : me.translate("STD.PR1030", null, i)});
+					prRevs.push(i);
+				}
+				me.set("prRevList", prRevList);
+				me.set("searchParam.pr_revs", prRevs);
+				me.set("searchParam.last_pr_rev", lastPrRev);
+			},
+			*/
+			// PR 변경이력 조회
+			onFindPrHistoryList : function() {
+				var me = this;
+				
+				UT.request(me.$.findListPrHistory);
+			},
+			// PR 변경이력 조회 완료
+			completeFindListPrHistory : function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					me.$.prGridPanel.setDataProvider(result.resultData.prList),
+					me.$.prItemGridPanel.setDataProvider(result.resultData.prItemList);
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// PR 헤더 변경이력 그리드 item-click 이벤트
+			onItemClick : function(event) {
+				var me = this,
+					e = event.detail,
+					data = e.data,
+					item = e.item,
+					provider = e.provider;
+				
+				if(item.dataField === "img_pr_rem") {			// 용도/비고
+					if(UT.isNotEmpty(data["pr_rmk"])) {
+						me.showPrRemDialog(data);
+					}
+				} else if(item.dataField === "img_pr_txt") {	// 변경사유
+					if(UT.isNotEmpty(data["pr_chg_rsn"])) {
+						me.showPrTxtDialog(data);
+					}
+				}
+			},
+			onItemGridClick: function(event) {
+				var me = this;
+				var data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// PR 헤더 변경이력 그리드 sc-image-column의 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_pr_rem") {			// 용도/비고
+					if(UT.isNotEmpty(data["pr_rmk"])) {
+						return "link";
+					}
+				} else if(item.dataField === "img_pr_txt") {	// 변경사유
+					if(UT.isNotEmpty(data["pr_chg_rsn"])) {
+						return "link";
+					}
+                }
+				return null;
+			},
+			onItemImageChangeFn : function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                	return "link";
+                }
+				return null;
+			},
+            // 상세규격 팝업
+            showDetailSpec: function(data) {
+            	var me = this;
+            	
+            	var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+            	popup.show();
+            	popup.getWindowContent().load(data);
+            },
+			// 용도/비고 dialog
+			showPrRemDialog : function(data) {
+				var me = this;
+				
+				me.set("dialogTitle", me.translate("구매요청 차수") + " : " + data["pr_revno"]);
+				me.$.pr_rmk.value = data["pr_rmk"];
+				me.$.dialog_pr_rem.show();
+			},
+			// 변경사유 dialog
+			showPrTxtDialog : function(data) {
+				var me = this;
+				
+				me.set("dialogTitle", me.translate("구매요청 차수") + " : " + data["pr_revno"]);
+				me.$.pr_chg_rsn.value = data["pr_chg_rsn"];
+				me.$.dialog_pr_txt.show();
+			},
+			// 구매요청 비교 버튼 클릭
+			onShowPrCompare: function() {
+				var me = this;
+				var provider = me.$.prGridPanel.getDataProvider(),
+					selected = provider.selectionCheckedItems();
+				
+				// 두 개씩만 비교 가능
+				if(selected.length === 2) {
+					var prevRev, postRev;
+					if(selected[0].pr_revno < selected[1].pr_revno) {
+						prevRev = selected[0].pr_revno;
+						postRev = selected[1].pr_revno;
+					} else {
+						prevRev = selected[1].pr_revno;
+						postRev = selected[0].pr_revno;
+					}
+					
+					me.$.findPrCompare.body = {
+						pr_no       : me.get("searchParam.pr_no"),
+						prev_pr_rev : prevRev,
+						post_pr_rev : postRev
+					};
+					
+					UT.request(me.$.findPrCompare, function(e, res) {
+						var result = res.response;
+						
+						me.$.div_pr_history.style.display = "none";
+						me.$.div_pr_compare.style.display = "";
+
+						me.$.prevAtt.doContentElementResize();
+						me.$.postAtt.doContentElementResize();
+						me.$.compareItemGrid.doContentElementResize();
+
+						me.set("showHistoryBtn", true);
+						me.set("pageTitle", me.translate("STD.PR1032", null, me.get("searchParam.pr_no")));
+
+						me.set("comparePrData", result.comparePrData);
+
+						me.applyFormula('prevRevText', 'postRevText');
+
+						me.$.compareItemGrid.setDataProvider(result.comparePrItems);
+					});
+				} else {
+					UT.alert("STD.PR1029");
+				}
+			},
+			// 구매요청 비교 그리드 item-style-function
+			onItemStyleFn : function(data, item) {
+				var postFieldName = item.dataField,
+					prevFieldName = "prev_" + postFieldName.substring(5, postFieldName.length),
+					prevFieldData = data[prevFieldName],
+					postFieldData = data[postFieldName];
+				
+				if(UT.isEmpty(data["prev_pr_item_id"]) && UT.isNotEmpty(data["post_pr_item_id"])) {			// 추가
+					return {
+						fontWeight : "bold",
+						background : "#00cd00"
+					}
+				} else if(UT.isNotEmpty(data["prev_pr_item_id"]) && UT.isEmpty(data["post_pr_item_id"])) {	// 삭제
+					return {
+						background : "#bebebe"
+					}
+				} else if(UT.isNotEmpty(prevFieldData) && UT.isNotEmpty(postFieldData)) {
+					if(UT.isDate(prevFieldData)) {
+						prevFieldData = prevFieldData.getTime();
+					}
+					if(UT.isDate(postFieldData)) {
+						postFieldData = postFieldData.getTime();
+					}
+					if(prevFieldData !== postFieldData) {					// 수정
+						return {
+							fontWeight : "bold",
+							background : "#ffa500"
+						}
+					}
+				}
+			},
+			// 구매요청 변경이력 보기
+			onShowPrHistory: function() {
+				var me = this;
+				
+				me.$.div_pr_history.style.display = "";
+				me.$.div_pr_compare.style.display = "none";
+				
+				me.$.prGridPanel.doContentElementResize();
+				me.$.prItemGridPanel.doContentElementResize();
+				
+				me.set("showHistoryBtn", false);
+				me.set("pageTitle", me.translate("STD.PR1031", null, me.get("searchParam.pr_no")));
+			}
+		});
+	</script>	
+</dom-module>

@@ -1,0 +1,190 @@
+<link rel="import" href="/bower_components/smartsuite/ifproxy/es-core-editor-behavior.html">
+
+<dom-module id="ep-po-if-fail-popup">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+		<sc-code code="C066" value="{{codes.passCcd}}" init></sc-code>
+		
+    	<sc-ajax id="findInfoIfPoDemo"
+				 url="findInfoIfPoDemo.do"
+				 on-response="completeFindInfoIfPoDemo">
+    	</sc-ajax>
+		
+		<div class="vspace-5"></div>
+		<cc-form-panel collapsible="false" column="2">
+			<cc-fieldset>
+				<sc-label text="인터페이스 아이디" ></sc-label>
+				<sc-text-field value="{{poIfInfo.if_id}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="실행 레벨 코드" ></sc-label>
+				<sc-text-field value="{{poIfInfo.if_lvl_ccd}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="시작 일시"></sc-label>
+				<sc-text-field value="{{poIfInfo.if_st_dttm}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="완료 일시"></sc-label>
+				<sc-text-field value="{{poIfInfo.if_ed_dttm}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="실행 상태"></sc-label>
+				<sc-combobox-field value="{{poIfInfo.if_sts_ccd}}" items="{{codes.passCcd}}"
+								   display-field="label" value-field="data"  readonly="true"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<div class="vspace-5"></div>
+		
+		<div class="flex">
+			<sc-tab-navigation id="tabNavi" style="height:auto;">
+				<div title="요청 / 응답 데이터" class="hbox flex" style="overflow: hidden;">
+					<sc-panel id="requestPanelContainer" title-text="요청 데이터" class="flex">
+						<div id="requestPanel"></div>
+					</sc-panel>
+					<sc-panel id="responsePanelContainer" title-text="응답 데이터" class="flex">
+						<div id="responsePanel"></div>
+					</sc-panel>
+				</div>
+				<div title="에러 데이터" class="flex">
+					<sc-textarea-field value="{{poIfInfo.if_msg}}" style="height: 300px;" readonly="true"></sc-textarea-field>
+				</div>
+			</sc-tab-navigation>
+		</div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: 'ep-po-if-fail-popup',
+            
+            properties: {
+				poIfInfo : {
+					type : Object,
+                    value : function(){
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							passCcd: []
+						}
+					},
+					reset: false
+				}
+            },
+            
+            behaviors: [
+            	Polymer.ESCoreEditorBehavior,
+            	Polymer.SCResizableBehavior
+            ],
+
+            // 화면 생성 완료
+            initialized: function(){
+				if (!this.requestEditor) {
+					this.requestEditor = this.createEditor(this.$.requestPanel);
+				}
+				if (!this.responseEditor) {
+					this.responseEditor = this.createEditor(this.$.responsePanel);
+				}
+				/** 윈도우 리사이즈 */
+				if(this.domHost && this.domHost.nodeName.toLowerCase() == 'sc-window'){
+					this.domHost.addEventListener("interact-resize", function(){
+						this.doExecuteDetailContentElementResize()
+					}.bind(this));
+				}
+				setTimeout(function(){
+					this.fire("sc-resize");
+				}.bind(this), 100);
+            },
+
+            
+            load: function(param) {
+				var me = this;
+				me.$.findInfoIfPoDemo.body = UT.copy(param);
+				UT.request(me.$.findInfoIfPoDemo);
+				
+				me.doExecuteDetailContentElementResize();
+            },
+			completeFindInfoIfPoDemo : function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.success) {
+					resultData = result.resultData;
+					
+					me.set('poIfInfo', resultData.poIfInfo);
+					
+					var sendInfo = new Object();
+					sendInfo.REQUEST = resultData.sendInfo;
+					var requestData = JSON.stringify(sendInfo);
+					
+					var rcptInfo = new Object();
+					rcptInfo.RESPONSE = resultData.rcptInfo;
+					var responseData = JSON.stringify(rcptInfo);
+					
+					this.requestEditor.set(
+							this.parseJSON(
+									requestData,
+									true,
+									this.requestEditor));
+					
+					this.responseEditor.set(
+							this.parseJSON(
+									responseData,
+									true,
+									this.responseEditor));
+				}
+				
+				me.doExecuteDetailContentElementResize();
+			},
+			
+			doExecuteDetailContentElementResize: function(){
+				setTimeout(function(){
+					this.contentResize();
+				}.bind(this), 100);
+			},
+
+
+            contentResize: function(){
+                this.jsonEditorResize();
+            },
+
+            jsonEditorResize: function(){
+            	var editors = this.querySelectorAll('div.jsoneditor'),
+            		minHeight = 200;
+            	if(editors && (editors.length > 0)){
+            		var parentContentHeight = this.$.tabNavi.parentElement.clientHeight;
+                	var tabNaviHeaderHeight = 31, titleHeight = 29, topMargin = 10,
+                		jsonContentHeight = parentContentHeight - tabNaviHeaderHeight - titleHeight - topMargin;
+
+                	if(jsonContentHeight < minHeight){
+                		jsonContentHeight = minHeight;
+                    }
+            		for(var i=0, editor; i < editors.length; i++){
+            			editors[i].style.height = (jsonContentHeight-20)+"px";
+                	}
+                }
+                
+            	var tabNavContent = this.$.tabNavi.querySelector('div.content-wrap>.content');
+                if(tabNavContent){
+                	if(tabNavContent.classList.contains('fit')){
+                		tabNavContent.classList.remove('fit');
+                    }
+                   	tabNavContent.style.width = "auto";
+                }
+            },
+            
+            onClose: function() {
+            	this.reset();
+            	this.fire('close');
+            }
+        });
+    </script>
+</dom-module>

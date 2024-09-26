@@ -1,0 +1,569 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="rfx-pre-insp">
+	<select id="findRfx" resultType="map">
+		/* rfx-pre-insp.findRfx */
+		SELECT RFX_UUID
+		     , RFX_NO
+		     , RFX_RND
+		     , RFX_PRESN_USE_YN
+		     , IMMED_RFX_PRESN_ST_USE_YN
+		     , RFX_PRESN_ST_DTTM
+		     , RFX_PRESN_CLSG_DTTM
+		  FROM RFX
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findListRfxPreInsp" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInsp */
+		SELECT RFX_PRESN.RFX_PRESN_UUID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_PRESN_USE_YN
+		     , RFX.OORG_CD
+		     , CASE WHEN RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{g.now} THEN 'CLSG'
+		            ELSE 'CLSG_WTG'
+		        END AS CLOSE_STS 
+		     , CASE WHEN RFX_PRESN.RFX_PRESN_CMPLD_YN IS NULL THEN 'N'
+		            WHEN RFX_PRESN.RFX_PRESN_CMPLD_YN = '' THEN 'N'
+		            ELSE RFX_PRESN.RFX_PRESN_CMPLD_YN
+		        END AS RFX_PRESN_CMPLD_YN
+		     , (
+		        SELECT COUNT(RFX_PRESN_AFP.RFX_PRESN_AFP_UUID)
+		          FROM RFX_PRESN_AFP RFX_PRESN_AFP
+		         WHERE RFX_PRESN_AFP.TEN_ID = RFX_PRESN.TEN_ID
+		           AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		           AND RFX_PRESN_AFP.STS !='D'
+		       ) AS RFX_PRE_INSP_APP_CNT
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_STS_CCD
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.RFX_PRESN_ST_DTTM
+		     , RFX.RFX_PRESN_CLSG_DTTM
+		     , CASE WHEN RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{g.now} AND RFX_PRESN.ERY_CLSG_RSN IS NOT NULL  THEN 'Y'
+		            ELSE 'N'
+		        END AS CRC_ED_YN
+		     , RFX_PRESN.ERY_CLSG_RSN
+		  FROM RFX_PRESN RFX_PRESN
+		 INNER JOIN RFX RFX
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX_PRESN.TEN_ID = #{g.tenant}
+		   AND RFX_PRESN.STS != 'D'
+		   AND RFX.STS     != 'D'
+		   AND RFX.RFX_TYP_CCD != 'RAUC'
+		   <if test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+		       AND RFX.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_rfx_pre_insp_date != null">
+		       AND RFX.RFX_PRESN_ST_DTTM &gt;= #{p.from_rfx_pre_insp_date}
+		   </if>
+		   <if test="p.to_rfx_pre_insp_date != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_pre_insp_date,1)"/>
+		       AND RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.rfx_typ_ccd != null">
+		       AND RFX.RFX_TYP_CCD = #{p.rfx_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_nos != null and p.rfx_nos.size() != 0">
+		           AND UPPER(RFX.RFX_NO) IN
+		           <foreach close=")" collection="p.rfx_nos" item="no" open="(" separator=",">
+		               #{no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_no != null and p.rfx_no != ''">
+		               <bind name="namePattern" value="'%' + p.rfx_no + '%'"/>
+		               AND UPPER(RFX.RFX_NO) LIKE UPPER(#{namePattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfx_tit != null and p.rfx_tit != ''">
+		       <bind name="userNamePattern" value="'%' + p.rfx_tit + '%'"/>
+		       AND UPPER(RFX.RFX_TIT) LIKE UPPER(#{userNamePattern})
+		   </if>
+		   <choose>
+		       <when test="p.rfx_sts_ccds != null and p.rfx_sts_ccds.size() != 0">
+		           AND RFX.RFX_STS_CCD IN
+		           <foreach close=")" collection="p.rfx_sts_ccds" item="rfx_sts_ccd" open="(" separator=",">
+		               #{rfx_sts_ccd}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_sts_ccd != null">
+		               AND RFX.RFX_STS_CCD = #{p.rfx_sts_ccd}
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfx_presn_cmpld_yn != null and p.rfx_presn_cmpld_yn != ''">
+		       <choose>
+		           <when test="p.rfx_presn_cmpld_yn == &quot;Y&quot;">
+		               AND RFX_PRESN.RFX_PRESN_CMPLD_YN = #{p.rfx_presn_cmpld_yn}
+		           </when>
+		           <otherwise>
+		               AND (RFX_PRESN.RFX_PRESN_CMPLD_YN IS NULL OR RFX_PRESN.RFX_PRESN_CMPLD_YN = '' OR RFX_PRESN.RFX_PRESN_CMPLD_YN = 'N')
+		           </otherwise>
+		       </choose>
+	 	   </if>
+		   <if test="p.close_sts != null and p.close_sts != ''">
+		       <choose>
+		           <when test="p.close_sts == &quot;CLSG&quot;">
+		               AND RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{g.now}
+		           </when>
+		           <otherwise>
+		               AND RFX.RFX_PRESN_CLSG_DTTM &gt;= #{g.now}
+		           </otherwise>
+		       </choose>
+		   </if>
+		 ORDER BY RFX.RFX_NO DESC, RFX.RFX_RND DESC
+	</select>
+	<select id="findListRfxPreInspAppAttach" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInspAppAttach : 사전심사참가신청 제출서류*/
+		SELECT RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_SUBMDDOC_UUID
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID
+		     , RFX_PRESN_AFP.VD_CD
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_UUID
+		     , RFX_PRESN.RFX_NO
+		     , RFX_PRESN.RFX_RND
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_TYP_CCD
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_TYP_NM
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_MAND_YN
+		     , RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID
+		     , RFX_PRESN_AFP_SUBMDDOC.ATHF_NM
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_SORT
+		     , (
+		        SELECT COUNT(TH.ATHF_UUID)
+		          FROM ATHF TH
+		         WHERE TH.TEN_ID = RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		           AND TH.ATHG_UUID = RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID
+		           AND TH.STS != 'D'
+		       ) AS ATHF_CNT
+		  FROM RFX_PRESN_AFP_SUBMDDOC RFX_PRESN_AFP_SUBMDDOC
+		 INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		    ON RFX_PRESN_AFP.TEN_ID = RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		   AND RFX_PRESN_AFP.RFX_PRESN_AFP_UUID = RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID
+		 INNER JOIN RFX_PRESN RFX_PRESN
+		    ON RFX_PRESN.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		   AND RFX_PRESN.RFX_PRESN_UUID = RFX_PRESN_AFP.RFX_PRESN_UUID
+		 WHERE RFX_PRESN_AFP_SUBMDDOC.TEN_ID             = #{g.tenant}
+		   AND RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID = #{p.rfx_presn_afp_uuid}
+		   AND RFX_PRESN_AFP_SUBMDDOC.STS               != 'D'
+		 ORDER BY RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_SORT
+	</select>
+	<select id="findListRfxPreInspDetail" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInspDetail */
+		SELECT RFX_VD.VD_CD
+		     , RFX_PRESN.RFX_PRESN_UUID
+		     , CASE WHEN RFX_PRESN_AFP.RFX_PRESN_AFP_UUID IS NULL THEN 'SUBM_WTG'
+		            WHEN RFX_PRESN_AFP.RFX_PRESN_AFP_UUID = '' THEN 'SUBM_WTG'
+		            ELSE RFX_PRESN_AFP.SUBM_STS_CCD
+		        END AS SUBM_STS_CCD
+		     , RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN RFX_PRESN_AFP.PRESN_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRESN_AFP.PRESN_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRESN_AFP.PRESN_RES_CCD
+		        END AS PRESN_RES_CCD
+		     , RFX_PRESN_AFP.DQ_RSN
+		     , RFX_PRESN_AFP.SUBM_DTTM
+		     , RFX_PRESN_AFP.PRESN_DTTM
+		     , RFX_PRESN_AFP.VD_PIC_NM
+		     , RFX_PRESN_AFP.VD_PIC_MOB
+		     , RFX_PRESN_AFP.VD_PIC_TEL
+		     , RFX_PRESN_AFP.VD_PIC_EML
+		     , VD.BIZREGNO
+		     , (
+		        SELECT COUNT(RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_SUBMDDOC_UUID)
+		          FROM RFX_PRESN_AFP_SUBMDDOC RFX_PRESN_AFP_SUBMDDOC
+		         WHERE RFX_PRESN_AFP_SUBMDDOC.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		           AND RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID = RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		           AND RFX_PRESN_AFP_SUBMDDOC.STS != 'D'
+		           AND RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID IS NOT NULL  ) AS ATT_CNT
+		  FROM RFX_VD RFX_VD
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID = RFX_VD.TEN_ID
+		   AND RFX.RFX_UUID = RFX_VD.RFX_UUID
+		 INNER JOIN RFX_PRESN RFX_PRESN
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		  LEFT OUTER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		    ON RFX_PRESN_AFP.TEN_ID = RFX_PRESN.TEN_ID
+		   AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		   AND RFX_PRESN_AFP.VD_CD = RFX_VD.VD_CD
+		   AND RFX_PRESN_AFP.SUBM_STS_CCD != 'CRNG'
+		   AND RFX_PRESN_AFP.STS != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_VD.VD_CD
+		 WHERE RFX_VD.TEN_ID = #{g.tenant}
+		   AND RFX_PRESN.RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+		   <if test="p.eval_rst_cd != null and p.eval_rst_cd != ''">
+		       <choose>
+		           <when test="p.eval_rst_cd == &quot;SN_WTG&quot;">
+		               AND ( RFX_PRESN_AFP.PRESN_RES_CCD = #{p.eval_rst} OR RFX_PRESN_AFP.PRESN_RES_CCD IS NULL OR RFX_PRESN_AFP.PRESN_RES_CCD = '' )
+		           </when>
+		           <otherwise>
+		               AND RFX_PRESN_AFP.PRESN_RES_CCD = #{p.eval_rst_cd}
+		           </otherwise>
+		       </choose>
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != ''">
+		       <bind name="vdnamePattern" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdnamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdnamePattern}))
+		   </if>
+	</select>
+	<select id="findListRfxPreInspDetailByOpen" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInspDetailByOpen */
+		SELECT RFX_PRESN_AFP.VD_CD
+		     , RFX_PRESN_AFP.RFX_PRESN_UUID
+		     , RFX_PRESN_AFP.SUBM_STS_CCD
+		     , RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN RFX_PRESN_AFP.PRESN_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRESN_AFP.PRESN_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRESN_AFP.PRESN_RES_CCD
+		        END AS PRESN_RES_CCD
+		     , RFX_PRESN_AFP.DQ_RSN
+		     , RFX_PRESN_AFP.SUBM_DTTM
+		     , RFX_PRESN_AFP.PRESN_DTTM
+		     , RFX_PRESN_AFP.VD_PIC_NM
+		     , RFX_PRESN_AFP.VD_PIC_MOB
+		     , RFX_PRESN_AFP.VD_PIC_TEL
+		     , RFX_PRESN_AFP.VD_PIC_EML
+		     , VD.BIZREGNO
+		     , (
+		        SELECT COUNT(RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_SUBMDDOC_UUID)
+		          FROM RFX_PRESN_AFP_SUBMDDOC RFX_PRESN_AFP_SUBMDDOC
+		         WHERE RFX_PRESN_AFP_SUBMDDOC.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		           AND RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID = RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		           AND RFX_PRESN_AFP_SUBMDDOC.STS != 'D'
+		           AND RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID IS NOT NULL  ) AS ATT_CNT
+		  FROM RFX_PRESN_AFP RFX_PRESN_AFP
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		   AND VD.VD_CD  = RFX_PRESN_AFP.VD_CD
+		 WHERE RFX_PRESN_AFP.TEN_ID          = #{g.tenant}
+		   AND RFX_PRESN_AFP.RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+		   AND RFX_PRESN_AFP.SUBM_STS_CCD       != 'CRNG'
+		   AND RFX_PRESN_AFP.STS            != 'D'
+		   <if test="p.eval_rst_cd != null and p.eval_rst_cd != ''">
+		       <choose>
+		           <when test="p.eval_rst_cd == &quot;SN_WTG&quot;">
+		               AND (RFX_PRESN_AFP.PRESN_RES_CCD = #{p.eval_rst_cd} OR RFX_PRESN_AFP.PRESN_RES_CCD IS NULL OR RFX_PRESN_AFP.PRESN_RES_CCD = '')
+		           </when>
+		           <otherwise>
+		               AND PRESN_RES_CCD = #{p.eval_rst_cd}
+		           </otherwise>
+		       </choose>
+		   </if>
+		   <if test="p.vd_nm != null and p.vd_nm != ''">
+		       <bind name="vdnamePattern" value="'%' + p.vd_nm + '%'"/>
+		       AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdnamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdnamePattern}))
+		   </if>
+	</select>
+	<select id="findRfxPreInsp" resultType="map">
+		/* rfx-pre-insp.findRfxPreInsp */
+		SELECT RFX_PRESN.RFX_PRESN_UUID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_PRESN_USE_YN
+		     , RFX.RFX_PRESN_ST_DTTM
+		     , RFX.RFX_PRESN_CLSG_DTTM
+		     , RFX.COMP_TYP_CCD
+		     , CASE WHEN RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{g.now} THEN 'CLSG'
+		            ELSE 'CLSG_WTG'
+		        END AS CLOSE_STS
+		     , RFX_PRESN.RFX_PRESN_CMPLD_YN
+		  FROM RFX_PRESN RFX_PRESN
+		 INNER JOIN RFX RFX
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX_PRESN.TEN_ID          = #{g.tenant}
+		   AND RFX_PRESN.RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+	</select>
+	<select id="findRfxPreInspByRfxId" resultType="map">
+		/* rfx-pre-insp.findRfxPreInspByRfxId */
+		SELECT RFX_PRESN.RFX_PRESN_UUID
+		     , RFX.RFX_UUID
+		     , RFX.RFX_PRESN_USE_YN
+		     , RFX.RFX_PRESN_ST_DTTM
+		     , RFX.RFX_PRESN_CLSG_DTTM
+		     , RFX_PRESN.RFX_PRESN_CMPLD_YN
+		     , RFX.IMMED_OPEN_USE_YN
+		  FROM RFX_PRESN RFX_PRESN
+		 INNER JOIN RFX RFX
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX_PRESN.TEN_ID = #{g.tenant}
+		   AND RFX_PRESN.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<update id="updatePreInspStartDt">
+		/* rfx-pre-info.updateRfxPreInspInfo */
+		UPDATE RFX
+		   SET RFX_PRESN_ST_DTTM = #{p.rfx_presn_st_dttm}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+	<insert id="insertRfxPreInsp">
+		/* rfx-pre-insp.insertRfxPreInsp */
+		INSERT INTO RFX_PRESN (
+			TEN_ID
+			, RFX_PRESN_UUID
+			, RFX_UUID
+			, RFX_NO
+			, RFX_RND
+			, RFX_PRESN_CMPLD_YN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{g.uuid}
+			, #{p.rfx_uuid}
+			, #{p.rfx_no}
+			, #{p.rfx_rnd}
+			, 'N'
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<delete id="deleteRfxPreInsp">
+		/* rfx-pre-insp.deleteRfxPreInsp */
+		UPDATE RFX_PRESN
+		   SET STS = 'D'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+	</delete>
+	<select id="findNoCloseRfxPreInspByRfxId" resultType="map">
+		<bind name="toDatePattern" value="g.getPlusDays(g.now,1)"/>
+		/* rfx-pre-insp.findNoCloseRfxPreInspByRfxId */
+		SELECT RFX_PRESN.RFX_PRESN_UUID
+		     , RFX_PRESN.RFX_UUID
+		  FROM RFX_PRESN RFX_PRESN
+		 INNER JOIN RFX RFX
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		 WHERE RFX_PRESN.TEN_ID = #{g.tenant}
+		   AND RFX_PRESN.RFX_UUID = #{p.rfx_uuid}
+		   AND RFX.RFX_PRESN_USE_YN = 'Y'
+		   AND RFX.RFX_PRESN_CLSG_DTTM &gt;= #{toDatePattern}
+	</select>
+	<update id="updateRfxPreInspEndDt">
+		/* rfx-pre-insp.updateRfxPreInspEndDt */
+		UPDATE RFX
+		   SET RFX_PRESN_CLSG_DTTM = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+	</update>
+	<update id="updateCloseRfxPreInsp">
+		/* rfx-pre-insp.updateCloseRfxPreInsp */
+		UPDATE RFX_PRESN
+		   SET ERY_CLSG_RSN = #{p.ery_clsg_rsn}
+		     , STS = 'U'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+	</update>
+	<select id="findRfxPreInspApp" resultType="map">
+		/* rfx-pre-insp.findRfxPreInspApp */
+		SELECT RFX_PRESN.RFX_PRESN_UUID
+		     , RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		     , RFX.RFX_UUID
+		     , RFX.OORG_CD
+		     , RFX.RFX_TYP_CCD
+		     , RFX.RFX_NO
+		     , RFX.RFX_RND
+		     , RFX.RFX_TIT
+		     , RFX.COMP_TYP_CCD
+		     , RFX.RFX_PRESN_ST_DTTM
+		     , RFX.RFX_PRESN_CLSG_DTTM
+		     , RFX.VD_ATHG_UUID
+		     , RFX_PRESN_AFP.VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , RFX_PRESN_AFP.PRESN_RES_CCD
+		     , CASE WHEN RFX.RFX_PRESN_CLSG_DTTM <![CDATA[<]]> #{g.now} THEN 'CLSG'
+		            ELSE 'CLSG_WTG'
+		        END AS CLOSE_STS 
+		     , CASE WHEN RFX_PRESN.RFX_PRESN_CMPLD_YN IS NOT NULL  THEN RFX_PRESN_AFP.PRESN_RES_CCD
+		            ELSE (CASE WHEN RFX_PRESN_AFP.SUBM_STS_CCD = 'SUBM' THEN 'U'
+		                       ELSE ''
+		                   END)
+		        END AS PRESN_RES_CCD
+		     , CASE WHEN RFX_PRESN_AFP.SUBM_STS_CCD IS NULL OR RFX_PRESN_AFP.SUBM_STS_CCD = '' THEN 'SUBM_WTG'
+		            ELSE RFX_PRESN_AFP.SUBM_STS_CCD
+		        END AS SUBM_STS_CCD
+		     , RFX_PRESN_AFP.DQ_RSN
+		     , RFX_PRESN_AFP.SUBM_DTTM
+		     , RFX_PRESN_AFP.SUBM_STS_CCD
+		     , RFX_PRESN_AFP.PRESN_DTTM
+		     , RFX_PRESN_AFP.VD_PIC_NM
+		     , RFX_PRESN_AFP.VD_PIC_MOB
+		     , RFX_PRESN_AFP.VD_PIC_TEL
+		     , RFX_PRESN_AFP.VD_PIC_EML
+		     , RFX_PRESN_AFP.AFP_OPN
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.CEO_NM_EN
+		            ELSE VD.CEO_NM
+		        END AS VD_CEO_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN CONCAT(CONCAT(VD.DTL_ADDR_EN_1, ' '), VD.DTL_ADDR_EN_2)
+		            ELSE CONCAT(CONCAT(VD.DTL_ADDR_1, ' '), VD.DTL_ADDR_2)
+		        END AS VD_ADDR
+		  FROM RFX_PRESN_AFP RFX_PRESN_AFP
+		 INNER JOIN RFX_PRESN RFX_PRESN
+		    ON RFX_PRESN.TEN_ID         = RFX_PRESN_AFP.TEN_ID
+		   AND RFX_PRESN.RFX_PRESN_UUID = RFX_PRESN_AFP.RFX_PRESN_UUID
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID   = RFX_PRESN.TEN_ID
+		   AND RFX.RFX_UUID = RFX_PRESN.RFX_UUID
+		   AND RFX.STS     != 'D'
+		   AND RFX.RFX_TYP_CCD != 'RAUC'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		   AND VD.VD_CD  = RFX_PRESN_AFP.VD_CD
+		 WHERE RFX_PRESN_AFP.TEN_ID              = #{g.tenant}
+		   AND RFX_PRESN_AFP.RFX_PRESN_AFP_UUID = #{p.rfx_presn_afp_uuid}
+		   AND RFX_PRESN_AFP.STS                != 'D'
+	</select>
+	<select id="findListRfxPreInspAppedAttach" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInspAppedAttach */
+		SELECT RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_SUBMDDOC_UUID
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID
+		     , RFX_PRESN_AFP.VD_CD
+		     , RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_UUID
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_TYP_CCD
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_TYP_NM
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_MAND_YN
+		     , RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID
+		     , RFX_PRESN_AFP_SUBMDDOC.ATHF_NM
+		     , RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_SORT
+		     , (
+		        SELECT COUNT(ATHF.ATHF_UUID)
+		          FROM ATHF ATHF
+		         WHERE ATHF.TEN_ID = RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		           AND ATHF.ATHG_UUID = RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID
+		           AND ATHF.STS != 'D'
+		       ) AS ATHF_CNT
+		  FROM RFX_PRESN_AFP_SUBMDDOC RFX_PRESN_AFP_SUBMDDOC
+		 INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		    ON RFX_PRESN_AFP.TEN_ID = RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		   AND RFX_PRESN_AFP.RFX_PRESN_AFP_UUID = RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID
+		  LEFT OUTER JOIN DTLCD DTLCD
+		    ON DTLCD.TEN_ID = RFX_PRESN_AFP_SUBMDDOC.TEN_ID
+		   AND DTLCD.DTLCD  = RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_TYP_CCD
+		   AND DTLCD.CCD = 'P205'
+		 WHERE RFX_PRESN_AFP_SUBMDDOC.TEN_ID              = #{g.tenant}
+		   AND RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID = #{p.rfx_presn_afp_uuid}
+		   AND RFX_PRESN_AFP_SUBMDDOC.STS                != 'D'
+		 ORDER BY DTLCD.DTLCD_SORT, RFX_PRESN_AFP_SUBMDDOC.SUBMDDOC_SORT
+	</select>
+	<update id="updateRfxPreInspEvalRstCd">
+		/* rfx-pre-insp.updateRfxPreInspsPass */
+		UPDATE RFX_PRESN_AFP
+		   SET DQ_RSN        = #{p.dq_rsn}
+		     , PRESN_RES_CCD = #{p.presn_res_ccd}
+		     , STS           = 'U'
+		     , PRESN_DTTM    = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_PRESN_UUID  = #{p.rfxPreInspInfo.rfx_presn_uuid}
+		   AND VD_CD IN
+		   <foreach close=")" collection="p.selectedList" item="selected" open="(" separator=",">
+		       #{selected.vd_cd}
+		   </foreach>
+	</update>
+	<update id="compRfxPreInsp">
+		/* rfx-pre-insp.compRfxPreInsp */
+		UPDATE RFX_PRESN
+		   SET RFX_PRESN_CMPLD_YN ='Y'
+		     , MODR_ID = #{g.username}
+		     , MOD_DTTM = #{g.now}
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+	</update>
+	<select id="findVdRfxPreInspApp" resultType="map">
+		/* rfx-pre-insp.checkValidRfxPreInspApp */
+		SELECT RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		     , RFX_PRESN_AFP.PRESN_RES_CCD AS RFX_BID_EFCT_YN
+		  FROM RFX RFX
+		 INNER JOIN RFX_PRESN RFX_PRESN
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		 INNER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		    ON RFX_PRESN_AFP.TEN_ID          = RFX_PRESN.TEN_ID
+		   AND RFX_PRESN_AFP.VD_CD           = #{p.vd_cd}
+		   AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		   AND RFX_PRESN_AFP.STS            != 'D'
+		 WHERE RFX.TEN_ID = #{g.tenant}
+		   AND RFX.RFX_UUID = #{p.rfx_uuid}
+	</select>
+	<select id="findListRfxPreInspQualification" resultType="map">
+		/* rfx-pre-insp.findListRfxPreInspQualification RFX사전심사 적격/부적격 조회 */
+		SELECT RFX_VD.VD_CD
+		     , RFX_PRESN.RFX_PRESN_UUID
+		     , CASE WHEN RFX_PRESN_AFP.RFX_PRESN_AFP_UUID IS NULL THEN 'SUBM_WTG'
+		            WHEN RFX_PRESN_AFP.RFX_PRESN_AFP_UUID = '' THEN 'SUBM_WTG'
+		            ELSE RFX_PRESN_AFP.SUBM_STS_CCD
+		        END AS SUBM_STS_CCD
+		     , RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		            ELSE VD.VD_NM
+		        END AS VD_NM
+		     , CASE WHEN RFX_PRESN_AFP.PRESN_RES_CCD IS NULL THEN 'SN_WTG'
+		            WHEN RFX_PRESN_AFP.PRESN_RES_CCD = '' THEN 'SN_WTG'
+		            ELSE RFX_PRESN_AFP.PRESN_RES_CCD
+		        END AS PRESN_RES_CCD
+		     , RFX_PRESN_AFP.DQ_RSN
+		     , RFX_PRESN_AFP.SUBM_DTTM
+		     , RFX_PRESN_AFP.PRESN_DTTM
+		     , RFX_PRESN_AFP.VD_PIC_NM
+		     , RFX_PRESN_AFP.VD_PIC_MOB
+		     , RFX_PRESN_AFP.VD_PIC_TEL
+		     , RFX_PRESN_AFP.VD_PIC_EML
+		     , VD.BIZREGNO
+		     , (
+		        SELECT COUNT(RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_SUBMDDOC_UUID)
+		          FROM RFX_PRESN_AFP_SUBMDDOC RFX_PRESN_AFP_SUBMDDOC
+		         WHERE RFX_PRESN_AFP_SUBMDDOC.TEN_ID = RFX_PRESN_AFP.TEN_ID
+		           AND RFX_PRESN_AFP_SUBMDDOC.RFX_PRESN_AFP_UUID = RFX_PRESN_AFP.RFX_PRESN_AFP_UUID
+		           AND RFX_PRESN_AFP_SUBMDDOC.STS != 'D'
+		           AND RFX_PRESN_AFP_SUBMDDOC.ATHG_UUID IS NOT NULL  ) AS ATT_CNT
+		  FROM RFX_VD RFX_VD
+		 INNER JOIN RFX RFX
+		    ON RFX.TEN_ID = RFX_VD.TEN_ID
+		   AND RFX.RFX_UUID = RFX_VD.RFX_UUID
+		 INNER JOIN RFX_PRESN RFX_PRESN
+		    ON RFX_PRESN.TEN_ID = RFX.TEN_ID
+		   AND RFX_PRESN.RFX_UUID = RFX.RFX_UUID
+		  LEFT OUTER JOIN RFX_PRESN_AFP RFX_PRESN_AFP
+		    ON RFX_PRESN_AFP.TEN_ID = RFX_PRESN.TEN_ID
+		   AND RFX_PRESN_AFP.RFX_PRESN_UUID = RFX_PRESN.RFX_PRESN_UUID
+		   AND RFX_PRESN_AFP.VD_CD = RFX_VD.VD_CD
+		   AND RFX_PRESN_AFP.SUBM_STS_CCD != 'CRNG'
+		   AND RFX_PRESN_AFP.STS != 'D'
+		 INNER JOIN VD VD
+		    ON VD.TEN_ID = RFX_VD.TEN_ID
+		   AND VD.VD_CD  = RFX_VD.VD_CD
+		 WHERE RFX_VD.TEN_ID = #{g.tenant}
+		   AND RFX_PRESN.RFX_PRESN_UUID = #{p.rfx_presn_uuid}
+		   AND RFX_PRESN_AFP.PRESN_RES_CCD = #{p.presn_res_ccd}
+	</select>
+</mapper>

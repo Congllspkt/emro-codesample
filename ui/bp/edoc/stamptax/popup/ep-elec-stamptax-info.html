@@ -1,0 +1,315 @@
+<sc-link rel="import" href="ep-elec-stamptax-history-info.html"></sc-link>
+
+<dom-module id="ep-elec-stamptax-info">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+ 		<!-- 인지세 정보 가져오기 -->
+		<sc-ajax id="findEstampTaxInfo"
+				url="findEstampTaxInfo.do"
+				 body="{{paramData}}"
+				 on-response="completeLoadInfo">
+		</sc-ajax>
+		
+ 		<!-- 인지세 정보 가져오기 -->
+		<sc-ajax id="findStampTaxBpUrlInfo"
+				 url="findStampTaxBpUrlInfo.do"
+				 body="{{paramData}}"
+				 on-response="completeFindStampTaxBpUrlInfo"></sc-ajax>
+		
+		<!-- 인지세 PDF 파일 다운로드 -->
+		<sc-ajax id="downloadStampTaxFile"
+				 url="downloadStampTaxFile.do"></sc-ajax>
+		
+		<!-- 인지세 환급 -->
+		<sc-ajax id="saveRefundStampTax"
+				 url="saveRefundStampTax.do"
+				 on-response="completeSaveRefundStampTax">
+		</sc-ajax>
+		
+ 		<!-- 툴바 -->
+ 		<cc-page-title-bar>
+ 			<sc-button text="전자인지세 다운로드" on-click="onDownloadStampTax" hidden="[[!formula('estampDownBtn')]]"></sc-button>
+	 		<sc-button text="전자인지세 구매" on-click="onPayEstmp" hidden="[[!formula('estampRequestBtn')]]"></sc-button>
+ 			<sc-button text="전자인지세 구매 확인" on-click="onEstmpPurcConfirm" hidden="[[!formula('estampRequestBtn')]]"></sc-button>
+  			<sc-button text="이력보기" on-click="onEstampHistory"></sc-button>
+  			<sc-button text="환급" on-click="onRefundStampTax" ></sc-button>
+ 		</cc-page-title-bar>
+		
+		<cc-sub-title-bar title-text="현재 차수 정보"></cc-sub-title-bar>
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="계약 번호 / 차수"></sc-label>
+				<sc-text-field value="{{stampTax.cntr_no}}" class="w-110" readonly="true"></sc-text-field> /
+				<sc-text-field value="{{stampTax.cntr_revno}}" class="w-50" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 금액" ></sc-label>
+				<sc-number-field value="{{stampTax.cntr_amt}}"  format-type="integer" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인지세 금액" ></sc-label>
+				<sc-number-field value="{{stampTax.stax_amt}}"  format-type="integer" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="총 인지세납부 금액" ></sc-label>
+				<sc-number-field value="{{stampTax.sttpymt_amt}}"  format-type="integer" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="환급 금액"></sc-label>
+				<sc-number-field value="{{stampTax.stax_refund_amt}}"  hide-trigger="true" format-type="integer" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<!--<cc-fieldset hidden="[[!formula('isStaxRefundAmt')]]">
+				<sc-label text="총 환급 금액" ></sc-label>
+				<sc-number-field value="{{stampTax.stax_refund_amt}}"  format-type="integer" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>-->
+		</cc-form-panel>
+		
+		<div class="vspace-10"></div>
+		
+		<!--<cc-sub-title-bar title-text="기납부 정보" hidden="[[!formula('preStampTaxPayInfo')]]"></cc-sub-title-bar>
+		<cc-form-panel hidden="[[!formula('preStampTaxPayInfo')]]">
+			<cc-fieldset>
+				<sc-label text="인지세 기납부 총액"></sc-label>
+				<sc-number-field value="{{preStampTax.pre_total_sttpymt_amt}}"  format-type="integer" disabled="true" class="align-right"></sc-number-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="인지세 기환급 총액"></sc-label>
+				<sc-number-field value="{{preStampTax.pre_total_refund_amt}}"  format-type="integer" disabled="true" class="align-right" ></sc-number-field>
+			</cc-fieldset>
+		</cc-form-panel>-->
+
+		<div class="vspace-10"></div>
+		
+		<cc-sub-title-bar id="subTitle" title-text="구매사"></cc-sub-title-bar>
+		<sc-grid data-provider="{{stampTaxList}}" class="h-200" use-state="false" use-selection="false">
+			<cc-grid-toolbar>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="sttpymt_no" header-text="인지세납부 번호" width="240" text-align="center"></sc-data-column>
+				<sc-data-column data-field="bizregno" 	header-text="사업자등록번호" width="150" text-align="center"></sc-data-column>
+				<sc-data-column data-field="taxpymt_amt" header-text="세금납부 금액" data-type="number" format-type="integer" width="100" text-align="right"></sc-data-column>
+				<sc-date-column data-field="taxpymt_dt" header-text="세금납부 일자" data-type="date" width="100"></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+			</sc-grid-fields>
+		</sc-grid>
+		
+	</template>
+	
+	<!-- 스크립트 -->
+	<script>
+		Polymer({
+			is: "ep-elec-stamptax-info",
+
+			properties: {
+				titleText:{
+					type: String,
+					value: "전자인지세"
+				},
+				// param
+				paramData: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				// 계약정보
+				stampTax: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				// 구매사 인지세 정보
+				stampTaxList: {
+					type: Array,
+					value: function () {
+						return [];
+					}
+				},
+				// bp(B) or sp(S)
+				usr_typ_ccd: {
+					type: String,
+					value: SCSessionManager.currentUser.usr_typ_ccd
+				},
+				stampTaxLabel: String,
+				title: String,
+				
+				preStampTax: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isBuyer: function(){
+					var cntrrTypCcd = this.paramData.cntrr_typ_ccd;
+					return cntrrTypCcd == "BUYER";
+				},
+				//수입인지 다운로드 버튼
+				estampDownBtn: function(){
+					var me = this;
+					var sttpymtSts = this.stampTax.sttpymt_sts_ccd;
+					var cntrSts = this.stampTax.cntr_sts_ccd;
+					return ( sttpymtSts === "CMPLD" || cntrSts === "CMPLD" ) && this.formula('isBuyer');
+				},
+				preStampTaxPayInfo: function() {
+					return this.stampTax.cntr_revno === 1 ? false : true;
+				},
+				/*isPreStaxMaxRevNoYn: function() {
+					var stampTaxInfo = this.stampTax;
+					return stampTaxInfo.cntr_revno === stampTaxInfo.pre_max_stax_revno ? true : false;
+				},*/
+				taxRefundField: function() {
+					return this.paramData.refund_yn === 'Y';
+				},
+				isStaxMaxRevNoYn: function() {
+					var stampTaxInfo = this.stampTax;
+					return stampTaxInfo.cntr_revno === stampTaxInfo.max_stax_revno ? true : false;
+				},
+				//전자수입인지 구매 버튼
+				estampRequestBtn: function(){
+					var sts = this.stampTax.sttpymt_sts_ccd;
+					return ( sts === "WTG" || sts === "PRGS" || sts === "CMPLD") && this.formula('isBuyer') && this.formula('isStaxMaxRevNoYn');
+				},
+				//전자수입인지 구매 확인 버튼
+				estampRequestBtn: function(){
+					var sts = this.stampTax.sttpymt_sts_ccd;
+					return ( sts === "WTG" || sts === "PRGS" ) && this.formula('isBuyer') && this.formula('isStaxMaxRevNoYn');
+				},
+				isStaxRefundAmt: function(){
+					return this.stampTax.stax_refund_amt > 0;
+				}
+			},
+
+			// 초기 데이터
+			load: function (data) {
+				var me = this;
+				
+				if(data.cntrr_typ_ccd === "VD") {
+					me.$.subTitle.titleText = "협력사 인지세";
+				}else if(data.cntrr_typ_ccd === "BUYER") {
+					me.$.subTitle.titleText = "구매사 인지세";
+				}
+				
+				me.set("paramData", data);
+				me.findEstampTaxInfo();
+			},
+
+			completeLoadInfo: function (e, res) {
+				var me = this;
+				var result = res.response;
+				
+				me.set("stampTax", result.stampTax);
+				me.set("stampTaxList", result.eStampTaxListBP);
+				me.set("preStampTax", result.preStampTax);		// 이전차수 인지세 정보
+				
+				me.applyFormula();
+				me.fire("saved");
+			},
+			
+			// 인지세 정보 요청
+			findEstampTaxInfo: function () {
+				var me = this;
+				UT.request(me.$.findEstampTaxInfo);
+			},
+			
+			// 인지세 정보 요청
+			onPayEstmp: function () {
+				var me = this;
+				UT.request(me.$.findStampTaxBpUrlInfo);
+			},
+			
+			completeFindStampTaxBpUrlInfo: function (e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.result_status == "S") {
+					me.purchaseRequestPopup(result.purchaseRequestUrl);
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+		   	purchaseRequestPopup : function(url){
+		   		var me = this;
+		   		var popupWidth = 700;
+		   		var popupHeight = 820;
+		   		
+		   		var popupX = (window.screen.width / 2) - (popupWidth / 2);
+		   		var popupY = (window.screen.height / 2) - (popupHeight / 2);
+		   		
+			 	//console.log(url);
+			 	UT.alert("STD.EDO1087"); //전자수입인지 결재 완료 시 전자수입인지 구매 확인 버튼을 통해서 결과를 조회 할 수 있습니다.
+			 	window.open(url, "stamptaxPopup","width="+popupWidth+",height=" + popupHeight +",left=" + popupX +",top=" + popupY);
+		   	},
+			
+			//인지세 구매 확인 (상태 확인용 cross domain 으로 인한 서버단 한번더 확인)
+			onEstmpPurcConfirm: function(){
+		   		var me = this;
+				me.findEstampTaxInfo();
+		   	},
+			
+			//계약서다운로드
+			onDownloadStampTax: function () {
+				var me = this;
+				
+				me.$.downloadStampTaxFile.body = {
+					cntr_uuid: me.get("stampTax.cntr_uuid")
+					,stax_uuid: me.get("stampTax.stax_uuid")
+				};
+				UT.request(me.$.downloadStampTaxFile, function(e, res) {
+					var result = res.response;
+					if (result.resultStatus === "S") {
+						DL.downloadByGrpCd(result.resultData.sttpymt_athg_uuid);
+					} else {
+						UT.alert("STD.E9999");
+					}
+				});
+			},
+		   	
+			onEstampHistory: function(){
+		   		var me = this;
+		   		var data = {
+					cntr_uuid : me.stampTax.cntr_uuid,
+					cntrr_typ_ccd: me.stampTax.cntrr_typ_ccd
+		   		}
+		   		var estampHistoryPopup = UT.popup("ep-elec-stamptax-history-info", me, "1200", "300", {});
+		   		estampHistoryPopup.show();
+		   		estampHistoryPopup.getWindowContent().load(data);
+		   	},
+			
+			onRefundStampTax: function() {
+				var me = this;
+				UT.confirm("STD.EDO3017", function(){	//환급 금액 저장하시겠습니까?
+					me.$.saveRefundStampTax.body = {
+						stax_uuid : me.stampTax.stax_uuid,
+						stax_refund_amt : me.stampTax.stax_refund_amt
+					};
+					
+					UT.request(me.$.saveRefundStampTax);
+				});
+				
+			},
+			
+			completeSaveRefundStampTax: function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(result.resultStatus === 'S') {
+					UT.alert("STD.N1500");
+					me.findEstampTaxInfo();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			}
+		});
+	</script>
+</dom-module>

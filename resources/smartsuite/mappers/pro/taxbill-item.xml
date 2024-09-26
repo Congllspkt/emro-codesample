@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="taxbill-item">
+    <select id="searchTaxBillItem" resultType="map">
+        /* taxbill-item.searchTaxBillItem : 세금계산서 발행현황 품목 조회 */
+        SELECT TXDT.TAXBILL_ITEM_UUID
+             , TXDT.TAXBILL_UUID
+             , TXDT.TAXBILL_NO
+             , TXDT.TAXBILL_LNO
+             , TXDT.INV_UUID
+             , TXDT.INV_NO
+             , TXDT.INV_ITEM_UUID
+             , TXDT.INV_LNO
+             , TXDT.ITEM_CD_CRN_TYP_CCD
+             , CASE
+                     WHEN TXDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+                         THEN NULL
+                     ELSE TXDT.ITEM_CD
+               END        AS DISP_ITEM_CD
+             , TXDT.ITEM_CD
+             , TXDT.ITEM_NM
+             , TXDT.ITEM_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN TXDT.ITEM_NM_EN
+                     ELSE TXDT.ITEM_NM
+                END) AS DISP_ITEM_NM
+             , TXDT.ITEM_SPEC
+             , TXDT.ITEM_SPEC_DTL
+             , TXDT.TAX_TYP_CCD
+             , TXDT.INV_UPRC
+             , TXDT.INV_QTY
+             , TXDT.SUP_AMT
+             , TXDT.VAT_AMT
+             --,UOM_CCD
+             , TXDT.PSTGDT
+             , IVHD.CNFDINV_PIC_ID
+             , (CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+                     ELSE USR.USR_NM
+                END) AS CNFDINV_PIC_NM
+          FROM TAXBILL_ITEM TXDT
+         INNER JOIN INV IVHD
+            ON IVHD.TEN_ID = TXDT.TEN_ID
+           AND IVHD.INV_UUID = TXDT.INV_UUID
+         INNER JOIN USR USR
+            ON USR.TEN_ID = IVHD.TEN_ID
+           AND USR.USR_ID = IVHD.CNFDINV_PIC_ID
+         WHERE TXDT.TEN_ID = #{g.tenant}
+           AND TXDT.TAXBILL_UUID = #{p.taxbill_uuid}
+         ORDER BY CAST(TXDT.TAXBILL_LNO AS INT)
+    </select>
+    <insert id="insertTaxBillItem">
+        /* taxbill-item.insertTaxBillItem : 세금계산서 품목 데이터 생성 */
+        INSERT INTO TAXBILL_ITEM
+             (
+               TEN_ID
+             , TAXBILL_ITEM_UUID
+             , TAXBILL_UUID
+             , TAXBILL_NO
+             , TAXBILL_LNO
+             , INV_UUID
+             , INV_NO
+             , INV_ITEM_UUID
+             , INV_LNO
+             , ITEM_CD_CRN_TYP_CCD
+             , ITEM_CD
+             , ITEM_NM
+             , ITEM_NM_EN
+             , ITEM_SPEC
+             , ITEM_SPEC_DTL
+             , TAX_TYP_CCD
+             , PSTGDT
+             , EVID_DT
+             , SUP_AMT
+             , VAT_AMT
+             , INV_UPRC
+             , INV_QTY
+             , REGR_ID
+             , REG_DTTM
+             , MODR_ID
+             , MOD_DTTM
+             )
+      VALUES (
+               #{g.tenant}
+             , #{p.taxbill_item_uuid}
+             , #{p.taxbill_uuid}
+             , #{p.taxbill_no}
+             , TO_CHAR(#{p.taxbill_lno})  , #{p.inv_uuid}
+             , #{p.inv_no}
+             , #{p.inv_item_uuid}
+             , TO_CHAR(#{p.inv_lno})  , #{p.item_cd_crn_typ_ccd}
+             , #{p.item_cd}
+             , #{p.item_nm}
+             , #{p.item_nm_en}
+             , #{p.item_spec}
+             , #{p.item_spec_dtl}
+             , #{p.tax_typ_ccd}
+             , TO_CHAR(#{p.pstgdt})  , TO_CHAR(#{p.evid_dt})  , CAST(#{p.sup_amt} AS FLOAT  )
+             , CAST(#{p.vat_amt} AS FLOAT  )
+             , CAST(#{p.inv_uprc} AS FLOAT  )
+             , CAST(#{p.inv_qty} AS FLOAT  )
+             , #{g.username}
+             , #{g.now}
+             , #{g.username}
+             , #{g.now}
+             )
+    </insert>
+    <delete id="deleteTaxBillItem">
+        /* taxbill-item.deleteTaxBillItem : 세금계산서 품목 삭제 */
+        DELETE FROM TAXBILL_ITEM
+         WHERE TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.taxbill_uuids != null and p.taxbill_uuids.size() &gt; 0">
+                AND TAXBILL_UUID IN
+                <foreach close=")" collection="p.taxbill_uuids" item="taxbillUuids" open="(" separator=",">
+                    #{taxbillUuids}
+                </foreach>
+            </when>
+            <when test="p.taxbill_uuid != null and p.taxbill_uuid != ''">
+                AND TAXBILL_UUID = #{p.taxbill_uuid}
+            </when>
+            <otherwise>
+                AND TAXBILL_ITEM_UUID = #{p.taxbill_item_uuid}
+            </otherwise>
+        </choose>
+    </delete>
+</mapper>

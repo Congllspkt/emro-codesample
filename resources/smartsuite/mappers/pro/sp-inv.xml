@@ -1,0 +1,507 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-inv">
+    <select id="searchInvoice" resultType="map">
+        /* sp-inv.searchInvoice : 송장 리스트 조회 */
+        SELECT INV.INV_UUID
+        , INV.OORG_CD
+        , INV.INV_STS_CCD
+        , INV.PURC_TYP_CCD
+        , INV.TAX_TYP_CCD
+        , INV.PYMTMETH_CCD
+        , INV.PURC_GRP_CD
+        , (CASE WHEN 'en_US' = #{g.locale} THEN PG.PURC_GRP_NM_EN
+        ELSE PG.PURC_GRP_NM
+        END) AS DISP_PURC_GRP_NM
+        , INV.INV_NO
+        , INV.VD_CD
+        , VD.ERP_VD_CD
+        , (CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+        ELSE VD.VD_NM
+        END) AS DISP_VD_NM
+        , INV.CUR_CCD
+        , INV.INV_AMT
+        , INV.SUP_AMT
+        , INV.VAT_AMT
+        , INV.INV_CNFD_DT
+        , INV.FNL_GR_DT
+        , INV.PYMT_REF_NO
+        , INV.INV_CNFD_CNCL_RSN
+        , INV.INV_CNFD_CNCL_DT
+        , INV.INV_RET_RSN
+        FROM INV INV
+        INNER JOIN VD VD
+        ON VD.TEN_ID = INV.TEN_ID
+        AND VD.VD_CD = INV.VD_CD
+        LEFT OUTER JOIN PURC_GRP PG /* JOB : 구매 그룹 */
+        ON PG.TEN_ID = INV.TEN_ID
+        AND PG.PURC_GRP_TYP_CCD = 'PURC'
+        AND PG.PURC_GRP_CD = INV.PURC_GRP_CD
+        AND PG.CO_CD = #{g.comp_cd}
+        AND PG.USE_YN = 'Y'
+        WHERE INV.TEN_ID = #{g.tenant}
+        AND INV.VD_CD = #{g.vd_cd}  /* 협력사 코드 */
+        <choose>
+            <when test="p.oorg_cds != null and p.oorg_cds.size() &gt; 0">
+                AND INV.OORG_CD IN
+                <foreach close=")" collection="p.oorg_cds" item="oorgCd" open="(" separator=",">
+                    #{oorgCd}
+                </foreach>
+            </when>
+            <otherwise>
+                AND INV.OORG_CD = '0'
+            </otherwise>
+        </choose>
+        <if test="p.from_inv_cnfd_dt != null and p.from_inv_cnfd_dt != ''">
+            AND INV.INV_CNFD_DT <![CDATA[>=]]> #{p.from_inv_cnfd_dt}
+        </if>
+        <if test="p.to_inv_cnfd_dt != null and p.to_inv_cnfd_dt != ''">
+            AND INV.INV_CNFD_DT <![CDATA[<=]]> #{p.to_inv_cnfd_dt}
+        </if>
+        <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+            AND INV.PURC_TYP_CCD = #{p.purc_typ_ccd}
+        </if>
+        <if test="p.from_fnl_gr_dt != null and p.from_fnl_gr_dt != ''">
+            AND INV.FNL_GR_DT <![CDATA[>=]]> #{p.from_fnl_gr_dt}
+        </if>
+        <if test="p.to_fnl_gr_dt != null and p.to_fnl_gr_dt != ''">
+            AND INV.FNL_GR_DT <![CDATA[<=]]> #{p.to_fnl_gr_dt}
+        </if>
+        <choose>
+            <when test="p.inv_nos != null and p.inv_nos.size() != 0">
+                AND INV.INV_NO IN
+                <foreach close=")" collection="p.inv_nos" item="invNo" open="(" separator=",">
+                    #{invNo}
+                </foreach>
+            </when>
+            <otherwise>
+                <if test="p.inv_no != null and p.inv_no != ''">
+                    <bind name="invNoPattern" value="'%' + p.inv_no + '%'"/>
+                    AND INV.INV_NO LIKE UPPER(#{invNoPattern})
+                </if>
+            </otherwise>
+        </choose>
+        <if test="p.tax_typ_ccd != null and p.tax_typ_ccd != ''">
+            AND INV.TAX_TYP_CCD = #{p.tax_typ_ccd}
+        </if>
+        <if test="p.pymtmeth_ccd != null and p.pymtmeth_ccd != ''">
+            AND INV.PYMTMETH_CCD = #{p.pymtmeth_ccd}
+        </if>
+        <if test="p.inv_sts_ccds != null and p.inv_sts_ccds.size() &gt; 0">
+            AND INV.INV_STS_CCD IN
+            <foreach close=")" collection="p.inv_sts_ccds" item="invStsCcd" open="(" separator=",">
+                #{invStsCcd}
+            </foreach>
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+            <bind name="erpVdCd" value="'%' + p.erp_vd_cd + '%'"/>
+            AND VD.ERP_VD_CD LIKE UPPER(#{erpVdCd})
+        </if>
+        <if test="p.vd_nm != null and p.vd_nm != ''">
+            <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+            AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm})) /* 협력사 명 검색조건*/
+        </if>
+        ORDER BY INV.INV_NO DESC
+    </select>
+    <select id="findInvoice" resultType="map">
+    /* sp-inv.findInvoice : 송장 상세 조회*/
+    SELECT INV.INV_UUID
+         , INV.OORG_CD
+         , INV.PURC_TYP_CCD
+         , INV.INV_NO
+         , INV.INV_TIT
+         , INV.VD_CD
+         , VD.ERP_VD_CD
+         , VD.VD_NM
+         , VD.VD_NM_EN
+         , (CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+                 ELSE VD.VD_NM
+            END) AS DISP_VD_NM
+         , INV.TAX_TYP_CCD
+         , INV.PYMTMETH_CCD
+         , INV.PURC_GRP_CD
+         , INV.ACCG_YR
+         , INV.INV_CNFD_DT
+         , INV.FNL_GR_DT
+         , INV.CUR_CCD
+         , INV.INV_AMT
+         , INV.SUP_AMT
+         , INV.VAT_AMT
+         , INV.PYMT_REF_NO
+         , INV.RMK
+         , INV.INV_STS_CCD
+         , CASE WHEN ( SELECT COUNT(1)
+                         FROM INV_ITEM INV_ITEM
+                        WHERE INV_ITEM.TEN_ID        = INV.TEN_ID
+                          AND INV_ITEM.INV_UUID        = INV.INV_UUID
+                          AND INV_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+                          AND INV_ITEM.STS          <![CDATA[<>]]> 'D'
+                     ) &gt; 0
+                     THEN 'Y'
+                ELSE 'N'
+           END  AS HAS_NO_CD_ITEM
+         , INV.INV_CNFD_CNCL_RSN
+         , INV.INV_CNFD_CNCL_DT
+         , (SELECT TXHD.TAXBILL_STS_CCD
+              FROM TAXBILL TXHD
+             WHERE TXHD.TAXBILL_UUID = (SELECT DISTINCT TXDT.TAXBILL_UUID
+	                              		  FROM INV_ITEM INV_ITEM
+	             					     INNER JOIN TAXBILL_ITEM TXDT
+	                              		  	ON TXDT.TEN_ID = INV_ITEM.TEN_ID
+	                              		   AND TXDT.INV_UUID = INV_ITEM.INV_UUID
+    									 WHERE INV_ITEM.INV_UUID = #{p.inv_uuid})) AS TAXBILL_STS_CCD
+      FROM INV INV
+     INNER JOIN VD VD
+        ON VD.TEN_ID = INV.TEN_ID
+       AND VD.VD_CD  = INV.VD_CD
+     WHERE INV.TEN_ID = #{g.tenant}
+       AND INV.INV_UUID = #{p.inv_uuid}
+    </select>
+    <insert id="insertInvoice">
+    /* sp-inv.insertInvoice : 송장 생성*/
+    INSERT INTO INV (
+        TEN_ID
+      , INV_UUID
+      , OORG_CD
+      , INV_NO
+      , INV_TIT
+      , VD_CD
+      , ACCG_YR
+      , PURC_TYP_CCD
+      , PYMTMETH_CCD
+      , TAX_TYP_CCD
+      , PURC_GRP_CD
+      , FNL_GR_DT
+      <if test="p.cnfdinv_pic_id != null and p.cnfdinv_pic_id != ''">
+      , CNFDINV_PIC_ID
+      </if>
+      , CUR_CCD
+      , INV_AMT
+      , SUP_AMT
+      , VAT_AMT
+      , PYMT_REF_NO
+      , RMK
+      , STS
+      , REGR_ID
+      , REG_DTTM
+      , MODR_ID
+      , MOD_DTTM
+    )
+    VALUES (
+        #{g.tenant}
+      , #{p.inv_uuid}
+      , #{p.oorg_cd}
+      , #{p.inv_no}
+      , #{p.inv_tit}
+      , #{p.vd_cd}
+      , TO_CHAR(#{p.accg_yr})  , #{p.purc_typ_ccd}
+      , #{p.pymtmeth_ccd}
+      , #{p.tax_typ_ccd}
+      , #{p.purc_grp_cd}
+      , #{p.fnl_gr_dt}
+      <if test="p.cnfdinv_pic_id != null and p.cnfdinv_pic_id != ''">
+      , #{p.cnfdinv_pic_id}
+      </if>
+      , #{p.cur_ccd}
+      , CAST(#{p.inv_amt} AS FLOAT  )
+      , CAST(#{p.sup_amt} AS FLOAT  )
+      , CAST(#{p.vat_amt} AS FLOAT  )
+      , #{p.pymt_ref_no}
+      , #{p.rmk}
+      , 'C'
+      , #{g.username}
+      , #{g.now}
+      , #{g.username}
+      , #{g.now}
+    )
+    </insert>
+    <update id="updateInvoice">
+    /* sp-inv.updateInvoice : 송장 수정 */
+    UPDATE INV
+       SET INV_TIT       = #{p.inv_tit}
+         , ACCG_YR       = TO_CHAR(#{p.accg_yr})  , PYMTMETH_CCD = #{p.pymtmeth_ccd}
+         , TAX_TYP_CCD       = #{p.tax_typ_ccd}
+         , FNL_GR_DT = #{p.fnl_gr_dt}
+         <if test="p.cnfdinv_pic_id != null and p.cnfdinv_pic_id != ''">
+         , CNFDINV_PIC_ID  = #{p.cnfdinv_pic_id}
+         </if>
+         , INV_AMT  = CAST(#{p.inv_amt} AS FLOAT  )
+         , SUP_AMT   = CAST(#{p.sup_amt} AS FLOAT  )
+         , VAT_AMT      = CAST(#{p.vat_amt} AS FLOAT  )
+         , PYMT_REF_NO      = #{p.pymt_ref_no}
+         , RMK          = #{p.rmk}
+         , STS          = 'U'
+         , MODR_ID       = #{g.username}
+         , MOD_DTTM       = #{g.now}
+     WHERE TEN_ID = #{g.tenant}
+       AND INV_UUID = #{p.inv_uuid}
+    </update>
+    <update id="updateInvoiceCancelCause">
+    /* sp-inv.updateInvoiceCancelCause : 송장 취소사유 */
+    UPDATE INV
+       SET INV_CNFD_CNCL_RSN = #{p.inv_cnfd_cncl_rsn}
+         , CNFDINV_PIC_ID       = NULL
+     WHERE TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.inv_uuids != null and p.inv_uuids.size() &gt; 0">
+       AND INV_UUID IN
+         <foreach close=")" collection="p.inv_uuids" item="invId" open="(" separator=",">
+             #{invId}
+         </foreach>
+       </when>
+       <otherwise>
+       AND INV_UUID = #{p.inv_uuid}
+       </otherwise>
+     </choose>
+    </update>
+    <delete id="deleteInvoice">
+    /* sp-inv.deleteInvoice */
+    DELETE FROM INV
+     WHERE TEN_ID = #{g.tenant}
+       AND INV_UUID = #{p.inv_uuid}
+    </delete>
+    <select id="compareInvoiceStatus" resultType="map">
+    /* sp-inv.compareInvoiceStatus : 송장 상태 비교 */
+    SELECT INV.INV_UUID
+         , INV.INV_NO
+         , INV.INV_STS_CCD
+         , CDDL.DTLCD_NM      AS INV_STS_CCD_NM
+         , CASE WHEN INV.INV_STS_CCD = #{p.inv_sts_ccd}
+                     THEN 'Y'
+                ELSE 'N'
+           END                 AS VALID_YN
+      FROM INV INV
+     INNER JOIN DTLCD CDDT
+        ON CDDT.TEN_ID = INV.TEN_ID
+       AND CDDT.CCD = 'P072'
+       AND CDDT.DTLCD = INV.INV_STS_CCD
+       AND CDDT.USE_YN = 'Y'
+       AND CDDT.STS   != 'D'
+     INNER JOIN DTLCD_MULTLANG CDDL
+        ON CDDL.TEN_ID  = CDDT.TEN_ID
+       AND CDDL.CCD  = CDDT.CCD
+       AND CDDL.DTLCD  = CDDT.DTLCD
+       AND CDDL.LANG_CCD = #{g.locale}
+       AND CDDL.STS    != 'D'
+     WHERE INV.TEN_ID = #{g.tenant}
+       AND INV.INV_UUID = #{p.inv_uuid}
+    </select>
+    <resultMap id="INVValidCheckMap" type="java.util.HashMap">
+        <result column="VALID_YN" property="valid_yn"/>
+        <collection javaType="java.util.ArrayList" property="itemList" resultMap="INVMap"/>
+    </resultMap>
+    <resultMap id="INVMap" type="java.util.HashMap">
+        <id column="INV_UUID" property="inv_uuid"/>
+        <result column="INV_NO" property="inv_no"/>
+        <result column="INV_STS_CCD" property="inv_sts_ccd"/>
+        <result column="INV_STS_CCD_NM" property="inv_sts_ccd_nm"/>
+    </resultMap>
+    <select id="compareInvoiceListStatus" resultMap="INVValidCheckMap">
+    /* sp-inv. compareInvoiceListStatus : 송장리스트 상태 비교*/
+    SELECT INV.INV_UUID
+         , INV.INV_NO
+         , INV.INV_STS_CCD
+         , CDDL.DTLCD_NM      AS INV_STS_CCD_NM
+         , CASE WHEN INV.INV_STS_CCD = #{p.availableSts}
+                     THEN 'Y'
+                ELSE 'N'
+           END  AS VALID_YN
+      FROM INV INV
+     INNER JOIN DTLCD CDDT
+        ON CDDT.TEN_ID = INV.TEN_ID
+       AND CDDT.CCD = 'P072'
+       AND CDDT.DTLCD = INV.INV_STS_CCD
+       AND CDDT.USE_YN = 'Y'
+       AND CDDT.STS   != 'D'
+     INNER JOIN DTLCD_MULTLANG CDDL
+        ON CDDL.TEN_ID  = CDDT.TEN_ID
+       AND CDDL.CCD  = CDDT.CCD
+       AND CDDL.DTLCD  = CDDT.DTLCD
+       AND CDDL.LANG_CCD = #{g.locale}
+       AND CDDL.STS    != 'D'
+     WHERE INV.TEN_ID  = #{g.tenant}
+       AND INV.INV_UUID IN
+       <foreach close=")" collection="p.inv_uuids" item="invId" open="(" separator=",">
+           #{invId}
+       </foreach>
+     ORDER BY INV.INV_NO
+    </select>
+    <select id="checkCompletedGrItem" resultType="map">
+    /* sp-inv.checkCompletedGrItem : 완료된 입고/기성 품목 확인 */
+    SELECT T.GR_NO
+         , T.GR_LNO
+         , T.CHECK_RESULT
+      FROM ( SELECT GR_NO
+                  , GR_LNO
+                  , CASE WHEN GR_ITEM_STS_CCD = 'GR_CNCL'
+                              THEN 'GR_CANCELED'
+                         ELSE NULL
+                    END  AS CHECK_RESULT
+               FROM GR_ITEM
+              WHERE TEN_ID      = #{g.tenant}
+                AND GR_ITEM_UUID IN
+                <foreach close=")" collection="p.gr_item_uuids" item="grItemId" open="(" separator=",">
+                    #{grItemId}
+                </foreach>
+           ) T
+     WHERE T.CHECK_RESULT IS NOT NULL  ORDER BY T.GR_NO, CAST(T.GR_LNO AS INT)
+    </select>
+    <select id="searchTaxBillRequestTarget" resultType="map">
+            /* sp-inv.searchTaxBillRequestTarget : 세금계산서 발행대상 목록 조회 */
+            SELECT INV.OORG_CD
+                 , INV.INV_UUID
+                 , INV.INV_NO
+                 , INV.PURC_TYP_CCD
+                 , INV.TAX_TYP_CCD
+                 , INV.VD_CD
+                 , VD.ERP_VD_CD
+                 , (CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+                         ELSE VD.VD_NM
+                     END) AS DISP_VD_NM
+                 , VD.BIZREGNO
+                 , INV.PURC_GRP_CD
+                 , JOB.PURC_GRP_NM
+                 , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                         ELSE JOB.PURC_GRP_NM
+                     END) AS DISP_PURC_GRP_NM
+                 , INV.INV_CNFD_DT
+                 , INV.FNL_GR_DT
+                 , INV.SUP_AMT
+                 , INV.VAT_AMT
+                 , INV.INV_AMT
+                 , INV.CNFDINV_PIC_ID
+                 , (CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+                         ELSE USR.USR_NM
+                     END) AS CNFDINV_PIC_NM
+            FROM INV INV
+           INNER JOIN VD VD
+              ON VD.TEN_ID = INV.TEN_ID
+             AND VD.VD_CD = INV.VD_CD
+            LEFT OUTER JOIN PURC_GRP JOB /* JOB : 직무(그룹) */
+              ON JOB.TEN_ID = INV.TEN_ID
+             AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+             AND JOB.PURC_GRP_CD = INV.PURC_GRP_CD
+             AND JOB.CO_CD = #{g.comp_cd}
+             AND JOB.USE_YN = 'Y'
+           INNER JOIN USR USR
+              ON USR.TEN_ID = INV.TEN_ID
+             AND USR.USR_ID = INV.CNFDINV_PIC_ID
+             AND USR.STS   <![CDATA[<>]]> 'D'
+           WHERE INV.TEN_ID = #{g.tenant}
+           <choose>
+               <when test="p.oorg_cds != null and p.oorg_cds.size() &gt; 0">
+                   AND INV.OORG_CD IN
+                   <foreach close=")" collection="p.oorg_cds" item="oorgCd" open="(" separator=",">
+                       #{oorgCd}
+                   </foreach>
+               </when>
+               <otherwise>
+                   AND INV.OORG_CD = '0'
+               </otherwise>
+           </choose>
+           <if test="p.from_inv_cnfd_dt != null and p.from_inv_cnfd_dt != ''">
+               AND INV.INV_CNFD_DT <![CDATA[>=]]> #{p.from_inv_cnfd_dt}
+           </if>
+           <if test="p.to_inv_cnfd_dt != null and p.to_inv_cnfd_dt != ''">
+               AND INV.INV_CNFD_DT <![CDATA[<=]]> #{p.to_inv_cnfd_dt}
+           </if>
+           <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+               AND INV.PURC_TYP_CCD = #{p.purc_typ_ccd}
+           </if>
+           <choose>
+               <when test="p.inv_nos != null and p.inv_nos.size() != 0">
+                   AND INV.INV_NO IN
+                   <foreach close=")" collection="p.inv_nos" item="invNo" open="(" separator=",">
+                       #{invNo}
+                   </foreach>
+               </when>
+               <otherwise>
+                   <if test="p.inv_no != null and p.inv_no != ''">
+                       <bind name="invNoPattern" value="'%' + p.inv_no + '%'"/>
+                       AND INV.INV_NO LIKE UPPER(#{invNoPattern})
+                   </if>
+               </otherwise>
+           </choose>
+           <if test="p.from_fnl_gr_dt != null and p.from_fnl_gr_dt != ''">
+               AND INV.FNL_GR_DT <![CDATA[>=]]> #{p.from_fnl_gr_dt}
+           </if>
+           <if test="p.to_fnl_gr_dt != null and p.to_fnl_gr_dt != ''">
+               AND INV.FNL_GR_DT <![CDATA[<=]]> #{p.to_fnl_gr_dt}
+           </if>
+           <if test="p.tax_typ_ccd != null and p.tax_typ_ccd != ''">
+               AND INV.TAX_TYP_CCD = #{p.tax_typ_ccd}
+           </if>
+           <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+               <bind name="erpVdCd" value="'%' + p.erp_vd_cd + '%'"/>
+               AND VD.ERP_VD_CD LIKE UPPER(#{erpVdCd})
+           </if>
+           <if test="p.vd_nm != null and p.vd_nm != ''">
+               <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+               AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm})) /* 협력사 명 검색조건*/
+           </if>
+           <choose>
+               <when test="p.purc_grp_cd != null and p.purc_grp_cd != ''">
+                   AND INV.PURC_GRP_CD = #{p.purc_grp_cd}
+               </when>
+               <otherwise>
+                   <if test="p.purc_grp_nm != null and p.purc_grp_nm != ''">
+                       <bind name="purcGrpNm" value="'%' + p.purc_grp_nm + '%'"/>
+                       AND (UPPER(JOB.PURC_GRP_NM) LIKE UPPER(#{purcGrpNm}) OR UPPER(JOB.PURC_GRP_NM_EN) LIKE UPPER(#{purcGrpNm}))
+                   </if>
+               </otherwise>
+           </choose>
+           <choose>
+               <when test="p.cnfdinv_pic_id != null and p.cnfdinv_pic_id != ''">
+                   AND INV.CNFDINV_PIC_ID = #{p.cnfdinv_pic_id}
+               </when>
+               <otherwise>
+                   <if test="p.cnfdinv_pic_nm != null and p.cnfdinv_pic_nm != ''">
+                       <bind name="cnfdinvPicNm" value="'%' + p.cnfdinv_pic_nm + '%'"/>
+                       AND (UPPER(USR.USR_NM) LIKE UPPER(#{cnfdinvPicNm}) OR UPPER(USR.USR_NM_EN) LIKE UPPER(#{cnfdinvPicNm}))
+                   </if>
+               </otherwise>
+           </choose>
+             AND INV.INV_STS_CCD = 'CNFD' -- 송장 확정
+             AND INV.STS <![CDATA[<>]]> 'D'
+             AND NOT EXISTS ( SELECT 'X'
+                                FROM INV_ITEM INV_ITEM
+                               INNER JOIN TAXBILL_ITEM TXDT
+                                  ON TXDT.TEN_ID = INV_ITEM.TEN_ID
+                                 AND TXDT.INV_UUID = INV_ITEM.INV_UUID
+                               INNER JOIN TAXBILL TXHD
+                                  ON TXHD.TEN_ID = TXDT.TEN_ID
+                                 AND TXHD.TAXBILL_UUID = TXDT.TAXBILL_UUID
+                               WHERE INV_ITEM.TEN_ID = INV.TEN_ID
+                                 AND INV_ITEM.INV_UUID = INV.INV_UUID
+                               -- 세금계산서 금액 체크 추가 필요
+                            )
+           ORDER BY INV.INV_CNFD_DT DESC, INV.INV_NO DESC
+        </select>
+        <select id="searchInvoiceItemsByGrIds" resultType="map">
+        /* sp-inv.searchInvoiceItemsByGrIds : 송장처리대상 품목 조회 */
+         SELECT INV_ITEM.TEN_ID
+              , INV_ITEM.INV_ITEM_UUID
+              , INV_ITEM.INV_UUID
+              , INV_ITEM.INV_LNO
+              , INV_ITEM.PO_NO
+              , INV_ITEM.ITEM_CD
+              , INV_ITEM.GR_ITEM_UUID
+              , INV_ITEM.GR_LNO
+              , INV_ITEM.ITEM_NM
+            FROM INV_ITEM INV_ITEM
+            INNER JOIN INV INV
+            ON INV.TEN_ID = INV_ITEM.TEN_ID
+            AND INV.INV_UUID = INV_ITEM.INV_UUID
+            WHERE INV_ITEM.TEN_ID        = #{g.tenant}
+            <if test="p.gr_item_uuids != null and p.gr_item_uuids.size() != 0">
+                AND INV_ITEM.GR_ITEM_UUID IN
+                <foreach close=")" collection="p.gr_item_uuids" item="grItemId" open="(" separator=",">
+                    #{grItemId}
+                </foreach>
+            </if>
+            AND INV_ITEM.STS          <![CDATA[<>]]> 'D'
+            AND INV_ITEM.STS          <![CDATA[<>]]> 'D'
+            AND INV.INV_STS_CCD NOT IN ('CNFD_CNCL' , 'RET')  -- 확정취소(D), 반려
+        </select>
+</mapper>

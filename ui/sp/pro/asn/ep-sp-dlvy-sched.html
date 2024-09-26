@@ -1,0 +1,529 @@
+<sc-link rel="import" href="ep-sp-dlvy-sched-chg-req.html"></sc-link>
+<sc-link rel="import" href="ep-sp-dlvy-sched-chg-req.html"></sc-link>
+
+<dom-module id="ep-sp-dlvy-sched">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+
+        <!-- 코드 -->
+        <sc-code-group>
+            <sc-code code="P256" value="{{codes.schedStsCcd}}"></sc-code>
+        </sc-code-group>
+
+        <!-- 납품예정 조회 -->
+        <sc-ajax id="findDlvySchedByPoItemUuids"
+                 url="findDlvySchedByPoItemUuids.do"
+                 body="{{searchParam}}"
+                 on-response="completeFindDlvySchedByPoItemUuids">
+        </sc-ajax>
+        <!-- 신규 납품예정 저장 -->
+        <sc-ajax id="saveDraftDlvySched"
+                 url="saveDraftDlvySched.do"
+                 on-response="completeSaveDlvyScheds">
+        </sc-ajax>
+
+        <!-- 변경 요청 조회 -->
+        <sc-ajax id="findDlvySchedChgReqByDlvySchedUuids"
+                 url="findDlvySchedChgReqByDlvySchedUuids.do"
+                 on-response="completeFindDlvySchedChgReqByDlvySchedUuids">
+        </sc-ajax>
+
+        <sc-ajax id="removeDlvyScheds" url="removeDlvyScheds.do">
+        </sc-ajax>
+
+        <div class="hbox flex">
+<!--            발주 품목 그리드 -->
+            <div class="vbox" style="width: 45%;">
+                <sc-grid id="poitemGridPanel"
+                         data-provider="{{poItems}}"
+                         row-style-function="onRowStyle"
+                         class="flex" use-dummy="false"
+                         use-dummy="false" column-fit-style="evenFill"
+                         use-state="false"
+                         use-selection="[[!formula('isCompleted')]]">
+                    <cc-grid-toolbar title-text="품목 정보">
+                    </cc-grid-toolbar>
+                    <sc-grid-columns>
+                        <sc-data-column data-field="po_no" header-text="발주 번호" width="100" mergeable="true" merge-based-field="po_no"></sc-data-column>
+                        <sc-data-column data-field="po_lno" header-text="발주 항번" width="60" mergeable="true" merge-based-field="po_no" data-type="number"></sc-data-column>
+                        <sc-data-column data-field="item_cd" header-text="품목 코드" width="90"></sc-data-column>
+                        <sc-data-column data-field="disp_item_nm" header-text="품목 명" width="100" text-align="left"></sc-data-column>
+                        <sc-data-column data-field="item_spec" header-text="품목 규격" width="145" text-align="left"></sc-data-column>
+                        <sc-data-column data-field="po_qty" header-text="발주 수량" width="85" text-align="right"
+                                        data-type="number" format-type="qty"></sc-data-column>
+                        <sc-data-column data-field="dlvy_sched_qty" header-text="납품 수량" width="120" text-align="right"
+                                        data-type="number" format-type="qty"></sc-data-column>
+                    </sc-grid-columns>
+                    <sc-grid-fields>
+                        <sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+                        <sc-grid-field data-field="po_revno"></sc-grid-field>
+                        <sc-grid-field data-field="pr_item_uuid"></sc-grid-field>
+                        <sc-grid-field data-field="pr_no"></sc-grid-field>
+                        <sc-grid-field data-field="pr_lno"></sc-grid-field>
+                        <sc-grid-field data-field="cur_ccd"></sc-grid-field>
+                        <sc-grid-field data-field="vd_cd"></sc-grid-field>
+                        <sc-grid-field data-field="asn_typ_ccd"></sc-grid-field>
+                        <sc-grid-field data-field="purc_typ_ccd"></sc-grid-field>
+                        <sc-grid-field data-field="item_cd"></sc-grid-field>
+                        <sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+                        <sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+                        <sc-grid-field data-field="item_nm"></sc-grid-field>
+                        <sc-grid-field data-field="item_nm_en"></sc-grid-field>
+                        <sc-grid-field data-field="gr_pic_id"></sc-grid-field>
+                        <sc-grid-field data-field="rmk"></sc-grid-field>
+                    </sc-grid-fields>
+                </sc-grid>
+            </div>
+
+            <div class="vbox flex--ct" style="place-items: center;">
+                <sc-button text="→" on-click="onAddPoItem" i18n-disabled disabled="[[formula('isCompleted')]]" style="margin: 10px;"></sc-button>
+            </div>
+<!--            납품 일정 그리드-->
+            <div class="vbox flex">
+                <sc-grid id="schedGridPanel"
+                         use-dummy="false" column-fit-style="evenFill"
+                         collapsible="false"
+                         data-provider="{{schedItems}}"
+                         aggregate="false" aggregate-group="true" aggregate-group-columns='["po_no", "po_lno"]' aggregate-group-hidden-columns="['po_no']"
+                         aggregate-auto-sorting="true"
+                         use-state="[[!formula('isCompleted')]]"
+                         validate-on-cell-paste="true"
+                         editable="[[!formula('isCompleted')]]"
+                         validator-function="flagValidation"
+                         on-item-edit-end="onItemEditEndFn"
+                         use-selection="[[!formula('isCompleted')]]">
+                    <cc-grid-toolbar title-text="납품 일정">
+                        <sc-button text="저장"          on-click="onSaveDraft" hidden="[[formula('isCompleted')]]" ></sc-button>
+                        <sc-button text="작성 완료"      on-click="onSaveSubmit" hidden="[[formula('isCompleted')]]" ></sc-button>
+                        <sc-button text="변경 요청 이력"  on-click="onShowChgReq"></sc-button>
+                        <sc-button text="삭제"          on-click="onRemove" hidden="[[formula('isCompleted')]]" ></sc-button>
+                    </cc-grid-toolbar>
+
+                    <sc-grid-columns>
+                        <sc-data-column data-field="po_no" header-text="발주 번호" width="100" mergeable="true" merge-based-field="po_no"></sc-data-column>
+                        <sc-data-column data-field="po_lno" header-text="발주 항번" width="80" data-type="number" merg eable="true"	merge-based-field="po_no"></sc-data-column>
+                        <sc-data-column data-field="item_cd" header-text="품목 코드" width="90" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                        <sc-data-column data-field="disp_item_nm" header-text="품목 명" width="90" text-align="left" mergeable="true"	merge-based-field="po_no"></sc-data-column>
+                        <sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right" data-type="number" format-type="qty"
+                                        mergeable="true"	merge-based-field="po_lno" aggregate-title="합계"></sc-data-column>
+                        <sc-data-column id="aggregate_field" data-field="dlvy_qty" header-text="납품 수량"  width="110" text-align="right" data-type="number" editor-regex-functio="onRegexFn"
+                                        format-type="qty" required="true"	editable="true" aggregate-format="qty" aggregate-function="onQtyAggregateFn"></sc-data-column>
+                        <sc-date-column	data-field="dlvy_dt"	 header-text="납품 일자"		width="100" required="true"	editable="true"></sc-date-column>
+                        <sc-combobox-column data-field="dlvy_sched_sts" header-text="상태" width="110" items="{{codes.schedStsCcd}}" display-field="label" value-field="data" ></sc-combobox-column>
+                    </sc-grid-columns>
+                    <sc-grid-fields>
+                        <sc-grid-field data-field="ten_id"></sc-grid-field>
+                        <sc-grid-field data-field="dlvy_sched_uuid"></sc-grid-field>
+                        <sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+                        <sc-grid-field data-field="gr_pic_id"></sc-grid-field>
+                        <sc-grid-field data-field="cur_ccd"></sc-grid-field>
+                        <sc-grid-field data-field="rmk"></sc-grid-field>
+                    </sc-grid-fields>
+                </sc-grid>
+            </div>
+        </div>
+
+    </template>
+
+    <script>
+        Polymer({
+            is: 'ep-sp-dlvy-sched',
+            properties: {
+                titleText: {
+                    type: String,
+                    value: I18N.translate("납품 일정")
+                },
+                codes: {
+                    type: Object,
+                    value: function () {
+                        return {
+                            // schedStsCcd: [] // 납품 일정
+                        };
+                    }
+                },
+                searchParam: {
+                  type: Object,
+                  value: function() {
+                      return {};
+                  }
+                },
+                flags: {
+                  type: Object,
+                  value: function() {
+                    return {
+                        aggregateValid: true
+                    };
+                  }
+                },
+                asnHdInfo: {
+                  type: Object,
+                  value: function() {
+                      return {}
+                  }
+                },
+                userInfo : {
+                    type : Object,
+                    value : function(){
+                        return SCSessionManager.getCurrentUser();
+                    }
+                },
+                poItems: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                schedItems: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                is_completed: {
+                    type: Boolean,
+                    value: function() {
+                        return false;
+                    }
+                },
+                actionText: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+
+                // 신규 납품예정 조회조건
+                asnReqSearchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                countChgReq : {
+                    type: Number,
+                    value: function() {
+                        return 0;
+                    }
+                },
+
+            },
+            formulas: {
+                isCompleted: function(){
+                    // 납품예정 진행상태 (CRNG:작성중, WTG:대기중, PRGSG:진행중, RET:반려, CNCL:취소, CMPLD:완료)
+                    return  this.get("is_completed");
+                }
+            },
+
+            load: function (param) {
+                var me = this;
+                if (UT.isNotEmpty(param.po_item_uuids)) {
+                    me.set("searchParam", param);
+                    me.onFindList();
+                }
+                if(UT.isNotEmpty(param.is_completed)) {
+                    me.set("is_completed", param.is_completed);
+                    me.applyFormula();
+                }
+                if(UT.isNotEmpty(param.asnHdInfo)) {
+                    me.set("asnHdInfo", param.asnHdInfo);
+                    me.applyFormula();
+                }
+            },
+
+            onFindList: function() {
+                var me = this;
+                UT.request(me.$.findDlvySchedByPoItemUuids);
+            },
+
+            completeFindDlvySchedByPoItemUuids: function (e, res) {
+                var me = this;
+                var result = res.response.resultData;
+                var leftProvider = me.$.poitemGridPanel.getDataProvider();
+                var rightProvider = me.$.schedGridPanel.getDataProvider();
+
+                leftProvider.removeAll(true);
+                leftProvider.clearRemoveItems();
+                rightProvider.removeAll(true);
+                rightProvider.clearRemoveItems();
+
+                leftProvider.addItems(result.asnItemList);
+                rightProvider.addItems(result.dlvySchedList);
+
+                leftProvider.setItemStateAtBatch(true, function(index, data) {
+                    return "none";
+                });
+                rightProvider.setItemStateAtBatch(true, function(index, data) {
+                    return "none";
+                });
+                me.updateChangeRequestCount();
+            },
+
+            // 새로 추가한 함수
+            updateChangeRequestCount: function(data) {
+                var me = this;
+                var rightProvider = me.$.schedGridPanel.getDataProvider();
+                var data = rightProvider.getItems();
+
+                var param = {
+                    dlvy_sched_uuids : data.map(item => {
+                        return item.dlvy_sched_uuid;
+                    })
+                };
+                me.$.findDlvySchedChgReqByDlvySchedUuids.body = UT.copy(param);
+                UT.request(me.$.findDlvySchedChgReqByDlvySchedUuids);
+            },
+
+            completeFindDlvySchedChgReqByDlvySchedUuids: function(e, res) {
+                var me = this;
+                var result = res.response.resultData;
+                var count = 0;
+                var arr = result.dlvy_chg_req_items.forEach(item => {
+                    if(item.dlvy_sched_chg_req_sts == "CHG_REQ") count++;
+                });
+                me.countChgReq = count;
+            },
+
+            onAddPoItem: function(){
+                var me = this;
+                var leftProvider = me.$.poitemGridPanel.getDataProvider();
+                var rightProvider = me.$.schedGridPanel.getDataProvider();
+
+                var target = leftProvider.selectionCheckedItems();
+                const scheduleBucket = {
+                    'dlvy_sched_sts' : 'CRNG',
+                    'dlvy_dt' : "",
+                    'dlvy_qty' : 0,
+                    'rmk' : "",
+                    'sts' : 'C',
+                    'modr_id' : "",
+                    'mod_dttm' : ""
+                };
+                if(target.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                } else {
+                    for(var i=target.length-1; i>=0; i--){
+                        rightProvider.addItem(Object.assign({}, UT.copy(target.at(i)), scheduleBucket));
+                    }
+                    me.flags.aggregateValid = true;
+                }
+
+            },
+            onRemove: function(){
+                var me = this;
+                UT.confirm("STD.N1300", function(){
+                    var rightProvider = me.$.schedGridPanel.getDataProvider();
+
+                    var selected = rightProvider.selectionCheckedIndexes();
+                    if(selected.length === 0) {
+                        UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                    } else {
+                        rightProvider.removeItemsByIndexes(selected);
+                        me.flags.aggregateValid = true;
+                    }
+
+                })
+            },
+
+            onSaveDraft: function(event){
+                var me = this;
+                var rightProvider =  me.$.schedGridPanel.getDataProvider();
+
+                if(rightProvider.getUpdateItems().length == 0
+                    && rightProvider.getNewItems().length == 0
+                    && rightProvider.getRemoveItems().length == 0) {
+                    UT.alert("STD.N1700"); // 변경된 내용이 없습니다.
+                } else {
+                    me.set("actionText", me.translate(event.target._aboveConfig.text));
+                    me.doSave("CRNG");
+                }
+            },
+
+            onSaveSubmit: function(event){
+                var me = this;
+
+                if(me.flagValidation()) {
+                    me.set("actionText", me.translate(event.target._aboveConfig.text));
+                    me.doSave("CCMPLD");
+                }
+            },
+            doSave: function(dlvy_sched_sts){
+                var me = this;
+                var rightProvider = me.$.schedGridPanel.getDataProvider();
+                var leftProvider = me.$.poitemGridPanel.getDataProvider();
+
+                var items = rightProvider.getItems(),
+                    deleted = rightProvider.getRemoveItems();
+
+                var param = {
+                    "dlvy_sched_sts": dlvy_sched_sts
+                };
+                param = Object.assign(param, {'items' : items});
+                param = Object.assign(param, {'deleted' : deleted});
+                if(UT.isNotEmpty(me.searchParam.po_item_uuids)) {
+                    param = Object.assign(param, {"poItemUuids" : me.searchParam.po_item_uuids });
+                }
+                if(UT.isNotEmpty(me.asnHdInfo)) {
+                    param = Object.assign(param, {"asnHdInfo" : me.asnHdInfo });
+                }
+                UT.confirm(me.translate("STD.COM1003", null, me.actionText), function() {
+                    me.$.saveDraftDlvySched.body = UT.copy(param);
+                    UT.request(me.$.saveDraftDlvySched);
+                })
+            },
+            completeSaveDlvyScheds: function(e, res) {
+                var me = this;
+
+                var result = res.response;
+                if(UT.isObject(result) && result.success) {
+                    UT.completeAlert(me.actionText, function() {
+                        me.onFindList();
+                    });
+                } else {
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+
+            onQtyAggregateFn: function(dataField, datas) {
+                var me = this;
+
+                var result = new BigNumber('0');
+                var poQty = new BigNumber(datas[0]['po_qty']);
+
+                for(var i = 0; i < datas.length; ++i) {;
+                    result = result.plus(new BigNumber(datas[i][dataField] || 0));
+                }
+
+                if(result.comparedTo(poQty) === 1) {
+                    me.flags.aggregateValid = false;
+                }
+
+                var leftProvider = me.$.poitemGridPanel.getDataProvider();
+                var po_no = datas[0]['po_no'];
+                var po_lno = datas[0]['po_lno'];
+
+                if(datas.length > 0) {
+                    var indexes = leftProvider.filterIndexes(function(item){return item.po_no == po_no && item.po_lno == po_lno;});
+                    if(UT.isNotEmpty(indexes)) {
+                         leftProvider.setCellValue(indexes[0], 'dlvy_sched_qty', result.toFixed());
+                    }
+                }
+                return result.toFixed();
+            },
+
+            // grid column editor-regex-function
+            onRegexFn: function(data, item) {
+                var me = this;
+                switch(item.dataField) {
+                    case "dlvy_qty":
+                        return CCPrecManager.regex("qty");
+                    default:
+                        return null;
+                }
+            },
+
+            onItemEditEndFn: function(event) {
+                var me = this,
+                    detail = event.detail,
+                    provider  = me.$.schedGridPanel.getDataProvider(),
+                    data      = detail.data,
+                    item      = detail.item,
+                    newValue  = detail.newValue,
+                    oldValue  = detail.oldValue,
+                    dataField = item.dataField;
+
+                var today = new Date();
+                today.setHours(0,0,0,0);
+
+                if(dataField == "dlvy_qty") {
+                    me.flags.aggregateValid = true;
+                    if(newValue > data.po_qty) {
+                        provider.setCellValue(item.rowIndex, item.dataField, oldValue);
+                        // UT.alert("발주 수량보다 큽니다. 다시 입력 하세요");
+                        UT.alert("STD.E0000");
+                    }
+                    if(newValue == 0) {
+                        provider.setCellValue(item.rowIndex, item.dataField, oldValue);
+                        // UT.alert("납품 일정 수량은 1개 이상부터 가능합니다. 다시 입력 하세요");
+                        UT.alert("STD.E0000");
+
+                    }
+                }
+                else if(dataField == "dlvy_dt") {
+                    if(newValue < today) {
+                        provider.setCellValue(item.rowIndex, item.dataField, oldValue);
+                        UT.alert("STD.E0000");
+                    }
+                }
+            },
+
+            flagValidation: function() {
+                var me = this;
+                var isValid = true;
+                var rightProvider  = me.$.schedGridPanel.getDataProvider();
+
+                for(var [k, v] of Object.entries(me.flags)) {
+                    if(!v) {
+                        UT.alert("STD.E0000");
+                        return v;
+                    }
+                }
+
+                rightProvider.getItems().forEach((item) => {
+                    if(item["dlvy_dt"] == null || item["dlvy_dt"] === undefined ) {
+                        UT.alert("STD.E0000");
+                        isValid = false;
+                        return false;
+                    }
+                    if(item["dlvy_qty"] == 0 || item["dlvy_qty"] == null || item["dlvy_qty"] === undefined) {
+                        UT.alert("STD.E0000");
+                        isValid = false;
+                        return false;
+                    }
+                })
+                return isValid;
+            },
+
+            onShowChgReq: function() {
+                var me = this;
+                var rightProvider = me.$.schedGridPanel.getDataProvider();
+
+                var dlvySchedChgReqPopup = UT.popup("ep-sp-dlvy-sched-chg-req", me, "80%", "80%", {
+                    'close': function(popup, e) {
+                        popup.close();
+                        me.onFindList();
+                    },
+                    'reload': function(popup, e) {
+                        me.onFindList();
+                        me.updateChangeRequestCount();
+                    }
+                }, {titleText: I18N.translate("변경 요청 이력")});
+                var param = {
+                    dlvy_sched_uuids : rightProvider.getItems().map(item => item.dlvy_sched_uuid),
+                    po_item_uuids : rightProvider.getItems().map(item => item.po_item_uuid),
+
+                };
+                dlvySchedChgReqPopup.show();
+                dlvySchedChgReqPopup.getWindowContent().load(param);
+            },
+
+            // 로우 별 스타일
+            onRowStyle : function(data) {
+                if(data["po_qty"] < data["dlvy_sched_qty"]) {
+                    return {
+                        "background": "#ffcccc" // 공지 글 로우 색상 변경
+                    }
+                } else {
+                    return {
+                        "background": '#ffffff' // 기본 색상
+                    }
+                }
+            },
+        });
+    </script>
+</dom-module>

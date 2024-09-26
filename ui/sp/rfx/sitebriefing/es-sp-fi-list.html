@@ -1,0 +1,172 @@
+<dom-module id="es-sp-fi-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+	
+		<cc-code-constraint code-param="{{codes.setupParam}}" value="{{codes.setupInfo}}"></cc-code-constraint>
+		
+        <sc-request-group init>
+            <sc-ajax id="findListOperOrgOfSp"
+              url="findListOperationOrganizationBySupplier.do"
+              body="PO"
+              content-type="text/plain"
+              last-response="{{codes.oorgCd}}">
+            </sc-ajax>
+            <sc-code-group>
+                <sc-code code="P094" value="{{codes.P094}}"></sc-code>
+                <sc-code code="C077" value="{{codes.C077}}"></sc-code>
+            </sc-code-group>
+        </sc-request-group>
+
+        <sc-ajax id="findListSpFieldIntro" url="findListSpFieldIntro.do" body="{{searchParam}}" last-response="{{resultList}}"></sc-ajax>
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <cc-page-title-bar></cc-page-title-bar>
+	
+		<cc-search-condition-panel on-search="onFindList" validation-group="search"  auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-sp-operorg-multi-combobox-field id="operorgcombobox"
+													oper-unit-cd="PO" value="{{searchParam.oorg_cd}}"
+													placeholder="전체"></cc-sp-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_date}}" to-value="{{searchParam.to_date}}"
+									  default-from-value="-1M" default-to-value="1M" string-date="false">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="상태"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.P094}}" value="{{searchParam.sitebrfg_sts_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{searchParam.sitebrfg_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="현장설명회 번호"></sc-label>
+				<sc-text-field value="{{searchParam.sitebrfg_no}}" on-enter="onFindList"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+        <sc-grid id="gridPanel" class="flex" editable="false" use-dummy="false"
+                 use-state="false"
+                 use-selection="false"
+                 data-provider="{{resultList}}"
+                 on-item-click="onItemClick">
+            <cc-grid-toolbar>
+            </cc-grid-toolbar>
+            <sc-grid-columns>
+                <sc-combobox-column	data-field="oorg_cd"		header-text="운영조직"		width="170"	text-align="center" 	display-field="logic_org_nm"	value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+                <sc-combobox-column data-field="sitebrfg_sts_ccd" header-text="상태" width="120"
+                                    display-field="label" value-field="data" items="{{codes.P094}}"></sc-combobox-column>
+                <sc-data-column data-field="atnd_confm_yn" header-text="참석 예정 여부" width="140" text-align="center" item-label-function="onItemLabelFunction"></sc-data-column>
+                <sc-data-column data-field="sitebrfg_no" header-text="현장설명회 번호" width="120" text-align="center" style-name="link"></sc-data-column>
+                <sc-checkbox-column data-field="vconf_use_yn" header-text="화상회의 사용 여부" width="100" display-checkbox="true" visible="[[formula('showRmYn')]]" ></sc-checkbox-column>
+                <sc-combobox-column data-field="vconf_sts_ccd" width="120" header-text="화상회의 상태" visible="[[formula('showRmYn')]]"
+                                    display-field="label" value-field="data" items="{{codes.C077}}"></sc-combobox-column>
+                <sc-data-column data-field="sitebrfg_tit" header-text="제목" width="300" text-align="left"></sc-data-column>
+                <sc-date-column	data-field="sitebrfg_st_dttm" header-text="시작 일시" display-format="yyyy/MM/dd HH:mm" value-format="yyyy-MM-dd HH:mm" width="150" text-align="center"></sc-date-column>
+                <sc-date-column	data-field="sitebrfg_clsg_dttm" header-text="마감 일시" display-format="yyyy/MM/dd HH:mm" value-format="yyyy-MM-dd HH:mm" width="150" text-align="center"></sc-date-column>
+                <sc-data-column data-field="sitebrfg_pic_nm" header-text="담당자" width="120" text-align="center"></sc-data-column>
+                <sc-data-column data-field="sitebrfg_inchr_dept_nm" header-text="작성자 부서" width="120" text-align="center"></sc-data-column>
+            </sc-grid-columns>
+        </sc-grid>
+    </template>
+    <script>
+        Polymer({
+            is: "es-sp-fi-list",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            P094 : [], // 현장설명회 진행상태
+                            C077 : [],
+                            oorgCd : [],
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+                            setupInfo:{}
+                        };
+                    },
+                    reset: false
+                },
+                searchParam: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                resultList: {
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                }
+            },
+            formulas : {
+                showRmYn: function() {
+                    return this.get("codes.setupInfo.rfx_sitebrfg_vconf") === "Y";
+                },
+            },
+
+            initialized: function() {
+                var me = this;
+                var filtered = me.codes.P094.filter(function(item){
+                    if(["NOFN_CNCL", "NOFN", "SITEBRFG_ED"].indexOf(item.data) > -1 ){
+                        return item;
+                    }
+                });
+                me.set("codes.P094",filtered);
+
+                me.applyFormula('showRmYn');
+                me.onFindList();
+            },
+
+            onFindList: function() {
+                var me = this;
+                if(!me.validate('search')){
+                    UT.alert("STD.E0000");
+                    return;
+                }
+
+                UT.request(me.$.findListSpFieldIntro);
+
+            },
+            onItemClick: function(e) {
+                var me = this,
+                    data = e.detail.data,
+                    item = e.detail.item;
+
+                if(item.dataField ==="sitebrfg_no"){
+                    me.fire("show-detail", {sitebrfg_uuid : data.sitebrfg_uuid});
+                }
+            },
+
+            onCreateFi: function() {
+                var me = this;
+                me.fire("show-detail");
+            },
+
+            onItemLabelFunction: function(data, item) {
+                if(data["atnd_confm_subm_yn"] == "N") {
+                    return this.translate("미제출");
+                } else if(data["atnd_confm_yn"] == "Y") {
+                    return this.translate("참석 예정");
+                } else if(data["atnd_confm_yn"] == "N") {
+                    return this.translate("미참석");
+                }
+
+            }
+
+
+        })
+    </script>
+</dom-module>

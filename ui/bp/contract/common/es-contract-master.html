@@ -1,0 +1,500 @@
+<sc-link rel="import" href="/ui/bp/edoc/template/popup/ep-cntrdoc-template-list.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-vd-contractor-list.html"></sc-link>
+
+<dom-module id="es-contract-master">
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 사용자 운영조직 조회 -->
+		<sc-ajax id="findListOperationOrganizationByUser"
+				url="findListOperationOrganizationByUser.do"
+				body="{{cntrInfo.ounit_cd}}"
+				content-type="text/plain"
+				last-response="{{codes.oorgCd}}">
+		</sc-ajax>
+		
+		<!-- 공통코드 조회 -->
+		<sc-request-group init>
+			<sc-code-group>
+				<sc-code code="D003" value="{{codes.cntrdocTyp}}"></sc-code><!-- 계약서 유형 코드 -->
+				<sc-code code="D022" value="{{codes.cntrTmplTyp}}"></sc-code><!-- 템플릿 유형 코드 -->
+			</sc-code-group>
+			<!-- 서명방법 코드 -->
+			<sc-ajax id="findListCommonCodeCntrSgnMeth"
+					 url="findListCommonCodeCntrSgnMeth.do"
+					 body="{{codes.cntrSgnMethParam}}"
+					 last-response="{{codes.cntrSgnMeth}}"
+			         on-response="completeFindListCommonCodeCntrSgnMeth">
+			</sc-ajax>
+			<!-- 사용자 구매그룹 코드 조회 -->
+			<sc-ajax id="findListMyPurcGrp"
+					 url="findListMyPurcGrp.do"
+					 body="{{codes.purcGrpCdParam}}"
+					 last-response="{{codes.purcGrpCd}}">
+			</sc-ajax>
+		</sc-request-group>
+
+		<!-- 화면 -->
+		<cc-form-panel label-width="120" column="1" validation-group="save">
+			<cc-fieldset>
+				<sc-label text="계약 번호/차수"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{cntrInfo.cntr_no}}" class="w-150" readonly="true"></sc-text-field>
+					<span style="margin:0 5px">&#47;</span>
+					<sc-text-field value="{{cntrInfo.cntr_revno}}" class="w-50" readonly="true"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 명"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntr_nm}}" max-length="200" required="true" readonly="[[readonly]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 기간"></sc-label>
+				<sc-period-date-field from-value="{{cntrInfo.cntr_st_dt}}" to-value="{{cntrInfo.cntr_exp_dt}}"
+									string-date="true" required="true" readonly="[[readonly]]"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약서 유형"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntrdoc_typ_ccd}}" required="true" readonly="true"
+								items="{{codes.cntrdocTyp}}" display-field="label" value-field="data"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 서명방법"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntr_sgnmeth_ccd}}" placeholder="필수" required="true" readonly="[[formula('readonlyCntrSgnMeth')]]"
+								items="{{codes.cntrSgnMeth}}" display-field="label" value-field="data"
+								on-change="onChangeCntrSgnMethCcd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 템플릿 유형"></sc-label>
+				<sc-combobox-field value="{{cntrInfo.cntr_tmpl_typ_ccd}}" placeholder="필수" required="true" readonly="[[formula('readonlyCntrTmplTyp')]]"
+								items="{{codes.cntrTmplTyp}}" display-field="label" value-field="data"
+								on-change="onChangeCntrTmplTypCcd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isTmplUse')]]">
+				<sc-label text="계약서 템플릿"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{cntrInfo.cntrdoc_tmpl_nm}}" readonly="true"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-trigger-field trigger-cls="field-search" on-trigger-click="popupCntrDocTemplate" hide-trigger="[[readonly]]"></sc-trigger-field>
+					<sc-text-field value="{{cntrInfo.cntrdoc_tmpl_uuid}}" hidden="true"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-combobox-field id="operorgcombobox" placeholder="필수" value="{{cntrInfo.oorg_cd}}" required="true" readonly="true"
+								items="{{codes.oorgCd}}" display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="다음 단계 구매 그룹"></sc-label>
+				<cc-purc-grp class="w-300" value="{{cntrInfo.purc_grp_nm}}" result-value="{{cntrInfo.purc_grp_cd}}" purc-grp-typ="PURC" placeholder="검색"
+							 readonly="[[formula('readonlyPurcGrpCd')]]" hide-trigger="[[formula('readonlyPurcGrpCd')]]" required="[[!formula('requiredPurcGrpCd')]]">
+				</cc-purc-grp>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{cntrInfo.vd_nm}}" class="w-150" placeholder="협력사 명" readonly="true"></sc-text-field>
+					<span style="margin:0 5px">&#47;</span>
+					<sc-text-field value="{{cntrInfo.erp_vd_cd}}" class="w-100" placeholder="코드" readonly="true" required="true"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{cntrInfo.vd_cd}}" hidden="true"></sc-text-field>
+					<sc-text-field value="{{cntrInfo.bizregno}}" hidden="true"></sc-text-field>
+					<sc-trigger-field trigger-cls="field-search" on-trigger-click="popupContractorList" hidden="[[!formula('isMultiSign')]]"></sc-trigger-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleCntrrInfo')]]">
+				<sc-label text="이메일"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntrr_eml}}" max-length="60" validator-type="email" required="true" readonly="[[readonly]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleCntrrInfo')]]">
+				<sc-label text="모바일"></sc-label>
+				<sc-text-field value="{{cntrInfo.cntrr_mob}}" max-length="60" validator-type="mobile" mask-re="/[0-9\-+]/" required="true" readonly="[[readonly]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('isUserFileUse')]]">
+				<sc-label text="계약서"></sc-label>
+				<sc-upload id="uploadCntrdoc" value="{{cntrInfo.orgn_tmpl_unud_athg_uuid}}" class="h-200" readonly="[[readonly]]"
+						sort-data-field="name" sort-direction="asc"
+						max-total-file-count="1" max-total-file-size="10MB"
+						extension="jpg,gif,png,tif,bmp,txt,xls,doc,ppt,xlsx,docx,pptx,rtf,gul,hwp,pdf,mht,eml,mp4"
+						restrict-extension="exe,vbs,zip"></sc-upload>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleTrmnDate')]]">
+				<sc-label text="해지 일자"></sc-label>
+				<sc-date-field value="{{cntrInfo.cntr_trmn_dt}}" string-date="true" class="date" readonly="true"></sc-date-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleTrmnReason')]]">
+				<sc-label text="해지 사유"></sc-label>
+				<sc-textarea-field value="{{cntrInfo.cntr_trmn_rsn}}" class="h-150" max-length="200" required="true" readonly="[[formula('readonlyTrmnReason')]]"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset hidden="[[!formula('visibleReason')]]">
+				<sc-label text="{{reasonTitle}}"></sc-label>
+				<sc-textarea-field value="{{cntrInfo.cntr_ret_rsn}}" class="h-150" readonly="true"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+	</template>
+
+	<!-- 스크립트  -->
+	<script>
+		Polymer({
+			is: 'es-contract-master',
+			properties: {
+				readonly: {
+					type: Boolean,
+					value: false
+				},
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							cntrdocTyp: [],
+							cntrSgnMethParam: {
+								ccd: "D020",
+								cstr_cnd_cd: "MODL_NM",
+								cstr_cnd_val: "CONTRACT"
+							},
+							orgnCntrSgnMeth: [],
+							cntrSgnMeth: [],
+							cntrTmplTyp: [],
+							oorgCd: [],
+							purcGrpCdParam: {
+								purc_grp_typ_ccd: "PURC"
+							},
+							purcGrpCd: []
+						};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				cntrrList: {
+					type: Object,
+					value: function() {
+						return [];
+					}
+				},
+				reasonTitle: {
+					type: String,
+					value: ""
+				},
+				beforeCntrSgnMeth: {
+					type: String,
+					value: ""
+				}
+			},
+			
+			formulas: {
+				existModuleEDOC: function() {
+					return SCModuleManager.exist("EDOC");
+				},
+				isChange: function() {
+					return this.get("cntrInfo.cntr_typ_ccd") === "CHG" && UT.toNumber(this.get("cntrInfo.cntr_revno")) > 1;
+				},
+				isTermination: function() {
+					return this.get("cntrInfo.cntr_typ_ccd") === "TRMN";
+				},
+				isTmplUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "TMPL";
+				},
+				isUserFileUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "USR_FILE";
+				},
+				isOffline: function() {
+					return this.get("cntrInfo.cntr_sgnmeth_ccd") === "OFFLINE";
+				},
+				readonlyPurcGrpCd: function() {
+					return this.readonly || this.formula("isChange") || this.formula("isTermination");
+				},
+				requiredPurcGrpCd: function() {
+					return (this.get("cntrInfo.cntrdoc_typ_ccd") == "ELEM_CNTRDOC" || this.get("cntrInfo.cntrdoc_typ_ccd") == "GEN_CNTRDOC");
+				},
+				readonlyCntrSgnMeth: function() {
+					return this.readonly || !this.formula("existModuleEDOC");
+				},
+				readonlyCntrTmplTyp: function() {
+					return this.readonly || this.formula("isOffline");
+				},
+				isTerminationSts: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return (this.formula("isTermination") && cntrStsCcd === "CNTR_CMPLD" && UT.isNotEmpty(this.get("cntrInfo.cntr_trmn_dt")))
+							|| cntrStsCcd === "CNTR_TRMN";
+				},
+				visibleTrmnDate: function() {
+					return this.formula("isTerminationSts");
+				},
+				visibleTrmnReason: function() {
+					return this.formula("isTermination") || this.get("cntrInfo.cntr_sts_ccd") === "CNTR_TRMN";
+				},
+				readonlyTrmnReason: function() {
+					return this.formula("isTerminationSts");
+				},
+				visibleReason: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					return cntrStsCcd === "APPX_REQ" || cntrStsCcd === "APPX_RET" || cntrStsCcd === "VD_RET";
+				},
+				isMultiSign: function() {
+					return this.get("cntrrList").length > 1;
+				},
+				visibleCntrrInfo: function() {
+					return !this.formula("isMultiSign") && this.get("cntrInfo.cntr_sgnmeth_ccd") === "EFORM";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("cntrInfo", data.cntrInfo);
+				me.set("cntrrList", data.cntrrList);
+				
+				// 사유필드 타이틀 세팅
+				var reasonTitle = "";
+				var cntrStsCcd = data.cntrInfo.cntr_sts_ccd;
+				if(cntrStsCcd === "APPX_REQ") {
+					reasonTitle = "부속서류 요청 내용";
+				} else if(cntrStsCcd === "APPX_RET") {
+					reasonTitle = "부속서류 거부 사유";
+				} else if(cntrStsCcd === "VD_RET") {
+					reasonTitle = "계약 반려 사유";
+				}
+				me.set("reasonTitle", reasonTitle);
+				
+				// 전자계약 모듈이 없는 경우, 계약 서명방법은 오프라인 계약으로 고정
+				if(!me.formula("existModuleEDOC")) {
+					me.set("cntrInfo.cntr_sgnmeth_ccd", "OFFLINE");
+				}
+				
+				// 사용자 운영조직 코드 목록 조회
+				me.onFindListOorgCd();
+				
+				// 간편서명은 기타계약서만 가능
+				me.filterCntrSgnMeth();
+				
+				me.applyFormula();
+			},
+			
+			completeFindListCommonCodeCntrSgnMeth: function(e, res) {
+				var me = this;
+				var cntrSgnMethList = me.get("codes.cntrSgnMeth");
+				me.set("codes.orgnCntrSgnMeth", cntrSgnMethList);
+			},
+			
+			// 사용자 운영조직 코드 목록 조회
+			onFindListOorgCd: function() {
+				var me = this;
+				var cntrdocTypCcd = me.get("cntrInfo.cntrdoc_typ_ccd");
+				var ounitCd = me.get("cntrInfo.ounit_cd");
+				
+				if(UT.isEmpty(ounitCd)) {
+					ounitCd = ["UPRC_AGT", "PO_CNTRDOC"].indexOf(cntrdocTypCcd) > -1 ? "PO" : "EO";
+					me.set("cntrInfo.ounit_cd", ounitCd);
+				}
+				UT.request(me.$.findListOperationOrganizationByUser);
+			},
+			
+			// 간편서명은 기타계약서만 가능하도록 제한
+			filterCntrSgnMeth: function() {
+				var me = this;
+				var cntrSgnMethList = me.get("codes.cntrSgnMeth");
+				var cntrDocTypCcd = me.get("cntrInfo.cntrdoc_typ_ccd");
+				
+				if(cntrDocTypCcd !== "GEN_CNTRDOC") {
+					var filtered = cntrSgnMethList.filter(function(item) {
+						if(item.data != "EFORM") {
+							return item;
+						}
+					});
+					cntrSgnMethList = filtered;
+					me.set("codes.cntrSgnMeth", cntrSgnMethList);
+				} else {
+					me.set("codes.cntrSgnMeth", me.get("codes.orgnCntrSgnMeth"));
+				}
+			},
+			
+			// 계약 저장 유효성 검사
+			validateOnSave: function() {
+				var me = this;
+				
+				if(!me.validate("save")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				return true;
+			},
+			
+			// 계약서 생성 유효성 검사
+			validateOnCreateDocument: function() {
+				var me = this;
+				
+				if(!me.validate("save")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				if(me.formula("isTmplUse")) {
+					if(UT.isEmpty(me.get("cntrInfo.cntrdoc_tmpl_uuid"))) {
+						UT.alert(me.translate("STD.E1001",null,me.translate("계약서 템플릿")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+						return false;
+					}
+				}
+				if(me.formula("isUserFileUse") && me.$.uploadCntrdoc.allFiles.length == 0) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("계약서")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return false;
+				}
+				if(me.get("cntrInfo.cntr_sgnmeth_ccd") === "PKI") {
+					var cntrrList = me.get("cntrrList");
+					for(var i = 0; i < cntrrList.length; i++) {
+						var cntrr = cntrrList[i];
+						if(UT.isEmpty(cntrr.bizregno)) {
+							UT.alert("STD.EDO3016"); // 공동인증서 서명은 사업자번호가 필수 항목입니다. 협력사의 사업자번호를 확인해 주시기 바랍니다.
+							return false;
+						}
+					}
+				}
+				return true;
+			},
+			
+			// 저장할 계약 정보 반환
+			saveParameter: function(callback) {
+				var me = this;
+				
+				if(me.formula("isUserFileUse")) {
+					me.$.uploadCntrdoc.upload().then(function() {
+						if(UT.isFunction(callback)) {
+							callback.call(me, me.get("cntrInfo"));
+						}
+					});
+				} else if(UT.isFunction(callback)) {
+					callback.call(me, me.get("cntrInfo"));
+				}
+			},
+			
+			// 계약 서명방법 변경시 이벤트
+			onChangeCntrSgnMethCcd: function(e) {
+				var me = this;
+				var sgnmethCcd = me.get("cntrInfo.cntr_sgnmeth_ccd");
+				var cntrTmplTypCcd = me.get("cntrInfo.cntr_tmpl_typ_ccd");
+				var beforeCntrSgnMeth = me.get("beforeCntrSgnMeth");
+				
+				if(sgnmethCcd == "OFFLINE") {
+					me.set("cntrInfo.cntr_tmpl_typ_ccd", "USR_FILE");
+				}
+				if(me.formula("isMultiSign") && (sgnmethCcd == "DOCUSIGN" || sgnmethCcd == "EFORM")) {
+					// 추후 다자계약 개발 완료시 제거
+					UT.alert('"DOCUSIGN 서명", "간편 서명"은 다자간 계약 기능 개발중입니다. 공동인증서 서명, 오프라인 계약 방식을 선택해주세요.', null, true);
+					return;
+				}
+				if(sgnmethCcd == "EFORM") {
+					me.set("cntrInfo.cntrdoc_typ_ccd", "GEN_CNTRDOC");
+				}
+				
+				if(beforeCntrSgnMeth != sgnmethCcd) {
+					// 오프라인 -> 전자서명(pki, docu, adobe)인 경우만 clear
+					if(cntrTmplTypCcd == "USR_FILE" && me.checkSgnMethOffline(beforeCntrSgnMeth)) {
+						me.clearUploadCntrDoc();
+					}
+					me.set("beforeCntrSgnMeth", sgnmethCcd);
+				}
+				
+				me.applyFormula();
+				me.fire("changed-cntr-sgnmeth-ccd", sgnmethCcd);
+			},
+			
+			// 서명 방법 오프라인
+			checkSgnMethOffline: function(data) {
+				return data == "OFFLINE" ? true : false;
+			},
+			
+			// 계약서 sc-upload clear
+			clearUploadCntrDoc: function() {
+				var me = this,
+					cntrDocCnt = me.$.uploadCntrdoc.allFiles.length;
+				
+				if(!me.readonly && cntrDocCnt > 0) {
+					me.$.uploadCntrdoc.clearAll();
+				}
+			},
+			
+			// 계약 템플릿 유형 변경시 이벤트
+			onChangeCntrTmplTypCcd: function(e) {
+				var me = this;
+				if(me.get("cntrInfo.cntr_tmpl_typ_ccd") == "TMPL") {
+					me.set("cntrInfo.tmpl_unud_cntrdoc_athg_uuid", null);
+					me.$.uploadCntrdoc.reset();
+				} else {
+					me.set("cntrInfo.cntrdoc_tmpl_uuid", null);
+					me.set("cntrInfo.cntrdoc_tmpl_nm", null);
+				}
+				
+				me.applyFormula();
+				me.onResizeComponent();
+			},
+			
+			// 파일 업로더 재조정
+			onResizeComponent: function() {
+				var me = this;
+				if(me.formula("isUserFileUse")) {
+					me.$.uploadCntrdoc.doContentElementResize();
+					
+					if(me.formula("isOffline")) {
+						me.$.uploadCntrdoc.extension = "jpg,gif,png,tif,bmp,txt,xls,doc,ppt,xlsx,docx,pptx,rtf,gul,hwp,pdf,mht,eml,mp4";
+					} else {
+						me.$.uploadCntrdoc.extension = "doc,docx,pdf";
+					}
+				}
+			},
+			
+			// 계약서 템플릿 선택 팝업
+			popupCntrDocTemplate: function() {
+				var me = this;
+				var cntrdocTypCcd = me.get("cntrInfo.cntrdoc_typ_ccd");
+				var sgnmethCcd = me.get("cntrInfo.cntr_sgnmeth_ccd");
+				
+				if(UT.isEmpty(cntrdocTypCcd)) {
+					UT.alert("STD.EDO3015"); // 계약서 유형을 선택해야 합니다.
+					return;
+				}
+				if(UT.isEmpty(sgnmethCcd)) {
+					UT.alert("STD.EDO3018"); // 계약 서명방법을 선택해야 합니다.
+					return;
+				}
+				
+				var sgnordTypCcd = "";
+				if(["DOCUSIGN", "EFORM", "ADOBESIGN"].indexOf(sgnmethCcd) > -1) {
+					sgnordTypCcd = "BUYER_VD";
+				} else {
+					sgnordTypCcd = "";
+				}
+				
+				var templatePopup = UT.popup("ep-cntrdoc-template-list", me, "80%", "70%", {
+					"selected": function(popup, e) {
+						popup.close();
+						me.set("cntrInfo.cntrdoc_tmpl_uuid", e.detail.cntrdoc_tmpl_uuid);
+						me.set("cntrInfo.cntrdoc_tmpl_nm", e.detail.cntrdoc_tmpl_nm);
+					}
+				});
+				
+				var param = {
+					cntrdoc_typ_ccd: cntrdocTypCcd,
+					use_yn: "Y",
+					sgnord_typ_ccd: sgnordTypCcd
+				};
+				templatePopup.show();
+				templatePopup.getWindowContent().load(param);
+			},
+			
+			// 다자간계약시 계약자 목록 팝업
+			popupContractorList: function() {
+				var me = this;
+				var contractorListPopup = UT.popup("ep-vd-contractor-list", me, "40%", "40%", {});
+				contractorListPopup.show();
+				contractorListPopup.getWindowContent().load(me.get("cntrInfo"));
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,193 @@
+<dom-module id="ep-appeal-popup">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 이의제기통보 데이타 조회  -->
+		<sc-ajax id="findAppealNoticeInfo"
+				 url="findAppealNoticeInfo.do"
+				 body="{{peInfo}}"
+				 on-response="completeFindAppealNoticeInfo">
+		</sc-ajax>
+		
+		<!-- 이의제기통보  -->
+		<sc-ajax id="noticeAppeal"
+				 url="noticeAppeal.do"
+				 body="{{peInfo}}">
+		</sc-ajax>
+		
+		<!-- 이의제기통보 임시저장 -->
+		<sc-ajax id="tempSaveNoticeAppeal"
+				 url="tempSaveNoticeAppeal.do"
+				 body="{{peInfo}}">
+		</sc-ajax>
+		
+		<!-- 이의제기통보 임시저장 삭제 -->
+		<!--<sc-ajax id="deleteDraftCmplNoticInfo"
+				 url="deleteDraftCmplNoticInfo.do"
+				 body="{{peInfo}}">
+		</sc-ajax>-->
+		
+		<cc-page-title-bar>
+			<sc-button	text="삭제"			on-click="onDeleteTempComplain"	hidden="true" 	auth-s></sc-button>
+			<sc-button	text="저장"			on-click="onTempSave"			hidden="[[!formula('isVisibleBtn')]]" 	auth-s></sc-button>
+			<sc-button  text="협력사 통보" 	on-click="onNoticeAppeal"  	hidden="[[!formula('isVisibleBtn')]]" 	auth-s></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel validation-group="appeal" column="1">
+			<cc-fieldset>
+				<sc-label text="평가 명"></sc-label>
+				<sc-text-field	value="{{peInfo.eval_nm}}"	disabled="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="이의제기 기간"></sc-label>
+				<sc-period-date-field from-value="{{peInfo.appeal_st_dt}}" to-value="{{peInfo.appeal_clsg_dt}}"
+									  default-from-value="0d" default-to-value="7d" string-date="true"	required="true" readonly="[[!formula('isEditable')]]">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="비고"></sc-label>
+				<sc-textarea-field value="{{peInfo.rmk}}" class="h-150" max-length="400" required="true" readonly="[[!formula('isEditable')]]"></sc-textarea-field>
+			</cc-fieldset>
+			</tr>
+		</cc-form-panel>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-appeal-popup',
+			properties : {
+				titleText: {
+					type: "String",
+					value: function() {
+						return this.translate("이의제기 통보");
+					}
+				},
+				peInfo: {
+					type: Object,
+					value: function(){
+						return {};
+					}
+				}
+			},
+			formulas : {
+				/* 이의제기통보 상태가 통보, 종료가 아닌 경우에만 버튼 노출 */
+				isVisibleBtn : function() {
+					var me   = this,
+						data = me.get("peInfo");
+					return data.appeal_sts_ccd != 'APPEAL_PRGSG' && data.appeal_sts_ccd != 'APPEAL_ED';
+				},
+				/* 이의제기통보 상태가 통보, 종료가 아닌 경우에만 수정가능 */
+				isEditable : function() {
+					var me   = this,
+						data = me.get("peInfo");
+					return data.appeal_sts_ccd != 'APPEAL_PRGSG' && data.appeal_sts_ccd != 'APPEAL_ED';
+				}
+			},
+			
+			// 1. 화면 로딩시 최초 호출
+			initialized : function(){
+			
+			},
+			
+			load: function(param){
+				var me = this;
+				
+				me.set("peInfo.eval_nm" ,param.eval_nm);
+				//me.set("peInfo.eval_id" ,param.eval_id);
+				me.set("peInfo.eval_cd" ,param.eval_cd);
+				me.set("peInfo.pe_uuid" ,param.pe_uuid);
+				me.set("peInfo.appeal_uuid" ,param.appeal_uuid);
+				
+				UT.request(me.$.findAppealNoticeInfo);
+			},
+			
+			// 이의제기삭제
+			onDeleteTempComplain: function(){
+				var me = this;
+				
+				UT.confirm("STD.N1300", function(){
+					UT.request(me.$.deleteDraftCmplNoticInfo, function(e, res){
+						var result = res.response;
+						if (UT.isObject(result) &&result.result_status === "S") {
+							UT.completeAlert("삭제",function(){
+								me.fire("complete-save");
+							});
+						} else {
+							//삭제실패
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 저장 Click
+			onTempSave: function(){
+				var me = this;
+				
+				if(!me.validate("appeal")){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function(){
+					UT.request(me.$.tempSaveNoticeAppeal, function(e, res){
+						var result = res.response;
+						if (UT.isObject(result) &&result.resultStatus === "S") {
+							UT.completeAlert("저장",function(){	// 저장이 완료되었습니다.
+								me.fire("complete-save");
+							});
+						} else {
+							// 저장실패
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 협력사 통보 Click
+			onNoticeAppeal: function(){
+				var me = this;
+				
+				if(!me.validate("appeal")){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.confirm("STD.SRM1004", function(){ // 협력사에게 이의제기 기간을 통보 하시겠습니까?
+					UT.request(me.$.noticeAppeal, function(e, res){
+						var result = res.response;
+						if (UT.isObject(result) && result.resultStatus === "S") {
+							UT.completeAlert("협력사 통보",function(){	// 요청을 완료하였습니다.
+								me.fire('complete-save');
+								me.onClose();
+							});
+						} else {
+							//저장실패
+							UT.alert("STD.E9999");
+						}
+					});
+				});
+			},
+			
+			// 협력사 통보 상세조회 완료
+			completeFindAppealNoticeInfo: function(el,res){
+				var me = this;
+				
+				if(UT.isNotEmpty(res.response)){
+					me.set("peInfo",res.response);
+				}
+				me.applyFormula();
+			},
+			
+			onClose: function(){
+				var me = this;
+				me.fire("close");
+			}
+			
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,563 @@
+<sc-link rel="import" href="../popup/ep-cntrformhistory-list.html"></sc-link>
+<sc-link rel="import" href="../popup/ep-cntrpreview.html"></sc-link>
+<sc-link rel="import" href="../popup/ep-appform-file.html"></sc-link>
+<sc-link rel="import" href="../popup/ep-cntrdoc-template-add.html"></sc-link>
+<sc-link rel="import" href="../appendix/em-appx-template.html"></sc-link>
+
+<dom-module id="es-cntrdoc-template-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 공통코드 조회 -->
+		<sc-code-group>
+			<sc-code code="D003" value="{{codes.cntrTypCcd}}"></sc-code><!-- 계약서 유형 -->
+			<sc-code code="C009" value="{{codes.useYn}}"></sc-code><!-- 사용 여부 -->
+			<sc-code code="D009" value="{{codes.sgnordTypCcd}}"></sc-code> <!-- 서명순서 유형 -->
+			<sc-code code="D004" value="{{codes.appxTypCcd}}"></sc-code> <!-- 부속서류 문서 유형 -->
+			<sc-code code="D031" value="{{codes.cndTypCcd}}"></sc-code> <!-- 계약서 템플릿 조건 유형 -->
+		</sc-code-group>
+		
+		<!-- 계약서 템플릿 목록 조회 -->
+		<sc-ajax id="findListCntrTmpl"
+				url="largeFindListCntrTmpl.do"
+				body="{{cntrTmplList.param}}"
+				last-response="{{cntrTmplList.result}}"
+				on-response="completeFindListCntrTmpl"></sc-ajax>
+	
+		<!-- 계약서 템플릿 목록 저장 -->
+		<sc-ajax id="saveListCntrTmpl"
+				 url="saveListCntrForm.do"
+				 on-response="completeSaveListCntrTmpl"></sc-ajax>
+
+		<!-- 계약서 템플릿 목록 삭제 -->
+		<sc-ajax id="deleteListCntrTmpl"
+				 url="deleteListCntrForm.do"
+				 on-response="completeDeleteListCntrTmpl"></sc-ajax>
+		
+		<!-- 부속서류 템플릿 목록 조회 -->
+		<sc-ajax id="findListCntrAppxTmpl"
+				url="findListCntrAppForm.do"
+				body="{{appxTmplList.param}}"
+				last-response="{{appxTmplList.result}}"></sc-ajax>
+		
+		<!-- 부속서류 템플릿 목록 저장 -->
+		<sc-ajax id="saveListCntrAppxTmpl"
+				 url="saveListCntrAppForm.do"
+				 on-response="completeSaveListCntrAppxTmpl"></sc-ajax>
+		
+		<!-- 부속서류 템플릿 목록 삭제 -->
+		<sc-ajax id="deleteListCntrAppxTmpl"
+				 url="deleteListCntrAppForm.do"
+				 on-response="completeDeleteListCntrAppxTmpl"></sc-ajax>
+				 
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+
+		<div class="vbox flex-6">
+			<cc-page-title-bar></cc-page-title-bar>
+			
+			<cc-search-condition-panel on-search="onSearchCntrTmpl" on-enter="onSearchCntrTmpl" auth-r>
+				<cc-fieldset>
+					<sc-label text="템플릿 명"></sc-label>
+					<sc-text-field value="{{cntrTmplList.param.cntrdoc_tmpl_nm}}" max-length="60"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="계약서 유형"></sc-label>
+					<sc-combobox-field value="{{cntrTmplList.param.cntrdoc_typ_ccd}}" placeholder="전체"
+										items="{{codes.cntrTypCcd}}" value-field="data" display-field="label"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="사용 여부"></sc-label>
+					<sc-combobox-field value="{{cntrTmplList.param.use_yn}}" placeholder="전체"
+										items="{{codes.useYn}}" value-field="data" display-field="label"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="서명순서 유형"></sc-label>
+					<sc-combobox-field value="{{cntrTmplList.param.sgnord_typ_ccd}}" placeholder="전체"
+										items="{{codes.sgnordTypCcd}}" value-field="data" display-field="label"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="조건 유형"></sc-label>
+					<sc-combobox-field value="{{cntrTmplList.param.cnd_typ_ccd}}" placeholder="전체"
+									   items="{{codes.cndTypCcd}}" value-field="data" display-field="label"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+
+			<!-- 계약서 템플릿 그리드 -->
+			<sc-grid id="gridCntrTmpl" class="flex" is-tree="true" editable="true" validate-none-editable="false"
+					 on-item-click="onCntrTmplItemClick">
+				<cc-grid-toolbar>
+					<sc-button text="추가" on-click="popupNewCntrTmpl"	auth-s></sc-button>
+					<sc-button text="삭제" on-click="onDeleteCntrTmpl"	auth-s></sc-button>
+					<sc-button text="저장" on-click="onSaveCntrTmpl"	auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="cntrdoc_tmpl_nm" header-text="템플릿 명" width="300" text-align="left" max-length="60" required="true" item-editable-function="onItemEditableFn"></sc-data-column>
+					<sc-image-column data-field="detail_btn" header-text="상세" width="70"  image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-group-column hide-child-headers="true" header-text="부속서류" width="80">
+						<sc-data-column data-field="appx_count" header-text="" width="40"></sc-data-column>
+						<sc-image-column data-field="appx_btn" header-text="" width="40" image-change-function="onImageChangeFn"></sc-image-column>
+					</sc-group-column>
+					
+					<sc-combobox-column data-field="cntrdoc_typ_ccd" header-text="계약서 유형" width="150" items="{{codes.cntrTypCcd}}" display-field="label" value-field="data" item-editable-function="onItemEditableFn"></sc-combobox-column>
+					<sc-combobox-column data-field="cnd_typ_ccd" header-text="조건 유형" width="100" items="{{codes.cndTypCcd}}" display-field="label" value-field="data" item-editable-function="onItemEditableFn"></sc-combobox-column>
+					<sc-checkbox-column data-field="use_yn" header-text="사용 여부" width="70" item-editable-function="onItemEditableFn"></sc-checkbox-column>
+					<sc-date-column data-field="cntrdoc_use_dt" header-text="계약서 사용 일자" width="100" required="true" string-date="true" item-editable-function="onItemEditableFn"></sc-date-column>
+					<sc-combobox-column data-field="sgnord_typ_ccd" header-text="서명순서 유형" width="140" items="{{codes.sgnordTypCcd}}" display-field="label" value-field="data" item-editable-function="onItemEditableFn"></sc-combobox-column>
+					<sc-data-column data-field="modr_id" header-text="수정자 아이디" width="100"></sc-data-column>
+					<sc-date-column data-field="mod_dttm" header-text="수정 일자" width="120" value-format="yyyy/MM/dd" ></sc-date-column>
+					<sc-image-column data-field="history_btn" header-text="변경 이력" width="110" image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-image-column data-field="pdf_btn" header-text="PDF 다운로드" width="100" image-change-function="onImageChangeFn"></sc-image-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="cntrdoc_tmpl_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+
+		<div class="vbox flex-4">
+			<!-- 부속서류 그리드 -->
+			<sc-grid id="gridAppxTmpl" class="flex" editable="true"
+					 data-provider="{{appxTmplList.result}}"
+					 on-item-click="onAppxTmplItemClick">
+				<cc-grid-toolbar id="appx_id" title-text="부속서류 템플릿">
+					<sc-button text="추가"	on-Click="popupAppxTmplList"	auth-s></sc-button>
+					<sc-button text="삭제"	on-Click="onDeleteAppxTmpl"		auth-s></sc-button>
+					<sc-button text="저장"	on-Click="onSaveAppxTmpl"		auth-s></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="appx_tmpl_nm" header-text="부속서류 템플릿 명" width="400" text-align="left" style-name="link" ></sc-data-column>
+					<sc-combobox-column data-field="mand_yn" header-text="필수 여부" width="120" editable="true" items="{{codes.useYn}}" display-field="label" value-field="data"></sc-combobox-column>
+					<sc-combobox-column data-field="appx_typ_ccd" header-text="부속서류 유형" width="150" items="{{codes.appxTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+					<sc-data-column data-field="cntrdoc_tmpl_ord" header-text="순서" width="100" editable="true" required="true"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="cntrdoc_tmpl_uuid"></sc-grid-field>
+					<sc-grid-field data-field="appx_tmpl_uuid"></sc-grid-field>
+					<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: "es-cntrdoc-template-list",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							cntrTypCcd: [],
+							useYn: [],
+							sgnordTypCcd: [],
+							appxTypCcd: [],
+							cndTypCcd: []
+						};
+					}
+				},
+				cntrTmplList: {
+					type: Object,
+					value: function() {
+						return {
+							param: {},
+							result: {}
+						};
+					}
+				},
+				appxTmplList: {
+					type: Object,
+					value: function() {
+						return {
+							param: {},
+							result: {}
+						};
+					}
+				}
+			},
+
+			initialized: function() {
+				var me = this;
+				me.load();
+			},
+
+			load: function() {
+				var me = this;
+				me.applyFormula();
+			},
+			
+			/* 계약서 템플릿 그리드 아이템 클릭 이벤트 */
+			onCntrTmplItemClick: function(e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+				var provider = e.detail.provider;
+
+				//신규생성 데이터는 이벤트 동작 X
+				if(provider.getItemState(item.rowIndex) === "created") {
+					return;
+				}
+				//트리의 root 데이터는 이벤트 동작 X
+				if(data["up_cntr_typ_ccd"] === "ROOT"){
+					return;
+				}
+				
+				var appxTmplProvider = me.$.gridAppxTmpl.getDataProvider();
+				var created = appxTmplProvider.getNewItems();
+				var updated = appxTmplProvider.getUpdateItems();
+
+				if(created.length + updated.length > 0) {
+					UT.confirm("STD.N3900", function() {	// 변경된 정보가 있습니다. 저장하지 않고 진행하시겠습니까?
+						me.onCntrTmplItemClickEvent(item, data);
+					});
+				} else {
+					me.onCntrTmplItemClickEvent(item, data);
+				}
+			},
+			
+			onCntrTmplItemClickEvent: function(item, data) {
+				var me = this;
+				
+				if(item.dataField === "detail_btn") { // 내용
+					me.fire("show-detail", data);
+				
+				} else if (item.dataField === "appx_btn") { //부속서류
+					me.set("appxTmplList.param", data);
+					me.onSearchAppxTmpl();
+					
+				} else if (item.dataField === "history_btn") { //변경이력
+					me.popupCntrTmplHistory(data);
+				
+				} else if (item.dataField === "pdf_btn") { // pdf 다운로드
+					me.onDownloadPdf(data);
+				}
+			},
+			
+			/* 부속서류 그리드 아이템 클릭 이벤트 */
+			onAppxTmplItemClick: function(e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+				var provider = e.detail.provider;
+
+				//생성시에는 클릭 이벤트 실행되지 않도록 Return
+				if (provider.getItemState(item.rowIndex) === "created") {
+					return;
+				}
+
+				if (item.dataField === "appx_tmpl_nm") { // 부속서류 명
+					me.popupAppxTmplDetail(data);
+				}
+			},
+			
+			/* 그리드 아이템 수정가능여부 function */
+			onItemEditableFn: function(data, item) {
+				if(data["up_cntr_typ_ccd"] === "ROOT"){
+					return false;
+				} else {
+					return true;
+				}
+			},
+			
+			/* 그리드 아이템 이미지 변경 function */
+			onImageChangeFn: function(data, item) {
+				if(data["up_cntr_typ_ccd"] === "ROOT"){
+					return "";
+				} else {
+					if(item.dataField === "detail_btn") { // 내용
+						return "search";
+					} else if (item.dataField === "appx_btn") { //부속서류
+						return "attach";
+					} else if (item.dataField === "history_btn") { //변경이력
+						return "link";
+					} else if (item.dataField === "pdf_btn") { // pdf 다운로드
+						return "attach";
+					}
+				}
+			},
+			
+			/* 계약서 템플릿 그리드 조회 */
+			onSearchCntrTmpl: function() {
+				UT.request(this.$.findListCntrTmpl);
+			},
+
+			/* 계약서 템플릿 그리드 조회 callback */
+			completeFindListCntrTmpl: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				var hier = new CCHierachicalData();
+				var datas = hier.HierachyTransformByKey(result, "cntrdoc_tmpl_uuid", "up_cntr_typ_ccd", "children", "ROOT", null, true);
+				me.$.gridCntrTmpl.setHierachyDataProvider(datas, "children");
+				
+				me.$.gridCntrTmpl.expandAll(); // 그리드 트리 전체 펼침
+				me.$.gridAppxTmpl.getDataProvider().removeAll(); // 부속서류 그리드 초기화
+			},
+			
+			/* 계약서 템플릿 추가 팝업 */
+			popupNewCntrTmpl: function() {
+				var me = this;
+				
+				var newCntrTmplPopup = UT.popup("ep-cntrdoc-template-add", me, "45%", "40%", {
+					"save": function(popup, e) {
+						me.onSearchCntrTmpl();
+						popup.close();
+					}
+				}, {titleText: "계약서 템플릿 추가"}); 
+				newCntrTmplPopup.show();
+				newCntrTmplPopup.getWindowContent().load();
+			},
+			
+			/* 계약서 템플릿 그리드 - 삭제 */
+			onDeleteCntrTmpl: function() {
+				var me = this;
+				var provider = me.$.gridCntrTmpl.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+
+				if(checked.length === 0) {
+					UT.alert("STD.N1600");	// 선택된 항목이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					me.$.deleteListCntrTmpl.body = {
+						deleteList: checked
+					};
+					UT.request(me.$.deleteListCntrTmpl);
+				});
+			},
+			
+			/*계약서 템플릿 그리드 - 삭제 callback */
+			completeDeleteListCntrTmpl: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S"){
+					UT.alert("STD.N2500", function() {	// 삭제 하였습니다.
+						me.onSearchCntrTmpl();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 계약서 템플릿 그리드 - 저장 */
+			onSaveCntrTmpl: function() {
+				var me = this;
+				var grid = me.$.gridCntrTmpl;
+				var provider = grid.getDataProvider();
+			   	var created = provider.getNewItems();
+				var updated = provider.getUpdateItems();
+
+				if(created.length + updated.length === 0) {
+					UT.alert("STD.N1700");	// 변경된 내용이 없습니다.
+					return;
+				}
+				
+				if(!grid.validate()) {
+					UT.alert("STD.E0000");	// 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+
+				UT.confirm("STD.N1200", function() {	// 저장 하시겠습니까?
+					me.$.saveListCntrTmpl.body = {
+						insertList: created,
+						updateList: updated
+					};
+					UT.request(me.$.saveListCntrTmpl);
+				});
+			},
+			
+			/* 계약서 템플릿 그리드 - 저장 callback */
+			completeSaveListCntrTmpl: function (e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if (result.resultStatus === "S") {
+					UT.alert("STD.N1500", function() { // 요청이 완료되었습니다.
+						me.onSearchCntrTmpl();
+					});
+				} else if (result.resultStatus === "D") {
+					UT.alert(me.translate("STD.E1042",null,me.translate("템플릿 명")),null,true); // 중복된 '{0}'(이)가 존재합니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 부속서류 템플릿 그리드 조회 */
+			onSearchAppxTmpl: function() {
+				UT.request(this.$.findListCntrAppxTmpl);
+			},
+			
+			/* 부속서류 템플릿 추가 팝업 */
+			popupAppxTmplList: function() {
+				var me = this;
+				var selectedCntrTmpl = me.get("appxTmplList.param");
+				selectedCntrTmpl["is_add_popup"] = true;
+				
+				if (UT.isEmpty(selectedCntrTmpl.cntrdoc_tmpl_uuid)) {
+					UT.alert("STD.EDO1014"); // 계약서 템플릿을 선택해야 합니다.
+					return;
+				}
+				
+				var newAppxTmplPopup = UT.popup("em-appx-template", me, "65%", "70%", {
+					"selected-items": function(popup, e) {
+						me.onAddAppxTmpl(e.detail);
+						popup.close();
+					}
+				}, {titleText: "부속서류 템플릿 추가"});
+				newAppxTmplPopup.show();
+				newAppxTmplPopup.getWindowContent().load(selectedCntrTmpl);
+			},
+			
+			/* 부속서류 템플릿 그리드 - 추가 */
+			onAddAppxTmpl: function(selected) {
+				var me = this;
+				var provider = me.$.gridAppxTmpl.getDataProvider();
+				var all = provider.getItems();
+				var addList = [];
+				var maxOrd = 0;
+				
+				for(var i in selected) {
+					var exist = false;
+					
+					// 이미 추가된 부속서류인지 확인
+					for(var j in all) {
+						maxOrd = (maxOrd < parseInt(all[j].cntrdoc_tmpl_ord,10))? parseInt(all[j].cntrdoc_tmpl_ord,10) : maxOrd;
+						if(all[j].appx_tmpl_uuid === selected[i].appx_tmpl_uuid) {
+							exist = true;
+							break;
+						}
+					}
+					
+					if(!exist) {
+						maxOrd++;
+						var addItem = {
+							cntrdoc_tmpl_uuid: me.get("appxTmplList.param.cntrdoc_tmpl_uuid"),
+							appx_tmpl_uuid: selected[i].appx_tmpl_uuid,
+							appx_tmpl_nm: selected[i].appx_tmpl_nm,
+							appx_typ_ccd: selected[i].appx_typ_ccd,
+							mand_yn: selected[i].mand_yn,
+							cntrdoc_tmpl_ord: maxOrd
+						};
+						addList.push(addItem);
+					}
+				}
+				
+				if(UT.isNotEmpty(addList)) {
+					provider.addItems(addList);
+					UT.alert("STD.N2000");	// 중복 데이터를 제외 후 추가하였습니다.
+				}
+			},
+			
+			/* 부속서류 템플릿 그리드 - 삭제 */
+			onDeleteAppxTmpl: function() {
+				var me = this;
+				var provider = me.$.gridAppxTmpl.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+
+				if (checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function () {	// 삭제 하시겠습니까?
+					me.$.deleteListCntrAppxTmpl.body = {
+						deleteList: checked
+					};
+					UT.request(me.$.deleteListCntrAppxTmpl);
+				});
+			},
+			
+			/* 부속서류 템플릿 그리드 - 삭제 callback */
+			completeDeleteListCntrAppxTmpl: function(e, res) {
+				var me = this;
+				var result = res.response;
+
+				if(result.resultStatus === "S"){
+					UT.alert("STD.N2500", function() {	// 삭제하였습니다.
+						me.onSearchCntrTmpl();
+						me.onSearchAppxTmpl();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 부속서류 템플릿 그리드 - 저장 */
+			onSaveAppxTmpl: function() {
+				var me = this;
+				var grid = me.$.gridAppxTmpl;
+				var provider = grid.getDataProvider();
+			   	var created = provider.getNewItems();
+				var updated = provider.getUpdateItems();
+
+				if(created.length + updated.length === 0) {
+					UT.alert("STD.N1700");	// 변경된 내용이 없습니다.
+					return;
+				}
+				
+				if(!grid.validate()) {
+					UT.alert("STD.E0000");	// 입력하신 정보를 다시 확인하여 주세요.
+					return;
+				}
+
+				UT.confirm("STD.N1200", function() {	// 저장 하시겠습니까?
+					me.$.saveListCntrAppxTmpl.body = {
+						insertList: created,
+						updateList: updated
+					};
+					UT.request(me.$.saveListCntrAppxTmpl);
+				});
+			},
+
+			/* 부속서류 템플릿 그리드 - 저장 callback */
+			completeSaveListCntrAppxTmpl: function(e, res) {
+				var me = this;
+				var result = res.response;
+
+				if(result.resultStatus === "S"){
+					UT.alert("STD.N1500", function() { // 요청이 완료되었습니다.
+						me.onSearchCntrTmpl();
+						me.onSearchAppxTmpl();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 변경 이력 팝업 */
+			popupCntrTmplHistory: function(data) {
+				var cntrFormHistroyList = UT.popup("ep-cntrformhistory-list", this, "725", "400", {}, {titleText: "계약서 템플릿 변경 이력"});
+				cntrFormHistroyList.show();
+				cntrFormHistroyList.getWindowContent().load(data);
+			},
+			
+			/* pdf 다운로드 */
+			onDownloadPdf: function(data) {
+				var paramObj = { cntrdoc_tmpl_uuid: data.cntrdoc_tmpl_uuid };
+				DL.downloadByUrl("bp/edoc/template/CntrTemplateController/downloadFormPdf.do", this, paramObj);
+			},
+			
+			/* 부속서류 상세보기 팝업 */
+			popupAppxTmplDetail: function(data) {
+				var me = this;
+				var type = data.appx_typ_ccd;
+				
+				if (type === "TXT") {
+					var cntrPreviewPopup = UT.popup("ep-cntrpreview", me, "70%", "60%", {}, {titleText: "부속서류 템플릿 상세"});
+					cntrPreviewPopup.show();
+					cntrPreviewPopup.getWindowContent().load(data, "appForm");
+					
+				} else if (type === "FILE" || type === "FILE_LIST") {
+					var appFormFilePopup = UT.popup("ep-appform-file", me, "50%", "40%", {}, {titleText: "부속서류 템플릿 상세"});
+					appFormFilePopup.show();
+					appFormFilePopup.getWindowContent().load(data, "view");
+				}
+			}
+		});
+	</script>
+</dom-module>

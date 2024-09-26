@@ -1,0 +1,357 @@
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사 Master
+	** @Author 			: sykim
+	** @Create Date 	: 2023.05.31
+	******************************************************************************************
+-->
+
+<sc-link rel="import" href="../vendorReg/em-reg-vendor.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-renewed-info.html"></sc-link>
+<sc-link rel="import" href="ep-vendor-profile-upload-tab.html"></sc-link>
+
+<dom-module id="es-vendor-profile-list">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+
+    </style>
+    <template>
+    	<!-- 협력사 목록 조회 -->
+    	<sc-ajax
+    		id="findListVendorProfile"
+    		url="findListVendorProfile.do"
+    		last-response="{{vdList}}"></sc-ajax>
+    		
+    	<!-- 인쇄물 관리 데이터 조회 -->
+    	<sc-ajax id="findListPrintoutProfile" url="findListPrintoutProfile.do"></sc-ajax>
+    	
+    	<!-- 공통코드 조회 -->
+		<sc-request-group id="codes" init>
+			<sc-code-group>
+				<sc-code code="C001" value="{{codes.ctry_ccd}}" ></sc-code><!-- 국가 -->
+				<sc-code code="E902" value="{{codes.obd_typ_ccd}}"></sc-code><!-- 온보딩 유형 -->
+				<sc-code code="E035" value="{{codes.po_poss_yn}}"></sc-code><!-- 발주 가능 상태 -->
+				<sc-code code="E027" value="{{codes.chg_typ_ccd}}"></sc-code><!-- 최근 결재구분 -->
+				<sc-code code="G002" value="{{codes.chg_req_sts_ccd}}"></sc-code><!-- 결재상태 -->
+			</sc-code-group>
+			
+	    	<sc-ajax
+	    		url="findListOperationOrganizationByUser.do"
+	    		body="EO"
+	            content-type="text/plain" 
+	    		last-response="{{codes.oorg_cd}}">
+	    	</sc-ajax><!-- 운영조직 조회 -->
+	    </sc-request-group>
+   	
+		<cc-auth-checker check-list="auth-p"></cc-auth-checker>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearch" on-enter="onSearch" search-condition-group-cls="label-column" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<sc-multi-combobox-field selected-all="true" placeholder="선택없음" required="true"
+										 display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorg_cd}}"
+										 value="{{vdInfo.oorg_cd}}">
+				</sc-multi-combobox-field>
+			</cc-fieldset>
+<!--			<cc-fieldset>-->
+<!--				<sc-label text="수정 일자"></sc-label>-->
+<!--				<sc-period-date-field default-from-value="-1y" default-to-value="0d"-->
+<!--									  from-value="{{vdInfo.from_date}}" to-value="{{vdInfo.to_date}}">-->
+<!--				</sc-period-date-field>-->
+<!--			</cc-fieldset>-->
+			<cc-fieldset>
+				<sc-label text="온보딩 유형"></sc-label>
+				<sc-combobox-field
+						display-field="label" value-field="data"
+						items="{{codes.obd_typ_ccd}}" value="{{vdInfo.obd_typ_ccd}}"placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field class="w-100" value="{{vdInfo.erp_vd_cd}}" placeholder="코드" on-enter="onSearch"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{vdInfo.vd_nm}}" placeholder="협력사 명" on-enter="onSearch"></sc-text-field>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="사업자등록번호"></sc-label>
+				<sc-text-field value="{{vdInfo.bizregno}}" max-length="12"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="국가"></sc-label>
+				<sc-combobox-field
+						display-field="label" value-field="data"
+						items="{{codes.ctry_ccd}}" value="{{vdInfo.ctry_ccd}}" placeholder="전체">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="대표자 명"></sc-label>
+				<sc-text-field value="{{vdInfo.ceo_nm}}" on-enter="onSearch" max-length="40"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+		<sc-grid id="gridPanel" class="flex" editable="true" on-item-click="onDataCellClicked" use-state="false" selection-mode="check"
+				 data-provider="{{vdList}}">
+			<cc-grid-toolbar>
+<!--				<cc-link-url-copy></cc-link-url-copy>-->
+				<sc-button text="Excel Upload" on-click="onExcelUpload"></sc-button>
+				<sc-button text="협력사 신규 등록" on-click="onAddNewVd"></sc-button>
+				<sc-button text="정보 갱신 요청" on-click="onChangeInfo"></sc-button>
+<!--				<sc-button text="인쇄"	on-click="onPrintout" auth-p></sc-button>-->
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column	data-field="org_nm"	header-text="운영조직" width="170" items="{{codes.oorg_cd}}"
+									   display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column	data-field="erp_vd_cd"	header-text="협력사 코드"	width="90"></sc-data-column>
+				<sc-data-column	data-field="vd_nm" header-text="협력사 명" width="220" text-align="left"></sc-data-column>
+				<sc-combobox-column	data-field="obd_typ_ccd" header-text="온보딩 유형" width="80" items="{{codes.obd_typ_ccd}}"
+									display-field="label" value-field="data"></sc-combobox-column><!-- 거래유형 -->
+				<sc-combobox-column	data-field="po_poss_yn"	header-text="발주 가능 여부" width="110" items="{{codes.po_poss_yn}}"
+									display-field="label" value-field="data"></sc-combobox-column><!-- 거래상태 -->
+				<sc-data-column	data-field="vd_nm_en" header-text="협력사 명 영문" width="220" text-align="left"></sc-data-column>
+				<sc-image-column data-field="img_vd_popup" header-text="상세" width="70" text-align="center" image-cls="link"></sc-image-column>
+				<sc-data-column	data-field="ceo_nm"	header-text="대표자 명" width="100"></sc-data-column>
+				<sc-combobox-column	data-field="ctry_ccd" header-text="국가" width="70" items="{{codes.ctry_ccd}}"
+									display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column	data-field="bizregno" header-text="사업자등록번호"	width="100"></sc-data-column>
+				<sc-data-column	data-field="corpno"	header-text="법인번호" width="130"></sc-data-column>
+				<sc-data-column	data-field="addr_info" header-text="주소" width="400" text-align="left"></sc-data-column>
+				<sc-data-column	data-field="tax_id"	header-text="Tax No" width="90" i18n-disabled></sc-data-column>
+				<sc-data-column	data-field="eu_vat_reg_id"	header-text="EU Sales No"	width="90"	 i18n-disabled></sc-data-column>
+<!--				<sc-checkbox-column	data-field="printout_check_yn"	header-text="인쇄"	width="50"	text-align="center" checked-value="Y" un-checked-value="N" -->
+<!--       						editable="true" display-box="true" display-checkbox="false" hide-unchecked-mark="true" item-style-function="onItemStyleFunction"></sc-checkbox-column>-->
+				<sc-date-column	data-field="mod_dttm" header-text="수정 일자" width="120"></sc-date-column>
+				<sc-combobox-column	data-field="chg_typ_ccd" header-text="최근 결재 구분"	width="190"
+									display-field="label" value-field="data" items="{{codes.chg_typ_ccd}}"></sc-combobox-column>
+				<sc-combobox-column	data-field="chg_req_sts_ccd" header-text="상태" width="90"
+								    display-field="label" value-field="data" items="{{codes.chg_req_sts_ccd}}"></sc-combobox-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="vd_oorg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+				<sc-grid-field data-field="erp_vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="corpno"></sc-grid-field>
+				<sc-grid-field data-field="vd_mand_fact_save_yn"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+    </template>
+	
+    <script>
+        Polymer({
+            is: "es-vendor-profile-list",
+			
+            properties: {
+            	/*공통코드 데이터 binding*/
+            	codes: {
+            		type: Object,
+            		value:function(){
+            		    return {
+                            ctry_ccd: [],
+							oorg_cd:[],
+							obd_typ_ccd: [],
+							po_poss_yn: [],
+							chg_typ_ccd: [],
+                            chg_req_sts_ccd: []
+                        };
+                    }
+            	},
+            	
+            	/*조회 데이터 binding*/
+            	vdInfo: {
+            		type: Object,
+            		value:function(){
+            			return{};
+            		}
+            	},
+				
+                vdList:{
+            	    type: Array,
+					value:function(){
+            	        return [];
+					}
+				},
+				
+				/*인쇄물 데이터 binding*/
+				printoutInfo: {
+                	type: Object,
+                	value: function(){
+                		return {}
+                	}
+                }
+            },
+            
+            initialized: function(){
+            	var me = this;
+            },
+   			
+            onDataCellClicked: function(e){
+                var me = this,
+                    item = e.detail.item,
+                    data = e.detail.data;
+				
+                if(item.dataField === "img_vd_popup") {
+                    UT.popupVendor(me, data, function() {
+                        me.onSearch();
+                    });
+                }
+            },
+         	// 인쇄컬럼 배경색 지정
+            onItemStyleFunction: function(data, item){
+            	var me = this;
+            	
+            	if(item.dataField=="printout_check_yn"){
+            		return {"background" : "#FFFFFF", "shapeColor" : "#DF0101"};
+            	}
+            },
+            
+            /* 협력사 목록 조회 */
+            onSearch: function(){
+            	var me = this;
+            	me.set("vdInfo", me.vdInfo);
+            	
+            	if(!me.validate("search")){
+            		UT.alert("STD.E0000");
+            		return;
+            	}
+            	me.$.findListVendorProfile.body = me.vdInfo;
+            	UT.request(me.$.findListVendorProfile);
+            	
+            },
+
+			/* 협력사 마스터정보 엑셀업로드 팝업호출 */
+			onExcelUpload: function() {
+				var me = this;
+
+				var excelUploadPopup = UT.popup('ep-vendor-profile-upload-tab', me, 1200, 750, {
+					'close' : function(popup, e) {
+						me.onSearch();
+					},
+				}, {titleText: me.translate("협력사 엑셀 업로드")});
+				// 신규등록 팝업을 호출한다.
+				excelUploadPopup.show();
+				excelUploadPopup.getWindowContent().load();
+			},
+
+            /* 협력사 신규등록 팝업호출 */
+            onAddNewVd: function(){
+            	var me = this;
+
+            	var newVendorPopup = UT.popup('em-reg-vendor', me, 1200, 750, {
+					'close' : function(popup, e) {
+						if(e.detail.vd_cd){
+							me.loadModuleByLink(e.detail);
+						}
+					},
+					'close-and-menutrans' : function(popup, e) {
+						var menuInfo = me._getMenuInfo('VS12300'),
+							menuName = menuInfo.menu_nm,
+							menuUrl = menuInfo.menu_url;
+						MDIUT.createWindow('VS12300', menuName, menuUrl);
+						popup.close();
+					}
+				}, {titleText: me.translate("협력사 신규 등록")});
+                // 신규등록 팝업을 호출한다.
+                newVendorPopup.show();
+				newVendorPopup.getWindowContent().load();
+            },
+			_getMenuInfo : function(menuCd) {
+                var menuInfo = SCMenuManager.getMenuNode(menuCd);
+                return menuInfo;
+            },
+            
+            /* 정보갱신요청 팝업 호출 */
+            onChangeInfo: function(){
+            	var me = this;
+            	
+            	var checkedRows = this.$.gridPanel.getDataProvider().selectionCheckedItems();
+            	
+				if(checkedRows.length == 0){
+					// 1개도 선택이 안된경우
+					UT.alert("STD.N1600" );
+				} else {
+					
+					var reNewInfoPopup = UT.popup("ep-vendor-renewed-info", me, 830, "95%", null, {titleText:"정보 갱신 요청"} );
+					// 정보 갱신 요청 팝업을 호출한다.
+					reNewInfoPopup.show();
+					reNewInfoPopup.getWindowContent().load(checkedRows);
+				}
+				
+            },
+            
+            /* 인쇄물 복수 건 조회 */
+            // onPrintout: function(data, item){
+            // 	var me = this,
+            // 		provider = me.$.gridPanel.getDataProvider(),
+            // 		selectedItems = provider.filterItems({printout_check_yn : "Y"});
+            //
+            // 	// 라디오버튼 선택 후 인쇄버튼 클릭 시
+            // 	var checkedRows = this.$.gridPanel.getDataProvider().selectionCheckedItems();
+            // 	if(checkedRows.length == 1){
+            // 		SCAlert.show("알림", "인쇄컬럼 체크박스를 선택 후 인쇄버튼을 클릭해주세요.", function(btn){
+            //             if(btn === "ok"){
+            //             	me.$.gridPanel.selectionCheckAll(false);
+            //             }
+            //         });
+            //         return;
+            // 	}
+            //
+            // 	if(UT.isEmpty(selectedItems)){
+            //     	UT.alert("STD.N1600");
+            //     	return;
+            //     }
+            // 	var vdCdList = [];
+            // 	for(i=0; i<selectedItems.length; i++){
+            // 		vdCdList.push(selectedItems[i].vd_cd);
+            // 	}
+            // 	if(vdCdList.length > 0) {
+            // 		me.$.findListPrintoutProfile.body = {
+       	 //                    vd_cd 	: vdCdList
+       	 //                };
+            // 	}
+            //    	UT.request(me.$.findListPrintoutProfile, function(e, res){
+            //    		var result = res.response;
+            //
+            //     	me.set("printoutInfo", result);
+            //
+            //     	var datasetList = me.get("printoutInfo.datasetList");
+            //    		var projectName = me.get("printoutInfo.param.projectName");
+            //    		var formName = me.get("printoutInfo.param.formName");
+            //    		var url = me.get("printoutInfo.param.url");
+            //        	// UBIFORM 호출
+            //        	UT.openUBIFORM(projectName, formName, datasetList, url);
+            //    	});
+            // },
+            
+            loadModuleByLink : function(param){
+                var me = this;
+                
+                me.$.findListVendorProfile.body = {
+                        vd_cd : param.vd_cd,
+						oorg_cd : [param.oorg_cd]
+                };
+                
+                UT.request(me.$.findListVendorProfile, function(e, res){
+                    var resultList = res.response;
+                    var result = UT.isArray(resultList) && resultList.length ? resultList[0] : param;
+                    // 리스트 조회되지 않은 경우 parameter로 팝업 호출하도록 임시 구현(사용자 권한 및 운영조직)
+                    UT.popupVendor(me, result, function(){
+                        me.onSearch();
+                    });
+                });
+            },
+            
+            onImageChangeFn: function(data, item) {
+            	if(UT.isNotEmpty(item.dataField)){
+	            	return "link";
+            	}
+			}
+        });
+    </script>
+
+</dom-module>

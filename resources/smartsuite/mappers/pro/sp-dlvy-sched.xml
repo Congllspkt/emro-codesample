@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-dlvy-sched">
+    <select id="findOneDlvySchedChgReq" resultType="map">
+        /* sp-dlvy-sched.findOneDlvySchedChgReq: 협력사 납품 일정 변경 요청 단일 조회 */
+        SELECT
+        DSCR.TEN_ID
+        , DSCR.DLVY_SCHED_CHG_REQ_UUID
+        , DSCR.DLVY_SCHED_CHG_REQ_DTTM
+        , DSCR.DLVY_SCHED_CHG_REQ_RSN
+        , DSCR.DLVY_SCHED_CHG_REQ_STS
+        , DSCR.RMK
+        , DSCR.STS
+        , DSCR.REGR_ID
+        , DSCR.REG_DTTM
+        FROM DLVY_SCHED_CHG_REQ DSCR
+        WHERE DSCR.TEN_ID = #{g.tenant}
+        AND DSCR.DLVY_SCHED_CHG_REQ_UUID = #{p.dlvy_sched_chg_req_uuid}
+        AND DSCR.STS != 'D'
+    </select>
+    <select id="findDlvySchedByPoItemUuids" resultType="map">
+        /* sp-dlvy-sched.findDlvySchedByPoItemUuids: 협력사 납품 일정 리스트 조회 */
+        SELECT DS.TEN_ID
+        , DS.DLVY_SCHED_UUID
+        , DS.PO_ITEM_UUID
+        , DS.DLVY_SCHED_STS
+        , PI.PO_NO
+        , PI.PO_LNO
+        , PI.PO_QTY
+        , PI.ITEM_CD
+        , CASE WHEN 'en_US' = #{g.locale} THEN PI.ITEM_NM_EN
+            ELSE PI.ITEM_NM
+            END AS DISP_ITEM_NM
+        , PI.ITEM_SPEC
+        , PI.GR_PIC_ID
+        , DS.DLVY_DT
+        , DS.DLVY_QTY
+        FROM DLVY_SCHED DS
+        INNER JOIN PO_ITEM PI
+            ON DS.TEN_ID = PI.TEN_ID
+            AND DS.PO_ITEM_UUID = PI.PO_ITEM_UUID
+        WHERE DS.TEN_ID = #{g.tenant}
+            AND DS.STS != 'D'
+            AND PI.STS != 'D'
+        <choose>
+            <when test="p.po_item_uuids != null and p.po_item_uuids.size() != 0">
+                AND DS.PO_ITEM_UUID IN
+                <foreach close=")" collection="p.po_item_uuids" item="po_item_uuid" open="(" separator=",">
+                    #{po_item_uuid}
+                </foreach>
+            </when>
+            <otherwise>
+                AND DS.PO_ITEM_UUID = ''
+            </otherwise>
+        </choose>
+        ORDER BY PI.PO_NO ASC, CAST(PI.PO_LNO AS INT) ASC, DS.DLVY_SCHED_STS DESC, DS.DLVY_DT ASC, DS.REG_DTTM
+    </select>
+    <select id="findDlvySchedChgReqByDlvySchedUuids" resultType="map">
+        /* sp-dlvy-sched.findDlvySchedChgReqByDlvySchedUuids: 협력사 납품 일정 변경 요청 리스트 조회 */
+        SELECT
+        DSCR.TEN_ID
+        , DSCR.DLVY_SCHED_CHG_REQ_UUID
+        , DSCR.DLVY_SCHED_CHG_REQ_DTTM
+        , DSCR.DLVY_SCHED_CHG_REQ_RSN
+        , DSCR.DLVY_SCHED_CHG_REQ_STS
+        , DSCR.RMK
+        , DSCR.STS
+        , DSCR.REGR_ID
+        , DSCR.REG_DTTM
+        FROM DLVY_SCHED_CHG_REQ DSCR
+        WHERE DSCR.TEN_ID = #{g.tenant}
+        AND DSCR.DLVY_SCHED_CHG_REQ_UUID IN
+        (
+        SELECT DSCPI.DLVY_SCHED_CHG_REQ_UUID
+        FROM DLVY_SCHED_CHG_PO_ITEM DSCPI
+        WHERE DSCPI.TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.dlvy_sched_uuids != null and p.dlvy_sched_uuids.size() != 0">
+                AND  DSCPI.DLVY_SCHED_UUID IN
+                <foreach close=")" collection="p.dlvy_sched_uuids" item="dlvy_sched_uuid" open="(" separator=",">
+                    #{dlvy_sched_uuid}
+                </foreach>
+            </when>
+            <otherwise>
+                AND  DSCPI.DLVY_SCHED_UUID = ''
+            </otherwise>
+        </choose>
+            AND DSCPI.STS != 'D'
+        )
+        AND DSCR.STS != 'D'
+        ORDER BY DSCR.DLVY_SCHED_CHG_REQ_STS DESC, DSCR.DLVY_SCHED_CHG_REQ_DTTM DESC
+    </select>
+    <select id="findDlvySchedChgRetItems" resultType="map">
+        /* sp-dlvy-sched.findDlvySchedChgRetItems: 협력사 납품 일정 변경 요청 품목 조회 */
+        SELECT DSCPI.TEN_ID
+             , DSCPI.DLVY_SCHED_CHG_REQ_UUID
+             , DSCPI.DLVY_SCHED_UUID
+             , DSCPI.PO_ITEM_UUID
+             , PI.PO_NO
+             , PI.PO_LNO
+             , PI.PO_QTY
+             , PI.ITEM_CD
+             , CASE WHEN 'en_US' = #{g.locale} THEN PI.ITEM_NM_EN
+                ELSE PI.ITEM_NM
+                END AS DISP_ITEM_NM
+             , PI.ITEM_SPEC
+             , PI.GR_PIC_ID
+             , DSCPI.ASIS_DT
+             , DSCPI.ASIS_QTY
+             , DSCPI.REQ_DT
+             , DSCPI.REQ_QTY
+             , DSCPI.FNL_DT
+             , DSCPI.FNL_QTY
+             , DSCPI.CHG_CMPLD_YN
+        FROM DLVY_SCHED_CHG_PO_ITEM DSCPI
+                 INNER JOIN PO_ITEM PI
+                            ON DSCPI.TEN_ID = PI.TEN_ID
+                                AND DSCPI.PO_ITEM_UUID = PI.PO_ITEM_UUID
+        WHERE DSCPI.TEN_ID = #{g.tenant}
+          AND DSCPI.DLVY_SCHED_CHG_REQ_UUID = #{p.dlvy_sched_chg_req_uuid}
+          <choose>
+              <when test="p.po_item_uuids != null and p.po_item_uuids.size() != 0">
+                  AND DSCPI.PO_ITEM_UUID IN
+                  <foreach close=")" collection="p.po_item_uuids" item="po_item_uuid" open="(" separator=",">
+                      #{po_item_uuid}
+                  </foreach>
+              </when>
+              <otherwise>
+              </otherwise>
+          </choose>
+          AND DSCPI.STS != 'D'
+          AND PI.STS != 'D'
+        ORDER BY PI.PO_NO ASC, CAST(PI.PO_LNO AS INT) ASC, DSCPI.ASIS_DT ASC
+    </select>
+    <select id="checkChgReqCmpld" resultType="boolean">
+        /* sp-dlvy-sched.checkChgReqCmpld */
+        SELECT CASE WHEN COUNT(DLVY_SCHED_UUID) = 0 THEN 1
+                    ELSE 0
+                   END
+        FROM DLVY_SCHED_CHG_PO_ITEM DSCPI
+        WHERE TEN_ID = #{g.tenant}
+          AND DSCPI.DLVY_SCHED_CHG_REQ_UUID = #{p.dlvy_sched_chg_req_uuid}
+          AND DSCPI.CHG_CMPLD_YN = 'N'
+    </select>
+    <select id="findReceiversByUsrId">
+        /* sp-dlvy-sched.findReceiversByUsrId : 납품 일정 등록 이메일 수신자 (입고 담당자) */
+        SELECT EML
+        , USR_NM
+        FROM USR
+        WHERE USR.TEN_ID = #{g.tenant}
+        AND USR.USR_ID = #{p.gr_pic_id}
+        AND USR.EML_RCPT_YN = 'Y'
+        AND USR.USE_YN = 'Y'
+        AND USR.STS != 'D'
+    </select>
+    <insert id="insertDlvySched">
+        /*sp-dlvy-sched.insertDlvySched 협력사 납품 일정 등록 */
+        INSERT INTO DLVY_SCHED
+        (
+         TEN_ID
+        , DLVY_SCHED_UUID
+        , PO_ITEM_UUID
+        , DLVY_SCHED_STS
+        , DLVY_DT
+        , DLVY_QTY
+        , RMK
+        , STS
+        , REGR_ID
+        , REG_DTTM
+        )
+        VALUES
+            (
+             #{g.tenant}
+            , #{p.dlvy_sched_uuid}
+            , #{p.po_item_uuid}
+            , #{p.dlvy_sched_sts}
+            ,
+             <choose>
+                 <when test="_databaseId == 'mssql'">
+                     CONVERT(DATE, #{p.dlvy_dt}, 112)
+                 </when>
+                 <otherwise>
+                     TO_DATE(#{p.dlvy_dt}, 'YYYYMMDD')
+                 </otherwise>
+             </choose>
+            , CAST(#{p.dlvy_qty} AS FLOAT  )
+            , #{p.rmk}
+            , 'C'
+            , #{p.regr_id}
+            , #{g.now}
+            )
+    </insert>
+    <update id="updateDlvySched">
+        /*  sp-dlvy-sched.updateDlvySched: 협력사 납품 일정 수정 */
+        UPDATE DLVY_SCHED
+        SET
+            DLVY_SCHED_STS = #{p.dlvy_sched_sts}
+          , DLVY_DT =
+              <choose>
+                  <when test="_databaseId == 'mssql'">
+                    CONVERT(DATE, #{p.dlvy_dt}, 112)
+                  </when>
+                  <otherwise>
+                    TO_DATE(#{p.dlvy_dt}, 'YYYYMMDD')
+                  </otherwise>
+              </choose>
+          , DLVY_QTY = CAST(#{p.dlvy_qty} AS FLOAT  )
+          , STS = 'U'
+          , MODR_ID = #{p.modr_id}
+          , MOD_DTTM = #{g.now}
+        WHERE TEN_ID = #{g.tenant}
+          AND DLVY_SCHED_UUID = #{p.dlvy_sched_uuid}
+          AND PO_ITEM_UUID = #{p.po_item_uuid}
+    </update>
+    <update id="updateDlvySchedChgReqSts">
+        /*  sp-dlvy-sched.updateDlvySchedChgReqSts: 협력사 납품 일정 변경 요청 상태 수정 */
+        UPDATE DLVY_SCHED_CHG_REQ
+        SET
+            DLVY_SCHED_CHG_REQ_STS = #{p.dlvy_sched_chg_req_sts}
+          , STS = 'U'
+          , MODR_ID = #{p.modr_id}
+          , MOD_DTTM = #{g.now}
+        WHERE TEN_ID = #{g.tenant}
+          AND DLVY_SCHED_CHG_REQ_UUID = #{p.dlvy_sched_chg_req_uuid}
+    </update>
+    <update id="deleteDlvySched">
+        /* sp-dlvy-sched.deleteDlvySched: 협력사 납품 일정 삭제 (수정) */
+        UPDATE DLVY_SCHED
+        SET
+            STS = 'D'
+        WHERE TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.deleted != null and p.deleted.size() != 0">
+                AND DLVY_SCHED_UUID IN
+                    <foreach close=")" collection="p.deleted" item="item" open="(" separator=",">
+                        #{item.dlvy_sched_uuid}
+                    </foreach>
+            </when>
+            <otherwise>
+                AND DLVY_SCHED_UUID = ""
+            </otherwise>
+        </choose>
+    </update>
+    <update id="deleteDlvySchedChgPoItem">
+        /* sp-dlvy-sched.deleteDlvySchedChgPoItem: 협력사 납품 일정 삭제 (수정) */
+        UPDATE DLVY_SCHED_CHG_PO_ITEM
+        SET
+        STS = 'D'
+        WHERE TEN_ID = #{g.tenant}
+        <choose>
+            <when test="p.deleted != null and p.deleted.size() != 0">
+                AND DLVY_SCHED_UUID IN
+                <foreach close=")" collection="p.deleted" item="item" open="(" separator=",">
+                    #{item.dlvy_sched_uuid}
+                </foreach>
+            </when>
+            <otherwise>
+                AND DLVY_SCHED_UUID = ""
+            </otherwise>
+        </choose>
+    </update>
+    <update id="updateDlvySchedChgPoItem">
+        /* sp-asn-item-sched.updateDlvySchedChgPoItem : 협력사 납품 일정 변경 요청 품목 최종값 등록 (수정)*/
+        UPDATE DLVY_SCHED_CHG_PO_ITEM DSCPI
+        SET DSCPI.FNL_QTY = CAST(#{p.fnl_qty} AS FLOAT  )
+          , DSCPI.FNL_DT =
+                <choose>
+                    <when test="_databaseId == 'mssql'">
+                        CONVERT(DATE, #{p.fnl_dt}, 112)
+                    </when>
+                    <otherwise>
+                        TO_DATE(#{p.fnl_dt}, 'YYYYMMDD')
+                    </otherwise>
+                </choose>
+          , DSCPI.CHG_CMPLD_YN = #{p.chg_cmpld_yn}
+          , STS = 'U'
+          , MODR_ID = #{p.modr_id}
+          , MOD_DTTM = #{g.now}
+        WHERE DSCPI.TEN_ID = #{g.tenant}
+        AND DSCPI.PO_ITEM_UUID = #{p.po_item_uuid}
+        AND DSCPI.DLVY_SCHED_UUID = #{p.dlvy_sched_uuid}
+        AND DSCPI.DLVY_SCHED_CHG_REQ_UUID = #{p.dlvy_sched_chg_req_uuid}
+    </update>
+</mapper>

@@ -1,0 +1,2009 @@
+<dom-module id="es-otrs-cntr-cnd">
+	<!--<style>
+		:host {
+			@apply(&#45;&#45;vbox-layout);
+		}
+	</style>-->
+	
+	<template>
+		<!-- 코드 -->
+		<sc-code-group>
+			<sc-code code="C007" value="{{codes.unitCd}}"></sc-code>       <!-- UOM -->
+			<sc-code code="C024" value="{{codes.domovrsDivCcd}}"></sc-code>  <!-- 내외자 구분 공통코드 -->
+			<sc-code code="P009" value="{{codes.pymtmethCcd}}"></sc-code>   <!-- 지급방법 -->
+			<sc-code code="P010" value="{{codes.delyTermsCd}}"></sc-code>  <!-- 납품방법 -->
+			<sc-code code="P011" value="{{codes.aprvSts}}"></sc-code>      <!-- 결재상태 -->
+			<sc-code code="P012" value="{{codes.vdPoStsCcd}}"></sc-code>    <!-- 협력사진행상태 -->
+			<sc-code code="P038" value="{{codes.poProgSts}}"></sc-code>    <!-- 발주진행상태 -->
+			<sc-code code="P045" value="{{codes.purcTypCcd}}"></sc-code>      <!-- 구매 유형 공통코드 -->
+			<sc-code code="P048" value="{{codes.maintBondTyp}}"></sc-code> <!-- 하자보증타입 -->
+			<sc-code code="P064" value="{{codes.bondCls}}"></sc-code>      <!-- 계약이행 보증구분/하자보증구분/선급금보증구분 -->
+			<sc-code code="P070" value="{{codes.modTyp}}"></sc-code>       <!-- 변경유형 -->
+			<sc-code code="E902" value="{{codes.regTyp}}"></sc-code>        <!-- 협력사 거래 유형 -->
+			<sc-code code="D015" value="{{codes.sttpymtRoTypCcd}}"></sc-code>        <!-- 인지세 납부 비율 유형 -->
+			<sc-code code="P091" value="{{codes.payClsCd}}"></sc-code>        <!-- 지급구분 (선급금/중도금/잔금) -->
+			<sc-code code="P100" value="{{codes.csTypCd}}"></sc-code>        <!-- 컨소시엄유형 -->
+			<sc-code code="P242" value="{{codes.nxtPrcsCcd}}"></sc-code>     <!-- 계약 발주 선택 유형 -->
+			<sc-code code="P049" value="{{codes.rfxPurpCcd}}"></sc-code>     <!-- RFX 목적 -->
+			<sc-code code="D016" value="{{codes.sttpymtmethCcd}}"></sc-code>     <!-- 인지세납부방법 -->
+		</sc-code-group>
+		
+		<!-- 코드 조회 -->
+		<sc-request-group init>
+			<!-- 세금코드 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.taxTypCcdParam}}"
+					 last-response="{{codes.taxTypCcd}}">
+			</sc-ajax>
+			<!-- 인지세납부비율 -->
+			<sc-ajax id="findListCommonCodeAttributeCode"
+					 url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.sttpymtRoTypCcdParam}}"
+					 on-response="completeFindListCommonCodeAttributeCode">
+			</sc-ajax>
+			<!-- 최상위 논리조직 정보 조회 -->
+			<sc-ajax id="findRootLogicOrganizationInfo"
+					 url="/org/logicorg/findRootLogicOrganizationInfo.do"
+					 on-response="completeFindRootLogicOrganizationInfo">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<sc-ajax id="findOtrsCntr"
+				 url="findOtrsCntr.do"
+				 on-response="completeFindOtrsCntr">
+		</sc-ajax>
+		
+		<sc-ajax id="savePurcCntr"
+				 url="savePurcCntr.do"
+				 on-response="completeSavePurcCntr">
+		</sc-ajax>
+		
+		<sc-ajax id="deletePurcCntr"
+				 url="deletePurcCntr.do"
+				 on-response="completeDeletePurcCntr">
+		</sc-ajax>
+		
+		<!-- EDOC SETUP 사용여부 -->
+		<cc-code-constraint code-param="{{codes.setupParam}}" value="{{codes.setupInfo}}"></cc-code-constraint>
+		
+		<cc-page-title-bar title-text="조건 상세" hidden="[[!internalButton]]">
+			<sc-button text="저장" on-click="onSaveDraft" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel title-text="일반 정보" validation-group="basicInfo">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="EO" selected-index="0" value="{{otrsCntrData.oorg_cd}}"
+											   disabled="true">
+					</cc-operorg-combobox-field>
+				</cc-fieldset>
+<!--				<cc-fieldset>-->
+<!--					<sc-label text="구매 유형"></sc-label>-->
+<!--					<sc-combobox-field class="w-150" value="{{otrsCntrData.purc_typ_ccd}}" items="{{codes.purcTypCcd}}" display-field="label" value-field="data"-->
+<!--									   readonly="[[!formula('purcTypSelEditable')]]">-->
+<!--					</sc-combobox-field>-->
+<!--				</cc-fieldset>-->
+				<cc-fieldset>
+					<sc-label text="협력사"></sc-label>
+					<cc-linked-vendor id="poVendor" vd-cd="{{otrsCntrData.vd_cd}}" result-value="{{otrsCntrData.erp_vd_cd}}" value="{{otrsCntrData.disp_vd_nm}}"
+									  oper-org-cd="{{otrsCntrData.oorg_cd}}" link-typ="POEO" reg-typ="OFC"
+									  required="true" readonly="[[!formula('vendorSelEditable')]]" hide-trigger="[[!formula('vendorSelEditable')]]">
+					</cc-linked-vendor>
+				</cc-fieldset>
+<!--				<cc-fieldset>-->
+<!--					<sc-label text="계약 기간"></sc-label>-->
+<!--					<sc-period-date-field from-value="{{otrsCntrData.cntr_st_dt}}" to-value="{{otrsCntrData.cntr_exp_dt}}" class="w-300"-->
+<!--										  readonly="[[!formula('cntrTermsHdSelEditable')]]" string-date="true" required="[[formula('isRequiredCntrDate')]]"></sc-period-date-field>-->
+<!--				</cc-fieldset>-->
+				<cc-fieldset>
+					<sc-label text="내외자 구분"></sc-label>
+					<sc-combobox-field value="{{otrsCntrData.domovrs_div_ccd}}" items="{{codes.domovrsDivCcd}}" display-field="label" value-field="data"
+									   readonly="[[!formula('shipperTypSelEditable')]]" selected-index="0" placeholder="필수" required="true">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<cc-cur-search value="{{otrsCntrData.cur_ccd}}" readonly="[[!formula('curSelEditable')]]" hide-trigger="[[!formula('curSelEditable')]]" result-hidden="true"></cc-cur-search>
+				</cc-fieldset>
+			</cc-form-panel>
+			<cc-form-panel title-text="지급 정보" collapsible="true"><!-- 지급정보 패널 내에 지불조건 그리드는 validation-group에 포함되면 안되므로 -->
+				<cc-fieldset>
+					<sc-label text="지급방법"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field value="{{otrsCntrInfoData.pymtmeth_ccd}}" items="{{codes.pymtmethCcd}}" display-field="label" value-field="data"
+										   readonly="[[!formula('cntrInfoSelEditable')]]" placeholder="선택">
+						</sc-combobox-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset row-span="6">
+					<!-- <td colspan="2" rowspan="6">-->
+					<sc-grid id="paymentPlanGrid" style="height:100%;min-height: 250px;" aggregate="true"
+							 editable="[[formula('cntrInfoSelEditable')]]"
+							 sortable="false"
+							 use-dummy="false"
+							 column-fit-style="evenFill"
+							 use-state="[[formula('cntrInfoSelEditable')]]"
+							 use-selection="[[formula('cntrInfoSelEditable')]]"
+							 selection-able-function="onPaymentPlanSelectionAbleFn"
+							 on-item-edit-end="onPaymentPlanEditEnd">
+						<cc-grid-toolbar title-text="지급 조건">
+							<sc-button text="지급 추가" on-click="onAddPaymentPlan" auth-s hidden="[[!formula('cntrInfoSelEditable')]]"></sc-button>
+							<sc-button text="삭제" on-click="onDeletePaymentPlan" auth-s hidden="[[!formula('cntrInfoSelEditable')]]"></sc-button>
+						</cc-grid-toolbar>
+						<sc-grid-columns>
+							<sc-combobox-column data-field="pymt_typ_ccd" header-text="지급 유형" width="100" required="true"
+												display-field="label" value-field="data" items="{{codes.payClsCd}}"
+												items-function="onItemsFn" item-editable-function="onPayPlanItemEditableFn"></sc-combobox-column>
+							<sc-data-column data-field="pymt_ro" header-text="지급 비율(%)" width="80" required="true" text-align="right"
+											data-type="number" format-type="decimal" item-editable-function="onPayPlanItemEditableFn" editor-regex-function="onPayPlanRegexFn"
+											validator-function="paymentPlanGridValidatorFn" validate-on-cell-paste="true"></sc-data-column>
+							<sc-data-column data-field="pymt_amt" header-text="지급 금액" width="180" editable="false" text-align="right"
+											data-type="number" format-type="amt" item-editable-function="onPayPlanItemEditableFn" editor-regex-function="onPayPlanRegexFn"
+											validator-function="paymentPlanGridValidatorFn" validate-on-cell-paste="true"
+											aggregate-function="onPayPlanAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+							<sc-date-column data-field="pymt_expt_dt" header-text="지급 예정 일자" width="100" editable="true" required="true"
+											value-format="yyyyMMdd" string-date="true"
+											validator-function="paymentPlanGridValidatorFn"></sc-date-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field data-field="otrs_cntr__pymt_expt_uuid"></sc-grid-field>
+							<sc-grid-field data-field="otrs_cntr_uuid"></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="지급방법 설명"></sc-label>
+					<sc-text-field value="{{otrsCntrInfoData.pymtmeth_expln}}" readonly="[[!formula('cntrInfoSelEditable')]]" max-length="128" validation-group="cntrInfo"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품방법"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-combobox-field value="{{otrsCntrInfoData.dlvymeth_ccd}}" items="{{codes.delyTermsCd}}" display-field="label" value-field="data"
+										   readonly="[[!formula('cntrInfoSelEditable')]]" placeholder="선택">
+						</sc-combobox-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품방법 설명"></sc-label>
+					<sc-text-field value="{{otrsCntrInfoData.dlvymeth_expln}}" readonly="[[!formula('cntrInfoSelEditable')]]" max-length="128" validation-group="cntrInfo"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="세금 유형"></sc-label>
+					<sc-combobox-field value="{{otrsCntrInfoData.tax_typ_ccd}}" items="{{codes.taxTypCcd}}" display-field="label" value-field="data"
+									   readonly="[[!formula('cntrInfoSelEditable')]]" placeholder="선택" on-change="onChangeTaxCd">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="지급방법 조건"></sc-label>
+					<sc-textarea-field class="h-50" value="{{otrsCntrInfoData.pymtmeth_cnd}}" readonly="[[!formula('cntrInfoSelEditable')]]" max-length="500" validation-group="cntrInfo"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="조건 정보" collapsible="true" validation-group="cntrInfo" column="3" i18n-disabled>
+				<cc-fieldset>
+					<sc-label text="총 금액(VAT 포함)"></sc-label>
+					<sc-number-field value="{{otrsCntrData.cntr_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="true">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="공급 금액"></sc-label>
+					<sc-number-field value="{{otrsCntrData.sup_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="[[!formula('cntrInfoSelEditable')]]">
+					</sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="VAT" i18n-disabled></sc-label>
+					<sc-number-field value="{{otrsCntrData.vat_amt}}" input-cover="true" format-type="amt"
+									 class="w-150 align-right" readonly="[[!formula('cntrInfoSelEditable')]]">
+					</sc-number-field>
+				</cc-fieldset>
+<!--				<cc-fieldset hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="계약이행보증 금액" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-checkbox-field hidden="[[!formula('isBond')]]" input-value="{{otrsCntrInfoData.cpgur_use_yn}}" checked-value="Y" un-checked-value="N"-->
+<!--										   readonly="[[!formula('cntrInfoSelEditable')]]" on-click="changePerforbondYn"></sc-checkbox-field>-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" id="perforBondRate" value="{{otrsCntrInfoData.cpgur_ro}}" format-type="decimal" min-value="0" max-value="100"-->
+<!--										 class="w-140 align-right" readonly="[[!formula('perforBondEditable')]]" required="[[formula('perforBondRequired')]]" validator="perforBondRateValidator">-->
+<!--						</sc-number-field>&nbsp;%&nbsp;-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.cpgur_amt}}" input-cover="true" format-type="amt"-->
+<!--										 class="align-right" readonly="true">-->
+<!--						</sc-number-field>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset column-span="2" hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="계약이행보증 기간" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-combobox-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.cpgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"-->
+<!--										   class="w-150" readonly="[[!formula('perforBondEditable')]]" placeholder="선택" required="[[formula('perforBondEssential')]]">-->
+<!--						</sc-combobox-field>-->
+<!--						<sc-period-date-field class="w-250" hidden="[[!formula('isBond')]]" id="perforBondPeriod" from-value="{{otrsCntrInfoData.cpgur_st_dt}}" to-value="{{otrsCntrInfoData.cpgur_exp_dt}}" string-date="true" style="margin-left:5px"-->
+<!--											  readonly="[[!formula('perforBondEditable')]]" required="[[formula('perforBondRequired')]]"></sc-period-date-field>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="선급금이행보증 금액" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-checkbox-field hidden="[[!formula('isBond')]]" input-value="{{otrsCntrInfoData.apymtgur_use_yn}}" checked-value="Y" un-checked-value="N"-->
+<!--										   readonly="[[!formula('cntrInfoSelEditable')]]" on-click="changePrepaybondYn"></sc-checkbox-field>-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" id="prePayBondRate" value="{{otrsCntrInfoData.apymtgur_ro}}" format-type="decimal" min-value="0" max-value="100"-->
+<!--										 class="w-140 align-right" readonly="[[!formula('prePayBondEditable')]]" required="[[formula('prePayBondRequired')]]" validator="prePayBondRateValidator">-->
+<!--						</sc-number-field>&nbsp;%&nbsp;-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.apymtgur_amt}}" input-cover="true" format-type="amt"-->
+<!--										 class="align-right" readonly="true">-->
+<!--						</sc-number-field>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset column-span="2" hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="선급금 보증 기간" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-combobox-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.apymtgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"-->
+<!--										   class="w-150" readonly="[[!formula('prePayBondEditable')]]" placeholder="선택" required="[[formula('prePayBondEssential')]]">-->
+<!--						</sc-combobox-field>-->
+<!--						<sc-period-date-field class="w-250" hidden="[[!formula('isBond')]]" id="prePayBondPeriod" from-value="{{otrsCntrInfoData.apymtgur_st_dt}}" to-value="{{otrsCntrInfoData.apymtgur_exp_dt}}" string-date="true" style="margin-left:5px"-->
+<!--											  readonly="[[!formula('prePayBondEditable')]]" required="[[formula('prePayBondRequired')]]"></sc-period-date-field>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="하자이행보증 금액" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-checkbox-field hidden="[[!formula('isBond')]]" input-value="{{otrsCntrInfoData.defpgur_use_yn}}" checked-value="Y" un-checked-value="N"-->
+<!--										   readonly="[[!formula('cntrInfoSelEditable')]]" on-click="changeMaintbondYn"></sc-checkbox-field>-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" id="maintBondRate" value="{{otrsCntrInfoData.defpgur_ro}}" input-cover="true" format-type="decimal" min-value="0" max-value="100"-->
+<!--										 class="w-140 align-right" readonly="[[!formula('maintBondEditable')]]" required="[[formula('maintBondRequired')]]" validator="maintBondRateValidator">-->
+<!--						</sc-number-field>&nbsp;%&nbsp;-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.defpgur_amt}}" input-cover="true" format-type="amt"-->
+<!--										 class="align-right" readonly="true">-->
+<!--						</sc-number-field>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset column-span="2" hidden="[[!formula('isBond')]]">-->
+<!--					<sc-label text="하자보증기간" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					<div class="field-box" style="width:100%">-->
+<!--						<sc-combobox-field hidden="[[!formula('isBond')]]" value="{{otrsCntrInfoData.defpgur_typ_ccd}}" items="{{codes.bondCls}}" display-field="label" value-field="data"-->
+<!--										   class="w-150" readonly="[[!formula('maintBondEditable')]]" placeholder="선택" required="[[formula('maintBondEssential')]]">-->
+<!--						</sc-combobox-field>-->
+<!--						<sc-combobox-field hidden="[[!formula('isBond')]]" id="maintBondTyp" value="{{otrsCntrInfoData.defpgur_pd_typ_ccd}}" items="{{codes.maintBondTyp}}" display-field="label" value-field="data"-->
+<!--										   class="w-150" readonly="[[!formula('maintBondEditable')]]" style="margin-left:5px" placeholder="선택" required="[[formula('maintBondRequired')]]">-->
+<!--						</sc-combobox-field>-->
+<!--						<sc-label text="로부터" style="margin:0 5px" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--						<sc-number-field hidden="[[!formula('isBond')]]" id="maintBondMon" value="{{otrsCntrInfoData.defpgur_pd}}" class="w-50 align-right" readonly="[[!formula('maintBondEditable')]]"-->
+<!--										 min-value="0" max-length="5" required="[[formula('maintBondRequired')]]" validator="maintBondMonValidator"></sc-number-field>-->
+<!--						<sc-label text="개월" style="margin:0 5px" hidden="[[!formula('isBond')]]"></sc-label>-->
+<!--					</div>-->
+<!--				</cc-fieldset>-->
+				<cc-fieldset column-span="4">
+					<sc-label text="지체상금"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-number-field value="{{otrsCntrInfoData.dfrm_ro}}" input-cover="true" format-type="decimal" min-value="0" max-value="999"
+										 class="w-100 align-right" readonly="[[!formula('cntrInfoSelEditable')]]" style="margin-right:5px">
+						</sc-number-field>
+						<sc-label text="/1000" i18n-disabled></sc-label>
+					</div>
+				</cc-fieldset>
+			</cc-form-panel>
+<!--			<cc-form-panel title-text="인지세 정보" collapsible="true" validation-group="cntrInfo" hidden="[[!formula('isStampTax')]]" column="3">-->
+<!--				<cc-fieldset>-->
+<!--					<sc-label text="인지세 사용 여부"></sc-label>-->
+<!--					<sc-checkbox-field class="w-150" input-value="{{otrsCntrInfoData.stax_yn}}" id="stamptaxYn" checked-value="Y" un-checked-value="N" readonly="[[!formula('checkAbleStamptaxYn')]]" on-click="changeStamptaxYn"></sc-checkbox-field>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset>-->
+<!--					<sc-label text="인지세납부방법" hidden="[[!formula('isStaxY')]]"></sc-label>-->
+<!--					<sc-combobox-field class="w-150" hidden="[[!formula('isStaxY')]]" value="{{otrsCntrInfoData.sttpymtmeth_ccd}}" items="{{codes.sttpymtmethCcd}}" readonly="[[!formula('checkAbleStamptaxYn')]]" display-field="label" value-field="data"-->
+<!--									   required="[formula('isStaxY')]]"-->
+<!--									   placeholder="선택">-->
+<!--					</sc-combobox-field>-->
+<!--				</cc-fieldset>-->
+<!--				<cc-fieldset>-->
+<!--					<sc-label text="인지세납부 비율" hidden="[[!formula('isStaxY')]]"></sc-label>-->
+<!--					<sc-combobox-field class="w-150" hidden="[[!formula('isStaxY')]]" value="{{otrsCntrInfoData.sttpymt_ro_typ_ccd}}" required="[formula('isStaxY')]]" items="{{codes.sttpymtRoTypCcd}}" display-field="label" value-field="data"-->
+<!--									   readonly="true" placeholder="선택" selected-index="0">-->
+<!--					</sc-combobox-field>-->
+<!--				</cc-fieldset>-->
+<!--			</cc-form-panel>-->
+
+<!--			<sc-grid id="gridPanel" class="h-500" collapsible="true" editable="[[formula('itemEditable')]]" aggregate="true"-->
+<!--					 use-state="[[formula('itemEditable')]]" use-selection="[[formula('itemEditable')]]"-->
+<!--					 calc-footer-include-invisible="true"-->
+<!--					 on-item-click="onItemClick"-->
+<!--					 on-item-edit-end="onItemEditEnd">-->
+<!--				<cc-grid-toolbar title-text="품목 정보">-->
+<!--					&lt;!&ndash;<sc-button text="무코드 품목 추가" on-click="onAddNoCdItem" hidden="[[!formula('itemAddRemoveEditable')]]" auth-s></sc-button>&ndash;&gt;-->
+<!--					<sc-button text="품목 추가" on-click="onPopupItemSelect" hidden="[[!formula('itemAddRemoveEditable')]]" auth-s></sc-button>-->
+<!--&lt;!&ndash;					<sc-button text="일괄 적용" on-click="onShowApplyDialog" hidden="[[!formula('gridEditable')]]" auth-s></sc-button>&ndash;&gt;-->
+<!--					<sc-button text="삭제" on-click="onDeleteItem" hidden="[[!formula('itemAddRemoveEditable')]]" auth-s></sc-button>-->
+<!--				</cc-grid-toolbar>-->
+<!--				<sc-grid-columns>-->
+<!--					<sc-data-column data-field="item_lno" header-text="항번" data-type="number" width="50" editable="false"></sc-data-column>-->
+<!--					<sc-data-column data-field="item_cd" header-text="품목 코드" width="100" editable="false"></sc-data-column>-->
+<!--					<sc-data-column data-field="disp_item_nm" header-text="[[getItemNmHdText(otrsCntrData.purc_typ_ccd)]]" width="250" text-align="left" max-length="500"></sc-data-column>-->
+<!--					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left"-->
+<!--									item-style-function="onItemStyleFn" validator-function="gridValidatorFn"></sc-data-column>-->
+<!--					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="100" text-align="center" visible="[[formula('hasNoCdItem')]]"-->
+<!--									 image-change-function="onImageChangeFn"></sc-image-column>-->
+<!--					<sc-checkbox-column data-field="df_yn" header-text="면세 여부" width="80"-->
+<!--										display-checkbox="false" editable="[[formula('cntrInfoSelEditable')]]"></sc-checkbox-column>-->
+<!--					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="60" required="true"-->
+<!--										display-field="data" value-field="data" items="{{codes.unitCd}}"-->
+<!--										editable="[[formula('itemUomSelEditable')]]"></sc-combobox-column>-->
+<!--					<sc-data-column data-field="item_qty" header-text="품목 수량" width="80" text-align="right"-->
+<!--									data-type="number" format-type="qty" max-length="8"-->
+<!--									editor-regex-function="onRegexFn" validate-on-cell-paste="true" validator-function="gridValidatorFn"-->
+<!--									editable="[[formula('itemQtySelEditable')]]" required="true"></sc-data-column>-->
+<!--					<sc-data-column data-field="item_uprc" header-text="품목 단가" width="100" text-align="right"-->
+<!--									data-type="number" format-type="price" max-length="13"-->
+<!--									editor-regex-function="onRegexFn" validate-on-cell-paste="true" validator-function="gridValidatorFn"-->
+<!--									aggregate-title="합계" editable="[[formula('itemUprcSelEditable')]]" required="true"></sc-data-column>-->
+<!--					<sc-data-column data-field="item_amt" header-text="품목 금액" width="140" text-align="right" editable="false"-->
+<!--									data-type="number" format-type="amt"-->
+<!--									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>-->
+<!--					<sc-data-column data-field="item_vat" header-text="VAT" width="120" text-align="right" editable="false"-->
+<!--									format-type="amt" converter="onVatConvert"-->
+<!--									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>-->
+<!--					<sc-date-column data-field="cntr_st_dt" header-text="[[getCntrDtPreText(otrsCntrData.purc_typ_ccd)]] 시작 일자" width="100" text-align="center" editable="[[formula('cntrTermsSelEditable')]]" visible="[[formula('showCTColumn')]]" required="true"-->
+<!--									validator-function="gridValidatorFn"></sc-date-column>-->
+<!--					<sc-date-column data-field="cntr_exp_dt" header-text="[[getCntrDtPreText(otrsCntrData.purc_typ_ccd)]] 종료 일자" width="100" text-align="center" editable="[[formula('cntrTermsSelEditable')]]" visible="[[formula('showCTColumn')]]" required="true"-->
+<!--									validator-function="gridValidatorFn"></sc-date-column>-->
+<!--					<sc-date-column data-field="req_dlvy_dt" header-text="요청 납품 일자" width="100" text-align="center" editable="[[formula('reqDlvyDtSelEditable')]]" visible="[[formula('showMTColumn')]]" required="true"-->
+<!--									validator-function="gridValidatorFn"></sc-date-column>-->
+<!--					<sc-date-column data-field="dlvy_dt" header-text="납품 일자" width="100" text-align="center" editable="[[formula('cntrTermsSelEditable')]]" visible="[[formula('showMTAndSelColumn')]]" required="[[formula('showMTAndSelColumn')]]"-->
+<!--									validator-function="gridValidatorFn"></sc-date-column>-->
+<!--					<sc-data-column data-field="dlvy_plc" header-text="[[formula('rdLocatTitle')]]" width="150" text-align="left" editable="[[formula('dlvySelEditable')]]" visible="[[!formula('isCndTypUC')]]" max-length="1000" required="true"></sc-data-column>-->
+<!--				</sc-grid-columns>-->
+<!--				<sc-grid-fields>-->
+<!--					<sc-grid-field data-field="otrs_cntr__item_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="otrs_cntr_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="plt_cd"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="item_oorg_cd"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="df_yn"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="tax_rate" data-type="number"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="pr_item_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="pr_no"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="pr_lno"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="upcr_item_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="upcr_no"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="upcr_lno"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_item_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_no"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_rnd"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_lno"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_bid_item_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_bid_uuid"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="rfx_bid_no"></sc-grid-field>-->
+<!--					<sc-grid-field data-field="dlvy_ldtm"></sc-grid-field>-->
+<!--				</sc-grid-fields>-->
+<!--			</sc-grid>-->
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-otrs-cntr-cnd",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							taxTypCcdParam: {
+								ccd: "C031",
+								cstr_cnd_cd: "TAXN_RATE"
+							},
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+							setupInfo: {},
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+							sttpymtRoTypCcdParam: {
+								ccd: "D015",
+								cstr_cnd_cd: "DFLT_VAL_YN"
+							}
+						};
+					}
+				},
+				
+				otrsCntrData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				otrsCntrInfoData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				grid: {
+					type: Object,
+					value: function() {
+						return {
+							itemIndex: null,
+							fieldName: null
+						};
+					}
+				},
+				
+				paymentDateCheckObj: {
+					type: Object,
+					value: function() {
+						return {
+							minApDt: null,
+							maxApDt: null,
+							minMpDt: null,
+							minMpDt: null,
+							bpDt: null
+						}
+					}
+				},
+				
+				taxRate: {
+					type: Number,
+					value: 0
+				},
+				
+				internalButton: {
+					type: Object,
+					value: function() {
+						return false;
+					}
+				},
+				
+				viewMode: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				purcTypSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				vendorSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: false
+				},
+				
+				cntrTermsSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				reqDlvyDtSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				dlvyDtSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				shipperTypSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				curSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				cntrInfoSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				itemAddRemove: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				itemUomSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				itemQtySelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				itemUprcSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				
+				dlvySelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				stampTaxSelection: {
+					type: Object,
+					observer: '_propertyChange',
+					value: function() {
+						return false;
+					}
+				},
+				ctryCcd: {
+					type: String,
+					value: ""
+				},
+			},
+			observers: [
+				"changedCntrAmt(otrsCntrData.sup_amt, otrsCntrData.vat_amt)"
+			// 	"changedPerforBondRate(otrsCntrInfoData.cpgur_use_yn, otrsCntrInfoData.cpgur_ro, otrsCntrData.cntr_amt)",
+			// 	"changedPerforBondCls(otrsCntrInfoData.cpgur_typ_ccd)",
+			// 	"changedPrePayBondRate(otrsCntrInfoData.apymtgur_use_yn, otrsCntrInfoData.apymtgur_ro)",
+			// 	"changedPrePayBondCls(otrsCntrInfoData.apymtgur_typ_ccd)",
+			// 	"changedMaintBondRate(otrsCntrInfoData.defpgur_use_yn, otrsCntrInfoData.defpgur_ro, otrsCntrData.cntr_amt)",
+			// 	"changedMaintBondCls(otrsCntrInfoData.defpgur_typ_ccd)"
+			],
+			
+			formulas: {
+				editable: function() {
+					return !this.viewMode;
+				},
+				purcTypSelEditable: function() {
+					return this.purcTypSelection && this.formula("editable");
+				},
+				vendorSelEditable: function() {
+					return this.vendorSelection && this.formula("editable");
+				},
+				// cntrTermsHdSelEditable: function() {
+				// 	return this.otrsCntrData.purc_typ_ccd === "QTY" && this.otrsCntrData.cnd_typ_ccd !== "UPRCCNTR" && this.formula("cntrTermsSelEditable");
+				// },
+				cntrTermsSelEditable: function() {
+					return this.cntrTermsSelection && this.formula("editable");
+				},
+				reqDlvyDtSelEditable: function() {
+					return this.reqDlvyDtSelection && this.formula("editable");
+				},
+				shipperTypSelEditable: function() {
+					return this.shipperTypSelection && this.formula("editable");
+				},
+				curSelEditable: function() {
+					return this.curSelection && this.formula("editable");
+				},
+				cntrInfoSelEditable: function() {
+					return this.cntrInfoSelection && this.formula("editable");
+				},
+				// itemAddRemoveEditable: function() {
+				// 	return this.itemAddRemove && this.formula("editable");
+				// },
+				// itemEditable: function() {
+				// 	return (this.itemUomSelection || this.itemQtySelection || this.itemUprcSelection || this.cntrInfoSelection) && this.formula("editable");
+				// },
+				// itemUomSelEditable: function() {
+				// 	return this.itemUomSelection && this.formula("editable");
+				// },
+				// itemQtySelEditable: function() {
+				// 	return this.itemQtySelection && this.formula("editable");
+				// },
+				// itemUprcSelEditable: function() {
+				// 	return this.itemUprcSelection && this.formula("editable");
+				// },
+				// dlvySelEditable: function() {
+				// 	return this.dlvySelection && this.formula("editable");
+				// },
+				// isCancelConfirm: function() {
+				// 	return this.otrsCntrData.cnfd_yn === "Y" && (UT.isEmpty(this.otrsCntrData.req_sts_ccd) || this.otrsCntrData.req_sts_ccd === "RET");
+				// },
+				// isCndTypPO: function() {
+				// 	return (this.otrsCntrData.cnd_typ_ccd === "PO");
+				// },
+				// isCndTypCNTR: function() {
+				// 	return (this.otrsCntrData.cnd_typ_ccd === "CNTR");
+				// },
+				// isCndTypUPRCCNTR: function() {
+				// 	return (this.otrsCntrData.cnd_typ_ccd === "UPRCCNTR");
+				// },
+				// hasNoCdItem: function() {
+				// 	return this.otrsCntrData.has_no_cd_item === "Y";
+				// },
+				// isCndTypUC: function() {
+				// 	return (this.otrsCntrData.cnd_typ_ccd === "UPRCCNTR");
+				// },
+				// isPurcTypMT: function() {
+				// 	return this.otrsCntrData.purc_typ_ccd === "QTY";
+				// },
+				// showMTColumn: function() {
+				// 	return this.otrsCntrData.purc_typ_ccd === "QTY" && !this.formula('isCndTypUC');
+				// },
+				// showCTColumn: function() {
+				// 	return this.otrsCntrData.purc_typ_ccd === "CONSTSVC" || this.formula('isCndTypUC');
+				// },
+				// showMTAndSelColumn: function() {
+				// 	return this.dlvyDtSelection && this.formula("showMTColumn");
+				// },
+				// rdLocatTitle: function() {
+				// 	return this.otrsCntrData.purc_typ_ccd === "QTY" ? this.translate("납품 장소") : this.translate("납품 장소");
+				// },
+				// perforBondEditable: function() {
+				// 	return this.formula("cntrInfoSelEditable") && this.otrsCntrInfoData.cpgur_use_yn === "Y";
+				// },
+				// perforBondRequired: function() {
+				// 	// 계약이행보증 유형: 보증보험
+				// 	return this.otrsCntrInfoData.cpgur_typ_ccd === "GUR_INS";
+				// },
+				// maintBondEditable: function() {
+				// 	return this.formula("cntrInfoSelEditable") && this.otrsCntrInfoData.defpgur_use_yn === "Y";
+				// },
+				// maintBondRequired: function() {
+				// 	// 하자이행보증 유형: 보증보험
+				// 	return this.otrsCntrInfoData.defpgur_typ_ccd === "GUR_INS";
+				// },
+				// prePayBondEditable: function() {
+				// 	return this.formula("cntrInfoSelEditable") && this.otrsCntrInfoData.apymtgur_use_yn === "Y";
+				// },
+				// prePayBondRequired: function() {
+				// 	// 선급금이행보증 유형: 보증보험
+				// 	return this.otrsCntrInfoData.apymtgur_typ_ccd === "GUR_INS";
+				// },
+				// /* 계약이행보증기간 */
+				// perforBondEssential: function() {
+				// 	return this.otrsCntrInfoData.cpgur_use_yn === "Y";
+				// },
+				// /* 선급금보증기간 */
+				// prePayBondEssential: function() {
+				// 	return this.otrsCntrInfoData.apymtgur_use_yn === "Y";
+				// },
+				// /* 하자보증기간 */
+				// maintBondEssential: function() {
+				// 	return this.otrsCntrInfoData.defpgur_use_yn === "Y";
+				// },
+				// /* 계약기간 필수 여부 (보증종류가 보증보험일 경우) */
+				// isRequiredCntrDate: function() {
+				// 	return this.otrsCntrInfoData.apymtgur_typ_ccd === "GUR_INS"
+				// 			|| this.otrsCntrInfoData.defpgur_typ_ccd === "GUR_INS"
+				// 			|| this.otrsCntrInfoData.cpgur_typ_ccd === "GUR_INS";
+				// },
+				// checkAbleStamptaxYn: function() {
+				// 	return this.otrsCntrData.cntr_amt > 10000000 && this.stampTaxSelection && this.formula('editable');
+				// },
+				// checkAbleStamptaxIssueRateTyp: function() {
+				// 	return this.formula('checkAbleStamptaxYn') && (this.otrsCntrInfoData.stax_yn === "Y");
+				// },
+				// showElecStamptax: function() {
+				// 	return this.get("codes.setupInfo.ecntr_estax") === "Y";
+				// },
+				// checkAbleElecStamptaxYn: function() {
+				// 	return this.formula('checkableElecCntrYn') && this.get("otrsCntrInfoData.stax_yn") === "Y" && this.formula('showElecStamptax');
+				// },
+				// isStampTax: function() {
+				// 	return ( this.formula('isCndTypPO') || this.formula('isCndTypCNTR' )) && this.formula('showElecStamptax') && (this.otrsCntrData.cntr_amt > 10000000) && this.formula('isKR');
+				// },
+				// isBond: function() {
+				// 	return ( this.formula('isCndTypPO') || this.formula('isCndTypCNTR' ));
+				// },
+				// isStaxY: function() {
+				// 	return this.get("otrsCntrInfoData.stax_yn") === "Y";
+				// },
+				isKR: function() {
+					
+					return this.get("ctryCcd") === "KR";
+				}
+			},
+			getItemNmHdText: function(purcTypCcd) {
+				var me = this;
+				var headerText = this.translate("품목 명");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText = this.translate("공사/용역명");
+				}
+				return headerText;
+			},
+			getCntrDtPreText: function(purcTypCcd) {
+				var me = this;
+				var headerText = this.translate("계약");
+				if(purcTypCcd === "CONSTSVC") {
+					headerText = this.translate("공사");
+				}
+				return headerText;
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				if(typeof param == "string") {
+					this.findOtrsCntr(param);
+				} else if(typeof param == "object") {
+					this.set("otrsCntrData", param.otrsCntrData);
+					this.set("otrsCntrInfoData", param.otrsCntrInfoData);
+					
+					// if(UT.isNotEmpty(param.purcCntrItemList)) {
+					// 	var dataProvider = this.$.gridPanel.getDataProvider();
+					// 	dataProvider.addItems(param.purcCntrItemList);
+					// }
+					if(UT.isEmpty(param.otrsCntrPymtExptList)) {
+						this.setDefaultPaymentPlans();
+					} else {
+						var paymentPlanProvider = this.$.paymentPlanGrid.getDataProvider();
+						paymentPlanProvider.addItems(param.otrsCntrPymtExptList);
+					}
+					
+					this.applyFormula();
+				}
+			},
+			
+			// 신규 작성 시 지불조건 설정
+			setDefaultPaymentPlans: function() {
+				var me = this;
+				var provider = this.$.paymentPlanGrid.getDataProvider(),
+					poAmt    = this.get("otrsCntrData.sup_amt") || 0,
+					payClsCds,
+					purcTypCcd = this.get("otrsCntrData.purc_typ_ccd") || "";
+				
+				if(purcTypCcd === "QTY") {
+					payClsCds = [{data: "BAL"}];
+				} else {
+					payClsCds = this.get("codes.payClsCd");
+				}
+				payClsCds.forEach(function(code) {
+					var payCls = code["data"], rate = 0, amt = 0, exptDate = null;
+					
+					if(payCls === "BAL") {
+						rate = 100;
+						amt = poAmt;
+						// 구매유형이 물품인 경우, 임의로 잔금의 지급예정일을 1달 뒤로 함
+						if(purcTypCcd === "QTY") {
+							exptDate = new Date();
+							exptDate.setMonth(exptDate.getMonth() + 1);
+						}
+					}
+					provider.addItem({"pymt_typ_ccd": payCls, "pymt_ro": rate, "pymt_amt": amt, "pymt_expt_dt": exptDate});
+				});
+			},
+			
+			findOtrsCntr: function(purcCntrUuid) {
+				var me = this;
+				this.$.findOtrsCntr.body = {
+					otrs_cntr_uuid: purcCntrUuid
+				};
+				UT.request(this.$.findOtrsCntr);
+			},
+			
+			completeFindOtrsCntr: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				this.set("otrsCntrData", response.otrsCntrData);
+				this.set("otrsCntrInfoData", response.otrsCntrInfoData);
+				
+				var paymentPlanGrid = this.$.paymentPlanGrid;
+				paymentPlanGrid.setDataProvider(response.otrsCntrPymtExptList);
+				
+				// var gridPanel = this.$.gridPanel;
+				// gridPanel.setDataProvider(response.purcCntrItemList);
+				//
+				// // 공사/용역 or 단가계약 용이면서 계약기간이 존재하지 않는 경우 품목의 계약기간으로 계산
+				// if(this.formula("showCTColumn") && (UT.isEmpty(this.get("otrsCntrData.cntr_st_dt")) || UT.isEmpty(this.get("otrsCntrData.cntr_exp_dt")))) {
+				// 	this.computeCntrPrdDate();
+				// }
+				//
+				// if(UT.isEmpty(me.get("otrsCntrInfoData.sttpymt_ro_typ_ccd"))) {
+				// 	me.set("otrsCntrInfoData.sttpymt_ro_typ_ccd", me.get("codes.sttpymtRoTypCcd")[0].data);
+				// }
+				
+				this.applyFormula();
+			},
+			
+			// 지불조건 item-editable-function
+			onPayPlanItemEditableFn: function(data, item) {
+				// 지급구분이 잔금인 경우: 지급구분, 지급율 수정 불가
+				if(data["pymt_typ_ccd"] === "BAL" && ["pymt_typ_ccd", "pymt_ro"].indexOf(item.dataField) > -1) {
+					return false;
+				}
+				return true;
+			},
+			
+			onPayPlanRegexFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "pymt_ro") {
+					return CCPrecManager.regex("decimal");
+				}
+				return null;
+			},
+			
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber,
+			
+			onPayPlanAmtAggregateFn: UT.plusBigNumber,
+			
+			// 지급구분 items-function
+			onItemsFn: function(data, item) {
+				var me       = this,
+					provider = this.$.paymentPlanGrid.getDataProvider();
+				
+				if(item.dataField === "pymt_typ_ccd") {
+					var items    = this.get("codes.payClsCd"),
+						payClsCd = data["pymt_typ_ccd"];
+					
+					if(payClsCd === "APYMT") {						// 1. 선급금
+						return items.filter(function(obj) {
+							return (obj["data"] !== "BAL");			// 잔금 제외: 선급금,중도금
+						});
+					} else if(payClsCd === "BAL") {				// 2. 잔금 (onPayPlanItemEditableFn에 의해 수정 불가)
+						return items.filter(function(obj) {
+							return (obj["data"] === "BAL");			// 잔금
+						});
+					} else {									// 3. 중도금 or 빈값
+						var aps = provider.filterItems({"pymt_typ_ccd": "APYMT"});
+						// 그리드의 선급금 데이터 미존재 시
+						if(aps.length === 0) {
+							return items.filter(function(obj) {
+								return (obj["data"] !== "BAL");		// 잔금 제외: 선급금,중도금
+							});
+						} else {	// 그리드의 선급금 데이터가 존재할 때
+							return items.filter(function(obj) {
+								return (obj["data"] === "IPYMT");		// 중도금
+							});
+						}
+					}
+				}
+			},
+			
+			// 지불조건 그리드 validator-function
+			paymentPlanGridValidatorFn: function(headerText, dataField, data) {
+				var me    = this,
+					value = data[dataField];
+				
+				if(dataField === "pymt_ro") {				// 지급율
+					if(UT.isEmpty(value) || value <= 0) {
+						return this.translate("STD.PO1066");		// 지급율을 0% 이상으로 설정해야합니다.
+					}
+					if(!CCPrecManager.validate("decimal", value)) {
+						return this.translate("STD.E1021", null, CCPrecManager.validateInfo("decimal").decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				} else if(dataField === "pymt_expt_dt") {	// 지급예정일
+					if(UT.isEmpty(value)) {
+						return this.translate("STD.E1001", null, this.translate(headerText));
+					}
+					
+					var payClsCd            = data["pymt_typ_ccd"],
+						paymentDateCheckObj = this.get("paymentDateCheckObj"),
+						minApDt             = paymentDateCheckObj.minApDt,	// MIN 선급금 지급예정일
+						maxApDt             = paymentDateCheckObj.maxApDt,	// MAX 선급금 지급예정일
+						minMpDt             = paymentDateCheckObj.minMpDt,	// MIN 중도금 지급예정일
+						maxMpDt             = paymentDateCheckObj.maxMpDt,	// MAX 중도금 지급예정일
+						nowDate             = UT.formatDate(new Date(), "yyyyMMdd");
+					
+					// 현재 데이터가 MIN 선급금 지급예정일인 경우,
+					if(payClsCd === "APYMT" && value == minApDt) {
+						// 현재일자와 비교
+						if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return this.translate("STD.E1013", null, this.translate("선급금 지급 예정 일자"), this.translate("금일"));
+						}
+					}
+					
+					// 현재 데이터가 MIN 중도금 지급예정일인 경우,
+					if(payClsCd === "IPYMT" && value == minMpDt) {
+						// 선급금 존재 시
+						if(UT.isNotEmpty(maxApDt)) {
+							// MAX 선급금 지급예정일과 비교
+							if(UT.isNotEmpty(value) && (maxApDt >= value)) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return this.translate("STD.E1013", null, this.translate("중도금 지급 예정 일자"), this.translate("선급금 지급 예정 일자"));
+							}
+							
+							// 선급금 미존재 시, 현재일자와 비교
+						} else if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return this.translate("STD.E1013", null, this.translate("중도금 지급 예정 일자"), this.translate("금일"));
+						}
+					}
+					
+					// 잔금 지급예정일인 경우 (잔금은 항상 1건임)
+					if(payClsCd === "BAL") {
+						// 중도금 존재 시
+						if(UT.isNotEmpty(maxMpDt)) {
+							// MAX 중도금 지급예정일과 비교
+							if(maxMpDt >= value) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return this.translate("STD.E1013", null, this.translate("잔금 지급 예정 일자"), this.translate("중도금 지급 예정 일자"));
+							}
+							// 중도금 미존재, 선급금 존재 시
+						} else if(UT.isNotEmpty(maxApDt)) {
+							// MAX 선급금 지급예정일과 비교
+							if((maxApDt >= value)) {
+								// {0}은(는) {1}이후 날짜로 입력하십시오
+								return this.translate("STD.E1013", null, this.translate("잔금 지급 예정 일자"), this.translate("선급금 지급 예정 일자"));
+							}
+							// 선급금,중도금 미존재 시, 현재일자와 비교
+						} else if(nowDate >= value) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return this.translate("STD.E1013", null, this.translate("잔금 지급 예정 일자"), this.translate("금일"));
+						}
+					}
+				} else if(dataField === "pymt_amt") {				// 지급액
+					if(UT.isEmpty(value) || value <= 0) {
+						return this.translate("STD.E1008", null, this.translate(headerText), "0");		// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					var cur = this.get("otrsCntrData.cur_ccd");
+					if(!CCPrecManager.validate("amt", value, cur)) {
+						return this.translate("STD.E1021", null, CCPrecManager.validateInfo("amt", cur).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				}
+				return true;
+			},
+			
+			onChangeTaxCd: function(e) {
+				this.setTaxRate(e.detail.selectedItem);
+				// this.changePoItemTaxRate();
+			},
+			
+			setTaxRate: function(taxCodeInfo) {
+				var taxRate = new BigNumber(0);
+				
+				if(UT.isNotEmpty(taxCodeInfo)) {
+					taxRate = (new BigNumber(taxCodeInfo.cstr_cnd_val).div(100));
+				}
+				
+				if(taxRate.comparedTo(new BigNumber(this.get("taxRate")))) {
+					//과세율이 다를 경우 변경
+					this.set("taxRate", taxRate.toNumber());
+				}
+				
+			},
+			
+			// changePoItemTaxRate: function() {
+			// 	var provider = this.$.gridPanel.getDataProvider();
+			// 	provider.setItemAtBatch(true, function(nodeIndex, data) {
+			// 		if(data["df_yn"] !== "Y") {
+			// 			return {tax_rate: this.get("taxRate")};
+			// 		}
+			// 	});
+			// },
+			
+			// 그리드 validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me = this;
+				var value = data[dataField];
+				
+				if(dataField === "cntr_exp_dt") {
+					if(UT.isEmpty(value)) {
+						return true;
+					}
+					var p2pPurcTypCcd = this.get("otrsCntrData.purc_typ_ccd");
+					
+					if(p2pPurcTypCcd === "CONSTSVC" && UT.isNotEmpty(value)) {
+						var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+						var compareValue = UT.toTime(UT.toDate(data['cntr_st_dt'], "yyyyMMdd"));
+						if(value === null || compareValue === null) {
+							return this.translate("STD.E0000");
+						}
+						if(value < compareValue) {
+							// {0}은(는) {1}이후 날짜로 입력하십시오
+							return this.translate("STD.E1013", null, this.translate(headerText), UT.formatDate(compareValue));
+						}
+					}
+				} else if(dataField === "req_dlvy_dt") {
+					/*var p2pPurcTypCcd = this.get("otrsCntrData.purc_typ_ccd");
+					if(p2pPurcTypCcd === "QTY") {
+						if(UT.isNotEmpty(value)) {
+							var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+							var geDate = new Date();
+							geDate.setHours(0, 0, 0, 0);
+							var compareValue = UT.toTime(geDate);
+							
+							if(value < compareValue) {
+								return this.translate("STD.E1013", null, this.translate("납품 일자"), UT.formatDate(compareValue));
+							}
+						}
+					}*/
+				} else if(["item_qty", "item_uprc"].indexOf(dataField) > -1) {
+					if((new BigNumber(value || 0)).isZero()) {
+						return this.translate("STD.E1008", null, this.translate(headerText), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					var formatterName, dtlCd;
+					if(dataField === "item_qty") {
+						// UOM 존재 시 단위별 수량 포맷유형, UOM 미존재 시 기본 수량 포맷유형
+						formatterName = "qty";
+						dtlCd = data["uom_ccd"];
+					} else {
+						formatterName = "amt";
+						dtlCd = this.get("otrsCntrData.cur_ccd");
+					}
+					if(!CCPrecManager.validate(formatterName, value, dtlCd)) {
+						return this.translate("STD.E1021", null, CCPrecManager.validateInfo(formatterName, dtlCd).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				}
+				return true;
+			},
+			
+			// 그리드 item-style-function
+			onItemStyleFn: function(data, item) {
+				var me       = this,
+					styleObj = {};
+				
+				if(item.dataField === "item_spec") {
+					styleObj = {
+						iconLocation: "leftSide",
+						iconOffset: 0,
+						iconPadding: 0,
+						paddingLeft: 0,
+						paddingTop: 0,
+						iconUrl: "bower_components/sc-grid/resources/img/icon_required.png"
+					};
+				}
+				return styleObj;
+			},
+			
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			
+			// grid column editor-regex-function
+			onRegexFn: function(data, item) {
+				var me        = this,
+					dataField = item.dataField;
+				
+				// 수량
+				if(dataField === "item_qty") {
+					return CCPrecManager.regex("qty", data["uom_ccd"]);
+					
+					// 단가
+				} else if(dataField === "item_uprc") {
+					return CCPrecManager.regex("price", this.get("otrsCntrData.cur_ccd"));
+				}
+			},
+			
+			// 세액 convert
+			onVatConvert: function(rowIndex, dataField, data) {
+				var me = this;
+				
+				if(data.df_yn === "Y") {
+					return 0;
+				}
+				
+				var cur = this.get("otrsCntrData.cur_ccd");
+				var itemAmt = new BigNumber(data["item_amt"] || 0);
+				
+				// 품목 별 세액 계산
+				var dp = CCPrecManager.validateInfo('amt', cur).decimalprecision;
+				var rm = 1;	// ROUND_DOWN
+				
+				return itemAmt.mul(new BigNumber(this.get("taxRate"))).toFixed(dp, rm);
+			},
+			
+			// 금액 합계
+			// onAmtAggregateFn: function(dataField, datas) {
+			// 	var me = this;
+			//
+			// 	if(dataField === "item_amt") {
+			// 		var amtSum = new BigNumber('0');
+			//
+			// 		for(var i = 0; i < datas.length; ++i) {
+			// 			var data = datas[i];
+			// 			amtSum = amtSum.plus(new BigNumber(data[dataField] || 0));
+			// 		}
+			//
+			// 		var cur   = this.get("otrsCntrData.cur_ccd"),
+			// 			value = amtSum.toFixed();
+			//
+			// 		// 금액 소수점처리(value)
+			// 		this.set("otrsCntrData.sup_amt", CCPrecManager.format("amt", value, cur));
+			//
+			// 		// 발주금액 변경 시
+			// 		this.changedPoTotAmt();
+			// 		return value;
+			// 	}
+			// 	return null;
+			// },
+			
+			// 발주금액 변경 시 처리 (공급가액, 세액, 계약금액, 지불조건 재계산)
+			// changedPoTotAmt: function() {
+			// 	var me = this, provider = this.$.gridPanel.getDataProvider();
+			//
+			// 	var cur = this.get("otrsCntrData.cur_ccd");
+			//
+			// 	// 품목의 면세여부를 체크하여 VAT 및 계약 금액(VAT포함)을 계산하도록 함.
+			// 	var vatAmt = new BigNumber(0);
+			// 	var lists = provider.getItems();
+			//
+			// 	for(var i = 0; i < lists.length; i++) {
+			// 		var item = lists[i];
+			//
+			// 		if(item.df_yn !== "Y") {
+			// 			var itemAmt = new BigNumber(item.item_amt || 0);
+			//
+			// 			var dp = CCPrecManager.validateInfo('amt', cur).decimalprecision;
+			// 			var rm = 1;	// ROUND_DOWN (절사하기로 함 - 2019.07.10)
+			// 			var itemVat = itemAmt.mul(new BigNumber(this.get("taxRate"))).toFixed(dp, rm);
+			//
+			// 			vatAmt = vatAmt.plus(new BigNumber(itemVat));
+			// 		}
+			// 	}
+			//
+			// 	// VAT 금액
+			// 	this.set("otrsCntrData.vat_amt", vatAmt.toFixed());
+			//
+			// 	// 공급가액 = 발주금액
+			// 	var supplyAmt = new BigNumber(this.get("otrsCntrData.sup_amt") || 0);
+			// 	this.set("otrsCntrData.sup_amt", supplyAmt.toFixed());
+			//
+			// 	// 계약 금액(VAT포함) = 공급가액 + VAT 금액
+			// 	this.set("otrsCntrData.cntr_amt", supplyAmt.plus(vatAmt).toFixed());
+			//
+			// 	// 선급금이행보증 계산
+			// 	this.changedPrePayBondRate(this.get("otrsCntrInfoData.apymtgur_use_yn"), this.get("otrsCntrInfoData.apymtgur_ro"));
+			//
+			// 	// 지불조건 - 지급액 계산
+			// 	this.calculatePaymentPlanAmt();
+			// },
+			
+			changedCntrAmt: function() {
+				var me = this;
+				
+				// VAT 금액
+				var vatAmt = new BigNumber(me.get("otrsCntrData.vat_amt") || 0);
+				me.set("otrsCntrData.vat_amt", vatAmt.toFixed());
+				
+				// 공급가액 = 발주금액
+				var supplyAmt = new BigNumber(me.get("otrsCntrData.sup_amt") || 0);
+				me.set("otrsCntrData.sup_amt", supplyAmt.toFixed());
+				
+				// 계약 금액(VAT포함) = 공급가액 + VAT 금액
+				me.set("otrsCntrData.cntr_amt", supplyAmt.plus(vatAmt).toFixed());
+				
+				// 선급금이행보증 계산
+				//me.changedPrePayBondRate(me.get("purcCntrInfoData.apymtgur_use_yn"), me.get("purcCntrInfoData.apymtgur_ro"));
+				
+				// 지불조건 - 지급액 계산
+				me.calculatePaymentPlanAmt();
+			},
+			
+			// 지불조건 - 지급액 계산 (발주금액 변경 후 재계산)
+			calculatePaymentPlanAmt: function() {
+				var me          = this,
+					poTotAmt    = this.get("otrsCntrData.sup_amt") || 0,
+					provider    = this.$.paymentPlanGrid.getDataProvider(),
+					sumAmtExBp  = new BigNumber(0),
+					sumRateExBp = new BigNumber(0),
+					apAmt       = new BigNumber(0),
+					cur         = this.get("otrsCntrData.cur_ccd");
+				
+				// 잔금을 제외한 지급액 계산 (잔금은 따로 계산한다.)
+				provider.setItemAtBatch(true, function(nodeIndex, data) {
+					// 잔금을 제외한 지급액 계산
+					if(data["pymt_typ_ccd"] !== "BAL") {
+						var rate = data["pymt_ro"] || 0,
+							amt  = (new BigNumber(poTotAmt)).mul((new BigNumber(rate)).div(new BigNumber(100))).toFixed();
+						
+						// 통화 별 지급액 소수점 처리
+						var precAmt = new BigNumber(CCPrecManager.format("amt", amt, cur));
+						
+						if(data["pymt_typ_ccd"] === "APYMT") {	// 선급금인 경우
+							apAmt = apAmt.plus(precAmt);
+						}
+						sumAmtExBp = sumAmtExBp.plus(precAmt);
+						sumRateExBp = sumRateExBp.plus(rate);
+						
+						return {"pymt_amt": precAmt.toFixed()};
+					}
+				});
+				
+				// 잔금 계산 (소수점 처리 된 지급액을 sum하였으므로 따로 소수점 처리할 필요 없음)
+				this.calculateBpAmt(sumAmtExBp, sumRateExBp);
+			},
+			
+			// 잔금 계산
+			calculateBpAmt: function(sumAmtExBp, sumRateExBp) {
+				var me       = this,
+					poTotAmt = this.get("otrsCntrData.sup_amt") || 0;
+				
+				// 잔금 지급율 계산 = 100 - (선급금 지급율 + 중도금 지급율)
+				var bpRate = (new BigNumber(100)).minus(sumRateExBp);
+				
+				// 잔금 계산 = 발주총액 - (선급금+중도금)
+				var bpAmt = (new BigNumber(poTotAmt)).minus(sumAmtExBp);
+				
+				var provider = this.$.paymentPlanGrid.getDataProvider();
+				var bpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "BAL";
+				});
+				if(bpIndexes.length > 0) {
+					// 잔금은 항상 1개
+					provider.setItemAt(bpIndexes[0], {"pymt_amt": bpAmt.toFixed(), "pymt_ro": bpRate.toFixed()});
+				}
+			},
+			
+			/* 계약이행보증기간 on-click 이벤트 */
+			changePerforbondYn: function() {
+				var me = this;
+				this.applyFormula();
+			},
+			/* 선급금보증기간 on-click 이벤트 */
+			changePrepaybondYn: function() {
+				var me = this;
+				var paymentPlanDataProvider = this.$.paymentPlanGrid.getDataProvider();
+				var items = paymentPlanDataProvider.getItems();
+				
+				var prepayFilterItems = items.filter(function(item) {
+					if(item.pymt_typ_ccd === "APYMT") {
+						return true;
+					}
+				});
+				if(prepayFilterItems.length == 0 || (prepayFilterItems[0].pymt_amt || 0) === 0) {
+					UT.alert("지급 조건의 선급금 추가 후 진행하시기 바랍니다.");
+					this.set("otrsCntrInfoData.apymtgur_use_yn", "N");
+				}
+				this.applyFormula();
+			},
+			/* 하자보증기간 on-click 이벤트 */
+			changeMaintbondYn: function() {
+				var me = this;
+				this.applyFormula();
+			},
+			// 계약이행보증금 - 보증율
+			changedPerforBondRate: function() {
+				var me = this;
+				var perforBondYn = this.get("otrsCntrInfoData.cpgur_use_yn");
+				
+				if(!UT.isNumber(this.get("otrsCntrInfoData.cpgur_ro"))) return;
+				
+				if("Y" === perforBondYn) {
+					var perforBondRate = new BigNumber(this.get("otrsCntrInfoData.cpgur_ro") || 0); // 계약이행 지급율
+					// BigNumber 생성 시 15자리 이상의 숫자 타입은 error 발생 -> toString하여 생성
+					var cntrAmt = new BigNumber(UT.toString(this.get("otrsCntrData.cntr_amt") || 0)); // 계약 금액(VAT포함)
+					
+					// cntrAmt * perforBondRate / 100
+					var preforBondAmt = (cntrAmt.isZero() || perforBondRate.isZero()) ? 0 : cntrAmt.mul(perforBondRate).div(new BigNumber(100)).toFixed();
+					this.set("otrsCntrInfoData.cpgur_amt", CCPrecManager.format("amt", preforBondAmt, this.get("otrsCntrData.cur_ccd")));
+				} else {
+					this.set("otrsCntrInfoData.cpgur_ro", 0);
+					this.set("otrsCntrInfoData.cpgur_amt", 0);
+					this.set("otrsCntrInfoData.cpgur_typ_ccd", "");
+					this.set("otrsCntrInfoData.cpgur_st_dt", "");
+					this.set("otrsCntrInfoData.cpgur_exp_dt", "");
+				}
+				this.applyFormula("perforBondEditable");
+			},
+			changedPerforBondCls: function() {
+				var me = this;
+				if(this.get("otrsCntrInfoData.cpgur_typ_ccd") !== "GUR_INS") {
+					this.$.perforBondRate.clearInvalid();
+					this.$.perforBondPeriod.clearInvalid();
+				}
+				this.applyFormula("perforBondRequired");
+				this.applyFormula("isRequiredCntrDate");
+			},
+			
+			// 하자이행보증금 - 보증율
+			changedMaintBondRate: function() {
+				var me = this;
+				var maintBondYn = this.get("otrsCntrInfoData.defpgur_use_yn");
+				
+				if(!UT.isNumber(this.get("otrsCntrInfoData.defpgur_ro"))) return;
+				
+				if("Y" === maintBondYn) {
+					var maintBondRate = new BigNumber(this.get("otrsCntrInfoData.defpgur_ro") || 0); // 하자이행 지급율
+					// BigNumber 생성 시 15자리 이상의 숫자 타입은 error 발생 -> toString하여 생성
+					var cntrAmt = new BigNumber(UT.toString(this.get("otrsCntrData.cntr_amt") || 0)); // 계약 금액(VAT포함)
+					
+					// cntrAmt * maintBondRate / 100
+					var maintBondAmt = (cntrAmt.isZero() || maintBondRate.isZero()) ? 0 : cntrAmt.mul(maintBondRate).div(new BigNumber(100)).toFixed();
+					this.set("otrsCntrInfoData.defpgur_amt", CCPrecManager.format("amt", maintBondAmt, this.get("otrsCntrData.cur_ccd")));
+				} else {
+					this.set("otrsCntrInfoData.defpgur_ro", 0);
+					this.set("otrsCntrInfoData.defpgur_amt", 0);
+					this.set("otrsCntrInfoData.defpgur_typ_ccd", "");
+					this.set("otrsCntrInfoData.defpgur_pd_typ_ccd", "");
+					this.set("otrsCntrInfoData.defpgur_pd", null);
+				}
+				this.applyFormula("maintBondEditable");
+			},
+			changedMaintBondCls: function() {
+				var me = this;
+				if(this.get("otrsCntrInfoData.defpgur_typ_ccd") !== "GUR_INS") {
+					this.$.maintBondRate.clearInvalid();
+					this.$.maintBondTyp.clearInvalid();
+					this.$.maintBondMon.clearInvalid();
+				}
+				this.applyFormula("maintBondRequired");
+				this.applyFormula("isRequiredCntrDate");
+			},
+			
+			// 선급금이행보증금 - 보증율
+			changedPrePayBondRate: function() {
+				var me = this;
+				var prePayBondYn = this.get("otrsCntrInfoData.apymtgur_use_yn");
+				
+				if(!UT.isNumber(this.get("otrsCntrInfoData.apymtgur_ro"))) return;
+				
+				if("Y" === prePayBondYn) {
+					var prePayBondRate = new BigNumber(this.get("otrsCntrInfoData.apymtgur_ro") || 0); // 선급금이행 지급율
+					
+					var provider = this.$.paymentPlanGrid.getDataProvider(),
+						plans    = provider.getItems();
+					
+					var payRate = new BigNumber(0);
+					for(var i = 0, len = plans.length; i < len; i++) {
+						var plan = plans[i];
+						if(plan["pymt_typ_ccd"] === "APYMT") {			// 선급금
+							payRate = payRate.plus(new BigNumber(plan["pymt_ro"]));
+						}
+					}
+					
+					//아래계산식으로 변경
+					// cntrAmt *( payRate / 100) * (prePayBondRate / 100)
+					var cntrAmt = new BigNumber(UT.toString(this.get("otrsCntrData.cntr_amt") || 0));
+					var prePayBondAmt = (cntrAmt.isZero() || prePayBondRate.isZero() || payRate.isZero()) ? 0 : cntrAmt.mul(payRate).div(new BigNumber(100)).mul(prePayBondRate).div(new BigNumber(100));
+					
+					this.set("otrsCntrInfoData.apymtgur_amt", CCPrecManager.format("amt", prePayBondAmt, this.get("otrsCntrData.cur_ccd")));
+				} else {
+					this.set("otrsCntrInfoData.apymtgur_ro", 0);
+					this.set("otrsCntrInfoData.apymtgur_amt", 0);
+					this.set("otrsCntrInfoData.apymtgur_typ_ccd", "");
+					this.set("otrsCntrInfoData.apymtgur_st_dt", "");
+					this.set("otrsCntrInfoData.apymtgur_exp_dt", "");
+				}
+				this.applyFormula("prePayBondEditable");
+			},
+			changedPrePayBondCls: function() {
+				var me = this;
+				if(this.get("otrsCntrInfoData.apymtgur_typ_ccd") !== "GUR_INS") {
+					this.$.prePayBondRate.clearInvalid();
+					this.$.prePayBondPeriod.clearInvalid();
+				}
+				this.applyFormula("prePayBondRequired");
+				this.applyFormula("isRequiredCntrDate");
+			},
+			
+			// 지급추가 버튼 클릭
+			onAddPaymentPlan: function() {
+				var me = this;
+				var provider = this.$.paymentPlanGrid.getDataProvider(),
+					items    = provider.getItems();
+				
+				var apIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "APYMT";
+				});
+				var mpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "IPYMT";
+				});
+				var bpIndexes = provider.filterIndexes(function(data) {
+					return data["pymt_typ_ccd"] === "BAL";
+				});
+				
+				var addPayPlan = function(index, payClsCd) {
+					provider.addItemAt(index, {
+						"pymt_typ_ccd": payClsCd,
+						"pymt_ro": 0,
+						"pymt_amt": 0
+					});
+				};
+				
+				if(apIndexes.length === 0) {
+					// 1. 그리드에 선급금 미존재 시 선급금 추가 (선급금은 0개 또는 1개 존재 가능)
+					addPayPlan(0, "APYMT");
+				} else {
+					// 2. 그리드에 선급금 존재 시, 잔금 앞에 중도금 추가 (잔금은 항상 1개 필수 존재해야 함)
+					addPayPlan(bpIndexes[0], "IPYMT");
+				}
+				// 지급추가 버튼
+				this.applyFormula("showAddPaymentPlanBtn");
+			},
+			
+			// 지급삭제 버튼 클릭
+			onDeletePaymentPlan: function() {
+				var me = this;
+				var provider = this.$.paymentPlanGrid.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+					provider.removeItems(true);
+					
+					var sumAmtExBp  = new BigNumber(0),
+						sumRateExBp = new BigNumber(0);
+					var plans = provider.getItems();
+					plans.forEach(function(data) {
+						if(data.pymt_typ_ccd !== "BAL") {
+							sumAmtExBp = sumAmtExBp.plus(new BigNumber(data.pymt_amt || 0));
+							sumRateExBp = sumRateExBp.plus(new BigNumber(data.pymt_ro || 0));
+						}
+					});
+					// 잔금 계산
+					me.calculateBpAmt(sumAmtExBp, sumRateExBp);
+					me.applyFormula("showAddPaymentPlanBtn");	// 지급추가 버튼
+				});
+			},
+			
+			// 지불조건 그리드 item-edit-end
+			/*
+             * item-edit-begin에서 설정에 관한 오류 메시지 처리 및 변경이벤트 취소를 구현하려 했으나,
+             * 붙여넣기 시 제어가 불가하여 item-edit-end에서 모두 수행함
+             */
+			onPaymentPlanEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+				
+				if(item.dataField === "pymt_typ_ccd") {		// 지급구분코드 변경 시
+					if(oldValue === "APYMT" && newValue === "IPYMT") {		// 선급금 -> 중도금
+						var mpIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "IPYMT";
+						});
+						// 선급금은 항상 중도금 앞이었으므로 이동할 필요 없음
+						//provider.moveRow(item.rowIndex, mpIndexes[0]);		// 중도금의 첫 번째로 이동
+						
+					} else if(oldValue === "IPYMT" && newValue === "APYMT") {	// 중도금 -> 선급금
+						var apIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "APYMT";
+						});
+						if(apIndexes.length === 1) {						// 선급금이 지금 바꾼 데이터 하나뿐이면
+							provider.moveRow(item.rowIndex, 0);					// 제일 첫 번째로 이동
+						}/* else {											// 선급금이 지금 바꾼 데이터 외에도 존재하는 경우 -> onItemsFn에 의해 애초에 바꿀 수 없음
+            				//provider.setItemAt(item.rowIndex, {pymt_typ_ccd: oldValue});
+            			}*/
+					}
+				} else if(item.dataField === "pymt_ro") {	// 지급율 변경 시
+					newValue = UT.isNumber(newValue) ? newValue : 0;
+					oldValue = UT.isNumber(oldValue) ? oldValue : 0;
+					
+					if(data["pymt_typ_ccd"] !== "BAL") {			// 잔금 아닌 경우
+						var newPayRate = new BigNumber(newValue),
+							oldPayRate = new BigNumber(oldValue);
+						
+						if(newPayRate.isZero()) {
+							UT.alert("STD.PO1066");	// 지급율을 0% 이상으로 설정해야합니다.
+							provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+						}
+						
+						// 잔금 index 구하기
+						var bpIndexes = provider.filterIndexes(function(data) {
+							return data["pymt_typ_ccd"] === "BAL";
+						});
+						if(bpIndexes.length > 0) {
+							var bpIndex = bpIndexes[0];	// 잔금은 항상 1개
+							var bpItem = provider.getItemAt(bpIndex),
+								bpRate = bpItem["pymt_ro"];
+							
+							var diff      = newPayRate.minus(oldPayRate),
+								calBpRate = (new BigNumber(bpRate)).minus(diff);	// 기존 잔금 지급율에서 수정된 지급율의 변경차를 빼줌
+							
+							if(calBpRate.comparedTo(new BigNumber(0)) < 0) {
+								UT.alert("STD.PO1063");	// 총 지급율은 100%로 설정해야 합니다.
+								provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+							} else if(calBpRate.isZero()) {
+								UT.alert("STD.PO1065");	// 잔금의 지급율은 0 이상이어야 합니다.
+								provider.setItemAt(item.rowIndex, {"pymt_ro": oldValue});
+							} else {
+								var cur = this.get("otrsCntrData.cur_ccd");
+								
+								// 지급율에 따른 지급액 계산
+								var poTotAmt = new BigNumber(this.get("otrsCntrData.sup_amt") || 0);
+								var payAmt = poTotAmt.mul(newPayRate).div(new BigNumber(100)).toFixed();
+								provider.setItemAt(item.rowIndex, {"pymt_amt": CCPrecManager.format("amt", payAmt, cur)});	// 현재 수정한 지급율에 대한 지급액
+								
+								// 선급금
+								var apChanged = (data["pymt_typ_ccd"] === "APYMT"), apAmt = new BigNumber(0);
+								// 잔금 제외 금액(선급금+중도금 합산금액)
+								var sumAmtExBp = new BigNumber(0);
+								// 잔금 제외 지급율(선급금 지급율 + 중도금 지급율)
+								var sumRateExBp = new BigNumber(0);
+								
+								var items = provider.getItems();
+								for(var i = 0, len = items.length; i < len; i++) {
+									var item = items[i];
+									if(item["pymt_typ_ccd"] !== "BAL") {	// 잔금 제외
+										var amt = new BigNumber(item["pymt_amt"] || 0);
+										sumAmtExBp = sumAmtExBp.plus(amt);
+										
+										var rate = new BigNumber(item["pymt_ro"] || 0);
+										sumRateExBp = sumRateExBp.plus(rate);
+										
+										if(item["pymt_typ_ccd"] === "APYMT") {	// 선급금
+											apAmt = apAmt.plus(amt);
+										}
+									}
+								}
+								
+								// 잔금 계산
+								this.calculateBpAmt(sumAmtExBp, sumRateExBp);
+							}
+						}
+					}
+				} else if(item.dataField === "pymt_expt_dt" && UT.isNotEmpty(newValue)) {	// 지급예정일 변경 시
+					if(provider.filterItems({"pymt_expt_dt": UT.formatDate(newValue, 'yyyyMMdd')}).length > 1) {
+						// 지급예정일은 중복이 불가합니다.
+						UT.alert("STD.PO1069");
+						provider.setItemAt(item.rowIndex, {"pymt_expt_dt": oldValue});
+					}
+				} else if(item.dataField === "pymt_amt") {	// 지급금 변경 시
+					var newPayAmt = new BigNumber(newValue || 0),
+						oldPayAmt = new BigNumber(oldValue || 0);
+					
+					if(newPayAmt.isZero()) {
+						UT.alert(this.translate("STD.E1008", null, this.translate(headerText), "0"), null, true);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+						provider.setItemAt(item.rowIndex, {"pymt_amt": oldValue});
+					} else {
+						var poTotAmt = new BigNumber(this.get("otrsCntrData.sup_amt") || 0);
+						if(poTotAmt.toFixed() === '0') {
+							UT.alert(this.translate("STD.E1008", null, this.translate("공급 금액"), "0"), null, true);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+							provider.setItemAt(item.rowIndex, {"pymt_amt": oldValue});
+						}
+					}
+				}
+			},
+			
+			// 지급예정일 validator 수행 전 min-max 날짜 계산
+			calculatePaymentDate: function() {
+				var me       = this,
+					provider = this.$.paymentPlanGrid.getDataProvider(),
+					plans    = provider.getItems(),
+					minApDt, maxApDt, minMpDt, maxMpDt;
+				
+				plans.forEach(function(plan) {
+					var payClsCd = plan["pymt_typ_ccd"],
+						exptDt   = plan["pymt_expt_dt"];
+					
+					if(payClsCd === "APYMT") {
+						if(UT.isEmpty(minApDt) || (minApDt > exptDt)) minApDt = exptDt;
+						if(UT.isEmpty(maxApDt) || (maxApDt < exptDt)) maxApDt = exptDt;
+					} else if(payClsCd === "IPYMT") {
+						if(UT.isEmpty(minMpDt) || (minMpDt > exptDt)) minMpDt = exptDt;
+						if(UT.isEmpty(maxMpDt) || (maxMpDt < exptDt)) maxMpDt = exptDt;
+					}
+				});
+				this.set("paymentDateCheckObj", {
+					"minApDt": minApDt,
+					"maxApDt": maxApDt,
+					"minMpDt": minMpDt,
+					"maxMpDt": maxMpDt
+				});
+			},
+			
+			// 지불조건 그리드 selection-able-function
+			onPaymentPlanSelectionAbleFn: function(data) {
+				return (data["pymt_typ_ccd"] !== "BAL");	// 잔금 삭제 불가
+			},
+			
+			// 계약기간 계산
+			// computeCntrPrdDate: function() {
+			// 	var me = this, provider = this.$.gridPanel.getDataProvider();
+			//
+			// 	var max = function(a, b) {
+			// 		if(UT.isDate(a) && UT.isDate(b)) {
+			// 			return a.getTime() >= b.getTime() ? a : b;
+			// 		} else if(UT.isString(a) && UT.isString(b)) {
+			// 			return parseInt(a, 10) >= parseInt(b, 10) ? a : b;
+			// 		} else {
+			// 			return UT.isString(a) ? a : UT.isString(b) ? b : null;
+			// 		}
+			// 	}
+			// 	var min = function(a, b) {
+			// 		if(UT.isDate(a) && UT.isDate(b)) {
+			// 			return a.getTime() <= b.getTime() ? a : b;
+			// 		} else if(UT.isString(a) && UT.isString(b)) {
+			// 			return parseInt(a, 10) <= parseInt(b) ? a : b;
+			// 		} else {
+			// 			return UT.isString(a) ? a : UT.isString(b) ? b : null;
+			// 		}
+			// 	}
+			// 	var sd = null, ed = null;
+			// 	var items = provider.getItems();
+			// 	for(var i = 0, len = items.length; i < len; i++) {
+			// 		sd = min(sd, items[i].cntr_st_dt);
+			// 		ed = max(ed, items[i].cntr_exp_dt);
+			// 	}
+			// 	if(UT.isDate(sd)) {
+			// 		this.set("otrsCntrData.cntr_st_dt", UT.formatDate(sd, "yyyyMMdd"));
+			// 	} else {
+			// 		this.set("otrsCntrData.cntr_st_dt", sd);
+			// 	}
+			// 	if(UT.isDate(ed)) {
+			// 		this.set("otrsCntrData.cntr_exp_dt", UT.formatDate(ed, "yyyyMMdd"));
+			// 	} else {
+			// 		this.set("otrsCntrData.cntr_exp_dt", ed);
+			// 	}
+			// },
+			
+			onItemClick: function(event) {
+				var me = this;
+				var data     = event.detail.data,
+					item     = event.detail.item,
+					provider = event.detail.provider;
+				
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					//현재 row 인덱스를 담아둔다.
+					this.rowIndex = item.rowIndex;
+					
+					this.showDetailSpec(data, provider);
+				}
+			},
+			
+			//그리드 데이터 에디팅 완료 함수
+			// onItemEditEnd: function(event) {
+			// 	var me = this, e = event.detail,
+			// 		data         = e.data,
+			// 		item         = e.item,
+			// 		newValue     = e.newValue,
+			// 		oldValue     = e.oldValue,
+			// 		provider     = e.provider,
+			// 		fieldName    = item.dataField,
+			// 		itemIndex    = item.rowIndex;
+			//
+			// 	this.grid.itemIndex = itemIndex;
+			// 	this.grid.fieldName = fieldName;
+			//
+			// 	if(fieldName === "item_qty" || fieldName === "item_uprc") {
+			// 		var unitCd = data["uom_ccd"],
+			// 			qty    = data["item_qty"] || 0,
+			// 			price  = data["item_uprc"] || 0;
+			//
+			// 		// UOM/수량 변경 시
+			// 		if(item.dataField === "uom_ccd") {
+			// 			// 수량 소수점처리
+			// 			qty = CCPrecManager.format("qty", qty, unitCd);
+			// 		}
+			//
+			// 		// 금액 계산 소수점처리
+			// 		var amt = CCPrecManager.format("amt", (new BigNumber(qty)).mul(new BigNumber(price)).toFixed(), this.get("otrsCntrData.cur_ccd"));
+			//
+			// 		provider.setItemAt(item.rowIndex, {
+			// 			"item_qty": qty,
+			// 			"item_amt": amt
+			// 		});
+			//
+			// 	} else if(fieldName === "cntr_st_dt" || fieldName === "cntr_exp_dt") {
+			// 		this.computeCntrPrdDate(); // 계약기간 계산
+			// 	} else if(fieldName === "df_yn") {
+			// 		// 공급가액, 세액, 계약금액 등 변경
+			// 		this.changedPoTotAmt();
+			//
+			// 	}
+			// },
+			
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data, provider) {
+				var me = this;
+				
+				var readonly = true;
+				var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 240 : 260), {
+					"clear-dtl-spec": function(popup, e) {
+						provider.setItemAt(this.rowIndex, {
+							"item_spec_dtl": null
+						});
+						popup.close();
+					},
+					"apply-dtl-spec": function(popup, e) {
+						var dtlSpec = e.detail.item_spec_dtl;
+						
+						provider.setItemAt(this.rowIndex, {
+							"item_spec_dtl": dtlSpec
+						});
+						popup.close();
+					}
+				});
+				popup.show();
+				popup.getWindowContent().load(data, readonly);
+			},
+			
+			onSaveDraft: function() {
+				var me = this;
+				if(!this.saveValidate()) {
+					return;
+				}
+				this.onSave(this.$.savePurcCntr);
+			},
+			
+			completeSavePurcCntr: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					var resultData = response.resultData;
+					this.findOtrsCntr(resultData.otrs_cntr_uuid);
+				}
+			},
+			
+			onSave: function(ajax) {
+				var me = this;
+				ajax.body = this.saveParameter();
+				UT.request(ajax);
+			},
+			
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {
+					var otrsCntrData = this.get("otrsCntrData");
+					this.$.deletePurcCntr.body = otrsCntrData;
+					UT.request(this.$.deletePurcCntr);
+				});
+			},
+			
+			completeDeletePurcCntr: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					this.fire("reload");
+					this.onClose();
+				}
+			},
+			
+			onClose: function() {
+				var me = this;
+				this.fire("close");
+			},
+			
+			saveValidate: function() {
+				var me = this;
+				if(!this.validate("basicInfo")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				if(!this.validate("cntrInfo")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				return true;
+			},
+			
+			confirmValidate: function() {
+				var me = this;
+				if(!this.validate("basicInfo")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				if(!this.validate("cntrInfo")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				// if(!this.formula("isCndTypUPRCCNTR")) {
+					this.calculatePaymentDate();
+					if(!this.$.paymentPlanGrid.validate()) {
+						UT.alert("STD.PO1064");	// 지불조건에 오류가 있습니다. 확인 바랍니다.
+						return false;
+					}
+				// }
+				// if(!this.$.gridPanel.validate()) {
+				// 	UT.alert("STD.E0000");
+				// 	return false;
+				// }
+				return true;
+			},
+			
+			saveParameter: function() {
+				var me = this;
+				var otrsCntrData = this.get("otrsCntrData");
+				var otrsCntrInfoData = this.get("otrsCntrInfoData");
+				// var itemProvider = this.$.gridPanel.getDataProvider();
+				var paymentPlanProvider = this.$.paymentPlanGrid.getDataProvider();
+				
+				return {
+					otrsCntrData: otrsCntrData,
+					otrsCntrInfoData: otrsCntrInfoData,
+					// insertItems: itemProvider.getNewItems(),
+					// updateItems: itemProvider.getUpdateItems(),
+					// deleteItems: itemProvider.getRemoveItems() || [],
+					paymentPlans: paymentPlanProvider.getItems(),
+					cntrAmt: otrsCntrData.cntr_amt
+				};
+			},
+			
+			changeCndTyp: function(value) {
+				var me = this;
+				this.set("otrsCntrData.cnd_typ_ccd", value);
+				if(value === "PO") {
+					this.set("otrsCntrInfoData.cpgur_use_yn", 'N');
+					this.set("otrsCntrInfoData.cpgur_ro", null);
+					this.set("otrsCntrInfoData.cpgur_amt", null);
+					this.set("otrsCntrInfoData.cpgur_typ_ccd", null);
+					this.set("otrsCntrInfoData.cpgur_st_dt", null);
+					this.set("otrsCntrInfoData.cpgur_exp_dt", null);
+					this.set("otrsCntrInfoData.apymtgur_use_yn", 'N');
+					this.set("otrsCntrInfoData.apymtgur_ro", null);
+					this.set("otrsCntrInfoData.apymtgur_amt", null);
+					this.set("otrsCntrInfoData.apymtgur_typ_ccd", null);
+					this.set("otrsCntrInfoData.apymtgur_st_dt", null);
+					this.set("otrsCntrInfoData.apymtgur_exp_dt", null);
+					this.set("otrsCntrInfoData.defpgur_use_yn", 'N');
+					this.set("otrsCntrInfoData.defpgur_ro", null);
+					this.set("otrsCntrInfoData.defpgur_amt", null);
+					this.set("otrsCntrInfoData.defpgur_typ_ccd", null);
+					this.set("otrsCntrInfoData.defpgur_pd_typ_ccd", null);
+					this.set("otrsCntrInfoData.defpgur_pd", null);
+				}
+				this.applyFormula();
+			},
+			changeStamptaxYn: function() {
+				var me = this;
+				
+				if(this.otrsCntrInfoData.stax_yn != "Y") {
+					this.set("otrsCntrInfoData.estax_yn", "N");
+				}
+				if(this.otrsCntrInfoData.stax_yn != "Y") {
+					this.set("otrsCntrInfoData.sttpymtmeth_ccd", null);
+				}
+				this.applyFormula();
+			},
+			
+			completeFindListCommonCodeAttributeCode: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				var list = UT.arrayFilterChange(result, {key: "cstr_cnd_val", value: "Y"});
+				me.set("codes.sttpymtRoTypCcd", list);
+				
+				me.set("otrsCntrInfoData.sttpymt_ro_typ_ccd", list[0].data);
+			},
+			
+			_propertyChange: function() {
+				this.applyFormula();
+			},
+			
+			// // 품목 팝업
+			// onPopupItemSelect: function() {
+			// 	var me = this;
+			// 	//구매운영조직 , 구매 유형 공통코드
+			// 	if(!me.validate('basicInfo')) {
+			// 		UT.alert("STD.E9000");
+			// 		return;
+			// 	}
+			// 	var param = {
+			// 		oorg_cd: me.get("otrsCntrData.oorg_cd"),
+			// 		purc_grp_typ_ccd: "PURC",
+			// 		purc_typ_ccd: me.get("otrsCntrData.purc_typ_ccd")
+			// 	};
+			//
+			// 	UT.popupItemSearch(me, param, function(selectedItems) {
+			// 		// 품목정보 리스트 추가
+			// 		me.onAddItemList(selectedItems);
+			// 	});
+			// },
+			// //품목 리스트 추가
+			// onAddItemList: function(selectedList) {
+			// 	var me       = this,
+			// 		otrsCntrData   = me.get("otrsCntrData"),
+			// 		provider = me.$.gridPanel.getDataProvider();
+			//
+			// 	var created = [];
+			// 	var itemLno = me.getNewItemLno(provider);
+			// 	for(var i = 0, len = selectedList.length; i < len; i++) { // 신규 데이터 가공
+			// 		var selected = selectedList[i];
+			// 		created.push({
+			// 			item_lno: itemLno,
+			// 			plt_cd: selected.org_cd,
+			// 			item_oorg_cd: selected.oorg_cd,
+			// 			plt_nm: selected.logic_org_nm,
+			// 			item_cd: selected.item_cd,						//품목코드
+			// 			disp_item_nm: selected.disp_item_nm,
+			// 			item_nm: selected.item_nm,						//품목명
+			// 			item_nm_en: selected.item_nm_en,            //품목명 영문
+			// 			item_uprc: 0,				//단가
+			// 			item_amt: 0,				//금액
+			// 			item_qty: 1,										//수량
+			// 			item_spec: selected.item_spec,							//규격
+			// 			uom_ccd: selected.uom_ccd,					//UOM (기본단위)
+			// 			sg_cd: selected.sg_cd,							//소싱그룹코드
+			// 			pr_realusr_id: SCSessionManager.currentUser.usr_id,	//구매요청 의뢰자
+			// 			pr_realusr_nm: SCSessionManager.currentUser.disp_usr_nm,	//구매요청 의뢰자
+			// 			gr_pic_id: SCSessionManager.currentUser.usr_id,	//검수 담당자
+			// 			gr_pic_nm: SCSessionManager.currentUser.disp_usr_nm,	//검수 담당자
+			// 			df_yn: "N",
+			// 			item_cd_crn_typ_ccd: 'ITEM_CD'						//구매품목유형: 등록
+			// 		});
+			// 		itemLno += 10;
+			// 	}
+			// 	provider.addItems(created);
+			// },
+			// getNewItemLno: function(provider) {
+			// 	var me = this;
+			// 	var maxNo = 10;
+			// 	if(provider.getItemSize() > 0) {
+			// 		var allRows = provider.getItems();
+			//
+			// 		var maxRow = allRows.reduce(function(a, b) {
+			// 			if(!a.item_lno) a.item_lno = 0;
+			// 			if(!b.item_lno) b.item_lno = 0;
+			// 			return (a.item_lno > b.item_lno) ? a : b;
+			// 		});
+			//
+			// 		maxNo = parseInt(maxRow.item_lno, 10) + 10;
+			// 	}
+			// 	return maxNo;
+			// },
+			// // 무코드품목추가 버튼 클릭 시
+			// onAddNoCdItem: function() {
+			// 	var me = this;
+			//
+			// 	var otrsCntrData = me.get('otrsCntrData');
+			// 	var provider = me.$.gridPanel.getDataProvider();
+			// 	var itemLno = me.getNewItemLno(provider);
+			// 	var defaultUnit = me.codes.unitCd.length > 0 ? me.codes.unitCd[0].data : null;
+			//
+			// 	var addRow = {
+			// 		po_lno: itemLno,
+			// 		uom_ccd: defaultUnit,		//UOM (기본단위)
+			// 		po_uprc: 0,
+			// 		po_amt: 0,
+			// 		po_qty: 1,
+			// 		pr_realusr_id: SCSessionManager.currentUser.usr_id, //구매요청 의뢰자
+			// 		pr_realusr_nm: SCSessionManager.currentUser.disp_usr_nm, //구매요청 의뢰자
+			// 		gr_pic_id: SCSessionManager.currentUser.usr_id, //검수 담당자
+			// 		gr_pic_nm: SCSessionManager.currentUser.disp_usr_nm, //검수 담당자
+			// 		df_yn: "N",
+			// 		item_cd_crn_typ_ccd: 'CDLS'						//구매품목유형: 미등록
+			// 	};
+			// 	provider.addItem(addRow);
+			// 	me.set("otrsCntrData.has_no_cd_item", "Y");
+			// 	me.applyFormula("hasNoCdItem");
+			// 	me.applyFormula("noCdItemPlantAddable");
+			// },
+			completeFindRootLogicOrganizationInfo: function(e, res){
+				var me = this;
+				var result = res.response;
+				me.set("ctryCcd", result.ctry_ccd);
+			}
+		});
+	</script>
+</dom-module>

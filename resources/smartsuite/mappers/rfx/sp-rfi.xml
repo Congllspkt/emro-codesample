@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-rfi">
+	<select id="findListRfi" resultType="map">
+		/* sp-rfi.findListRfi */
+		SELECT RFI.RFI_UUID
+		     , RFI.RFI_NO
+		     , RFI.OORG_CD
+		     , RFI.RFI_TIT
+		     , RFI.RFI_REQ_DTTM
+		     , RFI.RFI_CLSG_DTTM
+		     , RFI.RFI_CMPLD_DTTM
+		     , RFI.RFI_STS_CCD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS REG_NM
+		     , USR.TEL      AS REG_PHONE_NO
+		     , RFI_VD.RFI_VD_UUID
+		     , RFI_VD.SUBM_DTTM
+		     , RFI_VD.RFI_SUBM_STS_CCD
+		  FROM RFI RFI
+		 INNER JOIN USR USR
+		    ON USR.TEN_ID = RFI.TEN_ID
+		   AND USR.USR_ID = RFI.REGR_ID
+		 INNER JOIN RFI_VD RFI_VD
+		    ON RFI_VD.TEN_ID   = RFI.TEN_ID
+		   AND RFI_VD.RFI_UUID = RFI.RFI_UUID
+		   AND RFI_VD.VD_CD    = #{g.vd_cd}
+		   AND RFI_VD.STS     != 'D'
+		 WHERE RFI.TEN_ID       = #{g.tenant}
+		   AND RFI.RFI_STS_CCD != 'CRNG'
+		   <if test="p.oorg_cds != null and p.oorg_cds.size() &gt; 0">
+		       AND RFI.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_rfi_req_dttm != null">
+		       AND RFI.RFI_REQ_DTTM &gt;= #{p.from_rfi_req_dttm}
+		   </if>
+		   <if test="p.to_rfi_req_dttm != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfi_req_dttm,1)"/>
+		       AND RFI.RFI_REQ_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <choose>
+		       <when test="p.rfi_nos != null and p.rfi_nos.size() != 0">
+		           AND UPPER(RFI.RFI_NO) IN
+		           <foreach close=")" collection="p.rfi_nos" item="rfi_no" open="(" separator=",">
+		               #{rfi_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfi_no != null and p.rfi_no != ''">
+		               <bind name="rfiNoPattern" value="'%' + p.rfi_no + '%'"/>
+		               AND UPPER(RFI.RFI_NO) LIKE UPPER(#{rfiNoPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfi_tit != null and p.rfi_tit != ''">
+		       <bind name="rfiTitPattern" value="'%' + p.rfi_tit + '%'"/>
+		       AND UPPER(RFI.RFI_TIT) LIKE UPPER(#{rfiTitPattern})
+		   </if>
+		   <if test="p.rfi_sts_ccd != null">
+		       AND RFI.RFI_STS_CCD = #{p.rfi_sts_ccd}
+		   </if>
+		   <if test="p.rfi_subm_sts_ccd != null and p.rfi_subm_sts_ccd != ''">
+		       AND RFI_VD.RFI_SUBM_STS_CCD = #{p.rfi_subm_sts_ccd}
+		   </if>
+		   AND RFI.STS != 'D'
+		 ORDER BY RFI.RFI_NO DESC
+	</select>
+	<select id="findRfi" resultType="map">
+		/* sp-rfi.findRfi */
+		SELECT RFI_VD.RFI_VD_UUID
+		     , RFI.RFI_UUID
+		     , RFI.RFI_NO
+		     , RFI.OORG_CD
+		     , RFI.RFI_NO
+		     , RFI.RFI_TIT
+		     , RFI.RFI_REQ_DTTM
+		     , RFI.RFI_CLSG_DTTM
+		     , RFI.RFI_CMPLD_DTTM
+		     , RFI.RFI_STS_CCD
+		     , RFI.VD_ATHG_UUID
+		     , RFI.VD_RFI_RMK
+		     , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		            ELSE USR.USR_NM
+		        END AS REG_NM
+		     , USR.TEL    AS REG_PHONE_NO
+		     , RFI_VD.SUBM_DTTM
+		     , RFI_VD.RFI_SUBM_STS_CCD
+		     , RFI_VD.RFI_SUBM_RMK
+		     , RFI_VD.RFI_SUBM_RJCT_RSN
+		     , RFI_VD.ATHG_UUID
+		     , CASE WHEN (
+		                  SELECT COUNT(1)
+		                    FROM RFI_ITEM RFI_ITEM
+		                   WHERE RFI_ITEM.TEN_ID   = RFI.TEN_ID
+		                     AND RFI_ITEM.RFI_UUID = RFI.RFI_UUID
+		                     AND RFI_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+		                     AND RFI_ITEM.STS     != 'D'
+		                 ) &gt; 0 THEN 'Y'
+		            ELSE 'N'
+		       END AS HAS_NO_CD_ITEM
+		  FROM RFI_VD RFI_VD
+		 INNER JOIN RFI RFI
+		    ON RFI.TEN_ID   = RFI_VD.TEN_ID
+		   AND RFI.RFI_UUID = RFI_VD.RFI_UUID
+		 INNER JOIN USR USR
+		    ON USR.TEN_ID = RFI.TEN_ID
+		   AND USR.USR_ID = RFI.REGR_ID
+		 WHERE RFI_VD.TEN_ID      = #{g.tenant}
+		   AND RFI_VD.RFI_VD_UUID = #{p.rfi_vd_uuid}
+		   AND RFI_VD.VD_CD       = #{g.vd_cd}
+	</select>
+	<select id="findListRfiItem" resultType="map">
+		/* sp-rfi.findListRfiItem */
+		SELECT RFI_ITEM.TEN_ID
+		     , RFI_ITEM.RFI_ITEM_UUID
+		     , RFI_ITEM.RFI_UUID
+		     , RFI_ITEM.RFI_NO
+		     , RFI_ITEM.RFI_LNO
+		     , RFI_ITEM.OORG_CD
+		     , RFI_ITEM.PR_ITEM_UUID
+		     , RFI_ITEM.PR_NO
+		     , RFI_ITEM.PR_LNO
+		     , RFI_ITEM.UPCR_ITEM_UUID
+		     , RFI_ITEM.UPCR_NO
+		     , RFI_ITEM.UPCR_LNO
+		     , RFI_ITEM.ITEM_CD_CRN_TYP_CCD
+		     , CASE WHEN RFI_ITEM.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL -- 구매품목유형: 미등록(무코드품목)
+		            ELSE RFI_ITEM.ITEM_CD
+		        END AS DISP_ITEM_CD
+		     , RFI_ITEM.ITEM_CD
+		     , RFI_ITEM.ITEM_NM
+		     , RFI_ITEM.ITEM_SPEC
+		     , RFI_ITEM.ITEM_SPEC_DTL
+		     , RFI_ITEM.UOM_CCD
+		     , RFI_ITEM.RFI_QTY
+		  FROM RFI_ITEM RFI_ITEM
+		 WHERE RFI_ITEM.TEN_ID   = #{g.tenant}
+		   AND RFI_ITEM.RFI_UUID = #{p.rfi_uuid}
+		   AND RFI_ITEM.STS     != 'D'
+		 ORDER BY CAST(RFI_ITEM.RFI_LNO AS INT)
+	</select>
+	<update id="updateRfiVendor">
+		/* sp-rfi.updateRfiVendor */
+		UPDATE RFI_VD
+		   SET STS              = 'U'
+		     , MODR_ID          = #{g.username}
+		     , MOD_DTTM         = #{g.now}
+		     , RFI_SUBM_STS_CCD = #{p.rfi_subm_sts_ccd}
+		     <choose>
+		         <when test="p.rfi_subm_sts_ccd == &quot;RJCT&quot;">
+		             , RFI_SUBM_RJCT_RSN = #{p.rfi_subm_rjct_rsn}
+		         </when>
+		         <otherwise>
+		             <if test="p.rfi_subm_sts_ccd == &quot;SUBM_CMPLD&quot;">
+		                 , SUBM_DTTM = #{g.now}
+		             </if>
+		             , ATHG_UUID    = #{p.athg_uuid}
+		             , RFI_SUBM_RMK = #{p.rfi_subm_rmk}
+		         </otherwise>
+		     </choose>
+		 WHERE TEN_ID      = #{g.tenant}
+		   AND RFI_VD_UUID = #{p.rfi_vd_uuid}
+		   AND VD_CD       = #{g.vd_cd}
+	</update>
+	<select id="compareRfiVdSts" resultType="map">
+		/* sp-rfi.compareRfiVdSts */
+		SELECT RFI.RFI_UUID
+		     , RFI_VD.RFI_VD_UUID
+		     , RFI_VD.VD_CD
+		     , RFI.RFI_STS_CCD
+		     , (
+		        SELECT DTLCD_MULTLANG.DTLCD_NM
+		          FROM DTLCD DTLCD
+		         INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		            ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		           AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		           AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		           AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		           AND DTLCD_MULTLANG.STS     != 'D'
+		         WHERE DTLCD.TEN_ID = RFI.TEN_ID
+		           AND DTLCD.CCD    = 'P085'    /* RFI 진행상태 */
+		           AND DTLCD.DTLCD  = RFI.RFI_STS_CCD
+		           AND DTLCD.USE_YN = 'Y'
+		           AND DTLCD.STS   != 'D'
+		       ) AS RFI_STS_CCD_NM
+		     , RFI_VD.RFI_SUBM_STS_CCD
+		     , (
+		        SELECT DTLCD_MULTLANG.DTLCD_NM
+		          FROM DTLCD DTLCD
+		         INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		            ON DTLCD_MULTLANG.TEN_ID   = DTLCD.TEN_ID
+		           AND DTLCD_MULTLANG.CCD      = DTLCD.CCD
+		           AND DTLCD_MULTLANG.DTLCD    = DTLCD.DTLCD
+		           AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		           AND DTLCD_MULTLANG.STS     != 'D'
+		         WHERE DTLCD.TEN_ID = RFI_VD.TEN_ID
+		           AND DTLCD.CCD    = 'P086'    /* RFI 업체 제출 상태 */
+		           AND DTLCD.DTLCD  = RFI_VD.RFI_SUBM_STS_CCD
+		           AND DTLCD.USE_YN = 'Y'
+		           AND DTLCD.STS   != 'D'
+		       ) AS RFI_SUBM_STS_CCD_NM
+		     , CASE WHEN RFI.RFI_STS_CCD = #{p.rfi_sts_ccd} AND RFI_VD.RFI_SUBM_STS_CCD = #{p.rfi_subm_sts_ccd} THEN 'Y'
+		            ELSE 'N'
+		        END AS VALID_YN
+		  FROM RFI_VD RFI_VD
+		 INNER JOIN RFI RFI
+		    ON RFI.TEN_ID   = RFI_VD.TEN_ID
+		   AND RFI.RFI_UUID = RFI_VD.RFI_UUID
+		 WHERE RFI_VD.TEN_ID      = #{g.tenant}
+		   AND RFI_VD.RFI_VD_UUID = #{p.rfi_vd_uuid}
+		   AND RFI_VD.VD_CD       = #{g.vd_cd}
+	</select>
+</mapper>

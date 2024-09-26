@@ -1,0 +1,190 @@
+<!--
+    ******************************************************************************************
+    ** Description     : cc-work-bar-chart
+    ** Author          : choijh
+    ******************************************************************************************
+-->
+<dom-module id="cc-main-work-status">
+    <template>
+        <sc-ajax id="findListMainWorkStatusCount" url="findListMainWorkStatusCount.do" on-response="completeFindListMainWorkStatusCount"></sc-ajax>
+        <div class="worksMain">
+            <div class="worksWrap" on-click="onClickWork">
+            	<!-- Main Work dom-repeat -->
+           		<template is="dom-repeat" items="[[mainWorkList]]" index="index">
+            		<div class$="workBox [[item.selectedIndex]]" data-up-id$="[[item.up_work_id]]">
+					    <h4 class$="[[getIconClass(index)]]" clickable>[[translate(item.up_work_nm)]]</h4>
+					    <p class="count" clickable>[[item.workCount]]</p>
+					    <div class="statusBar">
+					    	<span class="red"    style$="left:[[item.red.left]]; width:[[item.red.width]]" clickable title="[[convertTitle(item, 'red')]]"></span>
+					    	<span class="orange" style$="left:[[item.orange.left]]; width:[[item.orange.width]]" clickable title="[[convertTitle(item, 'orange')]]"></span>
+					    	<span class="green"  style$="left:[[item.green.left]]; width:[[item.green.width]]" clickable title="[[convertTitle(item, 'green')]]"></span>
+				    	</div>
+					</div>
+					<template is="dom-if" if="[[!isLastIndex(index)]]">
+						<div class$="[[convertFlowTypClass(item)]]"></div>
+					</template>
+				</template>
+				
+            </div>
+        </div>
+        </sc-panel>
+    </template>
+    <script>
+		Polymer({
+			is: "cc-main-work-status",
+
+			behaviors:[
+				Polymer.CCFlowBehavior,
+				Polymer.SCResizableBehavior,
+                Polymer.CCModuleBehavior
+			],
+            
+            properties: {
+			    statusData: {
+			    	type: Object,
+                    value: function () {
+                        return {};
+					}
+                },
+                mainWorkList : {
+                	type : Array,
+                	value : function(){return[];}
+                },
+                selectedItem: {
+                	type: Object,
+                	value: function(){
+                		return {};
+                	}
+                }
+            },
+            
+            initialized: function() {
+            	var me = this;
+				me.load();
+            },
+            
+			refresh: function () {
+				var me = this;
+				me.load();
+			},
+
+            load: function () {
+                var me = this;
+				UT.request(me.$.findListMainWorkStatusCount);
+			},
+
+			onClickWork: function (e) {
+				var me = this;
+				// 부모 탐색
+				var workBox = UT.closest(e.target, "div.workBox");
+				
+				if(workBox && workBox.dataset.upId) {
+					var list = me.querySelectorAll("div.workBox");
+
+					for(var i=0; i<list.length; i++) {
+						list[i].classList.remove("on");
+	                }
+					workBox.classList.add("on");
+					
+					var target = e.target;
+					if(target.hasAttribute("clickable")) {
+						var seriesIndex;
+						if(target.classList.contains("red")) {
+							seriesIndex = 0;
+                        }  else if(target.classList.contains("orange")) {
+							seriesIndex = 1;
+                        } else if(target.classList.contains("green")) {
+							seriesIndex = 2;
+						}
+
+						me.fire("item-click", {
+							up_work_id: workBox.dataset.upId,
+							up_work_nm: workBox.querySelector("h4").innerText,
+							seriesIndex: seriesIndex,
+						});
+                    }
+				}
+			},
+
+			completeFindListMainWorkStatusCount: function (e, res) {
+                var me = this;
+                var result = res.response || [];
+                
+                var selectedItem = me.get("selectedItem");
+                
+				result.forEach(function (r) {
+					
+					//widget에서 선택한 workStatus가 있는 경우 처리
+					if(UT.isNotEmpty(selectedItem) && r.up_work_id === selectedItem.up_work_id){
+						r.selectedIndex = " on";
+					}else{
+						r.selectedIndex = "";
+					}
+					var all = r.dely_tot_cnt + r.wrnn_tot_cnt + r.norm_tot_cnt;
+					
+					r.red = {};        // 지연
+					r.orange = {};     // 도래(경고)
+					r.green = {};      // 일반
+					r.workCount = all; // 전체 카운트 설정
+					
+					if(all == 0){
+						r.red.left = "0";
+						r.orange.left = "0";
+						r.green.left = "0";
+						r.red.width = "0%";
+						r.orange.width = "0%";
+						r.green.width = "0%";
+						return;
+					}
+					
+					var redRate = new BigNumber((new BigNumber(r.dely_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var orangeRate = new BigNumber((new BigNumber(r.wrnn_tot_cnt)).mul(new BigNumber(100)).div(new BigNumber(all)).toFixed(2));
+					var redAndOrangeRate = redRate.plus(orangeRate);
+					var greenRate = (r.norm_tot_cnt === 0) ? new BigNumber(0) : (new BigNumber(100)).minus(redAndOrangeRate);
+					
+					r.red.left = "0%";
+					r.red.width = redRate.toFixed() + "%";
+					
+					r.orange.left = redRate.toFixed() + "%";
+					r.orange.width = orangeRate.toFixed() + "%";
+					
+					r.green.left = redAndOrangeRate.toFixed() + "%";
+					r.green.width = greenRate.toFixed() + "%";
+				});
+				
+				me.set("mainWorkList", result);
+			},
+			
+			isLastIndex : function(index){
+				return ((this.mainWorkList.length -1) == index);
+			},
+			
+			getIconClass : function(index){
+				return "wicon_" + (index + 1);
+			},
+			
+			getStatusCount: function (count) {
+                return count ? count: 0;
+			},
+			
+			convertTitle: function(item, type) {
+				var me = this,
+					title = (UT.isNotEmpty(item.up_work_nm)) ? "[" + item.up_work_nm + "] " : "";
+				if(type === "red") {
+					title += me.translate("지연") + " : " + item.dely_tot_cnt;
+				} else if(type === "orange") {
+					title += me.translate("도래") + " : " + item.wrnn_tot_cnt;
+				} else if(type === "green") {
+					title += me.translate("일반") + " : " + item.norm_tot_cnt;
+				}
+				return title;
+			},
+			convertFlowTypClass: function(item) {
+				if(UT.isNotEmpty(item)) {
+					return "arrowM_" + item.flow_typ_cd || 4;
+				}
+				return "";
+			}
+		});
+    </script>
+</dom-module>

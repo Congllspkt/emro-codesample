@@ -1,0 +1,367 @@
+<dom-module id="ep-add-shopping-cart">
+<!-- 
+/**
+ *
+ *	@description : 구매요청 리스트 팝업
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName : 
+ * @Since 2016. 5. 20.
+ */
+-->
+<!-- layout Style -->
+    <style>
+       :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+<!--  화면 구성 시작-->
+    <template>
+		<!-- 구매 요청 현황 조회 ajax-->
+        <sc-ajax id="findListShoppingCartList"
+            url="findListShoppingCart.do"
+            body="{{searchParam}}">
+        </sc-ajax>
+
+		<sc-ajax id="directPrByShoppingCart"
+				 url="directPrByShoppingCart.do"
+				 on-response="completeDirectPr">
+		</sc-ajax>
+
+		<sc-ajax id="deleteShoppingCartList"
+				 url="deleteShoppingCartList.do"
+				 on-response="completeDeleteShoppingCartList">
+		</sc-ajax>
+
+		<sc-ajax id="updateShoppingCartItemStatusD"
+				 url="updateShoppingCartItemStatusD.do">
+		</sc-ajax>
+
+		<sc-ajax id="saveUprcItemToShoppingCartList"
+				 url="saveUprcItemToShoppingCartList.do"
+				 on-response="completeSaveUprcItemToShoppingCartList">
+		</sc-ajax>
+		<sc-request-group id="codes" init>
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<sc-code code="C004" value="{{codes.cur}}" ></sc-code>         <!-- 통화 -->
+			</sc-code-group>
+		</sc-request-group>
+
+		<div class="vbox flex">
+			<sc-grid id="gridPanel" class="flex" editable="true" use-selection="[[formula('isAdded')]]" use-state="false"
+					 on-item-click="onItemClick" data-provider="{{itemList}}"
+					 selection-able-function="selectionAbleFn">
+				<cc-grid-toolbar>
+					<sc-button text="바로구매" on-click="onDirectPr" hidden="[[!formula('isAdded')]]"></sc-button>
+					<sc-button text="삭제" on-click="onDeletePr" hidden="[[!formula('isAdded')]]"></sc-button>
+					<sc-button text="장바구니담기" on-click="onAddShoppingCart" hidden="[[formula('isAdded')]]"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column data-field="oorg_cd"		header-text="운영조직"		width="170"
+										display-field="logic_org_nm"
+										value-field="oorg_cd"
+										items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-data-column		data-field="item_cd"	header-text="품목 코드"		width="100"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="item_nm"		header-text="품목 명"		width="200"	text-align="left"></sc-data-column>
+					<sc-data-column		data-field="item_spec"		header-text="품목 규격"	width="250"	text-align="left"></sc-data-column>
+					<sc-data-column 	data-field="uprccntr_uprc" header-text="단가" width="100" text-align="right" editor-regex-function="onRegexFn" validate-on-cell-paste="true"
+										data-type="number" format-type="price"  min-value="0" max-length="13"></sc-data-column>
+					<sc-data-column		data-field="cur_ccd"		header-text="통화"			width="80"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="uom_ccd"		header-text="UOM"			width="80"	text-align="center"></sc-data-column>
+					<sc-data-column		data-field="pr_qty"			header-text="구매요청 수량"	width="80"	text-align="right"
+										data-type="number"			format-type="qty"			editable="true" required="true"
+										validator-function="gridValidatorFn" ></sc-data-column>
+					<sc-date-column 	data-field="req_dlvy_dt" header-text="요청 납품 일자" width="100" text-align="center" editable="true"
+										required="true" validator-function="gridValidatorFn"></sc-date-column>
+					<sc-data-column 	data-field="dlvy_plc" header-text="납품 장소" width="150" text-align="left"
+									 	max-length="1000" required="true"	editable="true"></sc-data-column>
+					</sc-group-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="shpcart_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="cntr_no"></sc-grid-field>
+					<sc-grid-field data-field="cntr_revno"></sc-grid-field>
+					<sc-grid-field data-field="cntr_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_info_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="purc_cntr_item_lno"></sc-grid-field>
+					<sc-grid-field data-field="moq"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+
+    </template>
+    <!--  화면 구성 끝-->
+    
+    <!--  Polymer script 시작 -->
+    <script>
+        Polymer({
+            is : 'ep-add-shopping-cart',
+            properties : {
+                codes : {
+                	type : Object,
+                	value : function() {
+                        return {
+                            oorgCd: [],
+                        };
+                    },
+					reset: false
+                },
+                searchParam : {
+					type : Object,
+					value : function() {
+						return {}
+					}
+				},
+				itemList :{
+					type: Array,
+					value: function() {
+						return [];
+					},
+					reset: true
+				},
+				currentUser: {
+					type: Object,
+					value: function() {
+						return SCSessionManager.currentUser;
+					}
+				},
+				status:{
+					type:Object,
+					value: function(){
+						return {
+							isAdded : true
+						};
+					}
+				}
+            },
+            formulas : {
+            	isAdded: function() {
+					return this.get("status.isAdded");
+				}
+            },
+            //properties 구성 끝
+            
+            //화면 로딩시 최초호출 함수
+			initialized: function() {
+				
+			},
+			load: function(itemList) {
+            	var me = this;
+				if(UT.isNotEmpty(itemList)) {
+					me.set("status.isAdded", false);
+					me.set("itemList", itemList);
+					//me.$.gridPanel.setDataProvider(itemList);
+				}else {
+					me.set('searchParam', {
+						reg_id : me.currentUser.usr_id
+					});
+					//구매아이템 조회
+					me.findListShoppingCartList();
+				}
+
+				me.applyFormula();
+
+            },
+
+			onDirectPr: function(){
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider(),
+					items = provider.selectionCheckedItems(),
+					indexes = provider.selectionCheckedIndexes();
+				if(items.length < 1){
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+
+				if(!me.$.gridPanel.validateRows(indexes)) {	//실패
+					UT.alert("STD.E0000");
+					return false;
+				}
+
+
+				var prAmt = 0;
+				var prLno = 0;
+				var prTit = items.length == 1 ? items[0].item_nm  + " " + "구매요청" : items[0].item_nm + "외 " + UT.toString(items.length - 1 ) + "건 " +  "구매요청";
+
+
+				for(var i=0; i<items.length; i++){
+					var item = items[i];
+					prLno = prLno + 10
+					item.pr_lno = prLno;
+					item.pr_purp_ccd = "SPTPURC"; // SPOT 구매
+					item.pr_uprc = item.uprccntr_uprc;
+					item.pr_amt = item.pr_qty * item.pr_uprc;
+					prAmt = prAmt + item.pr_amt;
+					item.pr_realusr_id = me.currentUser.usr_id;
+					item.item_cd_crn_typ_ccd = "ITEM_CD";
+				}
+				var prData = {
+					oorg_cd : provider.getItems()[0].oorg_cd
+					, pr_tit : prTit
+					, purc_typ_ccd : 'QTY'   // Catalog의 경우 수량(QTY)만
+					, pr_crtr_nm : me.currentUser.usr_nm
+					, cur_ccd : provider.getItems()[0].cur_ccd
+					, pr_purp_ccd: "SPTPURC"  //"UPRCCNTR_PURC"
+					, pr_crtr_id: me.currentUser.usr_id
+					, pr_crtr_dept_cd: me.currentUser.dept_cd
+					, pr_crtr_tel : me.currentUser.tel
+					, pr_amt : prAmt
+				};
+				me.$.directPrByShoppingCart.body = {
+					prData: prData,
+					insertPrItems: items,
+					updatePrItems: provider.getUpdateItems(),
+					deletePrItems: provider.getRemoveItems(),
+					prItemIds: UT.getArrayValuesByKey(provider.getItems(), "pr_item_uuid")
+				};
+				UT.confirm("STD.CTLG004", function(){
+					UT.request(me.$.directPrByShoppingCart);
+				});
+
+			},
+			onDeletePr: function(){
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var items = provider.selectionCheckedItems();
+
+				UT.confirm("STD.N1300", function(){
+					me.$.deleteShoppingCartList.body = {
+						deleteList : items
+					};
+					UT.request(me.$.deleteShoppingCartList);
+				});
+			},
+
+            /** 장바구니 리스트 조회 */
+			findListShoppingCartList : function() {
+         	   var me = this;
+         	   UT.request(me.$.findListShoppingCartList, function(e,res) {
+         		   var result = res.response;
+         		   me.$.gridPanel.setDataProvider(result);
+         		   
+         		   var provider = me.$.gridPanel.getDataProvider();
+         		   //me.set("searchParam.has_no_cd_item", (provider.filterItem({"item_cd_crn_typ_ccd" : "T"}) != null)? "Y" : "N");
+         		   me.applyFormula();
+         	   });
+            },
+
+			completeDirectPr: function(e, res){
+				var me = this;
+				var lastResponse = res.response;
+				if(lastResponse.resultStatus === "S") {
+					UT.completeAlert(null, function(){
+						var provider = me.$.gridPanel.getDataProvider();
+						me.$.updateShoppingCartItemStatusD.body = {
+							deleteList : provider.selectionCheckedItems()
+						};
+						UT.request(me.$.updateShoppingCartItemStatusD, function(){
+							me.fire("save-close");
+						});
+					});
+				}	else{
+					UT.alert("STD.E9999");
+				}
+			},
+
+			completeDeleteShoppingCartList: function(e, res){
+				var me = this;
+				var lastResponse = res.response;
+				if(lastResponse.resultStatus === "S") {
+					UT.completeAlert(null, function(){
+						SCMdiManager.mdiHead.countShoppingCartList();
+						me.findListShoppingCartList();
+					});
+				}	else{
+					UT.alert("STD.E9999");
+				}
+			},
+			// grid item click 이벤트
+			onItemClick : function(event) {
+				var me = this;
+			},
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me    = this,
+						value = data[dataField];
+
+				if(dataField === "pr_qty") {
+					//수량은 0 보다 크고 , 필수값
+					if((value || 0) < (UT.toNumber(data['moq']) || 1 )) {
+						return me.translate("STD.E1008", null, me.translate(headerText), new BigNumber(data['moq'] || 0 ));
+					}
+					var unitCd = data.uom_ccd;
+					if(!CCPrecManager.validate("qty", value, unitCd)) { // 단위에 맞는 수량 소수점 체크
+						return me.translate("STD.E1021", null, CCPrecManager.validateInfo("qty", unitCd).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+					}
+				}
+
+				if(dataField === "req_dlvy_dt") {
+					var value = UT.toTime(UT.toDate(value, "yyyyMMdd"));
+					var compareValue = UT.toTime(new Date());
+					if(value < compareValue) {
+						// {0}은(는) {1}이후 날짜로 입력하십시오
+						return me.translate("STD.E1013", null, me.translate(headerText), UT.formatDate(compareValue));
+					}
+				}
+				return true;
+			},
+
+            clearDatas : function() {
+         	   var me = this;
+         	   
+         		//properties 초기화
+				me.reset();
+            },
+
+			onAddShoppingCart: function(){
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider(),
+						items = provider.getItems();
+
+				if(!me.$.gridPanel.validate()) {	//실패
+					UT.alert("STD.E0000");
+					return false;
+				}
+
+				var lenOfList = items.length;
+				UT.confirm(me.translate("STD.CTLG002", null, lenOfList), function(){
+					me.$.saveUprcItemToShoppingCartList.body = {
+						uprc_item_list  :   items
+					};
+					UT.request(me.$.saveUprcItemToShoppingCartList);
+				});
+			},
+
+			completeSaveUprcItemToShoppingCartList: function(e, res){
+				var me = this,
+						lastResponse = res.response;
+
+				if(lastResponse.resultStatus === "S") {
+					UT.alert("STD.N1510", function(){
+						SCMdiManager.mdiHead.countShoppingCartList();
+						me.fire('close');
+					});
+
+				} else {
+					me.failureMessageHandler(lastResponse);
+				}
+			},
+
+			selectionAbleFn: function(){
+				return this.get("status.isAdded");
+			},
+        });
+    </script>
+<!--  Polymer script 끝 -->
+
+</dom-module>

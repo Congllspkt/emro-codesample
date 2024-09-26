@@ -1,0 +1,616 @@
+<dom-module id="es-nego-slctn">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 협상 품의서 삭제 -->
+		<sc-ajax id="deleteNegoApproval"
+				 url="deleteNegoApproval.do"
+				 on-response="completeDeleteNegoApproval">
+		</sc-ajax>
+		
+		<!-- 협상 품의 존재여부 확인 -->
+		<sc-ajax id="checkNegoApproval"
+				 url="checkNegoApproval.do">
+		</sc-ajax>
+		
+		<!-- 낙찰자 선정 완료 -->
+		<sc-ajax id="bypassApprovalRfxResult"
+				 url="../rfx/bypassApprovalRfxResult.do"
+				 on-response="completeBypassApprovalRfxResult">
+		</sc-ajax>
+		
+		<sc-ajax id="byPassCloseNegos"
+				 url="byPassCloseNegos.do"
+				 on-response="completeByPassClose">
+		</sc-ajax>
+		
+		<sc-ajax id="selectNegoRfxQtas"
+				 url="selectNegoRfxBids.do"
+				 on-response="completeSelectQtas">
+		</sc-ajax>
+		
+		<cc-form-panel title-text="일반 정보" collapsible="false" validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{rfxData.oorg_cd}}"
+										   placeholder="선택 없음" readonly="true">
+				</cc-operorg-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="구매 유형"></sc-label>
+				<sc-combobox-field value="{{rfxData.purc_typ_ccd}}" items="[[codes.p2pPurcTypCcd]]" display-field="label" value-field="data" readonly="true"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFX 번호/진행차수"></sc-label>
+				<div class="field-box" style="width:100%">
+					<sc-text-field class="w-150" value="{{rfxData.rfx_no}}" readonly></sc-text-field>
+					<span style="margin:0 5px">&#47;</span>
+					<sc-text-field class="w-50 align-right" value="{{rfxData.rfx_rnd}}" readonly></sc-text-field>
+					<span style="margin-left:5px">[[translate('진행차수')]]</span>
+				</div>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{rfxData.rfx_tit}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFX 유형"></sc-label>
+				<sc-combobox-field value="{{rfxData.rfx_typ_ccd}}" items="[[codes.rfxTypCcd]]" display-field="label" value-field="data" readonly="true"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFX 목적"></sc-label>
+				<sc-combobox-field value="{{rfxData.rfx_purp_ccd}}" items="[[codes.rfxPurpCcd]]" display-field="label" value-field="data" readonly="true"></sc-combobox-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		<cc-form-panel title-text="RFX 선정 결과" collapsible="true" validation-group="rfxResult">
+			<cc-fieldset column-span="2">
+				<sc-label text="선정 사유"></sc-label>
+				<sc-textarea-field required="[[formula('isVisibleButton')]]" max-length="300" class="h-150" value="{{rfxData.slctn_rsn}}" readonly="[[!formula('isVisibleButton')]]"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		
+		<sc-grid id="gridPanel"
+				 class="flex"
+				 use-state="false"
+				 use-selection="[[formula('isVisibleButton')]]"
+				 selection-mode="radio"
+				 on-selection-checked="onGridSelectionChecked"
+				 on-item-click="onItemClick"
+				 selection-able-function="selectionAbleFn">
+			<cc-grid-toolbar title-text="[[formula('gridTitle')]]">
+				<sc-button text="통보" on-click="onNegoReq" hidden="[[!formula('isVisibleButton')]]" auth-s></sc-button>
+				<sc-button text="조기 마감" on-click="onCloseNego" hidden="[[!formula('isVisibleButton')]]" auth-s></sc-button>
+				<sc-button text="결과 등록" on-click="onNegoResult" hidden="[[!formula('isVisibleButton')]]" auth-s></sc-button>
+				<sc-button text="선정 결재 요청" on-click="onApprovalRfxResult" hidden="[[!formula('isVisibleButton')]]" auth-a></sc-button>
+				<sc-button text="선정 완료" on-click="onBypassRfxResult" hidden="[[!formula('isVisibleButton')]]" auth-a></sc-button>
+			</cc-grid-toolbar>
+			
+			<sc-grid-columns>
+				<sc-data-column data-field="img_slctn_yn" header-text="선정" width="60" text-align="center" editable="false" visible="[[formula('isVisibleStlYnColumn')]]" item-style-function="onItemStyleFn"></sc-data-column>
+				<sc-data-column data-field="slctn_rank" header-text="선정 순위" width="90" data-type="number"></sc-data-column>
+				<sc-data-column data-field="vd_cd" header-text="협력사 코드" width="100"></sc-data-column>
+				<sc-data-column data-field="vd_nm" header-text="협력사 명" width="200" text-align="left" item-style-function="onItemStyleFn"></sc-data-column>
+				<sc-data-column data-field="cur_ccd" header-text="통화" width="70"></sc-data-column>
+				<sc-data-column data-field="rfx_bid_amt" header-text="RFX 투찰 금액" width="100" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="nego_rnd" header-text="협상 진행차수" width="90"></sc-data-column>
+				<sc-data-column data-field="nego_amt" header-text="협상 금액" width="100" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+				<sc-combobox-column data-field="nego_sts_ccd" header-text="협상 상태" width="100" display-field="label" value-field="data" items="[[codes.negoStsCcd]]"></sc-combobox-column>
+				<sc-date-column data-field="clsg_dttm" header-text="마감 일시" width="120" string-date="false" format-type="datetime"></sc-date-column>
+				<sc-image-column data-field="img_clsg_rsn" header-text="조기 마감 사유" width="80" image-change-function="onImageChange"></sc-image-column>
+				<sc-combobox-column data-field="nego_typ_ccd" header-text="협상 유형" width="80" display-field="label" value-field="data" items="[[codes.negoTypCcd]]"></sc-combobox-column>
+				<sc-combobox-column data-field="nego_res_sts_ccd" header-text="협상 결과 상태" width="100" display-field="label" value-field="data" items="[[codes.negoResStsCcd]]"></sc-combobox-column>
+				<sc-image-column data-field="img_gup_rsn" header-text="포기 사유" width="70" image-change-function="onImageChange"></sc-image-column>
+				<sc-image-column data-field="img_renego_rsn" header-text="재협상 사유" width="80" image-change-function="onImageChange"></sc-image-column>
+				<sc-image-column data-field="img_rst_detail" header-text="협상 결과 상세" width="100" image-change-function="onImageChange"></sc-image-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="nego_uuid"></sc-grid-field>
+				<sc-grid-field data-field="slctn_yn"></sc-grid-field>
+				<sc-grid-field data-field="erp_vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="obd_typ_ccd"></sc-grid-field>
+				<sc-grid-field data-field="po_poss_yn"></sc-grid-field>
+				<sc-grid-field data-field="clsg_rsn"></sc-grid-field>
+				<sc-grid-field data-field="gup_rsn"></sc-grid-field>
+				<sc-grid-field data-field="renego_rsn"></sc-grid-field>
+				<sc-grid-field data-field="renego_yn"></sc-grid-field>
+				<sc-grid-field data-field="npe_pass_yn"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-dialog id="dialog" title-text="{{causeInfo.causeTitle}}" style="width:500px; height:290px" modal="true" draggable="true">
+			<table class="tb-form">
+				<colgroup>
+					<col style="width:120px">
+					<col>
+				</colgroup>
+				<tr>
+					<th>
+						<sc-label text="사유"></sc-label>
+					</th>
+					<td>
+						<sc-textarea-field value="{{causeInfo.causeContent}}" class="h-200" max-length="500" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-nego-slctn",
+			
+			properties: {
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {};
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				//결재 유형 코드
+				apvlTypCcd: {
+					type: String,
+					value: function() {
+						return 'NEGO';
+					}
+				},
+				causeInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isVisibleButton: function() {
+					return "NEGO_PRGSG" === this.get("rfxData.rfx_sts_ccd");
+				},
+				isVisibleStlYnColumn: function() {
+					return "ED" === this.get("rfxData.rfx_sts_ccd");
+				},
+				isRfxPurpUC: function() {
+					return (this.get("rfxData.rfx_purp_ccd") === "UPRCCNTR_SGNG");
+				},
+				gridTitle: function() {
+					return (this.get("rfxData.rfx_sts_ccd") === "NEGO_PRGSG" ? this.translate("협상 진행중") : this.translate(""));
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				me.set("rfxData", param.rfxData);
+				me.$.gridPanel.setDataProvider(param.negoDataList);
+				
+				me.applyFormula();
+			},
+			
+			onItemClick: function() {
+				var data = event.detail.data;
+				var item = event.detail.item;
+				var provider = event.detail.provider;
+				
+				if(item.dataField === "vd_nm") {
+					if(data.nego_sts_ccd === 'NEGO_WTG') {
+						return;
+					}
+					this.fire("show-detail", data);
+				} else if(item.dataField === "img_rst_detail") {
+					if(UT.isNotEmpty(data["nego_res_sts_ccd"])) {
+						this.fire('show-result', data);
+					}
+				} else if(item.dataField === "img_gup_rsn") {
+					if(UT.isNotEmpty(data["gup_rsn"]) && ['NEGO_CLSG', 'NEGO_CMPLD'].indexOf(data["nego_sts_ccd"]) > -1) {
+						this.set("causeInfo.causeContent", data["gup_rsn"]);
+						this.set("causeInfo.causeTitle", "포기 사유");
+						this.$.dialog.show();
+					}
+				} else if(item.dataField === "img_renego_rsn") {
+					if('Y' === data["renego_yn"]) {
+						this.set("causeInfo.causeContent", data["renego_rsn"]);
+						this.set("causeInfo.causeTitle", "재협상 사유");
+						this.$.dialog.show();
+					}
+				} else if(item.dataField === "img_clsg_rsn") {
+					if(UT.isNotEmpty(data["clsg_rsn"])) {
+						this.set("causeInfo.causeContent", data["clsg_rsn"]);
+						this.set("causeInfo.causeTitle", "조기 마감 사유");
+						this.$.dialog.show();
+					}
+				}
+			},
+			
+			onNegoReq: function() {
+				var provider = this.$.gridPanel.getDataProvider();
+				var selectedItem = provider.selectionCheckedItems()[0];
+				if(UT.isEmpty(selectedItem)) {
+					UT.alert("STD.NG1003"); //선택된 항목이 없습니다.
+					return;
+				} else if("NEGO_WTG" !== selectedItem.nego_sts_ccd) {
+					UT.alert("STD.NG1013"); //협상 진행상태가 협상전 상태일 때 협상을 요청할 수 있습니다.
+					return;
+				}
+				
+				this.fire('show-detail', selectedItem);
+			},
+			
+			onNegoResult: function(data) {
+				var provider = this.$.gridPanel.getDataProvider();
+				var selectedItem = provider.selectionCheckedItems()[0];
+				
+				if(UT.isEmpty(selectedItem)) {
+					UT.alert("STD.NG1003"); //선택된 항목이 없습니다.
+					return;
+				}
+				
+				if(UT.isEmpty(selectedItem.nego_typ_ccd)) {
+					UT.alert("STD.NG1010"); //협상 결과를 등록할 수 없습니다. 협상 요청을 진행 후 처리해주십시오.
+					return;
+				} else if("OFFLN" === selectedItem.nego_typ_ccd && "NEGO_CMPLD" === selectedItem.nego_sts_ccd) {
+					UT.alert("STD.NG1011"); //협상 진행상태가 협상완료 상태일 때 협상 결과등록을 할 수 없습니다.
+					return;
+				} else if("ONLN" === selectedItem.nego_typ_ccd && "NEGO_CLSG" !== selectedItem.nego_sts_ccd) {
+					UT.alert("STD.NG1012"); //협상 진행상태가 협상마감 상태일 때 협상 결과등록을 할 수 있습니다.
+					return;
+				}
+				
+				this.fire('show-result', selectedItem);
+			},
+			
+			/**
+			 * 낙찰자 선정완료 및 선정품의 (RPF 총액별)
+			 */
+			onGridSelectionChecked: function(e) {
+				var me        = this,
+					data      = e.detail.data,
+					nodeIndex = e.detail.nodeIndex,
+					checked   = e.detail.checked,
+					provider  = e.detail.provider;
+				
+				if(checked) {
+					provider.setItemAtBatch(true, function(index, data) {
+						if(index === nodeIndex) {
+							return {slctn_yn: "Y"};
+						} else {
+							return {slctn_yn: "N"};
+						}
+					});
+				} else {
+					provider.setItemAt(nodeIndex, {slctn_yn: "N"});
+				}
+			},
+			
+			onBypassRfxResult: function(e) {
+				var provider = this.$.gridPanel.getDataProvider();
+				
+				if(this.checkRfxQtaList(provider)) {
+					//작성중인 결재 존재여부 확인
+					this.checkNegoApproval('bypass');
+				}
+			},
+			
+			checkRfxQtaList: function(provider) {
+				var me = this;
+				
+				if(this.get("rfxData.rfx_bid_cnt") === 0) {
+					UT.alert("STD.RFX1078");    //제출업체가 존재하지 않아 낙찰자 선정이 불가합니다.
+					return false;
+				}
+				
+				var checked = provider.selectionCheckedItems();
+				if(checked.length == 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return false;
+				}
+				
+				// 선택된 업체 유효성 체크 : 총액별 업체선정은 하나의 업체만 선택이 가능함
+				var row = checked[0];
+				
+				if('STLMT' !== row.nego_res_sts_ccd) {
+					UT.alert("STD.NG1022");   //협상 결과가 타결 상태일 때 낙찰자 선정이 가능합니다.
+					return false;
+				}
+				
+				// 업체 거래여부 확인
+				if(row.po_poss_yn === "N") {
+					// [협력사 명 : {0}] 발주 협력사가 아니여서 선정이 불가합니다.
+					UT.alert(me.translate("STD.RFX1102", null, row.vd_nm), null, true);
+					return false;
+				}
+				
+				return true;
+			},
+			
+			_getCodeName: function(code, value) {
+				var me = this;
+				var codes = me.get("codes." + code);
+				var filtered = codes.filter(function(code) {
+					return code["data"] === value;
+				});
+				if(filtered.length > 0) {
+					return filtered[0]["label"];
+				}
+				return null;
+			},
+			
+			checkNegoApproval: function(saveType, preConfirmed) {
+				var me = this;
+				
+				me.set('rfxData.saveType', saveType);
+				
+				me.$.checkNegoApproval.body = {
+					rfxData: me.get('rfxData')
+				};
+				
+				UT.request(me.$.checkNegoApproval, function(e, res) {
+					var result = res.response;
+					if(result.resultStatus === "S") {
+						if(saveType === 'bypass') {
+							if(preConfirmed === true) {
+								me.onSave();
+							} else {
+								UT.confirm("STD.RFX1007", function() {  //"낙찰자 선정 완료하시겠습니까?"
+									me.onSave();
+								});
+							}
+						}
+					} else {    //작성중인 결재 존재 시
+						var saveTypeName = null;
+						if(saveType === 'bypass') {
+							saveTypeName = me.translate('선정 완료');
+						}
+						
+						var msg = me.translate("STD.RFX1026", null, saveTypeName);       //작성중인 낙찰자 선정품의가 삭제됩니다. {0} 하시겠습니까?
+						
+						UT.confirm(msg,
+								function() {
+									me.deleteNegoApproval();   // Rfx 결과품의 삭제
+								},
+								null, true);
+					}
+				});
+			},
+			
+			deleteNegoApproval: function() {
+				var me = this;
+				
+				me.$.deleteNegoApproval.body = {
+					rfxData: me.get('rfxData')
+				};
+				
+				UT.request(me.$.deleteNegoApproval);
+			},
+			
+			completeDeleteNegoApproval: function(e, res) {
+				var response = res.response;
+				
+				if(response.resultStatus != "S") {
+					return;
+				}
+				
+				var saveType = this.rfxData.saveType;
+				if(saveType === 'bypass') {
+					this.onSave();
+				}
+			},
+			
+			onSave: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var rfxData = me.get("rfxData");
+				var validRows = provider.filterItems({renego_yn: 'N'});
+				
+				me.$.selectNegoRfxQtas.body = {
+					rfxData: rfxData,
+					rfxBids: validRows
+				};
+				UT.request(me.$.selectNegoRfxQtas);
+			},
+			
+			completeSelectQtas: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+				if(status === "S") {
+					var saveType = me.rfxData.saveType;
+					if(saveType === 'approval') {
+						me.showPopupApproval();         //결재요청 팝업 호출
+					} else if(saveType === 'bypass') {
+						me.bypassApprovalRfxResult();   //낙찰자 선정 완료
+					}
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");  // 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			showPopupApproval: function() {
+				var me = this;
+				// 결재팝업 호출
+				UT.popupApproval(me, {
+							task_uuid: me.rfxData.rfx_uuid,
+							apvl_typ_ccd: me.apvlTypCcd,
+							apvl_tit: me.get("rfxData.rfx_tit") + " " + me.translate("우선협상대상자 선정"),
+							appData: me.get("rfxData"),
+							appAmt: me.stlAmt
+						},
+						// savedCallback (결재 팝업에서 이벤트 처리후 실행되는 callback 함수 내용을 정의한다.)
+						function(sts, popup) {
+							if(["PRGSG", "APVD"].indexOf(sts) > -1) {   // 결재상신, 승인(전결)
+								me.onClose();
+								me.fire('submit-approval');
+							} else {            // 결재 저장 시
+								me.fire("reload");
+							}
+						});
+			},
+			
+			get stlAmt() {
+				var me       = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					amtKey   = "rfx_bid_amt";
+				
+				var stlAmt = new BigNumber(0);
+				var items = provider.getItems();
+				items.forEach(function(item) {
+					var amt = item[amtKey];
+					stlAmt = stlAmt.plus(new BigNumber(amt || 0));
+				});
+				return stlAmt.toFixed();
+			},
+			
+			bypassApprovalRfxResult: function() {
+				var me = this;
+				me.$.bypassApprovalRfxResult.body = {
+					rfxData: me.get('rfxData')
+				};
+				
+				UT.request(me.$.bypassApprovalRfxResult);
+			},
+			
+			completeBypassApprovalRfxResult: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					UT.alert("STD.RFX1049");    //"선정처리 하였습니다."
+					me.fire("reload");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onApprovalRfxResult: function(e) {
+				var me = this, grid;
+				
+				if(me.get("rfxData.rfx_bid_cnt") === 0) {
+					UT.alert("STD.RFX1078");    //제출업체가 존재하지 않아 낙찰자 선정이 불가합니다.
+					return;
+				}
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				if(me.checkRfxQtaList(provider)) {
+					//작성중인 결재 존재여부 확인
+					//2020/08/21 작성중인 결재를 확인할 필요없이 작성중인 건을 보여주면된다.
+					//me.checkNegoApproval('approval');
+					UT.confirm("STD.RFX1008", function() {  //낙찰자 선정품의를 하시겠습니까?
+						me.set("rfxData.saveType", "approval");
+						me.onSave();
+					});
+				}
+			},
+			
+			onImageChange: function(data, item) {
+				if(item.dataField === "img_rst_detail" && UT.isNotEmpty(data["nego_res_sts_ccd"])) {
+					return "search";
+				} else if(item.dataField === "img_gup_rsn" && UT.isNotEmpty(data["gup_rsn"]) && ['NEGO_CLSG', 'NEGO_CMPLD'].indexOf(data["nego_sts_ccd"]) > -1) {
+					return "link";
+				} else if(item.dataField === "img_clsg_rsn" && UT.isNotEmpty(data["clsg_rsn"])) {
+					return "link";
+				} else if(item.dataField === "img_renego_rsn" && 'Y' === data["renego_yn"]) {
+					return "link";
+				}
+				
+				return null;
+			},
+			
+			onCloseNego: function() {
+				var me = this;
+				var selectedItem = me.$.gridPanel.getDataProvider().selectionCheckedItems()[0];
+				
+				if(UT.isEmpty(selectedItem)) {
+					UT.alert("STD.NG1003"); //선택된 항목이 없습니다.
+					return;
+				} else if(['NEGO_NOFN', 'NEGO_PRGSG'].indexOf(selectedItem.nego_sts_ccd) < 0) {
+					UT.alert("STD.NG1008"); //협상 진행상태가 협상요청, 협상진행중일 때 조기 마감이 가능합니다.
+					return;
+				} else if("ONLN" !== selectedItem.nego_typ_ccd) {
+					UT.alert("STD.NG1009"); //협상유형이 온라인일 때 조기 마감을 할 수 있습니다.
+					return;
+				}
+				
+				var directCloseNegoPopup = UT.popup("ep-cause", me, 800, 210, {
+					"submit": function(popup, e) {
+						
+						UT.confirm("STD.N1109", function() {    //조기마감 하시겠습니까?
+							popup.getWindowContent().reset();
+							popup.close();
+							
+							var result       = e.detail,
+								provider     = me.$.gridPanel.getDataProvider(),
+								checkedItems = provider.selectionCheckedItems();
+							
+							checkedItems.forEach(function(item) {
+								item.clsg_rsn = result.cause;
+							});
+							
+							me.$.byPassCloseNegos.body = {
+								negoDatas: checkedItems
+							};
+							UT.request(me.$.byPassCloseNegos);
+						});
+					}
+				}, {titleText: this.translate("조기 마감")});
+				directCloseNegoPopup.show();
+				directCloseNegoPopup.getWindowContent().load("closeNego");
+			},
+			
+			completeByPassClose: function(el, res) {
+				var me = this;
+				var lastResponse = res.response;
+				
+				UT.completeAlert();
+				me.fire("reload");
+			},
+			
+			selectionAbleFn: function(data) {
+				if('Y' === data.renego_yn) {
+					return false;
+				}
+				
+				if('BD' === data.nego_res_sts_ccd) {
+					return false;
+				}
+				
+				return true;
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var styleObj = {};
+				
+				if(item.dataField === "vd_nm" && data["nego_sts_ccd"] !== "NEGO_WTG") {
+					return {
+						"fontColor": "#0e006f",
+						"fontWeight": "bold"
+					}
+				} else if(item.dataField === "img_slctn_yn") {
+					styleObj.iconUrl = "ui/assets/img/grid/" + ((data["slctn_yn"] === "Y") ? "ico_choice.png" : "ico_nonchoice.png");
+					styleObj.iconLocation = "center";
+				}
+				return styleObj;
+			},
+		})
+	</script>
+</dom-module>

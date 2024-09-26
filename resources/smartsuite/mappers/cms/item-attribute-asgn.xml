@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-attribute-asgn">
+	<select id="findListAsgnAttrMapping" resultType="map">
+		/* item-attribute-asgn.findListAsgnAttrMapping :배정 속성 조회 */
+		SELECT
+			GRPG.IATTR_GRP_CD /*속성 그룹*/
+			, CASE WHEN 'en_US' = #{g.locale} THEN CONCAT(CONCAT(CONCAT(GRP.IATTR_GRP_NM_EN, '('), GRPG.IATTR_GRP_CD), ')')
+					ELSE CONCAT(CONCAT(CONCAT(GRP.IATTR_GRP_NM, '('), GRPG.IATTR_GRP_CD), ')')
+				END IATTR_GRP_LABEL /*그룹 명*/
+			, GRPG.IATTR_CD /*속성 코드*/
+			, GRPG.IATTR_UUID /*속성 일련번호*/
+			, GRPG.ASGD_IATTR_NM /*배정 속성 명*/
+			, GRPG.ASGD_IATTR_NM_EN /*배정 속성 영문 명*/
+			, GRPG.IATTR_UOM_USE_YN /*속성 유형*/
+			, GRPG.MAND_YN /*필수 여부*/
+			, GRPG.DAT_TYP_CCD /*데이터 유형*/
+			, GRPG.INP_VAL_LEN /*데이터 길이*/
+			, GRPG.DFLT_VAL /*기본 값*/
+			, GRPG.LIST_SHOW_YN /*목록 VIEW 여부*/
+			, GRPG.REG_DTTM /*등록 일시*/
+			, (
+				SELECT
+						CONCAT(CONCAT(CAST(SUM( CASE WHEN s.IATTR_INP_VAL IS NULL THEN 0 ELSE 1 END ) AS NVARCHAR2(8)), '/'), CAST(COUNT(1) AS NVARCHAR2(8)))  FROM ITEM_IATTR s
+				WHERE s.TEN_ID = IIATTR.TEN_ID
+				AND s.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+				AND s.IATTR_CD = IIATTR.IATTR_CD
+				AND s.IATTR_UUID = IIATTR.IATTR_UUID
+				GROUP BY s.TEN_ID, s.IATTR_GRP_CD, s.IATTR_CD, s.IATTR_UUID
+			) AS USE_CNT
+			, IATTR.IATTR_NM
+			, IATTR.IATTR_NM_EN
+			, IIATTR.SCR_DSPY_ORD
+			, IIATTR.ITEMCAT_CD /*분류 코드 */
+			, IIATTR.ITEMCAT_LVL /*분류 레벨 */
+			, IIATTR.RMK /*비고 */
+			, IIATTR.IH_ITEMCAT_LVL /*상속 분류 레벨*/
+			, CASE WHEN 'en_US' = #{g.locale} THEN GRP.IATTR_GRP_NM_EN
+					ELSE GRP.IATTR_GRP_NM
+				END DISP_IATTR_GRP_NM
+			, IIATTR.USE_YN
+			, IATTR.EXPLN_TYP_CCD /*Description 포함 유형 */
+			, IATTR.IATTR_UOM_CLS_CCD /*단위 Pool 그룹 코드*/
+			, IATTR.COMM_YN /*공통 여부*/
+			, IATTR.LOV_INP_VAL /*입력 값 목록*/
+			, IATTR.INP_VAL_ST /*입력 값 범위 시작*/
+			, IATTR.INP_VAL_ED /*입력 값 범위 종료*/
+			, IATTR.INP_VAL_SAMP /*입력 값 예시*/
+			, (
+				SELECT
+					COUNT(*)
+				FROM ITEM_IATTR_REG_REQ REQ
+				WHERE REQ.TEN_ID = IIATTR.TEN_ID
+				AND REQ.ITEMCAT_CD = IIATTR.ITEMCAT_CD
+				AND REQ.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+				AND REQ.IATTR_CD = IIATTR.IATTR_CD
+				AND REQ.IATTR_UUID = IIATTR.IATTR_UUID
+				AND REQ.STS != 'D'
+			) AS USED_REQ_CNT
+			, (
+		    	SELECT
+					COUNT(*)
+				FROM ITEM_IATTR ITEM
+				WHERE ITEM.TEN_ID = IIATTR.TEN_ID
+				AND ITEM.ITEMCAT_CD = IIATTR.ITEMCAT_CD
+				AND ITEM.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+				AND ITEM.IATTR_CD = IIATTR.IATTR_CD
+				AND ITEM.IATTR_UUID = IIATTR.IATTR_UUID
+				AND ITEM.STS != 'D'
+			) AS USED_ITEM_CNT
+		FROM IATTR_GRPG GRPG
+		INNER JOIN IATTR IATTR
+		ON GRPG.TEN_ID = IATTR.TEN_ID
+		AND GRPG.IATTR_CD = IATTR.IATTR_CD
+		INNER JOIN IATTR_GRP GRP
+		ON GRPG.TEN_ID = GRP.TEN_ID
+		AND GRPG.IATTR_GRP_CD = GRP.IATTR_GRP_CD
+		INNER JOIN ITEMCAT_IATTR IIATTR
+		ON GRPG.TEN_ID = IIATTR.TEN_ID
+		AND GRPG.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+		AND GRPG.IATTR_CD = IIATTR.IATTR_CD
+		AND GRPG.IATTR_UUID = IIATTR.IATTR_UUID
+		WHERE IIATTR.TEN_ID = #{g.tenant}
+		<if test="p.itemcat_cd != null and p.itemcat_cd != &quot;&quot;">
+			AND IIATTR.ITEMCAT_CD = #{p.itemcat_cd}
+		</if>
+		<if test="p.itemcat_lvl != null and p.itemcat_lvl != &quot;&quot;">
+				AND IIATTR.ITEMCAT_LVL = CAST(#{p.itemcat_lvl} AS INT) </if>
+		<if test="p.iattr_cd != null and p.iattr_cd != &quot;&quot;">
+			AND GRPG.IATTR_CD = #{p.iattr_cd}
+		</if>
+		AND IIATTR.STS != 'D'
+		ORDER BY IIATTR.SCR_DSPY_ORD, GRPG.IATTR_UUID
+	</select>
+	<select id="findInfoAsgnAttr" resultType="map">
+		/* item-attribute-asgn.findInfoAsgnAttr :배정 속성 조회(단건) */
+		SELECT
+			TEN_ID		/*시스템 아이디*/
+			, ITEMCAT_CD		/*분류 코드*/
+			, IATTR_GRP_CD	/*속성 그룹 코드*/
+			, IATTR_CD		/*속성 코드*/
+			, IATTR_UUID		/*속성 일련번호*/
+			, ITEMCAT_LVL		/*분류 레벨*/
+			, IH_ITEMCAT_LVL	/*상속 분류 레벨*/
+			, MAND_YN		/*필수 여부*/
+			, SCR_DSPY_ORD		/*화면 순서*/
+			, USE_YN		/*사용 여부*/
+			, RMK			/*비고*/
+			, STS			/*상태*/
+		FROM ITEMCAT_IATTR
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEMCAT_CD = #{p.itemcat_cd}
+		AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+		AND IATTR_CD = #{p.iattr_cd}
+		AND IATTR_UUID = #{p.iattr_uuid}
+	</select>
+	<select id="findListChildrenItemCatCd" parameterType="java.lang.String" resultType="java.lang.String">
+		/* item-attribute-asgn.findListChildrenItemCatCd : 하위 품목분류 코드 조회 */
+		WITH  RECUR_T(ITEMCAT_CD) AS
+			(
+			SELECT
+				ITEMCAT_CD
+			FROM ITEMCAT
+			WHERE TEN_ID     = #{g.tenant}
+			AND STS       != 'D'
+			AND PAR_ITEMCAT_CD = #{p} /* START WITH 절에 해당함 */
+			UNION ALL
+			SELECT
+				S1.ITEMCAT_CD
+			FROM ITEMCAT S1
+			, RECUR_T
+			WHERE S1.TEN_ID = #{g.tenant}
+			AND S1.PAR_ITEMCAT_CD = RECUR_T.ITEMCAT_CD  /* CONNECT BY 절에 해당함 */
+			)
+		SELECT
+			ITEMCAT_CD
+		FROM RECUR_T
+	</select>
+	<insert id="insertInfoItemcatIattr">
+		/* item-attribute-asgn.insertInfoItemcatIattr : 배정 속성 저장 */
+		INSERT INTO ITEMCAT_IATTR
+		(
+			TEN_ID        /*시스템 아이디 */
+			, ITEMCAT_CD       /*분류 코드 */
+			, IATTR_GRP_CD   /*속성 그룹 코드*/
+			, IATTR_CD       /*속성 코드 */
+			, IATTR_UUID       /*속성 일련번호*/
+			, ITEMCAT_LVL      /*분류 레벨 */
+			, IH_ITEMCAT_LVL  /*상속 분류 레벨*/
+			, MAND_YN       /*필수 여부*/
+			, SCR_DSPY_ORD      /*화면 순서*/
+			, USE_YN        /*사용 여부*/
+			, RMK		    /*비고*/
+			, STS           /*상태 */
+			, REGR_ID        /*등록자 아이디 */
+			, REG_DTTM        /*등록 일시 */
+		) VALUES (
+			#{g.tenant}
+			, #{p.itemcat_cd}
+			, #{p.iattr_grp_cd}
+			, #{p.iattr_cd}
+			, #{p.iattr_uuid}
+			, CAST(#{p.itemcat_lvl} AS INT)
+			, CAST(#{p.ih_itemcat_lvl} AS INT)
+			, #{p.mand_yn}
+			, CAST(#{p.scr_dspy_ord} AS FLOAT  )
+			, #{p.use_yn}
+			, #{p.rmk}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateInfoItemcatIattr">
+		/* item-attribute-asgn.updateInfoItemcatIattr : 배정 속성 수정 */
+		UPDATE ITEMCAT_IATTR SET
+			STS				= 'U'                               /*상태 */
+			, MODR_ID		= #{g.username}                     /*수정자 아이디 */
+			, MOD_DTTM		= #{g.now}                          /*수정 일시 */
+			, MAND_YN		= #{p.mand_yn}                      /*필수 여부*/
+			, RMK			= #{p.rmk}                          /*비고 */
+			, SCR_DSPY_ORD	= CAST(#{p.scr_dspy_ord} AS FLOAT  )/*화면 순서*/
+			, USE_YN		= #{p.use_yn}                       /*사용 여부*/
+		WHERE TEN_ID		= #{g.tenant}         /*시스템 아이디 */
+		AND ITEMCAT_CD		= #{p.itemcat_cd}        /*분류 코드 */
+		AND IATTR_GRP_CD	= #{p.iattr_grp_cd}    /*속성 그룹 코드*/
+		AND IATTR_CD		= #{p.iattr_cd}        /*속성 코드 */
+		AND IATTR_UUID		= #{p.iattr_uuid}        /*속성 일련번호*/
+	</update>
+	<update id="updateInfoItemcatIattrToChildren">
+		/* item-attribute-asgn.updateInfoItemcatIattrToChildren : 자식 노드 배정 속성 수정 */
+		UPDATE ITEMCAT_IATTR SET
+			STS				= 'U'                               /*상태 */
+			, MODR_ID		= #{g.username}                     /*수정자 아이디 */
+			, MOD_DTTM		= #{g.now}                          /*수정 일시 */
+			, MAND_YN		= #{p.mand_yn}                      /*필수 여부*/
+			, USE_YN		= #{p.use_yn}                       /*사용 여부*/
+			, SCR_DSPY_ORD	= CAST(#{p.scr_dspy_ord} AS FLOAT  )/*화면 순서*/
+			, RMK			= #{p.rmk}                          /*배정속성해설*/
+		WHERE TEN_ID		= #{g.tenant}         /*시스템 아이디 */
+		AND ITEMCAT_CD IN
+		<foreach close=")" collection="p.children_itemcat_cds" item="children_itemcat_cd" open="(" separator=",">
+			#{children_itemcat_cd}
+		</foreach>
+		AND IATTR_GRP_CD	= #{p.iattr_grp_cd}    /*속성 그룹 코드*/
+		AND IATTR_CD		= #{p.iattr_cd}        /*속성 코드 */
+		AND IATTR_UUID		= #{p.iattr_uuid}        /*속성 일련번호*/
+		AND STS				!= 'D'
+	</update>
+	<select id="findListItemcatIattrChildren" resultType="map">
+		/* item-attribute-asgn.findListItemcatIattrChildren */
+		SELECT
+		    IATTR.TEN_ID                            /* 시스템 아이디 */
+			, IATTR.IATTR_CD                           /* 속성 코드 */
+			, CAT.ITEMCAT_CD      AS CHILD_CATE_CD     /* 자식 분류 코드 */
+			, CAT.ITEMCAT_LVL     AS CHILD_CATE_LVL    /* 자식 분류 레벨 */
+			, IATTR.RMK                               /* 비고 */
+			, IATTR.STS                               /* 상태 */
+			, IATTR.REGR_ID                            /* 등록자 아이디 */
+			, IATTR.REG_DTTM                            /* 등록 일시 */
+			, IATTR.MODR_ID                            /* 수정자 아이디 */
+			, IATTR.MOD_DTTM                            /* 수정 일시 */
+			, IATTR.IATTR_GRP_CD                       /* 속성 그룹 코드 */
+			, IATTR.IATTR_UUID                           /* 속성 일련번호 */
+			, IATTR.IH_ITEMCAT_LVL                      /* 상속 분류 레벨 */
+			, IATTR.MAND_YN                           /* 필수 여부 */
+			, IATTR.USE_YN                            /* 사용 여부 */
+			, IATTR.SCR_DSPY_ORD                          /* 화면 순서 */
+		FROM ITEMCAT_IATTR IATTR           /* 부모(현재) 분류코드의 배정속성 정보 */
+		LEFT OUTER JOIN ITEMCAT CAT /* 자식 분류코드 */
+		ON CAT.TEN_ID   = IATTR.TEN_ID
+		AND CAT.ITEMCAT_CD IN
+		<foreach close=")" collection="p.children_cate_cds" item="child_cate_cd" open="(" separator=",">
+			#{child_cate_cd}
+		</foreach>
+		AND CAT.STS != 'D'
+		WHERE IATTR.TEN_ID = #{g.tenant}        /* 시스템 아이디 */
+		AND IATTR.ITEMCAT_CD = #{p.itemcat_cd}       /* 분류 코드 */
+		AND IATTR.IATTR_GRP_CD = #{p.iattr_grp_cd}   /* 속성 그룹 코드*/
+		AND IATTR.IATTR_CD = #{p.iattr_cd}       /* 속성 코드 */
+		AND IATTR.IATTR_UUID = #{p.iattr_uuid}       /* 속성 일련번호*/
+		AND IATTR.STS != 'D'
+	</select>
+	<update id="updateInfoItemcatIattrChildren">
+		/* item-attribute-asgn.updateInfoItemcatIattrChildren */
+		UPDATE ITEMCAT_IATTR SET
+			RMK = #{p.rmk}
+			, USE_YN = #{p.use_yn}
+				, SCR_DSPY_ORD = CAST(#{p.scr_dspy_ord} AS INT)  , STS = 'U'
+			, MODR_ID = #{g.username}
+			, MOD_DTTM = #{g.now}
+				, IH_ITEMCAT_LVL = CAST(#{p.ih_itemcat_lvl} AS INT)  WHERE TEN_ID = #{g.tenant}
+		AND ITEMCAT_CD = #{p.itemcat_cd}
+		AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+		AND IATTR_CD = #{p.iattr_cd}
+		AND IATTR_UUID = #{p.iattr_uuid}
+	</update>
+	<insert id="insertInfoItemcatIattrChildren">
+		/* item-attribute-asgn.insertInfoItemcatIattrChildren */
+		INSERT INTO ITEMCAT_IATTR (
+			TEN_ID
+			, IATTR_CD      /*속성 코드 */
+			, ITEMCAT_CD      /*분류 코드 */
+			, ITEMCAT_LVL     /*분류 레벨 */
+			, RMK          /*비고 */
+			, STS          /*상태 */
+			, REGR_ID       /*등록자 아이디 */
+			, REG_DTTM       /*등록 일시 */
+			, MODR_ID       /*수정자 아이디 */
+			, MOD_DTTM       /*수정 일시 */
+			, IATTR_GRP_CD  /*속성 그룹 코드*/
+			, IATTR_UUID      /*속성 일련번호*/
+			, IH_ITEMCAT_LVL /*상속 분류 레벨*/
+			, MAND_YN      /*필수 여부*/
+			, USE_YN       /*사용 여부*/
+			, SCR_DSPY_ORD     /*화면 순서*/
+		) VALUES (
+			#{g.tenant}     /*시스템 아이디 */
+			, #{p.iattr_cd}	     /*속성 코드 */
+			, #{p.itemcat_cd}	     /*분류 코드 */
+				, CAST(#{p.itemcat_lvl} AS INT)	     /*분류 레벨 */  , #{p.rmk}	     /*비고*/
+			, 'C'	     /*상태 */
+			, #{g.username}	     /*등록자 아이디 */
+			, #{g.now}	         /*등록 일시 */
+			, #{g.username}	     /*수정자 아이디 */
+			, #{g.now}	         /*수정 일시 */
+			, #{p.iattr_grp_cd}     /*속성 그룹 코드 */
+			, #{p.iattr_uuid}    /*속성 일련번호*/
+				, CAST(#{p.ih_itemcat_lvl} AS INT)   /*상속 분류 레벨 */  , CAST(#{p.ih_itemcat_lvl} AS INT)   /*상속 분류 레벨 */
+			, #{p.mand_yn}	 /*필수 여부 */
+			, #{p.use_yn}	     /*사용 여부 */
+				, CAST(#{p.scr_dspy_ord} AS INT)	     /*화면 순서 */  )
+	</insert>
+	<delete id="deleteInfoItemcatIattrChildren">
+		/* item-attribute-asgn.deleteInfoItemcatIattrChildren : 배정 속성 삭제(자식 노드) */
+		DELETE FROM ITEMCAT_IATTR
+		WHERE TEN_ID = #{g.tenant}        /*시스템 아이디 */
+		AND ITEMCAT_CD IN
+		<foreach close=")" collection="p.children_itemcat_cds" item="child_itemcat_cd" open="(" separator=",">
+			#{child_itemcat_cd}
+		</foreach>
+		AND IATTR_GRP_CD = #{p.iattr_grp_cd}   /*속성 그룹 코드*/
+		AND IATTR_CD = #{p.iattr_cd}       /*속성 코드 */
+		AND IATTR_UUID = #{p.iattr_uuid}       /*속성 일련번호*/
+	</delete>
+	<delete id="deleteInfoItemcatIattr">
+		/* item-attribute-asgn.deleteInfoItemcatIattr : 배정 속성 삭제  */
+		DELETE FROM ITEMCAT_IATTR
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEMCAT_CD = #{p.itemcat_cd}
+		<if test="p.iattr_grp_cd != null and p.iattr_grp_cd != &quot;&quot;">
+			AND IATTR_GRP_CD = #{p.iattr_grp_cd}
+		</if>
+		<if test="p.iattr_cd != null and p.iattr_cd != &quot;&quot;">
+			AND IATTR_CD = #{p.iattr_cd}
+		</if>
+		<if test="p.iattr_uuid != null and p.iattr_uuid != &quot;&quot;">
+			AND IATTR_UUID = #{p.iattr_uuid}
+		</if>
+	</delete>
+	<select id="findListAttrMapping" resultType="map">
+		/* item-attribute-asgn.findListAttrMapping : itemcat_cd 에 매핑된 배정 속성 을 구한다. */
+		SELECT
+			IATTR_GRP_CD
+			, ITEMCAT_CD
+		FROM ITEMCAT_IATTR
+		WHERE TEN_ID = #{g.tenant}
+		AND ITEMCAT_CD = #{p.itemcat_cd}
+		AND STS != 'D'
+		GROUP BY TEN_ID, ITEMCAT_CD, IATTR_GRP_CD
+	</select>
+</mapper>

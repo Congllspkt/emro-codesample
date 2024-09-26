@@ -1,0 +1,399 @@
+<link rel="import" href="es-performance-eval-group-info.html"></link>
+<sc-link rel="import" href="es-performance-evalsheet-info.html"></sc-link>
+
+<dom-module id="es-performance-eval-group-detail">
+<!-- 
+/**
+ *
+ *	@description : SRM > Performance평가 설정 > Performance평가그룹 > Performance평가그룹 상세
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 퍼포먼스평가그룹 조회 -->
+        <sc-ajax
+                id="findPeg"
+                url="findPeg.do"
+                body="{{searchParam}}"
+                on-response="onFindResultHandler">
+        </sc-ajax>
+
+        <!-- 퍼포먼스평가그룹 저장 -->
+        <sc-ajax
+                id="savePeg"
+                url="savePeg.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+
+        <!-- 퍼포먼스 평가시트 저장 -->
+        <sc-ajax
+                id="savePfmcEvalsht"
+                url="savePfmcEvalsht.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+		<!-- 퍼포먼스 평가시트 Import -->
+        <sc-ajax
+                id="saveImportPfmcEvalsht"
+                url="saveImportPfmcEvalsht.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+		<!-- 퍼포먼스 평가시트 버전업 -->
+        <sc-ajax
+                id="saveVersionupPfmcEvalsht"
+                url="saveVersionupPfmcEvalsht.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+		
+		<!-- 퍼포먼스 평가시트 삭제 -->
+        <sc-ajax
+                id="deletePfmcEvalsht"
+                url="deletePfmcEvalsht.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+		
+		<!-- 퍼포먼스 평가시트/평가템플릿 확정 저장 -->
+        <sc-ajax
+                id="saveCnfdYnPfmcEvalsht"
+                url="saveCnfdYnPfmcEvalsht.do"
+                on-response="onSaveResultHandler">
+        </sc-ajax>
+
+        <cc-page-title-bar title-text="[[titleText]]">
+            <sc-button text="닫기" on-click="onClose" hidden="[[!formula('isCloseable')]]"></sc-button>
+        </cc-page-title-bar>
+
+        <div class="hbox flex">
+            <es-performance-eval-group-info id="peg" class="flex-3" on-save-peg="onSavePeg" on-load-pfmc-evalsht-his="onLoadPfmcEvalshtHis"></es-performance-eval-group-info>
+            <div class="hspace-10"></div>
+            <es-performance-evalsheet-info id="pfmcEvalsht" class="flex-7" on-save-pfmc-evalsht="onSavePfmcEvalsht" on-confirm-cancel-pfmc-evalsht="onConfirmCancelPfmcEvalsht"
+											on-import-pfmc-evalsht="onImportPfmcEvalsht" on-versionup-pfmc-evalsht="onVersionupPfmcEvalsht" on-delete-pfmc-evalsht="onDeletePfmcEvalsht"
+											on-saved-transform-evaltmpl="onSavedTransformEvaltmpl" on-saved-mod-evaltr="onSavedModEvaltr"></es-performance-evalsheet-info>
+        </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-performance-eval-group-detail",
+            properties: {
+				// 평가시트 저장모드
+				saveMode:{
+					type: String,
+					value: null
+				},
+                btnMessage: {
+                    type: String,
+                    value: "저장"
+                },
+                titleText:{
+                    type: String,
+                    value: "퍼포먼스평가그룹"
+                },
+                searchParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                peg:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                pegVmgs:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                pfmcEvalshtHis:{
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+				options : {
+					type : Object,
+					value : function() {
+						return {
+							isPopup : false
+						};
+					}
+				},
+                // 목록 재조회
+                reloadable: {
+                    type: Boolean,
+                    value: false
+                }
+            },
+			formulas : {
+				isCloseable : function() {
+					return !this.options.isPopup;
+				}
+			},
+            initialized: function(){
+            },
+
+            /**
+             * 화면 load
+             */
+            loadScreen: function(param){
+                var me = this;
+                me.$.peg.load(param);
+                me.$.pfmcEvalsht.load(param);
+            },
+
+            load: function(param){
+                var me = this;
+				
+				if(UT.isEmpty(param)) {
+					//유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					UT.alert("STD.E9400");
+					me.onClose();
+				}
+				var data = param.defaultParam;
+                if(UT.isEmpty(data.peg_uuid)){
+                    // 신규
+                    me.set("titleText", "퍼포먼스평가그룹 등록");
+                    me.set("peg", data);
+
+                    var data = {
+                        peg : me.get("peg"),
+                        pegVmgs : new Array()
+                    };
+
+                    me.loadScreen(data);
+                } else {
+                    // 상세
+                    me.set("titleText", "퍼포먼스평가그룹 상세");
+                    me.set("searchParam", data);
+                    me.onSearchPeg();
+                }
+				
+				if(UT.isNotEmpty(param.options)) {
+					me.set("options.isPopup", (param.options.isPopup || false));
+				}
+				me.applyFormula('isCloseable');
+            },
+
+            /**
+             * 퍼포먼스평가그룹 조회
+             */
+            onSearchPeg: function(){
+                var me = this;
+                UT.request(me.$.findPeg);
+            },
+
+            /**
+             * 퍼포먼스평가그룹 조회 callback
+             */
+            onFindResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var resultData = result.resultData;
+                    var pegInfo = resultData.pegInfo;
+                    var pegVmgs = resultData.pegVmgs;
+					var pegEvalGrd = resultData.pegEvalGrd;
+                    var pfmcEvalshtHis = resultData.pfmcEvalshtHis;
+                    var pfmcEvalshtInfo = UT.isEmpty(resultData.pfmcEvalshtInfo) ? new Object() : resultData.pfmcEvalshtInfo;
+
+                    // 1. 퍼포먼스평가그룹 Mater
+                    me.set("peg", pegInfo);
+                    // 2. 퍼포먼스평가그룹 - 협력사관리그룹
+                    me.set("pegVmgs", pegVmgs);
+					// 3. 퍼포먼스평가그룹 - 평가 등급
+                    me.set("pegEvalGrd", pegEvalGrd);
+                    // 4. 퍼포먼스평가그룹 - 평가시트이력 조회
+                    me.set("pfmcEvalshtHis", pfmcEvalshtHis);
+                    // 5. 퍼포먼스 평가시트 조회
+                    me.set("pfmcEvalshtInfo", pfmcEvalshtInfo);
+
+                    var param = {
+                        peg : me.get("peg"),
+                        pegVmgs : me.get("pegVmgs"),
+						pegEvalGrd : me.get("pegEvalGrd"),
+                        pfmcEvalshtHis : me.get("pfmcEvalshtHis"),
+                        pfmcEvalshtInfo : me.get("pfmcEvalshtInfo")
+                    };
+
+                    me.loadScreen(param);
+                }
+            },
+
+            /**
+             * 퍼포먼스평가그룹 (PEG) 저장
+             */
+            onSavePeg: function(e){
+                var me = this;
+                var body = e.detail;
+
+                me.$.savePeg.body = body;
+                UT.request(me.$.savePeg);
+            },
+
+            /**
+             * 퍼포먼스평가그룹 (PEG) / 퍼포먼스평가시트 저장 callback
+             */
+            onSaveResultHandler: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var saveMode = me.get("saveMode");
+					var pegInfo = result.resultData;
+					
+					if(!UT.isEmpty(saveMode) && saveMode == "confirmSave"){
+						// 확정
+                        me.set("btnMessage", "확정");
+                        me.$.saveCnfdYnPfmcEvalsht.body = {pegInfo: pegInfo, cnfdYn: "Y"};
+                		UT.request(me.$.saveCnfdYnPfmcEvalsht);
+						
+						me.set("saveMode", null);  // 초기화
+					}else{
+                        var btnMessage = me.get("btnMessage");
+                        UT.completeAlert(btnMessage, function(){
+							me.set("btnMessage", "저장");
+                            me.load({
+								defaultParam : pegInfo,
+								options : me.options
+							});
+						});
+					}
+					
+					// 팝업으로 생성한 화면인 경우 평가그룹 정보 변경시 이벤트를 던진다.
+					if(me.options.isPopup) {
+						me.fire('changed-peg');
+					}
+                }else if(UT.isNotEmpty(result) && result.resultStatus == "INVALID_STATUS_ERR"){
+					UT.alert("STD.E9600", function(){  // 유효한 상태가 아니거나 상태가 변경된 데이터가 존재하여 요청을 수행할 수 없습니다.
+						me.load(pegInfo);
+					});
+				}
+            },
+
+            /**
+             * 퍼포먼스평가그룹 (PEG) - 평가시트 저장
+             */
+			onSavePfmcEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+					me.set("saveMode", body.pfmcEvalshtInfo.saveMode);
+                    me.set("reloadable", true);
+                    body.pfmcInfo = me.get("peg");
+                    me.$.savePfmcEvalsht.body = body;
+                    UT.request(me.$.savePfmcEvalsht);
+                }
+            },
+			/**
+             * 퍼포먼스평가그룹 (PEG) - 평가시트 확정취소
+             */
+			onConfirmCancelPfmcEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+                    me.set("btnMessage", "확정 취소");
+                    me.set("reloadable", true);
+                    me.$.saveCnfdYnPfmcEvalsht.body = body;
+                    UT.request(me.$.saveCnfdYnPfmcEvalsht);
+                }
+            },
+			
+			/**
+             * 퍼포먼스평가그룹 (PEG) - 평가시트 Import
+             */
+			onImportPfmcEvalsht: function(e){
+				var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+                    me.set("btnMessage", "평가시트 Import");
+                    me.set("reloadable", true);
+                    me.$.saveImportPfmcEvalsht.body = body;
+                    UT.request(me.$.saveImportPfmcEvalsht);
+                }
+			},
+			/**
+             * 퍼포먼스평가그룹 (PEG) - 평가시트 버전업
+             */
+			onVersionupPfmcEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+                    me.set("btnMessage", "갱신");
+                    me.set("reloadable", true);
+                    me.$.saveVersionupPfmcEvalsht.body = body;
+                    UT.request(me.$.saveVersionupPfmcEvalsht);
+                }
+            },
+			/**
+             * 퍼포먼스평가그룹 (PEG) - 평가시트 삭제
+             */
+			onDeletePfmcEvalsht: function(e){
+                var me = this;
+                var body = e.detail;
+
+                if(!UT.isEmpty(body)){
+                    me.set("btnMessage", "삭제");
+                    me.set("reloadable", true);
+                    me.$.deletePfmcEvalsht.body = body;
+                    UT.request(me.$.deletePfmcEvalsht);
+                }
+            },
+
+            /**
+             * 퍼포먼스 평가그룹 - 평가시트이력 상세 조회
+             */
+            onLoadPfmcEvalshtHis: function(e){
+                var me = this;
+                var data = e.detail;
+
+				var param = {
+					peg : me.get("peg"),
+					pfmcEvalshtInfo : data,
+					pfmcEvalshtHis : me.get("pfmcEvalshtHis")
+				}
+                me.$.pfmcEvalsht.load(param);
+            },
+
+			/* 평가템플릿 전환 완료 */
+			onSavedTransformEvaltmpl: function(){
+				var me = this;
+				me.load({defaultParam : me.get("peg")});
+			},
+			/* 평가자 변경 완료 */
+			onSavedModEvaltr: function(){
+				var me = this;
+				// 팝업으로 생성한 화면인 경우 평가자 정보 변경시 이벤트를 던진다.
+				if(me.options.isPopup) {
+					me.fire('changed-peg');
+				}
+			},
+			
+            /**
+             * 닫기 버튼 클릭
+             */
+            onClose: function() {
+                var me = this;
+                var reloadable = me.get("reloadable");
+                me.clear();
+                me.fire("close-detail", {reloadable:reloadable});
+            },
+            clear: function(){
+                var me = this;
+                me.reset();
+            }
+        });
+    </script>
+
+</dom-module>

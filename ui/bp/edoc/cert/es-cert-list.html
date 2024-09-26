@@ -1,0 +1,220 @@
+<sc-link rel="import" href="../popup/ep-save-bizregno.html"></sc-link>
+
+<dom-module id="es-cert-list">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+    	<!-- 조회 -->
+    	<sc-ajax id="findCertList"
+    			 url="largeFindCertList.do"
+    			 body="{{searchParam}}"
+				 on-response="completeFindCertList">
+    	</sc-ajax>
+    	
+    	<!-- 인증서 검증 -->
+    	<sc-ajax id="verifyCertInfo"
+    			 url="verifyCertInfo.do"
+    			 on-response="completeVerifyCertInfo">
+    	</sc-ajax>
+		
+		<!-- 사업자번호 저장 -->
+		<sc-ajax id="saveBizRegNo"
+				 url="saveBizRegNo.do"
+				 on-response="completeSaveBizRegNo">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<sc-grid id="gridCertInfo" is-tree="true" class="flex" selection-mode="radio" on-item-click="onItemClick" >
+			<cc-grid-toolbar>
+				<sc-button text="조회" 			on-click="onSearch" auth-r></sc-button>
+				<sc-button text="PDF 다운로드"	on-click="onDownloadPdf" auth-r></sc-button>
+				<sc-button text="검증" 			on-click="onVerify" auth-r></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="logic_org_nm" header-text="논리 조직 명" width="200" text-align="left"></sc-data-column>
+				<sc-data-column data-field="logic_org_cd" header-text="논리 조직 코드" width="140" text-align="center" style-name="link"></sc-data-column>
+				<sc-data-column data-field="logic_org_typ_nm" header-text="논리 조직 유형" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="bizregno"     header-text="사업자등록번호" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="cert_reg_yn"  header-text="인증서 등록 여부" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="cert_exp_dt"  header-text="인증서 만료 일자" width="100" text-align="center" format-type="date"></sc-data-column>
+				<sc-data-column data-field="cert_plcy"    header-text="인증서 정책" width="140" text-align="left"></sc-data-column>
+				<sc-data-column data-field="cert_nm"      header-text="인증서 DN" width="150" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field	data-field="logic_org_typ_ccd" ></sc-grid-field>
+				<sc-grid-field	data-field="parnode_logic_org_cd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+    </template>
+
+    <!-- 스크립트 -->
+    <script>
+        Polymer({
+            is: "es-cert-list",
+
+            properties: {
+            	searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {
+                        };
+                    }
+                },
+                certList: {
+                    type: Object,
+                    value: function () {
+                        return [];
+                    }
+                },
+                codes:{
+                	type: Object,
+                	reset: false,
+                	value : function(){
+                		return {
+                            company: [],
+                            orgType: {
+                                param : {
+                                    use_yn: "Y"
+                                },
+                                result: []
+                            }
+                        };
+                	}
+                }
+            },
+
+            //화면에 그려진 후 콜백 함수
+            initialized: function () {
+				var me = this;
+				me.onSearch();
+            },
+            
+            // 그리드 클릭
+            onItemClick: function (e) {
+                var me = this;
+                var data = e.detail.data;
+                var item = e.detail.item;
+                var provider = e.detail.provider;
+
+                //조직 코드
+                if (item.dataField === "logic_org_cd") {
+					if(UT.isEmpty(data.bizregno) || data.bizregno.length != 10 ){
+						UT.confirm("STD.EDO1124", function() { //사업자등록번호가 저장되어야 서버인증서 등록이 가능합니다.<br/> 먼저 사업자등록번호를 저장해주세요.
+							me.onSaveBizRegNo(data); // 사업자등록번호 저장
+						});
+					}else if(data.cert_reg_yn == "N"){
+						UT.alert("STD.EDO1056"); // 인증서 정보가 등록 되지 않았습니다.
+					}
+					data.logic_org_cd = data.logic_org_cd;
+					data.logic_org_typ_ccd = data.logic_org_typ_ccd;
+                	me.fire("detail", data);    
+                }
+            },
+            
+            //조회
+            onSearch: function(){
+            	var me = this;
+            	UT.request(me.$.findCertList);
+            	me.fire("clear");
+            },
+            
+            //인증서 검증
+            onVerify: function() {
+				var me = this;
+				var provider = me.$.gridCertInfo.getDataProvider();
+				var itemList = provider.selectionCheckedItems();
+	
+				if(itemList.length == 0) {
+					UT.alert("STD.N1600");//선택된 항목이 없습니다.
+					return;
+				}
+				
+				var row = itemList[0];
+				if(row.cert_reg_yn === "N") {
+					UT.alert("STD.EDO1056"); //인증서 정보가 등록 되지 않았습니다.
+					return;
+				}
+	
+				me.$.verifyCertInfo.body = row;
+				UT.request(me.$.verifyCertInfo);
+			},
+			
+            //인증서 검증 콜백함수
+            completeVerifyCertInfo: function(e, res){
+            	var me = this;
+            	var result = res.response;
+            	
+            	if(result.resultStatus === "S"){
+            		UT.alert("STD.EDO1055"); //검증되었습니다.
+            	}else{
+            		UT.alert("STD.E9999");
+            	}
+            },
+
+            // PDF 다운로드
+            onDownloadPdf: function() {
+            	var me = this;
+            	var provider = me.$.gridCertInfo.getDataProvider();
+            	var items = provider.selectionCheckedItems();
+            	
+            	if (items.length === 0) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                    return;
+                }
+            	
+            	if (items[0].cert_reg_yn === "N") {
+                    UT.alert("STD.EDO1056"); // 인증서 정보가 등록 되지 않았습니다.
+                    return;
+                }
+				
+				var paramObj = { logicOrgCd: items[0].logic_org_cd,  logicOrgTypCCD : items[0].logic_org_typ_ccd};
+				DL.downloadByUrl("bp/edoc/cert/watermarkTestPdf.do", this, paramObj);
+				
+            },
+            
+			completeFindCertList: function(e, res){
+				var me = this,
+					result = res.response;
+				
+				var hier = new CCHierachicalData();
+				var hierachiDatas = hier.HierachyTransformByKey(result, "logic_org_cd", "parnode_logic_org_cd", "children", "ROOT", null, true);
+				if(UT.isEmpty(hierachiDatas.children)){
+					hierachiDatas.children = result;
+				}
+				me.$.gridCertInfo.setHierachyDataProvider(hierachiDatas, "children");
+				me.$.gridCertInfo.expandAll();
+			},
+
+			onSaveBizRegNo: function(data) {
+				var me = this;
+				var org_cd = data.logic_org_cd;
+				var org_typ_ccd = data.logic_org_typ_ccd;
+				
+				var saveBizRegNoPopup = UT.popup("ep-save-bizregno", me, 500, 200, {
+					"complete-save" : function(popup, e) {
+						me.$.saveBizRegNo.body = {
+							biz_reg_no : e.detail.bizRegNo,
+							org_cd : org_cd,
+							org_typ_ccd : org_typ_ccd
+						};
+						UT.request(me.$.saveBizRegNo);
+						popup.close();
+					}
+				});
+				saveBizRegNoPopup.show();
+				saveBizRegNoPopup.getWindowContent().load();
+			},
+			
+			completeSaveBizRegNo: function() {
+				var me = this;
+				UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+				me.onSearch();
+			}
+        });
+    </script>
+</dom-module>

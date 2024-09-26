@@ -1,0 +1,450 @@
+<dom-module id="es-eform-sign-mail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+		.dialogWeb {
+			width:500px;
+			height:350px;
+		}
+		.dialogMobile {
+			width:300px;
+			height:240px;
+		}
+	</style>
+	
+	<template>
+		<!-- 서명대상자 순서 '을' mail 조회 -->
+		<sc-ajax id="findSignTargetInfoFormerNByMail"
+				 url="/bp/edoc/eform/notUser/findSignTargetInfoFormerNByMail.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindSignTargetInfoFormerNByMail">
+		</sc-ajax>
+ 
+		<!-- 서명 거부 -->
+		<sc-ajax id="rejectSignDocument"
+				 url="/bp/edoc/eform/notUser/rejectSignDocumentByMail.do"
+				 on-response="completeSave">
+		</sc-ajax>
+		
+		<!-- 서명 제출 -->
+		<sc-ajax id="sendNextSignTarget"
+				 url="/bp/edoc/eform/notUser/sendNextSignTargetByMail.do"
+				 on-response="completeSave">
+		</sc-ajax>
+		
+		 <!-- 1. Reader -->
+		<div style="display: flex; width: 100%; height: 100%; overflow: visible; flex-direction: column;">
+			<div id="outerContainer" class="Outer-Container Reader" >
+				<div id="MainContainer" class="Main-Container">
+					<!-- 4. PDF viewer -->
+					<div id="ReaderViewerContainer" class="Viewer-Container" >
+						<div id="ReaderPDFViewer" class="pdfViewer"></div>
+					</div>
+					
+					<div class="Reader-Toolbar">
+						<div class="Reader-Toolbar-Group Center Button-List">
+							<ul>
+								<!-- 2. PDF 페이지 이동 -->
+								<li>
+									<div><button class="Reader-Button Transparent Circle Goto-First-Button" id="Goto-First-Button"><i class=""></i></button></div>
+								</li>
+								<li>
+									<div><button class="Reader-Button Transparent Circle Goto-Prev-Button" id="Goto-Prev-Button"><i class=""></i></button></div>
+								</li>
+								<li>
+									<div><button class="Reader-Button Transparent Circle Goto-Next-Button" id="Goto-Next-Button"><i class=""></i></button></div>
+								</li>
+								<li>
+									<div><button class="Reader-Button Transparent Circle Goto-Last-Button" id="Goto-Last-Button"><i class=""></i></button></div>
+								</li>
+								<li>
+									<input type="number" id="pageNumber" class="Toolbar-Field Page-Number" title="페이지" value="1" size="4" min="1" data-l10n-id="page" autocomplete="off" max="14">
+									<span id="Num-Pages" class="Toolbar-Label">/ 14</span>
+								</li>
+								<li>
+									<div><div class="Toolbar-Button-Divider"></div></div>
+								</li>
+								<!-- 3. PDF 확대/축소 -->
+								<li>
+									<span id="scaleSelectContainer"  class="Toolbar-Label"><a>100%</a></span>
+								</li>
+								<li>
+									<div><button class="Reader-Button Transparent Zoom-Out-Button" id="Zoom-Out-Button"><i class=""></i></button></div>
+								</li>
+								<li>
+									<div><button class="Reader-Button Transparent Zoom-In-Button" id="Zoom-In-Button"><i class=""></i></button></div>
+								</li>
+							</ul>
+						</div>
+					</div>
+					
+					<!-- PDF 확대/축소 hidden -->
+					<div class="Scale-Seletor-Container Template-Hide" id="Scale-Seletor">
+						<select>
+							<option value="0.3">30%</option>
+							<option value="0.5">50%</option>
+							<option value="0.8">80%</option>
+							<option value="1">100%</option>
+							<option value="1.2">120%</option>
+							<option value="1.5">150%</option>
+							<option value="2">200%</option>
+							<option value="3">300%</option>
+							<option value="4">400%</option>
+						</select>
+					</div>
+					
+					<!-- 5. 프로세스 버튼 -->
+					<div class="Reader-Bottom-Container">
+						<div class="Button-List">
+							<button type="button" on-click="onSignContract" class="Reader-Button Confirm  Margin-Right-5">[[translate('TemplateDesigner.sendSign')]]</button>
+							<button type="button" on-click="onRejectContract" class="Reader-Button Cancel" >[[translate('TemplateDesigner.rejectSign')]]</button>
+						</div>
+					</div>
+					
+					<!-- 서명 popup -->
+					<div class="Sign-Popup Template-Hide" id="signElement">
+						<span class="Popup-Bg-Wrap"></span>
+						<div class="Sign-Layerpop">
+							<div class="Popup-Head">
+								<h3 class="Popup-Head Title">[[translate('TemplateDesigner.signText')]]</h3>
+							</div>
+							<div class="Popup-Body">
+								<div class="Sign-Tab-Container">
+									<ul class="Popup-Tab-Main">
+										<li id="signDrawTabButton" class="on"><span>[[translate('TemplateDesigner.drawSignText')]]</span></li>
+										<li id="signTextTabButton" class=""><span>[[translate('TemplateDesigner.textSignText')]]</span></li>
+										<li id="stampSignTabButton" class="tab_stamp"><span>[[translate('TemplateDesigner.imageSignText')]]</span></li>
+										<li id="registeredSignTabButton" class="tab_reg_sign"><span>[[translate('TemplateDesigner.regSignText')]]</span></li>
+									</ul>
+		 
+									<div class="Tab-Contents " id="signDrawArea" data-tab-name="signDrawTab">
+										<div class="Sign-Area Draw-Area" id="drawInputArea">
+											<div class="innerbox">
+												<span class="Signpad-Wrap"></span>
+												<canvas class="Signpad" id="drawComponent" ></canvas>
+											</div>
+										</div>
+									</div>
+									
+									<div class="Tab-Contents Template-Hide" id="signTextArea" data-tab-name="signTextTab">
+										<div class="Sign-Area Draw-Area" id="textInputArea">
+											<div class="Sign-Head">
+												<input type="text" id="signTextInput" placeholder="서명을 입력하세요.">
+												<button type="button" class="btn_common" id="signTextCreate">[[translate('TemplateDesigner.textSignCreate')]]</button>
+											</div>
+
+											<div class="signTxtWrap">
+												<ul class="signTypeList" clonekey="textTypeList">
+													<li class="Template-Hide" id="text-sign-canvas">
+														<div class="canvas_wrap">
+															<canvas clonekey="textTypeSample"></canvas>
+														</div>
+													</li>
+												</ul>
+											</div>
+										</div>
+									</div>
+	 
+									<div class="Tab-Contents Template-Hide tab_stamp" id="stampSignArea" data-tab-name="stampSignTab">
+										<div class="Sign-Area">
+											<div class="innerbox">
+												<div class="img_upload_area" id="imageUploadArea">
+													<div class="corner_point_area">
+														<div class="innerbox">
+															<div class="bg_area" id="stampImageSpan">
+																<i class="img">
+																	<img id="stampImageTag" src="" alt="">
+																</i>
+																<span class="txt_guide"><span>[[translate('TemplateDesigner.imageSignFileSelect')]]</span></span>
+															</div>
+															<input type="file" id="stampFileInput" class="hidden" style="display:none"
+																   accept="image/jpeg, image/png, image/tiff, image/bmp, image/gif">
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+		 
+									<div class="Tab-Contents Template-Hide tab_reg_sign" id="registeredSignArea" data-tab-name="registeredSignTab">
+										<div class="Sign-Area Draw-Area" id="registeredArea">
+											<div class="registeredSignWrap">
+												<ul class="signTypeList" clonekey="registeredList">
+													<li class="Template-Hide" >
+														<div class="canvas_wrap">
+															<canvas clonekey="registeredSample"></canvas>
+														</div>
+													</li>
+												</ul>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+			 
+							<div class="Popup-Foot">
+								<button type="button" class="btn_common btn_left btn_reset" id="drawTypeInitButton">[[translate('TemplateDesigner.initText')]]</button>
+								<button type="button" class="btn_common btn_cancel" id="cancelButton">[[translate('TemplateDesigner.cancelText')]]</button>
+								<button type="button" class="btn_common" id="drawRegistButton">[[translate('TemplateDesigner.confirmText')]]</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<sc-dialog id="dialog" title-text="반려 사유 작성" class$="[[formula('dialogClass')]]" hide-on-esc-key="true" modal="true">
+			<cc-sub-title-bar>
+				<sc-button text="반려" on-click="onSaveReject"></sc-button>
+			</cc-sub-title-bar>
+			<sc-textarea-field value="{{cntrInfo.ret_rsn}}" class$="[[formula('txtareaClass')]]" max-length="200" max-height="250"></sc-textarea-field>
+		</sc-dialog>
+	</template>
+
+	<sc-link rel="stylesheet" type="text/css"  href="/bower_components/template-designer/css/flatpickr.min.css" ></sc-link>
+	<sc-link rel="stylesheet" type="text/css"  href="/bower_components/template-designer/css/select2.min.css"/>
+	<script src="/bower_components/template-designer/js/pdf_form/jquery-1.9.1.min.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/flatpickr.min.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/fabric.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/polyfills.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/polyfillsIE.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/pdfjs/grab-to-pan.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/dist/readermod.bundle.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/dist/readermodSass.bundle.js"></script>
+	<script src="/bower_components/template-designer/js/pdf_form/select2/select2.min.js"></script>
+	
+	<script>
+		Polymer({
+			is: "es-eform-sign-mail",
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function () {
+						return {}
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				documentConts: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				signTarget: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				},
+				signJsonList: {
+					type: Object,
+					value: function () {
+						return [];
+					}
+				},
+				dialogMobile: {
+					type: Object,
+					value: function () {
+						return "dialogMobile";
+					}
+				},
+				isMobile: {
+					type: Boolean,
+					value: function () {
+						return false;
+					}
+				}
+			},
+
+			formulas: {
+				isMobile: function() {
+					return this.get("mobileYn");
+				},
+				dialogClass: function() {
+					return this.formula('isMobile') ? "dialogMobile" : "dialogWeb";
+				},
+				txtareaClass: function() {
+					return this.formula('isMobile') ? "h-100" : "h-200";
+				}
+			},
+			
+			initialized: function () {
+				var me = this;
+				var agent = navigator.userAgent.toLowerCase();
+				if ( (navigator.appName == 'Netscape' && agent.indexOf('trident') != -1) || (agent.indexOf("msie") != -1)) {
+					// ie일 경우
+					pdfjsLib.GlobalWorkerOptions.workerSrc = '/bower_components/template-designer/js/pdf_form/pdfjs/es5/pdf.worker.min.js'
+				}else{
+					// ie가 아닐 경우
+					pdfjsLib.GlobalWorkerOptions.workerSrc = '/bower_components/template-designer/js/pdf_form/pdfjs/pdf.worker.min.js'
+				}
+				readermod.initDocument(me,SCI18nManager.getLocale());
+				readermod.setCustomAlert(UT.alert);
+			},
+
+			load: function (param) {
+				var me = this;
+				debugger;
+				/* 간편서명 mail Link - ID/PW Login */
+				if(UT.isNotEmpty(param) ) {
+					data  = {
+						cntr_sgndusr_uuid : param.cntr_sgndusr_uuid
+					};
+					me.set("searchParam", data);
+					me.set("mobileYn", UT.isNotEmpty(param.mobileYn) && param.mobileYn === "Y" ? true : false);
+					me.applyFormula();
+					UT.request(me.$.findSignTargetInfoFormerNByMail);
+				}
+			},
+			
+			completeFindSignTargetInfoFormerNByMail: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					var resultData = result.resultData;
+					me.set("cntrInfo", resultData.cntrInfo);
+					me.set("documentConts", resultData.documentConts);
+					me.set("signTarget", resultData.signTarget);
+					me.set("signJsonList", resultData.signJsonList);
+					
+					var pdfUrl = window.location.protocol
+							+ "//"
+							+ window.location.host
+							+ "/bp/eform/getEFormPdf.do?athg_uuid="
+							+ resultData.documentConts.dgtlsgn_cntrdoc_tmpl_athg_uuid;
+
+					/**************************************************
+					 * pdfUrl : 템플릿 pdf 파일
+					 * jsonImportData : 템플릿 pdf Json Data
+					 ***************************************************/
+					var jsonImportData = {
+						ownerList : resultData.signJsonList
+					};
+					readermod.loadDocument(pdfUrl, jsonImportData, resultData.menuId);
+
+				} else if (result.resultStatus === "A") {
+					UT.alert("STD.EDO2025"); // 모든 계약상대자가 서명을 완료하였습니다.
+					me.onClose();
+
+				} else {
+					var msg = UT.isEmpty(result.resultMessage) ? "STD.E9999" : result.resultMessage;
+					UT.alert(msg, function() {
+						me.onClose();
+					});
+				}
+			},
+
+			/* 서명 제출 */
+			onSignContract: function () {
+				var me = this;
+				var isRequiredFieldValueEmpty = readermod.isRequiredFieldValueEmpty();
+				
+				if(isRequiredFieldValueEmpty.isEmpty) {
+					UT.alert("STD.E9000"); // 필수항목 입력여부를 확인해야 합니다.
+					return;
+				}
+
+				var jsonData = readermod.getJsonData();
+				
+				UT.confirm("STD.EDO2018", function(){	//서명 제출하시겠습니까?
+					me.saveSignValue(jsonData); //서명이미지 저장하기
+					
+					me.$.sendNextSignTarget.body = {
+						ecntr_uuid: me.get("cntrInfo.ecntr_uuid"),
+						signTarget: me.get("signTarget"),
+						cntrFormAttr: jsonData
+					};
+					UT.request(me.$.sendNextSignTarget);
+				});
+			},
+			
+			//서명이미지 저장하기
+			saveSignValue: function(jsonData) {
+				var me = this;
+				var jarray = JSON.parse(jsonData).ownerList;
+				
+				for(var j=0;j<jarray.length;j++) {
+					var page = jarray[j].pages;
+					for(var o in page) {
+						var items = page[o].fields;
+						for(var i in items) {
+							if(items[i].signType != null) {
+								// textPath : 텍스트 서명
+								// path : 그리기 서명
+								// 나머지 : 인장, 이미지첨부 서명
+								if(items[i].signType == "path" || items[i].signType == "textPath") {
+									me.set("signTarget.signImage", items[i].m_svgData);
+									me.set("signTarget.signImageYn", "Y");
+									break;
+								} else {
+									me.set("signTarget.signImage", items[i].m_value);
+									me.set("signTarget.signImageYn", "N");
+									break;
+								}
+							}
+						}
+					}
+				}
+			},
+			
+			/* 서명 거부 */
+			onRejectContract: function () {
+				var me = this;
+				me.$.dialog.show();
+			},
+			
+			/* 반려사유 작성 후 반려 */
+			onSaveReject: function() {
+				var me = this;
+				var retRsn = me.get("cntrInfo.ret_rsn");
+				
+				if(UT.isEmpty(retRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("반려 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+
+				UT.confirm("STD.EDO2026", function() { //서명 거부하시겠습니까?
+					me.$.rejectSignDocument.body = {
+						signTarget: me.get("signTarget"),
+						cntr_ret_rsn: retRsn
+					};
+					UT.request(me.$.rejectSignDocument);
+				});
+			},
+			
+			completeSave: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S" || result.resultStatus === "A") {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.onClose();
+				} else {
+					var msg = UT.isEmpty(result.resultMessage) ? "STD.E9999" : result.resultMessage;
+					UT.alert(msg, function() {
+						me.onClose();
+					});
+				}
+			},
+			
+			/* 로그인 창으로 이동 */
+			onClose: function() {
+				var me = this;
+				var usrCls =  me.get("signTarget.usr_typ_ccd");
+				
+				if(UT.isEmpty(usrCls) || usrCls ==="VD") { //사용자 정보가 없는경우
+					window.location.href = "/spLogin.do";
+				} else {
+					window.location.href = "/login.do";
+				}
+			}
+		});
+	</script>
+</dom-module>

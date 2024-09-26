@@ -1,0 +1,238 @@
+<dom-module id="ep-sp-appform-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <!-- 서비스 -->
+        <!-- 첨부서식에 해당하는 내용 가져오기(ESEADCT) -->
+        <sc-ajax id="findAppData"
+                 url="findAppData.do"
+                 on-response="completefindAppData"></sc-ajax>
+
+        <!-- 입력한 첨부서식 업데이트 -->
+        <sc-ajax id="updateAppFormOrgn"
+                 url="updateAppFormOrgn.do"
+                 on-response="completeupdateAppForm"></sc-ajax>
+
+        <!-- 공통코드 조회(D004: 문서종류, D005 : 첨부자구분 -->
+        <sc-code-group>
+            <sc-code code="D004" value="{{codes.appx_typ_ccd}}"></sc-code>
+            <sc-code code="D005" value="{{codes.appx_crtr_typ_ccd}}"></sc-code>
+        </sc-code-group>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <!-- 화면 -->
+        <cc-page-title-bar>
+            <sc-button text="저장" on-click="onInsertData" hidden="[[!formula('inputState')]]" auth-s></sc-button>
+        </cc-page-title-bar>
+        
+        <table class="tb-form">
+            <tr>
+				<th><sc-label text="부속서류 유형"></sc-label></th>
+				<td>
+					<sc-label text="{{dataParam.appx_typ_ccd}}" i18n-disabled></sc-label>
+				</td>
+				<th><sc-label text="작성자 유형"></sc-label></th>
+				<td>
+					<sc-label text="{{dataParam.appx_crtr_typ_ccd}}" i18n-disabled></sc-label>
+				</td>
+            </tr>
+        </table>
+        
+        <sc-container class="vbox flex">
+            <!-- 템플릿 에디터 -->
+            <iframe id="contHtml" class="flex" style="width:100%"></iframe>
+        </sc-container>
+    </template>
+
+    <script>
+        Polymer({
+            is: "ep-sp-appform-detail",
+
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "부속서류 상세"
+				},
+                dataParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                
+                cntrItemList: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                
+                //코드
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            appx_typ_ccd: [],
+							appx_crtr_typ_ccd: []
+                        };
+                    }
+                }
+            },
+
+            formulas: {
+                inputState: function () {
+                	var pageStatus = this.get("dataParam").pageStatus;
+                    return pageStatus === "reg" || pageStatus === "mod";
+                }
+            },
+
+            initialized: function () {
+                var me = this;
+
+            },
+
+            load: function (data) {
+                var me = this;
+                me.set("dataParam", data);
+                me.setCodes();
+                me.searchAppData();
+                me.applyFormula();
+            },
+
+            onInsertData: function () {
+                var me = this;
+                
+                if(me.checkItemInput()){
+	                me.$.updateAppFormOrgn.body = {
+	                    form: me.get("dataParam"),
+	                    etcInfo: me.selectItem()
+	                };
+	                UT.request(me.$.updateAppFormOrgn);
+                }
+            },
+
+            completeupdateAppForm: function () {
+                var me = this;
+                UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+                me.onClose();
+            },
+
+            onClose: function () {
+                var me = this;
+
+                me.reset();
+                me.fire("close");
+            },
+
+            selectItem: function () {
+                var me = this;
+                var contHtml = me.$.contHtml.contentDocument;
+                var inputArr = contHtml.getElementsByTagName("input");
+                var textArr = contHtml.getElementsByTagName("textarea");
+                var item = {};
+                for (var i = 0; i < inputArr.length; i++) {
+                    if (inputArr[i].getAttribute("name") != null) {
+                        var name = inputArr[i].name;
+                        var inputNameArr = contHtml.getElementsByName(name);
+                        if( inputNameArr.length > 1){
+                        	var itemArr = [];
+                        	
+                        	for(var j = 0; j < inputNameArr.length; j++){
+                        		itemArr[j] = inputNameArr[j].value;
+                        	}
+                        	
+                        	item[name] = itemArr;
+                        }else{
+                        	item[name] = inputArr[i].value;	
+                        }
+                    }
+                }
+
+                for (var i = 0; i < textArr.length; i++) {
+                    if (textArr[i].getAttribute("name") != null) {
+                        var name = textArr[i].name;
+                        item[name] = textArr[i].value;
+                    }
+                }
+                return item;
+            },
+
+            setCodes: function () {
+                var me = this;
+                for (var i = 0; i < me.codes.appx_typ_ccd.length; i++) {
+                    if (me.codes.appx_typ_ccd[i].data == me.dataParam.appx_typ_ccd) {
+                        me.set("dataParam.paper_cls_label", me.codes.appx_typ_ccd[i].label);
+                    }
+                }
+                for (var i = 0; i < me.codes.appx_crtr_typ_ccd.length; i++) {
+                    if (me.codes.appx_crtr_typ_ccd[i].data == me.dataParam.appx_crtr_typ_ccd) {
+                        me.set("dataParam.att_cls_label", me.codes.appx_crtr_typ_ccd[i].label);
+                    }
+                }
+            },
+            //첨부서식 Text
+            searchAppData: function () {
+                var me = this;
+
+                me.$.findAppData.body = {
+                    pageStatus: me.get("dataParam.pageStatus"),
+                    cntr_appx_uuid: me.get("dataParam.cntr_appx_uuid")
+                };
+                UT.request(me.$.findAppData);
+            },
+            completefindAppData: function (e, res) {
+                var me = this;
+                var lastResponse = res.response;
+                
+                me.$.contHtml.contentDocument.body.innerHTML = (me.get("dataParam.pageStatus") === "view") ? lastResponse.appData.cntr_appx_ccmpld_cont : lastResponse.appData.cntr_appx_crng_cont;
+                me.set("cntrItemList", lastResponse.itemList);
+            },
+            checkItemInput: function () {
+            	var me = this;
+            	var cntrItemList = me.cntrItemList;
+            	var check_input = "";
+            	for(var a = 0; a < cntrItemList.length; a++){
+            		check_input += cntrItemList[a].cntr_cl_id + "|";
+            	}
+            	
+                var contHtml = me.$.contHtml.contentDocument;
+                var inputArr = contHtml.getElementsByTagName("input");
+                var textArr = contHtml.getElementsByTagName("textarea");
+                
+                for (var i = 0; i < inputArr.length; i++) {
+                	if(inputArr[i].value == ""){
+                		
+                		if(check_input.indexOf(inputArr[i].name, 0) > -1){
+                			UT.alert("STD.E9000");	//필수항목 입력여부를 확인해야 합니다.
+                			
+   						 	inputArr[i].style.border = "1.5px solid #FF0000";
+   						 	inputArr[i].focus();
+						 	return false;
+                		}
+                	}
+                }
+                
+				for (var i = 0; i < textArr.length; i++) {
+                	if(textArr[i].value == ""){
+                		
+                		if(check_input.indexOf(textArr[i].name, 0) > -1){
+                			UT.alert("STD.E9000");	//필수항목 입력여부를 확인해야 합니다.
+                			
+                			textArr[i].style.border = "1.5px solid #FF0000";
+                			textArr[i].focus();
+						 	return false;
+                		}
+                	}
+                }
+                
+                return true;
+            }
+        });
+    </script>
+</dom-module>

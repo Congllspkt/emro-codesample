@@ -1,0 +1,244 @@
+<sc-link rel="import" href="es-po-receipt-cnd-list.html"></sc-link>
+<sc-link rel="import" href="es-po-receipt-uprc-list.html"></sc-link>
+
+<dom-module id="es-po-receipt-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 코드 조회 -->
+		<sc-request-group init>
+			<!-- 사용자 구매 운영조직 조회 -->
+			<sc-ajax id="findListOperationOrganizationByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			
+			<!-- 내 구매그룹 코드조회 -->
+			<sc-ajax id="findListMyPurcGrp"
+					 url="findListMyPurcGrp.do"
+					 body="{{codes.myPurcGrpCdsParam}}"
+					 last-response="{{codes.myPurcGrpCds}}">
+			</sc-ajax>
+			<sc-code-group>
+				<!-- 공통코드 : 접수 상태 -->
+				<sc-code code="C086" value="{{codes.rcptStsCcd}}"></sc-code>
+				<!-- 공통코드 : 발주 진행상태 -->
+				<sc-code code="P252" value="{{codes.prgsStsCcd}}"></sc-code>
+				<!-- 공통코드 : 구매 유형 공통코드-->
+				<sc-code code="P045" value="{{codes.purcTypCcd}}"></sc-code>
+				<!-- 발주 유형 -->
+				<sc-code code="P056" value="{{codes.poTypCcd}}"></sc-code>
+				<!-- 발주 변경 유형 -->
+				<sc-code code="P070" value="{{codes.poChgTypCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-r,auth-s,auth-ra"></cc-auth-checker>
+		
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindList" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-multi-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{searchParam.oorg_cds}}"
+												 placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_req_dt}}" to-value="{{searchParam.to_req_dt}}"
+									  default-from-value="-1M" default-to-value="0d" string-date="false">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="구매 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.purcTypCcd}}" value="{{searchParam.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청자"></sc-label>
+				<cc-user-search id="userSearch" value="{{searchParam.req_pic_nm}}" result-field="usr_id" result-value="{{searchParam.req_pic_id}}"></cc-user-search>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="발주 담당자"></sc-label>
+				<cc-user-search id="userSearch" value="{{searchParam.po_pic_nm}}" result-field="usr_id" result-value="{{searchParam.po_pic_id}}"></cc-user-search>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="구매 그룹"></sc-label>
+				<sc-multi-combobox-field display-field="purc_grp_nm" value-field="purc_grp_cd" items="{{codes.myPurcGrpCds}}" value="{{searchParam.purc_grp_cds}}" placeholder="선택 없음"
+										 selected-all="true" enable-check-all="true" required="true"></sc-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="접수 상태"></sc-label>
+				<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.rcptStsCcd}}" value="{{searchParam.rcpt_sts_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="진행 상태"></sc-label>
+				<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.prgsStsCcd}}" value="{{searchParam.prgs_sts_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="요청 제목"></sc-label>
+				<sc-text-field value="{{searchParam.req_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-tab-navigation id="tabNavi" class="vbox flex" style="padding-top: 10px;">
+			<es-po-receipt-cnd-list id="cndList" title-text="RFX 및 구매계약 기준" codes="{{codes}}" search-param="{{searchParam}}"
+									on-show-dialog-reject="onShowDialogReject" on-close-dialog-reject="onCloseDialogReject"
+									on-show-dialog-change-purc-grp="onShowDialogChangePurcGrp" on-close-dialog-change-purc-grp="onCloseDialogChangePurcGrp"></es-po-receipt-cnd-list>
+			<es-po-receipt-uprc-list id="uprcList" title-text="단가계약 기준" codes="{{codes}}" search-param="{{searchParam}}"
+									 on-show-dialog-reject="onShowDialogReject" on-close-dialog-reject="onCloseDialogReject"
+									 on-show-dialog-change-purc-grp="onShowDialogChangePurcGrp" on-close-dialog-change-purc-grp="onCloseDialogChangePurcGrp"></es-po-receipt-uprc-list>
+		</sc-tab-navigation>
+		
+		<!-- 발주 요청 반려 사유 dialog -->
+		<sc-dialog id="dialog_reject" title-text="반려 사유" title-align="left" style="width:450px;height:280px" modal="true">
+			<cc-page-title-bar>
+				<sc-button text="요청 반려" on-click="onReturnReqs"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field id="dialog_reject_cause" class="h-150" max-length="500" required="true"></sc-textarea-field>
+		</sc-dialog>
+		
+		<!-- 구매그룹 변경 dialog -->
+		<sc-dialog id="dialog_change_purc_grp" title-text="구매 그룹 변경" title-align="left" style="width:450px;height:230px" modal="true">
+			<cc-page-title-bar>
+				<sc-button text="변경" on-click="onUpdatePurcGrpCd"></sc-button>
+			</cc-page-title-bar>
+			<cc-form-panel label-width="100">
+				<cc-fieldset>
+					<sc-label text="구매 그룹"></sc-label>
+					<cc-purc-grp id="dialog_change_purc_grp_cd" value="{{dialog.purc_grp_nm}}" result-value="{{dialog.purc_grp_cd}}" purc-grp-typ="PURC" placeholder="검색" required="true">
+					</cc-purc-grp>
+				</cc-fieldset>
+			</cc-form-panel>
+		</sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-po-receipt-list",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							myPurcGrpCdsParam: {
+								purc_grp_typ_ccd: "PURC"
+							}
+						};
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						var user = SCSessionManager.currentUser;
+						return {
+							rcpt_sts_ccds: ["RCPT_WTG", "RCPT"],
+							prgs_sts_ccds: ["WTG"],
+							po_pic_id: user.usr_id,
+							po_pic_nm: user.usr_nm
+						};
+					}
+				}
+			},
+			
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				
+				if(UT.isNotEmpty(param)) {
+					// 컴포넌트 별 default 값이 셋팅되어 있을 수 있으므로 파라미터로 넘어온 값만 셋팅한다.
+					for(var key in param) {
+						if(param.hasOwnProperty(key)) {
+							// me.get("searchParam")[key] = param[key];
+							var paramKey = "searchParam." + key;
+							me.set(paramKey, param[key]);
+						}
+					}
+				}
+				me.applyFormula();
+				me.onFindList();
+			},
+			
+			get isNaviRfxAndCntrForm() {
+				var me = this;
+				return me.$.tabNavi.selectedItem.id === "cndList";
+			},
+			
+			onFindList: function() {
+				var me = this;
+				//유효성검사
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				if(me.isNaviRfxAndCntrForm) {
+					me.$.cndList.search();
+				} else {
+					me.$.uprcList.search();
+				}
+			},
+			
+			onShowDialogReject: function() {
+				var me = this;
+				//사유 초기화
+				me.$.dialog_reject_cause.value = "";
+				me.$.dialog_reject.show();
+			},
+			
+			onCloseDialogReject: function() {
+				var me = this;
+				me.$.dialog_reject.close();
+			},
+			
+			onReturnReqs: function() {
+				var me = this;
+				if(!me.$.dialog_reject_cause.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var rejectCause = me.$.dialog_reject_cause.value;
+				if(me.isNaviRfxAndCntrForm) {
+					me.$.cndList.onReturnReqs(rejectCause);
+				} else {
+					me.$.uprcList.onReturnReqs(rejectCause);
+				}
+			},
+			
+			onShowDialogChangePurcGrp: function() {
+				var me = this;
+				//사유 초기화
+				me.set("dialog", {});
+				me.$.dialog_change_purc_grp.show();
+			},
+			
+			onCloseDialogChangePurcGrp: function() {
+				var me = this;
+				me.$.dialog_change_purc_grp.close();
+				me.set("dialog", {});
+			},
+			
+			onUpdatePurcGrpCd: function() {
+				var me = this;
+				if(UT.isEmpty(me.$.dialog_change_purc_grp_cd.value)) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				if(me.isNaviRfxAndCntrForm) {
+					me.$.cndList.onUpdatePurcGrpCd(me.get("dialog.purc_grp_cd"));
+				} else {
+					me.$.uprcList.onUpdatePurcGrpCd(me.get("dialog.purc_grp_cd"));
+				}
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,313 @@
+<dom-module id="ep-ticket-method-mgt">
+	<style>
+		:host{
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언부 -->
+		<sc-request-group id="codes" init>
+            <sc-ajax id="findListAllMainWork"
+				url="findListAllMainWork.do"
+				last-response="{{codes.mainWork}}">
+			</sc-ajax>
+        </sc-request-group>
+        
+        <!-- ticket method 목록 조회 -->
+		<sc-ajax id="findListTaskMethod"
+				 url="findListTaskMethod.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- ticket method 삭제 -->
+		<sc-ajax id="deleteTaskMethods"
+				 url="deleteTaskMethods.do">
+		</sc-ajax>
+		
+		<!-- ticket method 저장 -->
+		<sc-ajax id="saveTaskMethods"
+				 url="saveTaskMethods.do">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-search-container on-search="onFindList" auth-r>
+			<table>
+				<colgroup>
+					<col style="width:140px"></col>
+					<col></col>
+					<col style="width:120px"></col>
+					<col></col>
+				</colgroup>
+				<tr>
+					<th>
+						<sc-label text="Ticket Method 설명"></sc-label>
+					</th>
+					<td>
+						<sc-text-field value="{{searchParam.tick_method_desc}}" max-length="200" on-enter="onFindList"></sc-text-field>
+					</td>
+					<th>
+						<sc-label text="대표 Main Work"></sc-label>
+					</th>
+					<td>
+						<sc-combobox-field display-field="label" value-field="data" items="{{codes.mainWork}}" value="{{searchParam.rep_main_work_id}}"  placeholder="전체"></sc-combobox-field>
+					</td>
+				</tr>
+				<tr>
+					<th>
+						<sc-label text="Ticket Class명"></sc-label>
+					</th>
+					<td>
+						<sc-text-field value="{{searchParam.tick_clss_nm}}" max-length="200" on-enter="onFindList"></sc-text-field>
+					</td>
+					<th>
+						<sc-label text="Ticket Method명"></sc-label>
+					</th>
+					<td>
+						<sc-text-field value="{{searchParam.tick_method_nm}}" max-length="200" on-enter="onFindList"></sc-text-field>
+					</td>
+				</tr>
+			</table>
+		</cc-search-container>
+		
+		<sc-grid id="gridPanel" class="flex" editable="true"
+				 use-state="true"
+				 use-selection="true"
+				 use-dummy="false">
+			<cc-grid-toolbar title-text="Ticket Method 목록">
+				<sc-button	text="수정모드"		on-click="onChangeMode"			hidden="{{formula('isEditMode')}}"		auth-s	data-args="edit"></sc-button>
+				<sc-button	text="선택"			on-click="onSelectTicketMethod"	hidden="{{formula('isEditMode')}}"		auth-s></sc-button>
+				<sc-button	text="선택모드"		on-click="onChangeMode"			hidden="{{!formula('isEditMode')}}"		auth-s	data-args="select"></sc-button>
+				<sc-button	text="추가"			on-click="onAddTicketMethod"	hidden="{{!formula('isEditMode')}}"		auth-s></sc-button>
+				<sc-button	text="삭제"			on-click="onDeleteTicketMethod"	hidden="{{!formula('isEditMode')}}"		auth-s></sc-button>
+				<sc-button	text="저장"			on-click="onSaveTicketMethod"	hidden="{{!formula('isEditMode')}}"		auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column		data-field="tick_method_desc"	header-text="Ticket Method 설명"	width="200"	text-align="left"	editable="{{formula('isEditMode')}}"	max-length="200"	required="true"></sc-data-column>
+				<sc-data-column		data-field="tick_clss_nm"		header-text="Ticket Class명"		width="150"	text-align="left"	editable="{{formula('isEditMode')}}"	max-length="200"	required="true"></sc-data-column>
+				<sc-data-column		data-field="tick_method_nm"		header-text="Ticket Method명"		width="150"	text-align="left"	editable="{{formula('isEditMode')}}"	max-length="200"	required="true"></sc-data-column>
+				<sc-combobox-column	data-field="rep_main_work_id"	header-text="대표 Main Work"		width="150" text-align="center"	editable="{{formula('isEditMode')}}"
+									display-field="label"			value-field="data"					items="{{codes.mainWork}}"></sc-combobox-column>
+				<sc-data-column		data-field="cnt_map_work"		header-text="업무 Method 연결"		width="120"	text-align="right"	editable="false"	data-type="number"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field	data-field="tick_method_id"	data-type="text"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+	Polymer({
+			is : 'ep-ticket-method-mgt',
+			properties : {
+				titleText: {
+					type: String,
+					value: "Ticket Method 관리"
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							mainWork: []
+						};
+					},
+					reset: false
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				mode: {
+					type: Object,
+					value: function() {
+						return "select";
+					}
+				}
+			},
+			formulas: {
+				isEditMode: function() {
+					return this.mode === "edit";
+				}
+			},
+			/************************************************** 
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized : function() {
+				var me = this;
+			},
+			load: function(param) {
+				 var me = this;
+				 
+				 if(UT.isNotEmpty(param.rep_main_work_id)) {
+					 me.set("searchParam.rep_main_work_id", param.rep_main_work_id);
+				 }
+				 me.onFindList();
+				 me.applyFormula();
+			},
+			// 조회
+			onFindList: function() {
+				var me = this;
+				
+				UT.request(me.$.findListTaskMethod, function(e, res) {
+					me.$.gridPanel.setDataProvider(res.response);
+				});
+			},
+			/**************************************************
+			 * 그리드 toolbar 버튼 이벤트
+			 ****************************************************/
+			// 모드 변경 버튼 클릭
+			onChangeMode: function(e) {
+				var me = this,
+					mode = e.target.dataset.args;
+				
+				var changeMode = function(mode) {
+					me.set("mode", mode);
+					me.applyFormula("isEditMode");
+				};
+				
+				if(mode === "select") {
+					var provider = me.$.gridPanel.getDataProvider(),
+	            		newItems = provider.getNewItems(),
+	            		updateItems = provider.getUpdateItems();
+					
+					if(newItems.length + updateItems.length > 0) {
+						UT.confirm("STD.N3900", function() {	// 변경된 정보가 있습니다. 저장하지 않고 진행하시겠습니까?
+							me.onFindList();
+							changeMode(mode);
+						});
+					} else {
+						changeMode(mode);
+					}
+				} else {
+					changeMode(mode);
+				}
+			},
+			// 선택 버튼 클릭
+			onSelectTicketMethod: function(){
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+	            	UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+	            	return;
+	            }
+				me.fire("selected-items", checked);
+			},
+			// 추가 버튼 클릭
+			onAddTicketMethod: function() {
+				var me = this;
+            	var provider = me.$.gridPanel.getDataProvider();
+            	provider.addItemAt(0, {});
+			},
+			// 삭제 버튼 클릭
+			onDeleteTicketMethod: function() {
+				var me = this;
+            	var provider = me.$.gridPanel.getDataProvider();
+            	var checked = provider.selectionCheckedItems();
+            	
+            	if(checked.length === 0) {
+            		UT.alert("STD.N1600"); // "선택된 항목이 없습니다."
+            		return;
+            	}
+            	
+            	var hasMappingData = false;
+            	for(var i=0, len=checked.length; i<len; i++) {
+            		var ticketMethod = checked[i];
+            		if(UT.isNotEmpty(ticketMethod["cnt_map_work"]) && ticketMethod["cnt_map_work"] > 0) {
+            			hasMappingData = true;
+            			break;
+            		}
+            	}
+            	if(hasMappingData) {
+            		UT.alert("STD.WRK1028");	// 업무 Method에 매핑된 데이터는 삭제할 수 없습니다.
+            		return;
+            	}
+            	
+            	UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+            		var deleteMethods = provider.removeItems();
+                    if(deleteMethods.length > 0) {
+	            		me.$.deleteTaskMethods.body = {
+	            			"deleteTaskMethods" : deleteMethods
+	            		};
+						UT.request(me.$.deleteTaskMethods, function(e, res) {
+							var result = res.response;
+							if(result.result_status === "S") {
+								UT.alert("STD.N2500");	// "삭제 하였습니다."
+								me.onFindList();
+							} else if(result.result_status === "U") {
+								UT.alert("STD.WRK1028");	// 업무 Method에 매핑된 데이터는 삭제할 수 없습니다.
+								me.onFindList();
+							}
+						});
+                    }
+				});
+			},
+			// 저장 버튼 클릭
+			onSaveTicketMethod: function() {
+				var me = this;
+            	var provider = me.$.gridPanel.getDataProvider(),
+            		newItems = provider.getNewItems(),
+            		updateItems = provider.getUpdateItems();
+            	
+            	if(!me.$.gridPanel.validate()) {
+            		UT.alert("STD.E0000");	// 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+            		return;
+            	}
+            	
+            	if(newItems.length + updateItems.length === 0) {
+            		UT.alert("STD.N1700");	// "변경된 내용이 없습니다."
+            		return;
+            	}
+            	
+            	// 중복 method 알림 메시지
+            	var makeMessageByDupMethods = function(dupMethods) {
+            		var msg = me.translate("STD.E1042", null, (me.translate("Ticket Class명") + " " + me.translate("Ticket Method명")) );	 // "중복된 '{0}'(이)가 존재합니다."
+	        		for(var i=0, len=dupMethods.length; i<len; i++) {
+	        			var data = dupMethods[i];
+				    	msg += "<br/>" + "[" + me.translate("Ticket Class명") + ": " + data["tick_clss_nm"] + ", " + me.translate("Ticket Method명") + ": " + data["tick_method_nm"] + "]";
+				    }
+	        		return msg;
+                }
+            	
+            	// 중복 method 체크
+            	var dupMethods = [];
+            	var allItems = provider.getItems();
+            	for(var i=0, len=allItems.length; i<len-1; i++) {
+            		var ticketMethod = allItems[i];
+            		for(var j=i+1; j<len; j++) {
+            			var compTicketMethod = allItems[j];
+            			if((ticketMethod["tick_clss_nm"] === compTicketMethod["tick_clss_nm"]) && (ticketMethod["tick_method_nm"] === compTicketMethod["tick_method_nm"])) {
+            				dupMethods.push(ticketMethod);
+            				break;
+            			}
+            		}
+            	}
+            	if(dupMethods.length > 0) {
+            		UT.alert(makeMessageByDupMethods(dupMethods), null, true);
+            		return;
+            	}
+            	
+            	UT.confirm("STD.N1200", function() {	// "저장 하시겠습니까?"
+	            	me.$.saveTaskMethods.body = {
+	            		"insertTicketMethods" : newItems,
+	            		"updateTicketMethods" : updateItems
+	            	};
+			        UT.request(me.$.saveTaskMethods, function(e, res) {
+			        	var result = res.response;
+			        	if(result.result_status === "S") {
+			        		UT.alert("STD.N2400");	// "저장 하였습니다."
+							me.onFindList();
+			        	} else if(result.result_status === "D") {
+			        		UT.alert(makeMessageByDupMethods(result.result_data), null, true);
+			        	}
+			        });
+           		});
+			}
+		});
+	</script>
+</dom-module>

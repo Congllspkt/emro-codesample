@@ -1,0 +1,192 @@
+<dom-module id="es-sp-asn-list">
+	<!--
+	/**
+	 *
+	 *	@description : 납품예정 현황
+	 *  <pre>
+	 * </pre>
+	 * @FileName :
+	 * @Since 2017. 01. 04. renew 9.1
+	 *        2023. 03. 21. renew 9.2
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		-->
+		<!-- 공통코드 -->
+		<sc-code-group>
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>      <!-- 통화 공통코드 -->
+			<sc-code code="P062" value="{{codes.asnStsCcd}}"></sc-code>   <!-- 납품예정 상태(협력사) -->
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-r, auth-p"></cc-auth-checker>
+		
+		<!-- 목록 조회 -->
+		<sc-ajax id="searchAsn" url="searchAsn.do" body="{{searchParam}}" on-response="completeSearchAsn"></sc-ajax>
+		<!-- 출력 정보 조회 -->
+    	<sc-ajax id="findListDocumentOutputSpAsn" url="findListDocumentOutputSpAsn.do"></sc-ajax>
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onSearchAsn" auth-r validation-group="search">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cd}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="선택 없음" required="true"></cc-sp-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납품예정 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_asn_dt}}" to-value="{{searchParam.to_asn_dt}}" default-from-value="-1M" default-to-value="0d" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납품예정 번호"></sc-label>
+				<sc-text-field value="{{searchParam.asn_no}}" on-enter="onEnterSearch"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="납품예정 상태"></sc-label>
+				<sc-combobox-field placeholder="전체" items="{{codes.asnStsCcd}}" display-field="label" value-field="data" value="{{searchParam.asn_sts_ccd}}"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="발주 번호"></sc-label>
+				<cc-multi-text-field title="발주 번호" value="{{searchParam.po_no}}" multi-value="{{searchParam.po_nos}}" on-enter="onEnterSearch"></cc-multi-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="gridPanel" class="flex" use-state="false" use-selection="true" on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="인쇄"	on-click="onDocumentOutput" auth-p></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="170" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="asn_sts_ccd" header-text="납품예정 상태" width="100" display-field="label" value-field="data" items="{{codes.asnStsCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="asn_no" header-text="납품예정 번호" width="120" style-name="link"></sc-data-column>
+				<sc-data-column data-field="asn_tit" header-text="제목" width="300" text-align="left"></sc-data-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="asn_amt" header-text="납품예정 금액" width="140" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+				<sc-date-column data-field="asn_dt" header-text="납품예정 일자" width="100"></sc-date-column>
+			</sc-grid-columns>
+		</sc-grid>
+	</template>
+	
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-sp-asn-list",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							curCcd: [],
+							asnStsCcd: []
+						}
+					}
+				},
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+				me.set("codes.oorgCd", me.$.operorgcombobox.codes.operOrgCd);
+				me.load();
+			},
+			
+			//그리드 셀 클릭이벤트
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item,
+					fieldName         = item.dataField,
+					itemIndex         = item.rowIndex;
+				
+				if(fieldName === "asn_no") {
+					me.fire("show-detail", data);
+				}
+			},
+			onEnterSearch: function() {
+				var me = this;
+				
+				me.onSearchAsn();
+			},
+			//load
+			load: function() {
+				this.onSearchAsn();
+			},
+			// 검색(조회)
+			onSearchAsn: function() {
+				var me = this;
+				
+				// 조회조건 필수값 체크
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(me.$.searchAsn);
+			},
+			
+			// 검색(조회) 완료
+			completeSearchAsn: function(e, res) {
+				var me = this;
+				me.$.gridPanel.setDataProvider(res.response);
+			},
+			
+			// 인쇄물 복수 건 조회
+            onDocumentOutput: function(data, item){
+            	var me = this;
+            	var checked = me.$.gridPanel.getDataProvider().selectionCheckedItems();
+            	var asnUuidList = [];
+            	
+	        	if(UT.isEmpty(checked)){
+                	UT.alert("STD.N1600");
+                	return;
+                }else{
+                	for(var idx in checked){
+                		asnUuidList.push(checked[idx].asn_uuid);
+                	}
+               		me.$.findListDocumentOutputSpAsn.body = {
+               				asn_uuid : asnUuidList
+       	                };
+                   	UT.request(me.$.findListDocumentOutputSpAsn, function(e, res){
+                   		var result = res.response;
+                   		
+           				me.set("docOutpInfo", result.resultData);
+           				
+           				var datasetList = me.get("docOutpInfo.datasetList");
+                		var projectName = me.get("docOutpInfo.param.projectName");
+                		var formName = me.get("docOutpInfo.param.formName");
+                		var url = me.get("docOutpInfo.param.url");
+                    	// UBIFORM 호출
+                    	UT.openUBIFORM(projectName, formName, datasetList, url);
+                   	});
+                }
+            }
+		});
+	</script>
+
+</dom-module>

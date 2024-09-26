@@ -1,0 +1,327 @@
+<sc-link rel="import" href="/ui/sp/edoc/document/es-sp-edoc-template.html"></sc-link>
+<sc-link rel="import" href="/ui/sp/edoc/document/es-sp-edoc-user-file.html"></sc-link>
+<sc-link rel="import" href="/ui/sp/eform/popup/ep-eform-sign.html"></sc-link>
+
+<dom-module id="es-sp-contract-document">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 부속서류 저장 -->
+		<sc-ajax id="saveAppendix"
+				url="saveAppendix.do"
+				on-response="completeSaveAppendix">
+		</sc-ajax>
+		<!-- Docusign Envelope 조회 -->
+		<sc-ajax id="findDocusignEnvelope"
+				url="findDocusignEnvelope.do"
+				on-response="completeFindDsgnInfo">
+		</sc-ajax>
+		<!-- AdobeSign 서명 url 조회 -->
+		<sc-ajax id="getSpAdobeSignUrlInfo"
+				 url="getSpAdobeSignUrlInfo.do"
+				 body="{{cntrInfo}}"
+				 on-response="completeGetSpAdobeSignUrlInfo">
+		</sc-ajax>
+		<!-- AdobeSign 진행상태 체크 -->
+		<sc-ajax id="checkAdobeSignStatus"
+				 url="checkAdobeSignStatus.do"
+				 on-response="completeCheckAdobeSignStatus">
+		</sc-ajax>
+		
+		<!-- 공통코드 -->
+		
+		
+		<!-- 화면 -->
+		<sc-pages id="pages" class="fit">
+			<div id="blank"></div>
+			<template>
+				<es-sp-edoc-template id="edocTmpl"></es-sp-edoc-template>
+			</template>
+			<template>
+				<es-sp-edoc-user-file id="edocUsrFile"></es-sp-edoc-user-file>
+			</template>
+		</sc-pages>
+	</template>
+
+	<script>
+		Polymer({
+			is: "es-sp-contract-document",
+			properties: {
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+				isTmplUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "TMPL";
+				},
+				isUserFileUse: function() {
+					return this.get("cntrInfo.cntr_tmpl_typ_ccd") === "USR_FILE";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("cntrInfo", data);
+				me.applyFormula();
+				me.loadDetail();
+			},
+			
+			loadDetail: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				if(me.formula("isTmplUse")) {
+					me.$.pages.selectItem(me.$.edocTmpl);
+					me.$.edocTmpl.load(cntrInfo);
+					
+				} else if(me.formula("isUserFileUse")) {
+					me.$.pages.selectItem(me.$.edocUsrFile);
+					me.$.edocUsrFile.load(cntrInfo);
+				}
+			},
+			
+			// 부속서류 검토 요청
+			onSaveAppendix: function() {
+				var me = this;
+				if(me.$.edocTmpl.validateOnSaveAppx()) {
+					UT.confirm("STD.EDO3007", function(){	//부속서류 검토 요청하시겠습니까?
+						me.$.saveAppendix.body = me.get("cntrInfo");
+						UT.request(me.$.saveAppendix);
+					});
+				}
+			},
+			
+			completeSaveAppendix: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.success) {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.fire("find-info");
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 공동인증서 서명
+			onSignPKI: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				var url = "sp/edoc/contract/SpEcontractController/openCertificateSelectionPage.do";
+				var param = [
+					{
+					ecntr_uuid  : cntrInfo.ecntr_uuid,
+					callbackUrl : url,
+					installStatus : "BEFORE"
+					}
+				];
+				UT.popupJspByPost(url, param, me, "630", "680", {
+					"close": function (popup, e) {
+						var result = e.detail;
+						if (result === "E") {
+							UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+						} else if(result === "S"){
+							UT.alert("STD.N1500"); // 요청을 완료하였습니다.
+						} else if(result === "N") {
+							UT.alert("STD.EDO1065"); // 등록되지 않은 인증서입니다. 인증서를 다시 등록하여 주세요.<br/>(메뉴:협력사정보>기본 정보관리>인증서등록버튼)
+						} else if(result === "U") {
+							UT.alert("STD.EDO1069"); // 유효기간이 만료된 인증서입니다. 인증서를 다시 등록하여 주세요.<br/>(메뉴:협력사정보>기본 정보관리>인증서등록버튼)
+						} else if(result === "ES") {
+							UT.alert("STD.EDO1089"); // 이미 서명을 진행중인 협력사가 존재합니다. <br/>서명을 진행중인 협력사가 서명을 완료한 이후에 서명이 가능합니다.
+						}
+						popup.close();
+						me.fire("find-info");
+					}
+				}, {titleText : "전자서명", resizable: false, draggable: false});
+			},
+			
+			// Docusign 서명
+			onSignDocusign: function() {
+				var me = this;
+				me.findDocusignEnvelope();
+			},
+			
+			// 간편 서명
+			onSignEFormsign: function() {
+				var me = this;
+				var eformPopup = UT.popup("ep-eform-sign", me, '90%', '90%', {
+					"close" : function(popup, e) {
+						popup.close();
+						me.fire("find-info");
+					}
+				},{titleText : "간편 서명"});
+				
+				eformPopup.show();
+				eformPopup.getWindowContent().load({ecntr_uuid: me.get("cntrInfo.ecntr_uuid")});
+			},
+			
+			// 서명 확인
+			onConfirmSign: function () {
+				var me = this;
+				if(me.formula("isTmplUse")) {
+					me.$.edocTmpl.onConfirmSign();
+				} else if(me.formula("isUserFileUse")) {
+					me.$.edocUsrFile.onConfirmSign();
+				}
+			},
+			
+			// PDF 미리보기
+			onPreviewPdf: function() {
+				var me = this;
+				me.$.edocTmpl.onPreviewPdf();
+			},
+			
+			// 완료 계약서 다운로드
+			onDownloadPdf: function() {
+				var me = this;
+				DL.downloadByGrpCd(me.get("cntrInfo.sgncmpld_cntrdoc_athg_uuid"));
+			},
+			
+			// 이력 문서 다운로드
+			onDownloadHistPdf: function() {
+				var me = this;
+				DL.downloadByGrpCd(me.get("cntrInfo.cntr_histrec_athg_uuid"));
+			},
+			
+			// docusign envelope 조회
+			findDocusignEnvelope: function() {
+				var me = this;
+				me.$.findDocusignEnvelope.body = {
+					dsgn_uuid: me.get("cntrInfo.dsgn_uuid"),
+					return_ui_id: "es-sp-contract-document"
+				};
+				UT.request(me.$.findDocusignEnvelope);
+			},
+			
+			completeFindDsgnInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					me.popupDocusign(result.resultData.url);
+				} else {
+					UT.alert("STD.E9999"); //오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// docusign popup
+			popupDocusign: function(url) {
+				var width = "1200";
+				var height = "900";
+				
+				var left = (screen.availWidth / 2) - (width / 2) + "";
+				var top = "100";
+				window.open(url, "docusignWindow","width=1100,height=800,top="+top+",left="+left);
+			},
+			
+			// docusign popup callback (envelope)
+			docusignCallBack: function(event, procType, cntrId) {
+				var me = this;
+				
+				if(event === "signing_complete") {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+				} else if(event === "decline") {
+					UT.alert("STD.EDO1111"); //거부 하였습니다.
+				}
+				me.fire("find-info");
+			},
+			
+			// adobesign 서명
+			onSignAdobeSign: function() {
+				var me = this;
+				UT.request(me.$.getSpAdobeSignUrlInfo);
+			},
+			
+			completeGetSpAdobeSignUrlInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S" ) {
+					me.openAdobeSignPopup(result.resultData);
+				} else {
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// adobesign url 정보 가져오기
+			onViewAdobeSign: function(popupType, viewName) {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				// adobesign url 정보 받아오기
+				me.$.getAdobeSignUrlInfo.body = {
+					agreement_id : cntrInfo.agreement_id,
+					popup_type: "view",
+					view_name : "DOCUMENT",
+				};
+				
+				UT.request(me.$.getAdobeSignUrlInfo)
+			},
+			
+			// adobesign 서명 popup 호출
+			openAdobeSignPopup: function(data) {
+				var me = this;
+				var width = "1100";
+				var left = (screen.availWidth / 2) - (width / 2) + "";
+				var top = "100";
+				
+				var adobeSignPopup = window.open(data.url, "adobesignWindow", "width=1100,height=800,top="+top+",left="+left);
+				
+				var timer = setInterval(function() {
+					if(adobeSignPopup.closed) {
+						clearInterval(timer);
+						// me.callAdobeSignLogout();
+					}
+				})
+			},
+			
+			// adobesign 로그아웃
+			callAdobeSignLogout: function() {
+				var logoutUrl = "https://secure.na4.adobesign.com/public/logout";
+				
+				var logoutPopup = window.open(logoutUrl, "adobesignWindow");
+				setTimeout(function() {
+					logoutPopup.close()
+				}, 1000);
+			},
+			
+			// adobesign 진행상태 체크
+			checkAdobeSignStatus: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				me.$.checkAdobeSignStatus.body = {
+					ecntr_uuid: cntrInfo.ecntr_uuid,
+					agreement_id: cntrInfo.agreement_id
+				}
+				
+				UT.request(me.$.checkAdobeSignStatus)
+			},
+			
+			completeCheckAdobeSignStatus: function() {
+				var me = this;
+				me.fire("find-info");
+			},
+			
+			// adobesign callback
+			adobesignCallback: function(event) {
+				var me = this;
+				if(event === "completed") {
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+				} else if(event === "declined") {
+					UT.alert("STD.EDO1111"); //거부 하였습니다.
+				}
+				me.fire("find-info");
+			}
+		});
+	</script>
+</dom-module>

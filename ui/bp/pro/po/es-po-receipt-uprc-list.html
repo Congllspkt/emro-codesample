@@ -1,0 +1,641 @@
+<sc-link rel="import" href="/ui/bp/pro/shared/ep-po-item.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/pro/po/ep-po-receipt-uprc-list.html"></sc-link>
+
+<dom-module id="es-po-receipt-uprc-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findListPoReceiptItemByUprcItem"
+				 url="findListPoReceiptItemByUprcItem.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+		
+		<sc-ajax id="receiptUprcItemReqs"
+				 url="receiptUprcItemReqs.do"
+				 on-response="completeReceiptUprcItemReqs">
+		</sc-ajax>
+		
+		<sc-ajax id="returnUprcItemReqs"
+				 url="returnUprcItemReqs.do"
+				 on-response="completeReturnUprcItemReqs">
+		</sc-ajax>
+		
+		<!-- 구매그룹 변경 -->
+		<sc-ajax id="changeUprcItemPurcGrp"
+				 url="changeUprcItemPurcGrp.do"
+				 on-response="completeUprcItemChangePurcGrp">
+		</sc-ajax>
+		
+		<sc-ajax id="createUprccntrPo"
+				 url="createUprccntrPo.do"
+				 on-response="completeCreateUprccntrPo">
+		</sc-ajax>
+		
+		<sc-grid id="gridPanel" class="flex" title-text="단가계약 기준" use-dummy="false" editable="false"
+				 data-provider="{{resultList}}"
+				 use-state="false"
+				 on-item-click="onItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="동일 요청 필터" on-click="onSelectedItem" auth-s></sc-button>
+				<sc-button text="요청 접수" on-click="onReceiveItems" auth-s></sc-button>
+				<sc-button text="요청 반려" on-click="onShowDialogPrReturn" auth-s></sc-button>
+				<sc-button text="구매 그룹 변경" on-click="onShowDialogChangePurcGrpCd" auth-s></sc-button>
+				<sc-button text="발주 생성" on-click="onCreatePo" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="150" text-align="center" display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="purc_typ_ccd" header-text="구매 유형" width="80" text-align="center" display-field="label" value-field="data" items="{{codes.purcTypCcd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="rcpt_sts_ccd" header-text="접수 상태" width="90" text-align="center" display-field="label" value-field="data" items="{{codes.rcptStsCcd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="prgs_sts_ccd" header-text="진행 상태" width="110" text-align="center" display-field="label" value-field="data" items="{{codes.prgsStsCcd}}" item-style-function="onItemStyleFn" item-label-function="onItemLabelFn"></sc-combobox-column>
+				<sc-data-column data-field="req_no" header-text="구매요청 번호" width="120" text-align="center" style-name="link"></sc-data-column>
+				<sc-data-column data-field="req_revno" header-text="차수" width="50" text-align="center" data-type="number"></sc-data-column>
+				<sc-data-column data-field="req_lno" header-text="항번" width="50" text-align="center" data-type="number"></sc-data-column><!--line_no-->
+				<sc-data-column data-field="sg_cd" header-text="SG 코드" width="80" text-align="center" visible="[[formula('existModuleVD')]]"></sc-data-column>
+				<sc-data-column data-field="sg_oper_nm" header-text="SG 명" width="120" text-align="left" visible="[[formula('existModuleVD')]]"></sc-data-column>
+				<sc-group-column header-text="품목 정보" width="850">
+					<sc-data-column data-field="item_cd" header-text="품목 코드" width="100" text-align="center"></sc-data-column>
+					<sc-group-column hide-child-headers="true" header-text="품목 명" width="280">
+						<sc-data-column data-field="disp_item_nm" width="200" text-align="left"></sc-data-column>
+						<sc-image-column data-field="img_item_cd" image-change-function="onImageChangeFn" width="30" text-align="center"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column hide-child-headers="true" header-text="품목 규격" width="280">
+						<sc-data-column data-field="item_spec" width="200" text-align="left"></sc-data-column>
+						<sc-image-column data-field="img_dtl_spec" width="30" text-align="center" image-change-function="onImageChangeFn"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column data-field="uom_ccd" header-text="UOM" width="60" text-align="center"></sc-data-column>
+					<sc-checkbox-column data-field="tl_yn" header-text="Touchless 여부" width="100" editable="false" un-checked-value="N" checked-value="Y" display-checkbox="false"></sc-checkbox-column>
+					<sc-checkbox-column data-field="qta_yn" header-text="쿼터 여부" width="60" editable="false" un-checked-value="N" checked-value="Y" display-checkbox="false"></sc-checkbox-column>
+				</sc-group-column>
+				<sc-image-column header-text="협력사 선택 및 물량 배분" data-field="img_sel_cntr" width="160" text-align="center" image-change-function="onImageChangeFn"></sc-image-column>
+				<!--<sc-group-column header-text="단가계약 정보" width="460">
+					<sc-group-column hide-child-headers="true" header-text="단가계약 연결" width="160">
+						<sc-data-column data-field="cntr_no" width="130" text-align="center" item-label-function="onItemLabelFn"></sc-data-column>
+						<sc-image-column data-field="img_sel_cntr" width="30" text-align="center" image-change-function="onImageChangeFn"></sc-image-column>
+					</sc-group-column>
+					<sc-group-column hide-child-headers="true" header-text="협력사" width="300">
+						<sc-data-column data-field="vd_cd" width="100"></sc-data-column>
+						<sc-data-column data-field="disp_vd_nm" width="200" text-align="left"></sc-data-column>
+					</sc-group-column>
+				</sc-group-column>-->
+				<sc-data-column data-field="req_qty" header-text="요청 수량" width="80" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+				<sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+				<sc-data-column data-field="disp_req_pic_nm" header-text="요청자" width="120" text-align="center"></sc-data-column><!--구매요청담당자명-->
+				<sc-date-column data-field="req_dt" header-text="요청 일자" width="100" text-align="center"></sc-date-column>
+				<sc-data-column data-field="purc_grp_cd" header-text="구매 그룹" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="disp_purc_grp_nm" header-text="구매 그룹 명" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="disp_po_pic_nm" header-text="발주 담당자" width="120" text-align="center"></sc-data-column>
+				<sc-data-column data-field="req_tit" header-text="요청 제목" width="300" text-align="left"></sc-data-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" text-align="center" display-field="data" value-field="data" items="{{codes.commCurCd}}"></sc-combobox-column>
+				<sc-data-column data-field="req_uprc" header-text="요청 단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+				<sc-data-column data-field="req_amt" header-text="요청 금액" width="140" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+				<sc-date-column data-field="req_dlvy_dt" header-text="요청 납품 일자" width="100" text-align="center"></sc-date-column>
+				<sc-date-column data-field="const_st_dt" header-text="공사 시작 일자" width="100" text-align="center"></sc-date-column><!--수행시작일-->
+				<sc-date-column data-field="const_exp_dt" header-text="공사 종료 일자" width="100" text-align="center"></sc-date-column><!--수행종료일-->
+				<sc-data-column data-field="dlvy_plc" header-text="납품 장소" width="150" text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="po_req_item_rcpt_uuid"></sc-grid-field>
+				<sc-grid-field data-field="req_item_uuid"></sc-grid-field>
+				<sc-grid-field data-field="item_oorg_cd"></sc-grid-field>
+				<sc-grid-field data-field="item_cd"></sc-grid-field>
+				<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+				<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+				<sc-grid-field data-field="req_uuid"></sc-grid-field>
+				<sc-grid-field data-field="req_doc_typ_ccd"></sc-grid-field>
+				<sc-grid-field data-field="wh_ccd"></sc-grid-field>
+				<sc-grid-field data-field="po_pic_id"></sc-grid-field>
+				<sc-grid-field data-field="gr_pic_id"></sc-grid-field>
+				<sc-grid-field data-field="pr_item_uuid"></sc-grid-field>
+				<sc-grid-field data-field="pr_uuid"></sc-grid-field>
+				<sc-grid-field data-field="pr_no"></sc-grid-field>
+				<sc-grid-field data-field="pr_revno"></sc-grid-field>
+				<sc-grid-field data-field="pr_lno"></sc-grid-field>
+				<sc-grid-field data-field="cntr_uuid"></sc-grid-field>
+				<sc-grid-field data-field="cntr_no"></sc-grid-field>
+				<sc-grid-field data-field="cntr_revno"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_uuid"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_info_uuid"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_item_uuid"></sc-grid-field>
+				<sc-grid-field data-field="purc_cntr_item_lno"></sc-grid-field>
+				<sc-grid-field data-field="aloc_repre_cntr_no"></sc-grid-field>
+				<sc-grid-field data-field="aloc_repre_cntr_cnt"></sc-grid-field>
+				<sc-grid-field data-field="qtaList" data-type="object"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-po-receipt-uprc-list",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {};
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			search: function() {
+				var me = this;
+				UT.request(me.$.findListPoReceiptItemByUprcItem);
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var me = this;
+				var red = "#ff0000";
+				if(item.dataField === "prgs_sts_ccd") {
+					if(!me.itemCreatePoValidate(data)) {
+						return {
+							fontColor: red,
+							fontWeight: "bold"
+						};
+					}
+				}
+			},
+			
+			// grid image column 데이터에 따른 icon 처리
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {	// 정규품목인 경우
+					return "link";
+				} else if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				} else if(item.dataField === "img_sel_cntr") {
+					if(data.prgs_sts_ccd === "WTG") {
+						return "search";
+					} else {
+						return "link";
+					}
+				} else {
+					return null;
+				}
+			},
+			
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item-click 이벤트
+			onItemClick: function(event) {
+				var me       = this,
+					data     = event.detail.data,
+					item     = event.detail.item,
+					rowIndex = event.detail.item.rowIndex, // 선택된 행의 번호
+					provider = event.detail.provider;
+				
+				if(item.dataField === 'req_no') {
+					//구매 상세 조회 화면 호출
+					me.fire('show-pr-detail', {pr_uuid: data.req_uuid, pageType: "VIEW"});
+				} else if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {			// 품목
+					me.showItemContractHistory(data["item_cd"]);
+				} else if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				} else if(item.dataField === "img_sel_cntr" && me.onImageChangeFn(data, item)) {
+					me.showUprccntr(rowIndex, provider, data);
+				}
+			},
+			// 품목 별 계약 및 발주 이력 조회
+			showItemContractHistory: function(itemCd) {
+				var me = this;
+				var itemHistoryPopup = UT.popup("ep-po-item", me, "90%", "80%", null, {titleText: '품목 정보', menuId: "PRO30040"});
+				itemHistoryPopup.show();
+				itemHistoryPopup.getWindowContent().load({item_cd: itemCd});
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			// 동일 NO 선택
+			onSelectedItem: function() {
+				var me                           = this,
+					flag                         = true,
+					selectedId = null, checkRows = [];
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length > 0) {
+					for(var i = 0; i < checked.length; i++) {
+						var item = checked[i];
+						selectedId = item.req_no;
+						
+						for(var j = 0; j < checked.length; j++) {
+							var jItem = checked[j];
+							if(jItem.req_no != item.req_no) {
+								UT.alert("STD.PR1013");	//"선택하신 구매요청 번호가 같지 않습니다."
+								flag = false;
+								break;
+							}
+						}
+						if(!flag) {
+							break;
+						}
+					}
+					
+					if(flag) {
+						var checkedIdxs = provider.filterIndexes(function(data) {
+							if(data.req_no === selectedId) {
+								return true;
+							}
+						});
+						for(var i = 0; i < checkedIdxs.length; i++) {
+							me.$.gridPanel.selectionCheck(checkedIdxs[i], true, false);
+						}
+					}
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+			},
+			// 접수 validation
+			validateUpdateRV: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length > 0) {
+					var flag = true, message = '';
+					
+					for(var i = 0; i < checked.length; i++) {
+						var item = checked[i];
+						if(item.rcpt_sts_ccd === "RCPT") {
+							message = me.translate("STD.PR1014"); // 선택하신 건 중에 이미 접수된 구매요청 건이 포함되어 있습니다. 접수건은 제외하여 선택해 주세요.
+							flag = false;
+							break;
+						}
+					}
+					if(!flag) {
+						UT.alert(message, null, true);
+					}
+					return flag;
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return false;
+				}
+			},
+			// 접수 처리
+			onReceiveItems: function() {
+				var me = this;
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				var checkedRows = provider.selectionCheckedItems();
+				
+				if(me.validateUpdateRV()) {
+					//"접수하시겠습니까?"
+					UT.confirm("STD.N1108", function() {
+						me.$.receiptUprcItemReqs.body = {
+							checkedList: checkedRows
+						};
+						UT.request(me.$.receiptUprcItemReqs);
+					});
+				}
+			},
+			
+			completeReceiptUprcItemReqs: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.search();
+				} else {
+					me.invalidMessageHandler(response, me.translate("접수"), true, me.search.bind(me));
+				}
+			},
+			
+			invalidMessageHandler: function(result, excuteTypeName, isExcutedExceptInvalid, callbackFn) {
+				var me = this;
+				var status = result.resultStatus, resultData = result.resultData;
+				
+				if(status === "PO_RCPT_ITEM_STS_ERR") {
+					var invalidPrItems = resultData.invalid_datas || [],
+						notExistIds    = resultData.not_exist_ids || [],
+						validCnt       = resultData.valid_cnt,
+						nonExcutedCnt  = invalidPrItems.length + notExistIds.length;
+					
+					/*
+					 * STD.E9400 : "유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다."
+					 * STD.E9500 : "유효한 상태가 아니거나 상태가 변경된 {0}건을 제외하고 {1} 하였습니다."
+					 * STD.E9600 : "유효한 상태가 아니거나 상태가 변경된 데이터가 존재하여 요청을 수행할 수 없습니다."
+					 */
+					var msg = (validCnt === 0) ? me.translate("STD.E9400") : (isExcutedExceptInvalid ? me.translate("STD.E9500", null, nonExcutedCnt, excuteTypeName) : me.translate("STD.E9600"));
+					
+					invalidPrItems.forEach(function(invalidPrItem) {
+						// [구매요청 번호 : {0}, 항번 : {1}] 은(는) '{2}' 상태입니다.
+						msg += "<br/>" + me.translate("STD.PR1035", null, invalidPrItem.req_no, invalidPrItem.req_lno, invalidPrItem.rcpt_sts_ccd_nm);
+					});
+					
+					if(notExistIds.length > 0) {
+						var provider = me.$.gridPanel.getDataProvider();
+						var checkedRows = provider.selectionCheckedItems();
+						
+						notExistIds.forEach(function(notExistId) {
+							var notExistItem = null;
+							checkedRows.forEach(function(row) {
+								if(row.po_req_item_rcpt_uuid === notExistId) {
+									notExistItem = row;
+								}
+							});
+							if(notExistItem) {
+								// [구매요청 번호 : {0}, 항번 : {1}] 은(는) 삭제되었거나 존재하지 않는 데이터입니다.
+								msg += "<br/>" + me.translate("STD.PR1037", null, notExistItem.req_no, notExistItem.req_lno);
+							}
+						});
+					}
+					
+					UT.alert(msg, null, true);
+					
+					if(UT.isFunction(callbackFn)) {
+						callbackFn.call();
+					}
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 내 담당구매그룹인지 체크
+			checkPurcGrpCd: function(purcGrpCd) {
+				var me = this;
+				var newArr = me.codes.myPurcGrpCds.filter(function(item) {
+					return item.purc_grp_cd === purcGrpCd;
+				});
+				return !(newArr.length > 0);
+			},
+			
+			// 반송 validation
+			validateUpdateRDList: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return false;
+				}
+				
+				var flag = true, message = '';
+				
+				for(var i = 0; i < checked.length; i++) {
+					var item = checked[i];
+					if(item.prgs_sts_ccd !== "WTG") {
+						message = me.translate("STD.PO1107");
+						flag = false;
+						break;
+					} else if(me.checkPurcGrpCd(item.purc_grp_cd)) {
+						message = me.translate("STD.RFX1021", null, item.req_lno, item.req_no);
+						flag = false;
+						break;
+					}
+				}
+				if(!flag) {
+					UT.alert(message, null, true);
+				}
+				return flag;
+			},
+			
+			// 구매요청 반송 다이얼로그 보이기
+			onShowDialogPrReturn: function() {
+				var me = this;
+				
+				if(me.validateUpdateRDList()) {
+					me.fire("show-dialog-reject");
+				}
+			},
+			
+			onReturnReqs: function(rejectCause) {
+				var me = this, message = "STD.N3000";	//"반려하시겠습니까?"
+				var provider = me.$.gridPanel.getDataProvider();
+				var checkedRows = provider.selectionCheckedItems();
+				
+				for(var i = 0; i < checkedRows.length; i++) {
+					var item = checkedRows[i];
+					if(item.rcpt_sts_ccd === "RCPT") {
+						message = "STD.PR1045";	//"이미 접수된 구매요청 건이 포함되어있습니다.<br/>반려를 진행하시겠습니까?"
+						break;
+					}
+				}
+				
+				UT.confirm(message, function() {
+					me.$.returnUprcItemReqs.body = {
+						checkedList: checkedRows,
+						req_ret_rsn: rejectCause
+					};
+					UT.request(me.$.returnUprcItemReqs);
+				});
+			},
+			
+			completeReturnUprcItemReqs: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				var callbackFn = function() {
+					me.fire("close-dialog-reject");
+					me.search();
+				};
+				
+				if(response.success) {
+					UT.completeAlert();
+					callbackFn();
+				} else {
+					me.invalidMessageHandler(response, me.translate("반려"), true, callbackFn);
+				}
+			},
+			
+			// 구매그룹 변경 다이얼로그 보이기
+			onShowDialogChangePurcGrpCd: function() {
+				var me = this;
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				var checkedRows = provider.selectionCheckedItems();
+				
+				if(checkedRows.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				me.fire("show-dialog-change-purc-grp");
+			},
+			
+			// 구매그룹 변경
+			onUpdatePurcGrpCd: function(purcGrpCd) {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checkedRows = provider.selectionCheckedItems();
+				
+				me.$.changeUprcItemPurcGrp.body = {
+					checkedList: checkedRows,
+					purc_grp_cd: purcGrpCd
+				};
+				UT.request(me.$.changeUprcItemPurcGrp);
+			},
+			completeUprcItemChangePurcGrp: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				var callbackFn = function() {
+					me.fire("close-dialog-change-purc-grp");
+					me.search();
+				};
+				
+				if(response.success) {
+					UT.completeAlert();
+					callbackFn();
+				} else {
+					me.invalidMessageHandler(response, me.translate("구매 그룹 변경"), true, callbackFn);
+				}
+			},
+			
+			showUprccntr: function(rowIndex, provider, data) {
+				var me = this;
+				
+				var popup = UT.popup("ep-po-receipt-uprc-list", me, "90%", "800", {
+					'apply-item': function(popup, e) {
+						var qtaList = e.detail;
+						var totalAlocQty = new BigNumber(0);
+						for(var i = 0; i < qtaList.length; i++) {
+							var qta = qtaList[i];
+							totalAlocQty = totalAlocQty.plus(new BigNumber(qta.aloc_qty || 0));
+						}
+						
+						provider.setItemAt(rowIndex, {
+							"po_qty": Number(totalAlocQty),
+							// 이미 배분 저장되어 있으므로 리스트에서는 제외
+							"qtaList": []
+						});
+						popup.close();
+					},
+					'close': function(popup, e) {
+						popup.close();
+					}
+				}, {titleText: "물량 배분", closable: true});
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			
+			itemCreatePoValidate: function(data) {
+				var prgsStsCcd = data.prgs_sts_ccd;
+				var purcCntrUuid = data.purc_cntr_uuid;
+				var reqQty = data.req_qty;
+				var poQty = data.po_qty;
+				
+				if(prgsStsCcd === "WTG") {
+					if(reqQty !== poQty) {
+						return false;
+					}
+				}
+				return true;
+			},
+			
+			createPoValidate: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var checkedRows = provider.selectionCheckedItems();
+				
+				if(checkedRows.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return false;
+				}
+				
+				var message;
+				for(var i = 0; i < checkedRows.length; i++) {
+					var checked = checkedRows[i];
+					if(checked.prgs_sts_ccd !== "WTG") {
+						message = me.translate("STD.RFX1304");
+						break;
+					}
+					
+					if(!me.itemCreatePoValidate(checked)) {
+						message = me.translate("STD.PO1111");
+						break;
+					}
+				}
+				
+				if(UT.isNotEmpty(message)) {
+					UT.alert(message, null, true);
+					return false;
+				}
+				return true;
+			},
+			
+			onCreatePo: function() {
+				var me = this;
+				
+				if(!me.createPoValidate()) {
+					return;
+				}
+				
+				UT.confirm("STD.PO1112", function() { // 발주 생성하시겠습니까?<br>완료 후 발주 메뉴에서 확인 할 수 있습니다.
+					var provider = me.$.gridPanel.getDataProvider();
+					var checkedRows = provider.selectionCheckedItems();
+					
+					me.$.createUprccntrPo.body = {
+						checkedList: checkedRows
+					};
+					UT.request(me.$.createUprccntrPo);
+				});
+			},
+			completeCreateUprccntrPo: function(e, res) {
+				var me = this;
+				var response = res.response;
+				
+				if(response.success) {
+					UT.completeAlert();
+					me.search();
+				}
+			},
+			onItemLabelFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "cntr_no") {
+					var cntrNo = data.cntr_no;
+					var alocRepreCntrNo = data.aloc_repre_cntr_no;
+					var alocRepreCntrCnt = data.aloc_repre_cntr_cnt;
+					
+					if(UT.isNotEmpty(cntrNo)) {
+						return cntrNo;
+					} else if(UT.isNotEmpty(alocRepreCntrNo) && UT.isNotEmpty(alocRepreCntrCnt) && alocRepreCntrCnt > 1) {
+						return me.translate("STD.N3100", null, alocRepreCntrNo, alocRepreCntrCnt-1);
+					}
+				} else if(item.dataField === "prgs_sts_ccd") {
+					// 대기중인 경우
+					if(data.prgs_sts_ccd === "WTG") {
+						var reqQty = Number(data.req_qty);
+						var poQty = Number(data.po_qty || 0);
+						
+						if(reqQty > poQty) {
+							return me.translate("물량 배분 대기중");
+						} else {
+							return me.translate("물량 배분 완료");
+						}
+					} else {
+						var prgsStsCcd = me.get("codes.prgsStsCcd");
+						return prgsStsCcd.filter(function(item) {
+							return item.data === data.prgs_sts_ccd;
+						})[0].label;
+					}
+				}
+			}
+		})
+	</script>
+</dom-module>

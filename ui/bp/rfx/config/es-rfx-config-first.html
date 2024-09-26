@@ -1,0 +1,207 @@
+<sc-link rel="import" href="cc-rfx-config-header.html"></sc-link>
+
+<dom-module id="es-rfx-config-first">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<cc-page-title-bar id="titTxt">
+			<sc-button text="RFX 복사" on-click="onCopyRfx" hidden="[[formula('isViaPr')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose" hidden="[[!formula('isViaPr')]]"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-rfx-config-header id="header" rfx-data="[[rfxInfo]]" cur-lvl="1" on-select-no="onSelectNo"></cc-rfx-config-header>
+		
+		<div class="rfx_wrap">
+			<div class="content rfx_grid_first row ai_start pst_relative">
+				<div id="rfq" class="card rfx_flex type rfq selected" on-click="onSelectRfx">
+					<h5>RFQ</h5>
+					<p>Request for Quotation</p>
+					<p>견적 요청서</p>
+					<p class="icon">rfq</p>
+				</div>
+				<div id="rfp" class="card rfx_flex type rfp" on-click="onSelectRfx">
+					<h5>RFP</h5>
+					<p>Request For Proposal</p>
+					<p>제안 요청서</p>
+					<p class="icon">rfp</p>
+				</div>
+				<div id="rauc" class="card rfx_flex type rauc" on-click="onSelectRfx">
+					<h5>[[translate('역경매')]]</h5>
+					<p>Reverse Auction</p>
+					<p>최저 낙찰가 선정</p>
+					<p class="icon">rauc</p>
+				</div>
+				<div class="title_input">
+					<sc-text-field value="{{rfxInfo.rfx_tit}}" placeholder="RFX 제목을 입력해 주세요." required="true" on-enter="onNext"></sc-text-field>
+				</div>
+			</div>
+			
+			<div class="btn_bar rfx_flex">
+				<a class="sc-button next" on-click="onNext">
+					<span>[[translate('다음')]]</span>
+					<span class="icon"></span>
+				</a>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'es-rfx-config-first',
+			properties : {
+				rfxInfo : {
+					type : Object,
+					value : function() {
+						return {
+							rfx_typ_ccd : 'RFQ'
+						};
+					}
+				},
+				// 시작이 된 케이스 인지 구분 하는 flag
+				startFlag : {
+					type : Boolean,
+					value : false
+				},
+				// 초기 rfx 유형 값
+				initVal : {
+					type : String,
+					value : 'rfq'
+				},
+				viaPr : {
+					type : Boolean,
+					value : false
+				},
+				dfltData : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas : {
+				isViaPr: function() {
+					return this.get("viaPr");
+				}
+			},
+			
+			load : function(data) {
+				var me = this;
+				if(UT.isNotEmpty(data)) {
+					if(data.via_pr) {
+						me.set("viaPr", UT.copy(data.via_pr));
+					}
+					if(!UT.isEmpty(data.dfltData)) {
+						me.set("dfltData", UT.copy(data.dfltData));
+					}
+					if(!UT.isEmpty(data.rfxInfo)) {
+						me.set("rfxInfo", UT.copy(data.rfxInfo));
+					}
+				} else {
+					me.$[me.get("initVal")].classList.add('selected');
+					//me.set("rfxInfo", new Object({rfx_typ_ccd : 'RFQ'}));
+					me.set("startFlag", false);
+					me.onClearSelectedCard(me.get("initVal"));
+				}
+				me.applyFormula();
+			},
+			
+			//RFx 유형 클릭
+			onSelectRfx : function(e) {
+				var me = this;
+				var id = e.currentTarget.id.toString();
+				var rfxTyp = me.get("rfxInfo.rfx_typ_ccd");
+				if(!UT.isEmpty(rfxTyp)) {
+					rfxTyp = rfxTyp.toLowerCase();
+				}
+				
+				if(me.get('startFlag')) {
+					UT.confirm("STD.RFX1207", function(){ //RFX 유형 변경 시 모든 정보가 초기화 됩니다.<br/>계속 진행하시겠습니까?
+						var newInfo = new Object();
+						newInfo.rfx_typ_ccd = id.toUpperCase();
+						me.set("rfxInfo", newInfo);
+						me.set("startFlag", false);
+						me.$[rfxTyp].classList.remove('selected');
+						me.$[id].classList.add('selected');
+						me.fire('reset-header');
+						me.$.header.onChangeRfxTyp(me.get('rfxInfo.rfx_typ_ccd'));
+					});
+				} else {
+					if(me.$[id].classList.contains('selected')) {
+						me.$[id].classList.remove('selected');
+						me.set("rfxInfo.rfx_typ_ccd", undefined);
+					} else {
+						me.$[id].classList.add('selected');
+						me.set("rfxInfo.rfx_typ_ccd", id.toUpperCase());
+						me.onClearSelectedCard(id);
+					}
+				}
+				
+				me.$.header.onChangeRfxTyp(me.get('rfxInfo.rfx_typ_ccd'));
+			},
+			//다른 카드 clear
+			onClearSelectedCard : function(data) {
+				var me = this;
+				//선택되어 있던 다른 typ 선택 해제
+				var rfxArr = ['rfp', 'rfq', 'rauc'];
+				for(var i in rfxArr) {
+					if(rfxArr[i] != data) {
+						me.$[rfxArr[i]].classList.remove('selected');
+					}
+				}
+			},
+			//다음 버튼 클릭
+			onNext : function(){
+				var me = this;
+				
+				if(UT.isEmpty(me.get("rfxInfo.rfx_typ_ccd"))) {
+					UT.alert(me.translate("STD.E1001", "", me.translate("RFX 유형")),null,true);//'{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				if(!me.validate()) {
+					UT.alert(me.translate("STD.E1001", "", me.translate("RFX 제목")),null,true);//'{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				me.set('startFlag', true);
+				
+				var param = new Object();
+				param.typ = 'next';
+				param.rfxInfo = me.get("rfxInfo");
+				param.via_pr = me.get("viaPr");
+				param.dfltData = me.get("dfltData");
+				me.fire('second-page', param);
+			},
+			//RFx 복사 버튼 클릭 이벤트
+			onCopyRfx : function() {
+				var me = this;
+				me.fire('copy-rfx');
+			},
+			// header 번호 클릭 이벤트
+			onSelectNo : function(e, data) {
+				var me = this;
+				
+				var param = new Object();
+				param.lvl = data;
+				param.rfxInfo = me.get("rfxInfo");
+				param.via_pr = me.get("viaPr");
+				param.dfltData = me.get("dfltData");
+				me.fire('selected-no', param);
+			},
+			onResetCard : function() {
+				var me = this;
+				me.onClearSelectedCard();
+				me.$.rfq.classList.add('selected');
+			},
+			onClose : function() {
+				var me = this;
+				me.reset();
+				me.fire('close');
+			}
+		});
+	</script>
+</dom-module>

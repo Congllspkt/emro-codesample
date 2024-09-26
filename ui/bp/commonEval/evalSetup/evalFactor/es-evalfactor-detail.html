@@ -1,0 +1,1230 @@
+<sc-link rel="import" href="../../shared/ep-evalfactor-calc.html"></sc-link>
+
+<dom-module id="es-evalfactor-detail">
+<!-- 
+/**
+ *
+ *	@description : 평가항목 관리 - 상세
+ *  <pre>
+ * </pre>
+ * @변경이력 : [2023. 06. 01] cyhwang
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+
+    </style>
+    
+    
+    <template>
+		<!-- 콤보 목록 조회 서비스 그룹 -->
+		<sc-request-group init>
+			<!-- 평가업무유형 -->
+			<sc-ajax
+					id="findListCommonCodeAttributeCode"
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.R704.param}}"
+					last-response="{{codes.R704.result}}">
+			</sc-ajax>
+			<!-- 적용 평가 업무 유형 -->
+			<sc-ajax
+					id="findListApplyEvalTask"
+					url="findListApplyEvalTask.do"
+					body="{{evalFactorInfo}}"
+					last-response="{{evalTaskList}}"></sc-ajax>
+		</sc-request-group>
+		
+        <!-- 콤보 목록 조회 서비스 그룹 -->
+        <sc-code-group>
+            <!-- 정량/정성 공통코드콤보 조회 -->
+            <sc-code code="R001" value="{{codes.R001}}" ></sc-code>
+            <!-- 평가항목 스케일 여부 -->
+            <sc-code code="C009" value="{{codes.C009}}" ></sc-code>
+            <!-- 스케일 구간 설정 공통코드 콤보 -->
+            <sc-code code="R003" value="{{codes.R003}}" ></sc-code>
+            <!-- NULL값 데이터보정 방식 공통코드 콤보 -->
+            <sc-code code="R006" value="{{codes.R006}}" ></sc-code>
+            <!-- 분자/분모 코드 조회 -->
+            <sc-code code="R805" value="{{codes.R805}}" ></sc-code>
+            <!-- 분자 값 NULL값 데이터보정 방식 -->
+            <sc-code code="R806" value="{{codes.R806}}" ></sc-code>
+            <!-- 평가항목 상세 표시 유형 -->
+            <sc-code code="R808" value="{{codes.R808}}" ></sc-code> 
+            <!-- 추가 조건 코드 콤보 -->
+            <sc-code code="EVKD" value="{{codes.EVKD}}" ></sc-code>
+        </sc-code-group>
+        
+        <cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+        
+        <!-- 평가항목 정보 조회 -->   
+        <sc-ajax 
+            id="findEvalFactorInfo"
+            url="findEvalFactorInfo.do"
+            body="{{evalFactorInfo.data}}"
+            on-response="completeFindEvalFactorInfo">
+        </sc-ajax>
+        
+        <!-- 평가항목 정보 복사 -->   
+        <sc-ajax 
+            id="saveCopyEvalFactor"
+            url="saveCopyEvalFactor.do"
+            on-response="onSaveCopyResultHandler">
+        </sc-ajax>
+        
+        <!-- 평가항목 확정취소 저장 -->   
+        <sc-ajax 
+            id="saveCnfdYnEvalFactor"
+            url="saveCnfdYnEvalFactor.do"
+            on-response="onSaveCnfdYnResultHandler">
+        </sc-ajax>
+
+        <!-- 평가항목 정보 저장 -->   
+        <sc-ajax 
+            id="saveEvalFactor"
+            url="saveEvalFactor.do"
+            on-response="onSaveResultHandler">
+        </sc-ajax>
+        
+        <cc-page-title-bar >
+            <sc-button                 text="확정 취소" on-click="onClickCancelConfirmBtn" auth-s hidden="[[!formula('isCancelable')]]"></sc-button>
+            <sc-button                 text="복사"     on-click="onClickCopyBtn"          auth-s hidden="[[!formula('isCopiable')]]"></sc-button>
+            <sc-button id="confirmBtn" text="확정"     on-click="onClickSaveBtn"          auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+            <sc-button id="saveBtn"    text="저장"     on-click="onClickSaveBtn"          auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-page-title-bar>
+        
+        <div class="vbox flex">
+			<cc-form-panel title-text="평가항목 정보" form-cls="label-row">
+				<cc-fieldset>
+					<sc-label text="평가항목 명"></sc-label>
+					<sc-text-field value="{{evalFactorInfo.data.evalfact_nm}}" max-length="60" readonly="[[!formula('isEditable')]]" required="[[formula('isEditable')]]"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset row-span="4">
+					<sc-label text="평가 업무 유형"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-grid id="gridPanelEvalTask" class="h-150" use-selection="false" use-state="true" editable="true" data-provider="{{evalTaskList}}">
+							<sc-grid-columns>
+								<sc-checkbox-column data-field="reg_yn" header-text="등록 여부" width="100" text-align="center" editable="[[formula('isEditable')]]"></sc-checkbox-column>
+								<sc-data-column	data-field="eval_task_typ_nm"			header-text="적용 평가 업무 유형"	width="250"></sc-data-column>
+							</sc-grid-columns>
+							<sc-grid-fields>
+								<sc-grid-field  data-field="eval_task_typ_ccd"    ></sc-grid-field>
+								<sc-grid-field  data-field="evalfact_uuid"    ></sc-grid-field>
+							</sc-grid-fields>
+						</sc-grid>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가항목 유형"></sc-label>
+					<sc-combobox-field id="qqDivCcdCombobox" display-field="label" value-field="data" readonly="[[!formula('isEditable')]]"
+									   items="{{codes.R001}}" value="{{evalFactorInfo.data.evalfact_typ_ccd}}" placeholder="필수" required="[[formula('isEditable')]]">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="추가 조건"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" readonly="[[!formula('isEditable')]]" selected-index="0"
+									   items="{{codes.EVKD}}" value="{{evalFactorInfo.data.add_cnd_ccd}}" placeholder="필수" required="[[formula('isEditable')]]">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('includeLayoutQuant')]]">
+					<sc-label text="스케일 적용 여부"></sc-label>
+					<sc-checkbox-field input-value="{{evalFactorInfo.data.scale_appl_yn}}" checked-value="Y" un-checked-value="N" readonly="[[!formula('isEditable')]]"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('includeLayoutQuant')]]" >
+					<sc-label text="계산식"></sc-label>
+					<div class="field-box vbox" style="width:100%">
+						<sc-button id="calcButton"  hidden="[[!formula('isEditable')]]" text="계산식" class="w-80 " on-click="onClickCalculatorBtn" auth-s disabled="[[!formula('isRequiredQuant')]]"></sc-button>
+						<div class="vspace-5"></div>
+						<sc-textarea-field class="h-100"value="{{evalFactorInfo.data.quant_fmla_expln}}" required="[[formula('isRequiredQuant')]]" max-length="128" readonly="true"></sc-textarea-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('isQuant')]]">
+					<sc-label text="계산식 계산항목"></sc-label>
+					<sc-grid id="gridPanelRec" class="h-150"
+							 use-selection="false" use-state="false"
+							 editable="false">
+						<sc-grid-columns>
+							<sc-data-column data-field="calcfact_nm"    header-text="계산항목 명"    width="200" text-align="left"></sc-data-column>
+							<sc-combobox-column data-field="nmtr_dntr_div_ccd"    header-text="분자/분모"    width="100"
+												display-field="label"   value-field="data" items="{{codes.R805}}" text-align="center"></sc-combobox-column>
+							<sc-combobox-column data-field="nmtr_val_nullv_datfil_meth_ccd"    header-text="NULL값 데이터보정 방식"        width="180"
+												display-field="label"   value-field="data" items="{{codes.R806}}" text-align="left"></sc-combobox-column>
+						</sc-grid-columns>
+						<sc-grid-fields>
+							<sc-grid-field  data-field="calcfact_uuid"    ></sc-grid-field>
+							<sc-grid-field  data-field="calcfact_cd"    ></sc-grid-field>
+							<sc-grid-field  data-field="calcfact_nm"    ></sc-grid-field>
+							<sc-grid-field  data-field="dat_unit"   ></sc-grid-field>
+							<sc-grid-field  data-field="rmk"    ></sc-grid-field>
+						</sc-grid-fields>
+					</sc-grid>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('includeLayoutQuant')]]">
+					<sc-label text="정량 값 단위"></sc-label>
+					<sc-text-field value="{{evalFactorInfo.data.quant_val_unit}}" max-length="18" required="[[formula('isRequiredQuant')]]" readonly="[[!formula('isEditable')]]"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('includeLayoutQuant')]]">
+					<sc-label text="NULL값 데이터보정 방식"></sc-label>
+					<div class="field-box">
+						<sc-combobox-field display-field="label" value-field="data" readonly="[[!formula('isEditable')]]" selected-index="0" required="[[formula('isRequiredQuant')]]"
+										   items="{{codes.nullDatfilMethCombo}}" value="{{evalFactorInfo.data.nullv_datfil_meth_ccd}}" placeholder="선택">
+						</sc-combobox-field>
+						<div class="hspace-5" hidden$="[[!formula('isBasicScore')]]"></div>
+						<sc-number-field id="bas_sco" class="align-right w-100" value="{{evalFactorInfo.data.nullv_elem_sc}}" input-cover="true" format-type="srmScore" validator-type="srmScore" min-value="0" max-value="100" step="5"
+										 required="[[formula('isRequiredBasicSco')]]" readonly="[[!formula('isRequiredBasicSco')]]" hidden="[[!formula('isBasicScore')]]">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가항목 상세 표시 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" selected-index="0" required="[[formula('isEditable')]]" input-clear="false"
+									   items="{{codes.R808}}" value="{{evalFactorInfo.data.evalfact_dtl_dspy_typ_ccd}}" placeholder="선택" readonly="[[!formula('isEditable')]]">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('includeLayoutQuant')]]">
+					<sc-label text="스케일 구간 설정" hidden="[[!formula('includeLayoutScale')]]"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" readonly="[[!formula('isEditable')]]" selected-index="0" required="[[formula('isRequiredScaleRng')]]"
+									   items="{{codes.R003}}" value="{{evalFactorInfo.data.scale_rng_setup_ccd}}" placeholder="선택" hidden="[[!formula('includeLayoutScale')]]">
+					</sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('stStpValLayout')]]">
+					<sc-label text="시작 값"></sc-label>
+					<sc-text-field value="{{evalFactorInfo.data.st_val}}" readonly="[[!formula('isEditable')]]" required="[[formula('isEditable')]]" class="w-50" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset hidden="[[!formula('stStpValLayout')]]">
+					<sc-label text="멈춤 값"></sc-label>
+					<sc-text-field value="{{evalFactorInfo.data.stp_val}}" readonly="[[!formula('isEditable')]]" required="[[formula('isEditable')]]" class="w-50" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="정렬"></sc-label>
+					<sc-text-field value="{{evalFactorInfo.data.sort}}"readonly="[[!formula('isEditable')]]" class="w-50"
+								   mask-re="/[0-9]/" strip-chars-re="/[ㄱ-힣]/">
+					</sc-text-field>
+				</cc-fieldset>
+
+				<cc-fieldset column-span="2">
+					<sc-label text="평가항목 설명"></sc-label>
+					<sc-textarea-field class="h-150" value="{{evalFactorInfo.data.evalfact_expln}}" max-length="1000" readonly="[[!formula('isEditable')]]"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+            <sc-grid id="gridPanelScale" class="h-300"
+                    hidden="[[!formula('isQualiScale')]]"
+                    editable="[[formula('isEditable')]]"
+                    use-state="[[formula('isEditable')]]"
+                    use-selection="[[formula('isEditable')]]">
+           		<cc-grid-toolbar title-text="스케일 구간">
+                    <sc-button text="추가" on-click="onClickAddScaleBtn" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+                    <sc-button text="삭제" on-click="onClickDeleteScaleBtn" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+               	</cc-grid-toolbar>
+           		<sc-grid-columns>
+           			<sc-data-column	data-field="scale_nm"	header-text="스케일 명"	width="650"	text-align="left"	editable="true"
+           			                max-length="100" required="true" validator-function="gridValidatorFuncQuali" validation-group="quali"></sc-data-column>
+					<sc-data-column	data-field="sc"		header-text="점수"	width="60"	text-align="right"	editable="true"	max-length="6"
+									data-type="number"		format-type="srmScore" required="true" max-value="100" validation-group="quali" editor-regex-function="onRowRegex"
+                                       editor-maskre="{{formula('positiveRegex')}}"></sc-data-column>
+					<sc-data-column	data-field="scale_sort"	header-text="정렬"	width="40"	text-align="right"	editable="true" validation-group="quali" editor-regex-function="onRowRegex"
+                                       data-type="number"		format-type="integer" max-length="2"></sc-data-column>
+           		</sc-grid-columns>
+           		<sc-grid-fields>
+           			<sc-grid-field	data-field="evalfact_scale_uuid"></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_uuid"	></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_cd"	></sc-grid-field>
+					<sc-grid-field	data-field="scale_cd"	></sc-grid-field>
+					<sc-grid-field	data-field="scale_nm"	></sc-grid-field>
+					<sc-grid-field	data-field="scale_sort"	data-type="number"></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_typ_ccd"	></sc-grid-field>
+					<sc-grid-field	data-field="scale_appl_yn"	></sc-grid-field>
+					<sc-grid-field	data-field="sc"	data-type="number"></sc-grid-field>
+           		</sc-grid-fields>
+           	</sc-grid>
+            
+               <sc-grid id="gridPanelQuantScale" class="h-300"
+                        hidden="[[!formula('isQuantScale')]]"
+                        editable="[[formula('isEditable')]]"
+                        use-state="[[formula('isEditable')]]"
+                        use-selection="[[formula('isEditable')]]"
+                        on-item-edit-end="quantGridItemEditEnd">
+                   <cc-grid-toolbar title-text="스케일 구간">
+                       <sc-button text="추가" on-click="onClickAddQuantScaleBtn" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+                       <sc-button text="삭제" on-click="onClickDeleteQuantScaleBtn" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+                   </cc-grid-toolbar>
+                   <sc-grid-columns>
+					   <sc-data-column	data-field="scale_nm"	header-text="스케일 명"	width="650"	text-align="left"	editable="true" validation-group="quant"
+           			                max-length="100" required="true" validator-function="gridValidatorFuncQuant"></sc-data-column>
+					   <sc-data-column	data-field="st_val"	header-text="시작 값"	width="80"	text-align="right"	editable="true" validation-group="quant" editor-regex-function="onRowRegex"
+                                       data-type="number"		format-type="srmScore" required="true" max-length="15"></sc-data-column>
+					   <sc-data-column	data-field="stp_val"	header-text="멈춤 값"	width="80"	text-align="right"	editable="true" validation-group="quant" editor-regex-function="onRowRegex"
+                                       data-type="number"		format-type="srmScore" required="true" max-length="15"></sc-data-column>
+					   <sc-data-column	data-field="sc"		header-text="점수"		width="60"	text-align="right"	editable="true"	max-length="6" validation-group="quant" editor-regex-function="onRowRegex"
+                                       data-type="number"		format-type="srmScore"	required="true" max-value="100"
+									editor-maskre="{{formula('positiveRegex')}}"></sc-data-column>
+					   <sc-checkbox-column data-field="nullv_appl_subj_scale_yn" header-text="NULL값 적용 대상 스케일 여부"      width="110"      text-align="center" visible="[[formula('isNullDataSc')]]"
+                                        editable="[[formula('isRequiredNullDataSc')]]" display-checkbox="false" checked-value="Y" un-checked-value="N"></sc-checkbox-column>
+					   <sc-data-column	data-field="scale_sort"	header-text="정렬"	width="40"	text-align="right"	editable="true" validation-group="quali" editor-regex-function="onRowRegex"
+					                                          data-type="number"		format-type="integer" max-length="2"></sc-data-column>
+           		</sc-grid-columns>
+           		<sc-grid-fields>
+           			<sc-grid-field	data-field="evalfact_scale_uuid"	></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_uuid"	></sc-grid-field>
+					<sc-grid-field	data-field="eval_task_typ_ccd"	></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_cd"	></sc-grid-field>
+					<sc-grid-field	data-field="st_val"	data-type="number"></sc-grid-field>
+					<sc-grid-field	data-field="stp_val"	data-type="number"></sc-grid-field>
+					<sc-grid-field	data-field="sc"	data-type="number"></sc-grid-field>
+					<sc-grid-field	data-field="scale_sort"	data-type="number"></sc-grid-field>
+					<sc-grid-field	data-field="evalfact_typ_ccd"	></sc-grid-field>
+					<sc-grid-field	data-field="scale_appl_yn"	></sc-grid-field>
+					<sc-grid-field	data-field="tmp_yn"	></sc-grid-field>
+           		</sc-grid-fields>
+           	</sc-grid>
+        </div>
+        
+    </template>
+    
+    <script>
+        Polymer({
+            is: "es-evalfactor-detail",
+            properties: {
+                codes: {
+                    type: Object,
+                    reset : false,
+                    value: function () {
+                        return {
+                            R001: [],       // 정량정성 구분
+							C009: [],       // 평가항목 스케일 여부
+                            R003: [],       // 스케일 구간 설정
+							R006 : [],   // NULL값 데이터보정 방식 콤보
+							nullDatfilMethCombo : [],   // NULL값 데이터보정 방식 콤보
+                            R805: [],       // 실측항목 분자/분모여부
+                            R806: [],       // 분자 값 NULL값 데이터보정 방식
+                            R808: [],       // 평가항목 상세 표시 유형
+                            EVKD: [],       // 추가 조건
+							R704 : {
+								param : {
+									ccd : 'R704',
+									cstr_cnd_cd : 'MDCD'  //모듈구분속성 조회
+								},
+								result : []
+							}
+                        };
+                    }
+                },
+                // 평가항목군
+                //평가항목 정보 Object
+                evalFactorInfo : {
+                    type: Object,
+                    value: function() {
+                        return {
+                            data : {
+								evalfact_typ_ccd: "",
+								scale_appl_yn: "",
+								nullv_datfil_meth_ccd : "",
+								scale_rng_setup_ccd: "",
+								add_cnd_ccd : "NA",
+                                calc_key : []
+                            },                     // 평가항목정보
+                            qualiScaleList: [],      // 정성세부항목
+                            quantScaleList: []       // 정량스케일항목
+                        };
+                    }
+                },
+				evalTaskList : {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+                //변경전 평가항목 정보 Object
+                oldEvalFactor : {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+				reloadable : {
+					type: Boolean,
+					value : false
+				}
+            },
+            
+            /**
+             * binding object observer
+             */
+            observers: [
+                        'setLayout(evalFactorInfo.data.evalfact_typ_ccd, evalFactorInfo.data.scale_appl_yn)',
+                        'onChangeNullvDatfilMethCcd(evalFactorInfo.data.nullv_datfil_meth_ccd)',
+					    'onChangeAddCndCcd(evalFactorInfo.data.add_cnd_ccd)'
+            ],
+            
+            formulas: {
+            	isNewData: function(){
+            		var me = this;
+            		var data = me.get("evalFactorInfo.data");
+            		return UT.isEmpty(data.evalfact_uuid);
+            	},
+                // 수정 가능 여부
+                isEditable: function(){
+                	var me = this;
+                	var data = me.get("evalFactorInfo.data");
+                	return (me.formula('isNewData') || (data.cnfd_yn =="N"));
+                },
+                // 확정 취소 가능 여부
+                isCancelable: function(){
+                	var me = this;
+                	var data = me.get("evalFactorInfo.data");
+                	return !me.formula('isNewData') && (data.cnfd_yn == "Y");
+                },
+                // 복사 가능 여부
+                isCopiable: function(){
+                	var me = this;
+                	var data = me.get("evalFactorInfo.data");
+                	return !me.formula('isNewData') && (data.evalfact_typ_ccd != 'QUANT'); // 정량항목은 복사 불가
+                },
+				// 정량 항목 여부
+				isQuant: function(){
+					var me = this;
+					var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+					return evalfactTypCcd == "QUANT";
+				},
+                // 정성 스케일 여부
+				isQualiScale: function(){
+                	var me = this;
+                	var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+                	return evalfactTypCcd == "QUALI" || evalfactTypCcd == "QUALI_MULTPL_SEL";    // 정성 단일 선택, 정성 다중 선택인 경우
+                },
+                // 정량 스케일 항목 여부
+                isQuantScale: function(){
+                	var me = this;
+                	var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+                	var scaleApplYn = me.get("evalFactorInfo.data.scale_appl_yn");
+                	return (me.formula('isQuant') && scaleApplYn  != "N");
+                },
+                // 정성항목 Default Layout 설정
+                includeLayoutQuali: function(){
+                	var me = this;
+                	var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+                	return (UT.isNotEmpty(evalfactTypCcd) && evalfactTypCcd != "QUANT") ? "true" :"false"; // 정량이 아닌경우
+                },
+                // 정량항목 Default Layout 설정
+                includeLayoutQuant: function(){
+                    var me = this;
+                    var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+
+                    return (evalfactTypCcd === "QUANT")? true : false;
+                },
+                // 스케일 적용 여부 Layout 설정
+                includeLayoutScale: function(){
+                    var me = this;
+                    var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+                    var scaleApplYn = me.get("evalFactorInfo.data.scale_appl_yn");
+                    
+                    return (evalfactTypCcd === "QUANT" && scaleApplYn  != "N");
+                },
+                // NULL값 데이터보정 방식
+                isNullDataSc: function(){
+                    var me = this;
+                    var data = me.get("evalFactorInfo.data");
+                    var evalfactTypCcd = data.evalfact_typ_ccd,
+						scaleApplYn = data.scale_appl_yn,
+                        nullvDatfilMethCcd = data.nullv_datfil_meth_ccd;
+                    
+                    return (evalfactTypCcd == "QUANT" && scaleApplYn != "N" && nullvDatfilMethCcd == "SCALE_SEL_APPL");
+                },
+                // NULL값 데이터보정 방식 기본 점수 적용
+                isBasicScore: function(){
+                	var me = this;
+                	var nullvDatfilMethCcd = me.get("evalFactorInfo.data.nullv_datfil_meth_ccd");
+                	return (nullvDatfilMethCcd === "ELEM_SC_APPL");
+                },
+                positiveRegex: function(){
+                	var me = this;
+                	var addCndCcd = me.get("evalFactorInfo.data.add_cnd_ccd")
+                	return (addCndCcd === "NA") ? "/[0-9.]/" : "";
+                },
+                isRequiredQuant: function(){
+                    var me = this;
+                    return (me.formula('includeLayoutQuant') == true && me.formula('isEditable'));
+                },
+				isRequiredNullDataSc: function(){
+                    var me = this;
+                    return (me.formula('isNullDataSc') && me.formula('isEditable'));
+                },
+				isRequiredScaleRng: function(){
+                    var me = this;
+                    return (me.formula('includeLayoutScale') && me.formula('isEditable'));
+                },
+                isRequiredBasicSco : function(){
+                	var me = this;
+                	return (me.formula("isBasicScore")  &&  me.formula('isEditable'));
+                },
+				isQualiScInp : function(){
+					var me = this;
+					var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+					return evalfactTypCcd == "QUALI_SC_INP";
+				},
+				isExpntDedtn : function(){
+					var me = this;
+					var addCndCcd = me.get("evalFactorInfo.data.add_cnd_ccd");
+					return addCndCcd == "EXPNT" || addCndCcd == "DEDTN";
+				},
+				stStpValLayout : function(){
+					var me = this;
+					return me.formula('isQualiScInp') && me.formula('isExpntDedtn'); // 점수 입력 && 가감점
+				}
+                
+            },
+            //초기화완료
+            initialized: function(){
+                var me = this;
+                me.$.bas_sco.regex = CCPrecManager.regex("srmScore");
+            },
+            //load
+            load: function(param){
+            	this.setEvalFactor(param);
+            },
+            /**
+             * 평가항목정보 setting
+             */
+            setEvalFactor: function(param) {
+                var me = this;
+                
+                if(param.evalfact_uuid){
+                    me.set("evalFactorInfo.data", {
+						evalfact_uuid : param.evalfact_uuid,
+                        evalfact_cd : param.evalfact_cd,
+						eval_task_typ_ccd : param.eval_task_typ_ccd
+                    });
+                    me.searchEvalFactorInfo();
+                }else{
+                    me.set("evalFactorInfo.data.eval_task_typ_ccd", param.eval_task_typ_ccd);
+                    me.set("evalFactorInfo.data.eval_task_typ_nm", param.eval_task_typ_nm);
+                    me.set("evalFactorInfo.data.evalfact_typ_ccd", 'QUANT');		// 정량
+                    me.set("evalFactorInfo.data.scale_appl_yn", 'N');			// 결과값 적용 (체크박스 미체크)
+					
+					UT.request(me.$.findListApplyEvalTask);
+					
+                    me.applyFormula();
+                }
+            },
+            
+            removeGridDataProvider : function(grid){
+                var me = this,
+                    provider = grid.getDataProvider();
+                
+                if(typeof provider.removeAll == "function"){
+                    provider.removeAll();
+                }
+            },
+            
+            /**
+             * 항목 유형 component setting
+             */
+            setLayout: function(evalfactTypCcd, scaleApplYn){
+                var me = this;
+                var data = me.get("evalFactorInfo.data");
+                
+                if(!evalfactTypCcd){
+                    return;
+                }
+                
+                if(evalfactTypCcd == "QUANT"){    // 정량
+                    var scaleRng = data.scale_rng_setup_ccd || "ABV_UD"; // 스케일 범위 default : 이상미만("ABV_UD")
+                    
+                    me.set("evalFactorInfo.data.scale_rng_setup_ccd"  , (scaleApplYn != "N") ? scaleRng : "");
+                    me.setNullDatfilMethCombo();
+                }else{    // 정량이 아닌경우
+                    me.set("evalFactorInfo.data.scale_appl_yn"  , "Y");     // 스케일 적용
+                    me.set("evalFactorInfo.data.nullv_datfil_meth_ccd"        , "");      // NULL값 데이터보정 방식 해당없음
+                    me.set("evalFactorInfo.data.scale_rng_setup_ccd"   , "");      // 스케일 구간 설정 없음
+                    me.set("evalFactorInfo.data.quant_fmla"           , "");      // 계산식 없음
+                    me.set("evalFactorInfo.data.quant_fmla_expln"       , "");      // 계산식 없음
+                    me.set("evalFactorInfo.data.calc_key"       , []);      // 계산식 없음
+                    me.removeGridDataProvider(me.$.gridPanelRec);
+                }
+                me.applyFormula();
+                me.onResizeGrid();
+            },
+            
+            /**
+             * NULL값 데이터보정 방식 콤보 설정
+             */
+            setNullDatfilMethCombo : function(){
+                var me = this;
+                var data = me.get("evalFactorInfo.data");
+                var orgnCodes = me.codes.R006 || [];
+                var newCodes = [];
+                var value = data.nullv_datfil_meth_ccd;
+                
+                if(data.scale_appl_yn == "N"){	// 스케일 적용여부 N이면
+                    newCodes = orgnCodes.filter(function(item){
+                        if(item.data != "SCALE_SEL_APPL") {		// NULL값 데이터보정 방식에서 스케일 선택 적용 제외
+                            return item;
+                        }
+                    });
+                }else{
+                    newCodes = orgnCodes;
+                }
+                
+                if(!value && UT.isArray(newCodes) && newCodes.length > 1){
+                    value = newCodes[0].data;
+                }
+                
+                me.set("codes.nullDatfilMethCombo", newCodes);
+                me.set("evalFactorInfo.data.nullv_datfil_meth_ccd", value);
+            },
+			
+            /**
+             * 정량/정성 스케일 그리드 resize
+             */
+            onResizeGrid : function(){
+                var me = this,
+                    grid = me.$.gridPanelScale,
+                    gridQuant = me.$.gridPanelQuantScale,
+                    gridRec = me.$.gridPanelRec;
+                
+                me.removeGridDataProvider(grid);
+                me.removeGridDataProvider(gridQuant);
+                grid.doContentElementResize();
+                gridQuant.doContentElementResize();
+                gridRec.doContentElementResize();
+            },
+			
+            
+            /**
+             * NULL값 데이터보정 방식 변경 - 기본 점수 적용/스케일 무실적적용 제어
+             */
+            onChangeNullvDatfilMethCcd: function(nullv_datfil_meth_ccd){
+                var me = this;
+                
+                if(nullv_datfil_meth_ccd != "ELEM_SC_APPL"){
+                    me.set("evalFactorInfo.data.nullv_elem_sc", null);
+                }
+                
+                me.applyFormula("isBasicScore");
+                me.applyFormula("isNullDataSc");
+                me.applyFormula('isRequiredNullDataSc');
+                me.applyFormula('isRequiredBasicSco');
+            },
+			/**
+			 * 추가 조건 변경
+			 */
+			onChangeAddCndCcd: function(addCndCcd){
+				var me = this;
+				me.applyFormula("stStpValLayout");
+			},
+			/**
+			 * 정량 스케일 그리드 item-edit-end
+             */
+            quantGridItemEditEnd : function(e){
+                var me = this;
+                var detail = e.detail,
+                    item = detail.item,
+                    dataField = item.dataField,
+                    newValue = detail.newValue,
+                    provider = detail.provider,
+                    data = provider.getItemAt(item.rowIndex);
+                
+                if(dataField == "nullv_appl_subj_scale_yn" && newValue =="Y"){
+                    // 전체 rowIndex에 대해 현재 수정된 행이 아니고, nullv_appl_subj_scale_yn = "Y" 인 경우 "N"으로 변경
+                    provider.setItemAtBatch(true, function(index, data){
+                        if(index != item.rowIndex && data[dataField] == "Y"){
+                            return {nullv_appl_subj_scale_yn : "N"};
+                        }
+                    });
+                }
+            },
+            
+            gridValidatorFuncQuant: function(headerText, dataField, data){
+                var me = this;
+                
+                if(dataField === "scale_nm"){
+                    // 코드 중복 체크
+                    var provider = me.$.gridPanelQuantScale.getDataProvider(),
+                            rows = provider.getItems();
+                    var unique_check = {};
+                    for (var i=0, len = rows.length; i<len; i++) {
+                        if(typeof unique_check[rows[i].scale_nm] == "undefined"){
+                            unique_check[rows[i].scale_nm] = 0;
+                        } else {
+                            return me.translate("STD.E1000", null, me.translate(headerText));   // '{0}'에 동일한 값이 존재합니다.
+                        }
+                    }
+                }
+                return true;
+            },
+            
+            gridValidatorFuncQuali: function(headerText, dataField, data){
+                var me = this;
+                
+                if(dataField === "scale_nm"){
+                    // 코드 중복 체크
+                    var provider = me.$.gridPanelScale.getDataProvider(),
+                            rows = provider.getItems();
+                    var unique_check = {};
+                    for (var i=0, len = rows.length; i<len; i++) {
+                        if(typeof unique_check[rows[i].scale_nm] == "undefined"){
+                            unique_check[rows[i].scale_nm] = 0;
+                        } else {
+                            return me.translate("STD.E1000", null, me.translate(headerText));   // '{0}'에 동일한 값이 존재합니다.
+                        }
+                    }
+                }
+                return true;
+            },
+            
+            /**
+             * 정량 스케일 범위 유효성 확인
+             */
+            isValidQuantScaleRange: function() {
+                var me = this;
+                var grid = me.$.gridPanelQuantScale;
+                
+                var chkScaleList = grid.getDataProvider().getItems();
+                
+                for(var i=0; i<chkScaleList.length; i++){
+                    var seqSection = chkScaleList[i];
+                    var chkCnt = 0;
+                    
+                    if(parseFloat(seqSection.st_val) >= parseFloat(seqSection.stp_val)) {
+                        UT.alert(me.translate("STD.E1010",null, "시작 값", "멈춤 값"),null,true);    // minText은(는) maxText 보다 작은 값으로 입력하십시오
+                        return false;
+                    }
+                    
+                    for(var j=0; j<chkScaleList.length; j++){
+                        var seqScale = chkScaleList[j];
+
+                        if(seqScale && (i != j)){
+                            if(parseFloat(seqSection.stp_val) <= parseFloat(seqScale.stp_val)
+                                    && parseFloat(seqSection.stp_val) > parseFloat(seqScale.st_val)) {
+                                chkCnt++;
+                            }
+                            if(parseFloat(seqSection.st_val) < parseFloat(seqScale.stp_val)
+                                    && parseFloat(seqSection.st_val) >= parseFloat(seqScale.st_val)) {
+                                chkCnt++;
+                            }
+                        }
+                    }
+                    
+                    if(chkCnt > 0) {
+                        UT.alert("STD.SRM1041"); // 스케일 시작, 멈춤 구간값의 중첩 등록이 불가능합니다.
+                        return false;
+                    }
+                }
+                return true;
+            },
+            
+            /**
+             * 계산식 버튼 클릭
+             */
+            onClickCalculatorBtn : function() {
+                var me = this;
+                var data = me.get("evalFactorInfo.data");
+                var param = {
+						eval_task_typ_ccd : data.eval_task_typ_ccd,
+						quant_fmla        : (data.quant_fmla)? data.quant_fmla : '',
+						quant_fmla_expln    : (data.quant_fmla_expln)? data.quant_fmla_expln : '',
+                        calc_key     : (data.calc_key)? data.calc_key : []
+                };
+                
+                // 계산식 팝업 호출
+                var evalFactorCalcPopup = UT.popup('ep-evalfactor-calc', me, 1200, 600, {
+                    "apply-data" : function(popup, e) {
+                        var calcData = e.detail;
+                        me.setCalcFunc(calcData);
+                        popup.close();
+                    }
+                });
+                evalFactorCalcPopup.show();
+                evalFactorCalcPopup.getWindowContent().load(param);
+            },
+            
+            /**
+             * 계산식/ 계산항목 setting
+             */
+            setCalcFunc : function(calcData){
+                var me = this,
+                    grid = me.$.gridPanelRec,
+                    provider = grid.getDataProvider();
+                var calcList = calcData.calc_key;
+                var calcArr = [];
+                
+                me.set("evalFactorInfo.data.quant_fmla", calcData.quant_fmla);
+                me.set("evalFactorInfo.data.quant_fmla_expln", calcData.quant_fmla_expln);
+                me.set("evalFactorInfo.data.calc_key", calcList);
+                me.$.gridPanelRec.setDataProvider(calcList);
+            },
+            
+            /**
+             * 계산식 유효성 검증
+             */
+            validateCalculus : function(quant_fmla){
+                var me = this;
+                var calcFactList = me.$.gridPanelRec.getDataProvider().getItems();
+                
+                if(UT.isEmpty(calcFactList)){
+                    UT.alert("STD.SRM1119"); // 계산식에 계산항목을 하나 이상 입력하세요.
+                    return false;
+                }else{
+                    try{
+                        var valid = false;
+                        var checkVal = quant_fmla || "";
+                        // 실적항목 아이디가 정규식 범위를 넘어 replaceAll 함수 구현
+                        var replaceAllFunc = function(str, searchVal, newVal){
+                            var str = str || "";
+                            str = str.replace(searchVal, newVal);
+                            if(str.indexOf(searchVal) > -1){
+                                return replaceAllFunc(str, searchVal, newVal)
+                            }
+                            return str;
+							
+                        }
+                        
+                        for(var i=0; i<calcFactList.length; i++){
+                            var recFact = "[" + calcFactList[i].calcfact_uuid + "]";
+                            // 모든 계산항목을 1로 치환
+                            checkVal = replaceAllFunc(checkVal, recFact, 1);
+                        }
+                        // 구분자'^' 제거
+                        checkVal = checkVal.replace(new RegExp("\\^", "gi"), "");
+                        
+                        // 계산식 수행 결과가 숫자형식인지 확인
+                        valid = UT.isNumber(eval(checkVal));
+                    }catch(exception){
+                        valid = false;
+                    }finally{
+                        if(!valid){
+                            UT.alert("STD.SRM1116");    // 계산식이 잘못되었습니다. 올바른 형식으로 입력하십시오.
+                        }
+                        return valid;
+                    }
+                }
+            },
+
+            /**
+             * 복사 버튼 클릭
+             */
+            onClickCopyBtn: function() {
+                 var me = this;
+				 
+				 me.saveCopyEvalFactor();
+            },
+            
+            /**
+             * 확정 취소 버튼
+             */
+            onClickCancelConfirmBtn: function() {
+                var me = this;
+
+				me.saveCancelConfirmEvalFactor();
+            },
+            
+            /**
+             * 확정/저장 버튼 클릭
+             */
+            onClickSaveBtn: function(e) {
+                var me = this;
+                var targetId = e.target.id;
+                var cnfdYn = 'N';
+                
+                if(targetId == "confirmBtn"){
+					cnfdYn = 'Y';
+                }
+                me.saveEvalFactorInfo(cnfdYn);
+            },
+            //clear
+            clear: function(){
+                var me = this;
+                me.set("evalFactorInfo",me.getPropertyInfo("evalFactorInfo").value());
+				me.set("reloadable", false);
+
+                me.removeGridDataProvider(me.$.gridPanelScale);
+                me.removeGridDataProvider(me.$.gridPanelQuantScale);
+				me.removeGridDataProvider(me.$.gridPanelRec);
+                me.removeGridDataProvider(me.$.gridPanelEvalTask);
+            },
+            /**
+             * 닫기 버튼 클릭
+             */
+            onClose: function() {
+                var me = this;
+				var reloadable = me.get("reloadable");
+                me.clear();
+                me.fire("close", {reloadable: reloadable});
+            },
+            
+            /**
+             * 정성 세부 항목 추가 버튼 클릭
+             */
+			onClickAddScaleBtn: function() {
+                var me = this,provider = me.$.gridPanelScale.getDataProvider();
+                var data = me.get("evalFactorInfo.data");
+                
+                provider.addItem({
+					scale_appl_yn : 'Y', // 정성인 경우 스케일 적용 여부 Y
+					eval_task_typ_ccd : data.eval_task_typ_ccd,
+					evalfact_uuid : data.evalfact_uuid,
+                    evalfact_cd : data.evalfact_cd
+                });
+            },
+
+            /**
+             * 정량 스케일 항목 추가 버튼 클릭
+             */
+			onClickAddQuantScaleBtn: function() {
+                var me = this,provider = me.$.gridPanelQuantScale.getDataProvider();
+                var data = me.get("evalFactorInfo.data");
+                
+                provider.addItem({
+					scale_appl_yn : data.scale_appl_yn,
+					eval_task_typ_ccd : data.eval_task_typ_ccd,
+					evalfact_uuid : data.evalfact_uuid,
+                    evalfact_cd : data.evalfact_cd
+                });
+            },
+            
+            /**
+             * 정성 세부항목 삭제 버튼 클릭
+             */
+			onClickDeleteScaleBtn: function() {
+                var me = this;
+                me.deleteEvalfactScaleList(me.$.gridPanelScale);
+            },
+            
+            /**
+             * 정성 세부항목 삭제 버튼 클릭
+             */
+            onClickDeleteQuantScaleBtn: function() {
+                var me = this;
+                me.deleteEvalfactScaleList(me.$.gridPanelQuantScale);
+            },
+            
+            /**
+             * 평가항목 조회
+             */
+            searchEvalFactorInfo: function() {
+                var me = this;
+                UT.request(me.$.findEvalFactorInfo);
+            },
+            
+            /**
+             * 평가항목 조회 callback
+             */
+            completeFindEvalFactorInfo: function(e, res) {
+                var me = this;
+                var result = res.response.resultData || {},
+                    data = result.data || {},
+					qualiScaleList = result.qualiScaleList,
+					quantScaleList = result.quantScaleList,
+					evalTaskList = result.evalTaskList;
+                
+                // 평가항목 상세정보 data Binding
+                me.set("evalFactorInfo.data", data);
+				me.$.gridPanelRec.setDataProvider(result.data.calc_key);
+				
+				// 적용 평가 업무 유형
+                me.set("evalTaskList", evalTaskList);
+                
+                if(qualiScaleList && qualiScaleList.length > 0){
+                    // 정성 세부항목 그리드 dataProvider binding
+                    me.$.gridPanelScale.setDataProvider(qualiScaleList);
+					
+					if(me.formula('stStpValLayout')){
+						// 점수입력 && 가감점인 경우 단일 스케일 항목의 시작 값 멈춤 값 세팅
+						me.set("evalFactorInfo.data.st_val", qualiScaleList[0].st_val);
+						me.set("evalFactorInfo.data.stp_val", qualiScaleList[0].stp_val);
+					}
+                }else{
+                    me.removeGridDataProvider(me.$.gridPanelScale);
+                }
+                
+                if(quantScaleList && quantScaleList.length > 0){
+                    // 정량 스케일 그리드 dataProvider binding
+                    me.$.gridPanelQuantScale.setDataProvider(quantScaleList);
+                }else{
+                    me.removeGridDataProvider(me.$.gridPanelQuantScale);
+                }
+                me.applyFormula();
+            },
+            
+            /**
+             * 평가항목 복사
+             */
+            saveCopyEvalFactor: function() {
+                var me = this;
+                var message = me.translate("STD.N2100"); // 복사하시겠습니까?
+                
+                UT.confirm(message, function(btn) {
+                    var copyParam = me.get("evalFactorInfo.data");
+                    copyParam.copy_nm = me.translate('복사본_');
+                    me.$.saveCopyEvalFactor.set("body", copyParam);
+                    UT.request(me.$.saveCopyEvalFactor);
+                }, null, true);
+            },
+            
+             /**
+              * 평가항목 복사 callback
+              */
+            onSaveCopyResultHandler: function(e, res) {
+                var me = this;
+                var result = res.response;
+                if (UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("복사", function() {
+						me.set("reloadable", true);
+                        me.removeGridDataProvider(me.$.gridPanelScale);
+                        me.removeGridDataProvider(me.$.gridPanelQuantScale);
+                        me.set("evalFactorInfo.data.evalfact_uuid", result.resultData.evalfact_uuid);
+                        me.set("evalFactorInfo.data.evalfact_cd", result.resultData.evalfact_cd);
+                        me.searchEvalFactorInfo();
+                    });
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+
+            /**
+             * 평가항목 확정취소
+             */
+            saveCancelConfirmEvalFactor: function() {
+                var me = this;
+                UT.confirm("STD.N1111", function() {  // 확정 취소하시겠습니까?
+					me.set("reloadable", true);
+                    me.set("evalFactorInfo.data.cnfd_yn", "N");
+                    me.$.saveCnfdYnEvalFactor.set("body", me.evalFactorInfo.data);
+                    UT.request(me.$.saveCnfdYnEvalFactor);
+                });
+            },
+            
+             /**
+              * 평가항목 확정취소 callback
+              */
+            onSaveCnfdYnResultHandler: function(e, res) {
+                var me = this;
+                var result = res.response || {};
+                var data = me.get("evalFactorInfo.data");
+                
+                if (result.resultStatus === "S") {
+					UT.completeAlert("확정 취소", function() {
+                        // 평가항목정보 재 조회
+						me.set("reloadable", true);
+                        me.setEvalFactor(data);
+                    });
+                } else if (result.resultStatus == "INVALID_STATUS_ERR") {
+                	return UT.alert("STD.SRM1044"); // 평가템플릿에 적용된 평가항목은 확정 취소할 수 없습니다.
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+            
+            /**
+             * 평가항목 저장
+             */
+            saveEvalFactorInfo: function(cnfdYn) {
+                var me = this;
+                var data = me.get("evalFactorInfo.data"),
+                    isQuantFact = (data.evalfact_typ_ccd == "QUANT");  // 정량평가 여부
+                var message = me.translate("STD.N1200");    // 저장하시겠습니까?
+                
+                // 평가항목 정보 form 유효성 check
+                if(!me.validate()) {
+                    UT.alert("STD.E0000");
+                    return;
+                }
+                
+                if(isQuantFact && !me.validateCalculus(data.quant_fmla)){
+                    return;
+                }
+				
+                if(me.formula("isQuantScale")){ // 정량 스케일 항목이 존재하는 경우
+                    if(me.$.gridPanelQuantScale.getDataProvider().getItemSize() <1){
+                        UT.alert("STD.SRM1047"); // 스케일을 등록하세요.
+                        return;
+                    }
+                    if(me.formula('isNullDataSc')){
+                        var item = me.$.gridPanelQuantScale.getDataProvider().filterItem({nullv_appl_subj_scale_yn : "Y"});
+                        if(UT.isEmpty(item)){
+							// 	STD.N4300	'{0}'을(를) {1}개 선택하세요.
+							// -> 'NULL값 적용 대상 스케일 여부'을(를) 1개 선택하세요.
+                            return UT.alert(me.translate("STD.N4300", null, me.translate("NULL값 적용 대상 스케일 여부"), "1"), null, true);
+                        }
+                    }
+                    // 정량 스케일 항목 그리드 입력 값 유효성 체크
+                    if(!me.validate("quant")){
+                        UT.alert("STD.E0000");
+                        return;
+                    }
+                    // 정량 스케일 항목 스케일범위 유효성 체크
+                    if(!me.isValidQuantScaleRange()){
+                        return;
+                    }
+                }else if(me.formula("isQualiScale")){ // 정성항목 스케일 구간 존재 하는 경우
+                    var provider = me.$.gridPanelScale.getDataProvider();
+                    if(provider.getItemSize() <1){
+                        UT.alert("STD.SRM1047");	// 스케일을 등록하세요.
+                        return;
+                    }
+                    
+                    if(!me.validate("quali")){
+                        UT.alert("STD.E0000");
+                        return;
+                    }
+					
+					var evalfactTypCcd = me.get("evalFactorInfo.data.evalfact_typ_ccd");
+
+					// 단일 선택인 경우 validation. 필요 시 다국어 등록 후 주석 해제.
+					if(evalfactTypCcd == "QUALI"){
+						var scItem = provider.filterItems({sc: "100"});
+						if(UT.isEmpty(scItem) || scItem.length == 0){
+							// 평가항목이 단일 선택인 경우 스케일 항목에 100점이 존재해야 합니다.
+							UT.alert("STD.SRM1353");
+							return;
+						}
+					}
+					// 정성 다중 선택인 경우 validation. 필요 시 다국어 등록 후 주석 해제.
+					else if(evalfactTypCcd == "QUALI_MULTPL_SEL") {
+						var sumVal = provider.getSummary("sc","sum");
+						if(sumVal != 100) {
+							// 평가항목이 다중 선택인 경우 스케일 항목 점수의 합이 100이어야 합니다.
+							UT.alert("STD.SRM1354");
+							return;
+						}
+					}
+
+					/*
+					// 다중선택인 경우
+                    if(evalfactTypCcd == "QUALI_MULTPL_SEL"){
+                        var defaultScale = provider.filterItem({sc:0});
+                        if(UT.isEmpty(defaultScale)){
+                            var allRows = provider.getItems(),
+                                minScale;
+                            for(var i=0; i<allRows.length; i++){
+                                if(i==0){
+									minScale = allRows[i];
+                                }else{
+                                    if(allRows[i-1].sc >= allRows[i].sc){
+										minScale = allRows[i];
+                                    }
+                                }
+                            }
+                            
+                            // '선택사항 해당없음' 처리를 위한 0점 배점 항목이 존재하지 않습니다.<br/>[선택항목명: {0} (배점: {1}점)] 항목을 최저 배점 항목으로 저장하시겠습니까?
+                            message = me.translate("STD.SRM1096", null, minScale.scale_nm, minScale.sc);
+                        }
+                    }
+                    */
+                }
+                
+				// 적용 평가 업무 유형 체크
+				var evalTaskList = me.$.gridPanelEvalTask.getDataProvider().getItems();
+				var applyYn = false;
+				for(var i=0;i<evalTaskList.length;i++){
+					if(evalTaskList[i].reg_yn == "Y"){
+						applyYn = true;
+						break;
+					}
+				}
+				if(!applyYn){
+					UT.alert("STD.SRM1319");	// 평가 업무 유형을 선택하세요.
+					return;
+				}
+				
+                if(cnfdYn === 'Y'){
+                    message = me.translate("STD.SRM1049");  // 확정 하시겠습니까?
+                }
+                
+                UT.confirm(message, function() {
+                    var providerRec = me.$.gridPanelRec.getDataProvider(),
+                        calcKeys = providerRec.getItems();	// 계산항목list
+                    var calcArr = [];
+                    
+                    if(calcKeys && calcKeys.length > 0){
+                        for(var i=0;i<calcKeys.length;i++){
+                            var item = calcKeys[i];
+                            item.evalfact_uuid          = data.evalfact_uuid;
+                            item.eval_task_typ_ccd    = data.eval_task_typ_ccd;
+                            item.evalfact_cd          = data.evalfact_cd;
+                            item.evalfact_typ_ccd    = data.evalfact_typ_ccd;
+                            calcArr.push(item);
+                        }
+                    }
+                    
+                    if (!isQuantFact) {   // 정량이 아닌 경우
+                        me.set("evalFactorInfo.data.nullv_datfil_meth_ccd", '');          // NULL값 데이터보정 방식 공통코드
+						me.set("evalFactorInfo.data.scale_appl_yn", 'Y');        // 스케일 적용여부 default 'Y'
+                    }
+                    
+                    me.set("evalFactorInfo.data.cnfd_yn", cnfdYn);
+                    
+                    var grid = isQuantFact ? me.$.gridPanelQuantScale : me.$.gridPanelScale;
+                    var provider = grid.getDataProvider();
+
+                    me.$.saveEvalFactor.set("body", {
+                        saveParam : me.get("evalFactorInfo.data"),  // 저장할 평가항목 정보
+                        saveListScale : provider.getItems(),        // 저장할 스케일(세부항목) 목록
+						saveListCalc : calcArr,                     // 저장할 계산식 실적항목 목록
+						saveListEvalTask : evalTaskList             // 평가항목이 적용될 평가 업무 유형 목록
+                    });
+                    
+                    UT.request(me.$.saveEvalFactor);
+                }, null, true);
+            },
+            
+             /**
+              * 평가항목 저장 callback
+              */
+            onSaveResultHandler: function(e, res) {
+                var me = this;
+                var result = res.response;
+                var data = me.get("evalFactorInfo.data");
+				if (UT.isObject(result) && result.resultStatus === "S") {
+					var resultMessage = (data.cnfd_yn === "Y") ? "확정" : "저장";
+					UT.completeAlert(resultMessage, function() {
+						me.set("reloadable", true);
+                        if(!data.evalfact_uuid || data.cnfd_yn == "Y"){ // 확정 시 닫기
+                            me.onClose();
+                        }else{  // 저장 시 재조회
+                            me.setEvalFactor(data);
+                        }
+                    });
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            },
+            
+            /**
+             * 정성/정량 스케일 항목 삭제
+             */
+            deleteEvalfactScaleList: function(grid){
+                var me = this;
+                var provider = grid.getDataProvider();
+                var deleteRows = provider.selectionCheckedItems();
+                
+                if(UT.isEmpty(deleteRows)){
+                    UT.alert("STD.N1600");
+                }else{
+                    provider.removeItems(true,true);
+                }
+            },
+
+            onRowRegex: function(data, item) {
+                var me = this;
+                switch (item.dataField) {
+                    case "sc":
+                    case "st_val":
+                    case "stp_val":
+                        return CCPrecManager.regex("srmScore");
+                    case "scale_sort":
+                        return CCPrecManager.regex("integer");
+                    default:
+                        return null;
+                }
+            }
+        });
+    </script>
+
+</dom-module>

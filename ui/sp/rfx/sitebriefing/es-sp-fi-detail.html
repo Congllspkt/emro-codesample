@@ -1,0 +1,368 @@
+<sc-link rel="import" href="ep-sp-rm-shared-detail.html"></sc-link>
+<sc-link rel="import" href="../../../bp/pro/shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="es-sp-fi-detail">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    <template>
+	
+		<cc-code-constraint code-param="{{codes.setupParam}}" value="{{codes.setupInfo}}"></cc-code-constraint>
+
+        <sc-request-group init>
+            <sc-code-group>
+                <!-- 단위 -->
+                <sc-code code="C007"	value="{{codes.comboUnitCode}}"></sc-code>
+            </sc-code-group>
+        </sc-request-group>
+
+        <sc-ajax id="findInfoSpFieldIntro" url="findInfoSpFieldIntro.do" on-response="completeFindInfo"></sc-ajax>
+        <sc-ajax id="submitSpFieldIntro" url="submitSpFieldIntro.do" body="{{fiData}}" on-response="completeSubmit"></sc-ajax>
+        <sc-ajax id="remoteMeetingConferenceVendorJoin" url="remoteMeetingConferenceVendorJoin.do" body="{{fiData}}" on-response="callConferenceJoinGetUrl"></sc-ajax>
+
+
+        <cc-auth-checker check-list="auth-s, auth-r"></cc-auth-checker>
+
+        <cc-detail-title-bar title-text="현장설명회 정보">
+            <sc-button text="참석 예정 제출" on-click="onAttendExptSubmit" auth-s hidden="[[!formula('submitAble')]]"></sc-button>
+            <sc-button text="화상회의 참석" on-click="onRemoteMeetJoin" auth-s hidden="[[!formula('remoteMeetJoinAble')]]"></sc-button>
+            <sc-button text="화상회의 공유 내용" on-click="onRemoteMeetShared" auth-r hidden="[[!formula('remoteMeetShared')]]"></sc-button>
+            <sc-button text="닫기" on-click="onClose"></sc-button>
+        </cc-detail-title-bar>
+
+        <div class="flex page">
+			<cc-form-panel title-text="일반 정보" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{fiData.oorg_cd}}" selected-index="0" placeholder="필수" readonly="true"></cc-sp-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="현장설명회 번호"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_no}}" readonly></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_tit}}" readonly="true" max-length="100"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="담당자"></sc-label>
+					<cc-user-search value="{{fiData.sitebrfg_pic_nm}}" result-field="usr_id" result-value="{{fiData.sitebrfg_pic_id}}" readonly="true" hide-trigger="true"></cc-user-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="담당자 부서"></sc-label>
+					<cc-dept-search value="{{fiData.sitebrfg_inchr_dept_nm}}" result-field="dept_cd" result-value="{{fiData.sitebrfg_inchr_dept_cd}}" readonly="true" hide-trigger="true"></cc-dept-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="담당자 연락처"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_pic_ctc}}" readonly="true" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18"></sc-text-field>
+				</cc-fieldset>
+			</cc-form-panel>
+
+            <cc-form-panel title-text="일정 및 장소" collapsible="true">
+				<cc-fieldset>
+					<sc-label text="일자"></sc-label>
+					<div class="field-box" style="width:100%" validation-group="fiDate">
+						<sc-date-field id="fiStartDt" class="w-100" value="{{fiData.sitebrfg_st_dttm}}"
+									   readonly="true"
+									   validator="fiStartDateValidator">
+						</sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field id="fiStartDtHour" class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="integer"
+										 value="{{fiData.sitebrfg_st_dttm_hour}}"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 readonly="true"
+										 validator="fiStartDateValidator">
+						</sc-number-field>
+						<span style="margin:0 2px">:</span>
+						<sc-number-field id="fiStartDtMin" class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="integer"
+										 value="{{fiData.sitebrfg_st_dttm_min}}"
+										 regex="/^[0-5]?[0-9]$/"
+										 readonly="true"
+										 validator="fiStartDateValidator">
+						</sc-number-field>
+			
+						<span style="margin:0 3px">~</span>
+			
+						<sc-date-field id="fiEndDt" class="w-100" value="{{fiData.sitebrfg_clsg_dttm}}" hidden="true"></sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field id="fiEndDtHour" class="w-60" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="integer"
+										 value="{{fiData.sitebrfg_clsg_dttm_hour}}"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 readonly="true"
+										 validator="fiEndDateValidator">
+						</sc-number-field>
+						<span style="margin:0 2px">:</span>
+						<sc-number-field id="fiEndDtMin" class="w-60" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="integer"
+										 value="{{fiData.sitebrfg_clsg_dttm_min}}"
+										 regex="/^[0-5]?[0-9]$/"
+										 readonly="true"
+										 validator="fiEndDateValidator">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="현장설명회 장소"></sc-label>
+					<sc-text-field value="{{fiData.sitebrfg_plc}}" readonly="true" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[!formula('showRmYn')]]">
+					<div class="field-box">
+						<sc-label text="화상회의 여부"></sc-label>
+						<cc-label-tooltip text="화상회의를 통해 현장설명회를 진행하게 됩니다."></cc-label-tooltip>
+					</div>
+					<sc-checkbox-field input-value="{{fiData.vconf_use_yn}}" readonly="true" checked-value="Y" un-checked-value="N"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="공유 내용"></sc-label>
+					<sc-textarea-field value="{{fiData.sitebrfg_vd_rmk}}" max-length="1000" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+            <sc-panel title-text="첨부파일" collapsible="true">
+                <sc-upload id="upload_out" class="h-200" value="{{fiData.vd_athg_uuid}}" editable="false"></sc-upload>
+            </sc-panel>
+
+            <sc-grid id="itemGridPanel" class="h-300" collapsible="true" aggregate=true use-dummy="false"
+                     editable="false"
+                     use-state="false"
+                     use-selection="false"
+                     on-item-click="onItemClick">
+                <cc-grid-toolbar title-text="품목 정보">
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column	data-field="sitebrfg_lno" header-text="항번" width="60" data-type="number" text-align="center" editable="false"></sc-data-column>
+                    <sc-data-column	data-field="disp_item_cd" header-text="품목 코드"	width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column	data-field="item_nm" header-text="품목 명" width="250" text-align="left"></sc-data-column>
+                    <sc-data-column data-field="item_spec" header-text="품목 규격"	 width="250" text-align="left"></sc-data-column>
+                    <sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="60"	text-align="center"	visible="[[formula('hasNoCdItem')]]"
+                                     image-change-function="onImageChangeFn"></sc-image-column>
+                    <sc-combobox-column	data-field="uom_ccd" header-text="UOM" width="60" text-align="center"
+                                        display-field="data" value-field="data" items="{{codes.comboUnitCode}}"></sc-combobox-column>
+                    <sc-data-column	data-field="sg_cd" header-text="소싱그룹 코드"	width="100"	text-align="center"	editable="false"></sc-data-column>
+                    <sc-data-column	data-field="sg_nm" header-text="소싱그룹 명"	width="160"	text-align="center"	editable="false"></sc-data-column>
+                </sc-grid-columns>
+                <sc-grid-fields>
+                    <sc-grid-field	data-field="sitebrfg_uuid"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_cd"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_spec_dtl"			data-type="text"></sc-grid-field>
+                    <sc-grid-field	data-field="item_cd_crn_typ_ccd"		data-type="text"></sc-grid-field>
+                </sc-grid-fields>
+            </sc-grid>
+        </div>
+
+        <sc-dialog id="dialog_attend_expt" title-text="참석 예정 여부" title-align="left" style="width:400px;height:150px" modal="true">
+            <cc-page-title-bar>
+                <sc-button text="제출"	on-click="onSubmit" auth-s></sc-button>
+            </cc-page-title-bar>
+            <sc-radio-group-field value="{{fiData.atnd_confm_yn}}">
+                <sc-radio-field label="참석" input-value="Y"></sc-radio-field>
+                <sc-radio-field label="미참석" input-value="N"></sc-radio-field>
+            </sc-radio-group-field>
+        </sc-dialog>
+    </template>
+    <script>
+        Polymer({
+            is: "es-sp-fi-detail",
+            properties: {
+                codes: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            P094: [],
+                            comboUnitCode: [],
+							setupParam: {
+								ccd: "C000",
+								dtl_cd: "USE_YN"
+							},
+                            setupInfo:{}
+                        };
+                    },
+                    reset: false
+                },
+
+                fiData: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            vconf_use_yn:{
+                                type: String,
+                                value: "N"
+                            },
+                        };
+                    }
+                }
+
+            },
+
+            formulas: {
+
+                // 참석여부 제출 가능 상태 : 통보 (P), 참석예정 여부 미제출
+                submitAble: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "NOFN" && this.fiData.atnd_confm_subm_yn === "N";
+                },
+
+                remoteMeetJoinAble: function (){
+                    return this.fiData.sitebrfg_sts_ccd === "NOFN" && this.fiData.vconf_use_yn == "Y" && this.fiData.vconf_sts_ccd === "VCONF_CRN";
+                },
+
+                remoteMeetShared: function() {
+                    return this.fiData.sitebrfg_sts_ccd === "SITEBRFG_ED" && this.fiData.vconf_shr_yn ===  "Y" && this.fiData.vconf_use_yn === "Y"  && this.fiData.vconf_sts_ccd === "VCONF_ED";
+                },
+
+                // 무코드 품목 포함 여부
+                hasNoCdItem: function() {
+                    return this.fiData.has_no_cd_item === "Y";
+                },
+                showRmYn: function() {
+                    return this.get("codes.setupInfo.rfx_sitebrfg_vconf") === "Y";
+                },
+            },
+            // 화면 생성 완료
+            initialized: function() {
+                var me = this;
+                me.applyFormula();
+            },
+
+            load: function(data) {
+                var me = this;
+                if(data.sitebrfg_uuid){
+                    me.set("fiData.sitebrfg_uuid", data.sitebrfg_uuid);
+                    me.onFindInfo();
+                }
+            },
+
+            onFindInfo: function() {
+                var me = this;
+                me.$.findInfoSpFieldIntro.body = {sitebrfg_uuid : me.fiData.sitebrfg_uuid};
+                UT.request(me.$.findInfoSpFieldIntro);
+            },
+
+            completeFindInfo: function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                var fiData = UT.convertDtToDayHourMin(result.fiData);
+                me.set("fiData", fiData);
+                me.$.itemGridPanel.setDataProvider(result.fiItems);
+
+                me.applyFormula();
+            },
+
+            onSubmit: function() {
+                var me = this;
+
+                UT.confirm("STD.N4800", function() { // 제출 하시겠습니까?
+                    UT.request(me.$.submitSpFieldIntro);
+                });
+            },
+
+            completeSubmit: function(e, res) {
+                var me = this,
+                    result = res.response.resultData;
+
+                UT.alert("STD.N4900", function() {// 제출 되었습니다.
+                    me.$.dialog_attend_expt.close();
+                    me.set("fiData.sitebrfg_uuid", result.sitebrfg_uuid);
+                    me.onFindInfo();
+                });
+            },
+
+            getFiData : function() {
+                var me = this;
+                return UT.convertDayHourMinToDt(me.get("fiData"));
+            },
+
+            // grid item click 이벤트
+            onItemClick : function(e) {
+                var me = this;
+                var data = e.detail.data,
+                    item = e.detail.item,
+                    provider = e.detail.provider;
+
+                if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                    //현재 row 인덱스를 담아둔다.
+                    me.rowIndex = item.rowIndex;
+
+                    me.showDetailSpec(data, provider);
+                }
+            },
+
+            // 상세규격 팝업
+            showDetailSpec: function(data, provider) {
+                var me = this;
+
+                var readonly =  true;
+                var popup = UT.popup('ep-item-detail-spec', me, 400, (readonly ? 200 : 200), {
+                    "clear-dtl-spec": function(popup, e) {
+                        provider.setItemAt(me.rowIndex, {
+                            "item_spec_dtl": null
+                        });
+                        popup.close();
+                    },
+                    "apply-dtl-spec": function(popup, e) {
+                        var dtlSpec = e.detail.item_spec_dtl;
+
+                        provider.setItemAt(me.rowIndex, {
+                            "item_spec_dtl": dtlSpec
+                        });
+                        popup.close();
+                    }
+                });
+                popup.show();
+                popup.getWindowContent().load(data, readonly);
+            },
+
+            // 그리드 image-change-function
+            onImageChangeFn: function(data, item){
+                if(item.dataField === "img_item_cd" && data["item_cd_crn_typ_ccd"] === "ITEM_CD") {
+                    return "link";
+                } else if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+                    return "link";
+                }
+                return null;
+            },
+
+            onAttendExptSubmit: function() {
+                var me = this;
+                me.$.dialog_attend_expt.show();
+                me.set("fiData.atnd_confm_yn", "Y");
+            },
+
+
+
+            onClose: function() {
+                var me = this;
+                me.reset();
+                me.fire("show-list");
+            },
+
+            onRemoteMeetJoin:function (){
+                var me = this;
+                UT.request(me.$.remoteMeetingConferenceVendorJoin);
+            },
+
+            callConferenceJoinGetUrl : function(e, res) {
+                var me = this,
+                    result = res.response;
+
+                if(result.resultStatus === "E" || UT.isEmpty(result.url)) {
+                    UT.alert(result.result_message, function(){
+                        me.onFindInfo();
+                    });
+                }else{
+                    window.open(result.url,"_blank");
+                }
+            },
+
+            // 화상회의 공유 화면
+            onRemoteMeetShared: function() {
+                var me = this;
+                var popup = UT.popup('ep-sp-rm-shared-detail', me, 750 ,"80%", {
+                },{titleText: "협력사 화상회의 공유"});
+                popup.show();
+                popup.getWindowContent().load(me.get('fiData'));
+            },
+
+        })
+    </script>
+</dom-module>

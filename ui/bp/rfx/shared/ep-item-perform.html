@@ -1,0 +1,377 @@
+<dom-module id="ep-item-perform">
+	<style>
+		:host {
+			@apply(--vbox-layout)
+		}
+	</style>
+	<template>
+		<sc-ajax id="findItemBasicInfo" url="findItemBasicInfo.do" body="[[searchParam]]"></sc-ajax>
+		<sc-ajax id="findPerformByItem" url="findPerformByItem.do" body="[[searchParam]]"></sc-ajax>
+		
+		<cc-page-title-bar title-text="[[searchParam.item_cd]] [[itemInfo.item_nm]]" i18n-disabled>
+		</cc-page-title-bar>
+		
+		<div class="flex page">
+			<cc-form-panel column="3">
+				<cc-fieldset row-span="4"> <!-- cc-fieldset : Label 필드 1개 / Input 필드 1개 패턴 유지 필수 -->
+					<cc-image-listbox grp-cd="[[itemInfo.img_athg_uuid]]" hide-image-name="true" read-only="true"></cc-image-listbox>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<div class="field-box" style="width:100%">
+						<cc-operorg-multi-combobox-field id="operorgcombobox" class="w-150" validation-group="operOrg"
+														 oper-unit-cd="PO" value="{{searchParam.oorg_cds}}" selected-all="true"
+														 placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+						<sc-button text="조회" on-click="findPerformByItem" style="margin-left:2px;height:fit-content"></sc-button>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="분류"></sc-label>
+					<sc-label text="[[itemInfo.itemcat_lvl_1_nm]] > [[itemInfo.itemcat_lvl_2_nm]] > [[itemInfo.itemcat_lvl_3_nm]] > [[itemInfo.itemcat_lvl_4_nm]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="품목 코드"></sc-label>
+					<sc-label text="[[searchParam.item_cd]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="품목 명"></sc-label>
+					<sc-label text="[[itemInfo.item_nm]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="UOM"></sc-label>
+					<sc-label text="[[itemInfo.uom_ccd]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="품목 규격"></sc-label>
+					<sc-label text="[[itemInfo.item_spec]]" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field value="[[itemInfo.rmk]]" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<div class="hbox" style="width:100%;height:300px" hidden="[[!formula('existProModule')]]">
+				<sc-grid id="poAmtGrid" class="flex" use-dummy="false"
+						 editable="false"
+						 use-state="false"
+						 use-selection="false">
+					<cc-grid-toolbar></cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="oper_org_nm" header-text="운영조직" width="100" text-align="center"></sc-data-column>
+						<sc-data-column data-field="vd_cd" header-text="협력사 코드" width="80" text-align="center"></sc-data-column>
+						<sc-data-column data-field="vd_nm" header-text="협력사 명" width="150" text-align="left"></sc-data-column>
+						<sc-data-column data-field="po_amt" header-text="발주 금액" width="150" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+					</sc-grid-columns>
+				</sc-grid>
+				
+				<div class="hspace-5"></div>
+				
+				<cc-echart id="poAmtChart" class="box flex" style="margin-top: 5px;"></cc-echart>
+			</div>
+			
+			<div class="hbox" style="width:100%;height:300px" hidden="[[!formula('existProModule')]]">
+				<sc-grid id="poItemPriceGrid" class="flex" use-dummy="false"
+						 editable="false"
+						 use-state="false"
+						 use-selection="false">
+					<cc-grid-toolbar></cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="oper_org_nm" header-text="운영조직" width="100" text-align="center"></sc-data-column>
+						<sc-data-column data-field="vd_cd" header-text="협력사 코드" width="80" text-align="center"></sc-data-column>
+						<sc-data-column data-field="vd_nm" header-text="협력사 명" width="150" text-align="left"></sc-data-column>
+						<sc-data-column data-field="po_uprc" header-text="단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+						<sc-date-column data-field="po_crn_dt" header-text="발주 등록 일자" width="100" text-align="center"></sc-date-column>
+					</sc-grid-columns>
+				</sc-grid>
+				
+				<div class="hspace-5"></div>
+				
+				<cc-echart id="poItemPriceChart" class="box flex" style="margin-top: 5px;"></cc-echart>
+			</div>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is: 'ep-item-perform',
+			behaviors: [
+				Polymer.SCResizableBehavior
+			],
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				itemInfo: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				poAmtChartOption: {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: I18N.translate("발주 금액(누계)")
+							},
+							tooltip: {
+								trigger: 'axis',
+								axisPointer: {
+									type: 'shadow'
+								}
+							},
+							legend: {},
+							grid: {
+								left: '3%',
+								right: '4%',
+								bottom: '3%',
+								containLabel: true
+							},
+							xAxis: {
+								type: 'category',
+								data: []
+							},
+							yAxis: {
+								type: 'value',
+								boundaryGap: [0, '1%']
+							},
+							series: []
+						};
+					}
+				},
+				poItemPriceChartOption: {
+					type: Object,
+					value: function() {
+						return {
+							title: {
+								text: I18N.translate("발주 등록 일자")
+							},
+							tooltip: {
+								trigger: 'axis',
+								axisPointer: {
+									type: 'shadow'
+								}
+							},
+							legend: {},
+							grid: {
+								left: '3%',
+								right: '4%',
+								bottom: '3%',
+								containLabel: true
+							},
+							xAxis: {
+								type: 'time',
+								axisLabel: {
+									formatter: '{yy}/{MM}/{dd}',
+									rotate: 70,
+									hideOverlap: true
+								},
+								minInterval: 60 * 60 * 1000 * 24,
+								min: function(value) {
+									return value.min - 60 * 60 * 1000 * 24;
+								},
+								max: function(value) {
+									return value.max + 60 * 60 * 1000 * 24;
+								},
+								boundaryGap: ['5%', '5%'],
+								data: []
+							},
+							yAxis: {
+								type: 'value',
+								boundaryGap: [0, '1%']
+							},
+							series: []
+						};
+					}
+				}
+			},
+			formulas: {
+				existProModule: function() {
+					return SCModuleManager.exist("PRO");
+				}
+			},
+			listeners: {
+				'sc-resize': 'doContentElementResize'
+			},
+			doContentElementResize: function() {
+				Polymer.dom.addDebouncer(this.debounce('_debounceGridResize', this._doContentElementResize, 100));
+			},
+			_doContentElementResize: function() {
+				var me = this;
+				
+				if(!me.isVisible(true)) {
+					return;
+				}
+				
+				/*if(me.poAmtChartMain && me.$.poAmtChart.firstElementChild) {
+					me.poAmtChartMain.resize();
+				}*/
+				/*if(me.poItemPriceChartMain && me.$.poItemPriceChart.firstElementChild) {
+					me.poItemPriceChartMain.resize();
+				}*/
+			},
+			initialized: function() {
+			
+			},
+			load: function(param) {
+				var me = this;
+				
+				me.set("searchParam.item_cd", param.item_cd);
+				
+				me.findItemBasicInfo();
+			},
+			// 품목 기본정보 조회
+			findItemBasicInfo: function() {
+				var me = this;
+				
+				UT.request(me.$.findItemBasicInfo, function(el, res) {
+					me.set("itemInfo", res.response);
+					
+					me.findPerformByItem();
+				});
+			},
+			// 해당 품목의 협력사 발주정보 조회
+			findPerformByItem: function() {
+				var me = this;
+				
+				if(!me.validate('operOrg')) {
+					UT.alert("STD.N3400");
+					return;
+				}
+				
+				UT.request(me.$.findPerformByItem, function(el, res) {
+					var result          = res.response,
+						poTotAmtList    = result.vendorPoTotAmtList,
+						poItemPriceList = result.vendorPoItemPriceList;
+					
+					// 협력사 별 발주금액 목록
+					me.$.poAmtGrid.setDataProvider(poTotAmtList);
+					// 발주품목 별 발주단가 목록
+					me.$.poItemPriceGrid.setDataProvider(poItemPriceList);
+					
+					// 차트 초기화
+					me.clearChart();
+					
+					// 차트 그리기
+					me.drawPoAmtChart(poTotAmtList);
+					me.drawPoItemPriceChart(poItemPriceList);
+				});
+			},
+			// 차트 초기화
+			clearChart: function() {
+				var me = this;
+				
+				/*if(me.$.poAmtChart.firstElementChild) {
+					me.$.poAmtChart.removeChild(me.$.poAmtChart.firstElementChild);
+				}*/
+				/*if(me.$.poItemPriceChart.firstElementChild) {
+					me.$.poItemPriceChart.removeChild(me.$.poItemPriceChart.firstElementChild);
+				}*/
+			},
+			// colorCode 랜덤 생성
+			getRandomColorCode: function() {
+				return "#" + Math.round(Math.random() * 0xffffff).toString(16);
+			},
+			// 발주금액(누적) 차트
+			drawPoAmtChart: function(poTotAmtList) {
+				var me = this;
+				
+				var operOrgCds                           = [], operOrgNms          = [],
+					vendorNmMap = {}, vendorOperOrgPoMap = {};
+				
+				poTotAmtList.forEach(function(data) {
+					var oorgCd    = data.oorg_cd,
+						operOrgNm = data.oper_org_nm,
+						vdCd      = data.vd_cd,
+						vdNm      = data.vd_nm,
+						poAmt     = data.po_amt;
+					
+					if(operOrgCds.indexOf(oorgCd) === -1) {
+						operOrgCds.push(oorgCd);
+						operOrgNms.push(operOrgNm);
+					}
+					if(!vendorNmMap[vdCd]) {
+						vendorNmMap[vdCd] = vdNm;
+					}
+					if(!vendorOperOrgPoMap[vdCd]) {
+						vendorOperOrgPoMap[vdCd] = {};
+					}
+					vendorOperOrgPoMap[vdCd][oorgCd] = poAmt;
+				});
+				
+				// 협력사 별 발주품목 정보 구성
+				var chartSeries = [];
+				Object.keys(vendorOperOrgPoMap).forEach(function(vdCd) {
+					var vdOperOrgPo = vendorOperOrgPoMap[vdCd],
+						vdNm        = vendorNmMap[vdCd],
+						operOrgCnt  = operOrgCds.length,
+						vdPoItems   = Array.apply(null, Array(operOrgCnt)),
+						colorCode   = me.getRandomColorCode();
+					
+					for(var i = 0; i < operOrgCnt; i++) {
+						var oorgCd = operOrgCds[i];
+						vdPoItems[i] = vdOperOrgPo[oorgCd] || 0;
+					}
+					
+					chartSeries.push({
+						type: 'bar',
+						name: vdNm,
+						data: vdPoItems
+					});
+				});
+				
+				var option = me.get("poAmtChartOption");
+				option.xAxis.data = operOrgNms;
+				option.series = chartSeries;
+				
+				me.$.poAmtChart.generateChart(option);
+			},
+			// 발주단가 이력 차트
+			drawPoItemPriceChart: function(poItemPriceList) {
+				var me = this;
+				
+				var vendorNmMap = {}, vendorPoItemMap = {};
+				
+				poItemPriceList.forEach(function(data) {
+					var vdCd      = data.vd_cd,
+						vdNm      = data.vd_nm,
+						//	oorgCd = data.oorg_cd,
+						//	operOrgNm = data.oper_org_nm,
+						itemPrice = data.po_uprc,
+						poDate    = data.po_crn_dt,
+						dt        = UT.toTime(UT.toDate(poDate, "yyyyMMdd"));
+					
+					if(!vendorNmMap[vdCd]) {
+						vendorNmMap[vdCd] = vdNm;
+					}
+					if(!vendorPoItemMap[vdCd]) {
+						vendorPoItemMap[vdCd] = [];
+					}
+					vendorPoItemMap[vdCd].push([dt, itemPrice]);
+				});
+				
+				// 협력사 별 발주품목 정보 구성
+				var chartSeries = [];
+				Object.keys(vendorPoItemMap).forEach(function(vdCd) {
+					var vdPoItems = vendorPoItemMap[vdCd],
+						vdNm      = vendorNmMap[vdCd],
+						colorCode = me.getRandomColorCode();
+					
+					chartSeries.push({
+						type: 'line',
+						name: vdNm,
+						data: vdPoItems
+					});
+				});
+				
+				var option = me.get("poItemPriceChartOption");
+				option.series = chartSeries;
+				
+				me.$.poItemPriceChart.generateChart(option);
+			}
+		});
+	</script>
+</dom-module>

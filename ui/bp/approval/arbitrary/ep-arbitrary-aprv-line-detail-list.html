@@ -1,0 +1,570 @@
+<sc-link rel="import" href="ep-arbitrary-aprv-line-detail-list-cur.html"></sc-link>
+
+<dom-module id="ep-arbitrary-aprv-line-detail-list">
+
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+
+        <!-- 코드 조회 -->
+        <sc-request-group init>
+            <sc-code-group>
+                <sc-code code="G012" value="{{codes.G012}}" ></sc-code> <!-- 결재자 직책 -->
+                <sc-code code="G008" value="{{codes.G008}}" ></sc-code> <!-- 결재자 검색 범위 -->
+				<sc-code code="C004" value="{{codes.C004}}" on-response="completeFindCur"></sc-code> <!-- 통화 -->
+			</sc-code-group>
+            <sc-ajax url="findListCommonCodeAttributeCode.do" body="{{codes.G005.param}}" last-response="{{codes.G005.result}}" on-response="completeCodeGroup">
+            </sc-ajax>
+        </sc-request-group>
+
+        <sc-ajax id="searchList" url="selectListArbitraryAprvLineDetail.do" body="{{searchParam}}" on-response="completeSearchList"> <!-- 목록 조회 -->
+        </sc-ajax>
+
+        <sc-ajax id="save" url="saveListArbitraryAprvLineDetail.do" on-response="completeSave"> <!-- 저장 -->
+        </sc-ajax> 
+
+        <sc-ajax id="deleteList" url="deleteListArbitraryAprvLineDetail.do" on-response="completeDeleteList"> <!-- 목록 삭제 -->
+        </sc-ajax> 
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<div class="vbox flex">
+			<cc-form-panel validation-group="save" label-width="250" >
+				<cc-fieldset>
+					<sc-label text="전결 결재선 명"></sc-label>
+					<sc-text-field value="{{searchParam.dapvl_apvlln_nm}}" class="w-350" readonly="[[!formula('isLineNameEditable')]]" required="true"></sc-text-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="datagrid" on-item-edit-end="onItemEditEnd"  on-item-click="onItemClick"
+				editable="false" use-state="[[formula('isEditable')]]" use-selection="[[formula('isEditable')]]" sortable="false" on-item-click="onItemClick" class="flex">
+				
+				<cc-grid-toolbar>
+					<sc-button text="추가" on-click="onAddData"    auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+					<sc-button text="삭제" on-click="onDeleteList" auth-s hidden="[[!formula('isEditable')]]"></sc-button>
+				</cc-grid-toolbar>
+				
+				<sc-grid-columns>
+					<sc-combobox-column data-field="apvr_typ_ccd" header-text="결재자 유형"     width="100" text-align="center" editable="true" items="{{codes.G005}}" display-field="label" value-field="data" required="true" style-name="link"></sc-combobox-column>
+					<sc-data-column     data-field="sort"      header-text="순서"           width="50"  text-align="center" editable="true" data-type="number" format-type="integer" validator-type="integer" required="true" max-length="3"></sc-data-column>
+					<sc-combobox-column data-field="apvr_jobtit_ccd"    header-text="결재자 직책"         width="120" text-align="center" items="{{codes.G012}}" display-field="label" value-field="data" required="true"></sc-combobox-column>
+					<sc-group-column	hide-child-headers="true"	header-text="부서"			width="130"	text-align="center"	editable="false">
+						<sc-data-column data-field="apvr_dept_cd"    header-text="부서 코드"         width="40" text-align="center"  required="true"></sc-data-column>
+						<sc-data-column data-field="aprver_dept_nm"    header-text="부서 명"         width="90" text-align="center"  required="true"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column	hide-child-headers="true"	header-text="결재자"			width="200"	text-align="center"	editable="false">
+						<sc-data-column data-field="aprver_user_nm"    header-text="결재자 명"         width="120" text-align="center" editable="true" required="true"></sc-data-column>
+						<sc-data-column data-field="apvr_id"    header-text="결재자 아이디"         width="80" text-align="center" editable="true" required="true"></sc-data-column>
+					</sc-group-column>
+					<sc-combobox-column data-field="apvr_srch_scop_ccd" header-text="결재자 검색 범위" width="200" text-align="center" editable="true" items="{{codes.G008}}" display-field="label" value-field="data" required="true"></sc-combobox-column>
+					<sc-checkbox-column data-field="apvlln_mod_poss_yn" header-text="결재선 수정 가능 여부"       width="170" text-align="center" editable="true" check-value="Y" un-checked-value="N" display-checkbox="false"></sc-checkbox-column>
+					<sc-group-column hide-child-headers="true" header-text="전결 대상 금액 검토 여부" width="190" text-align="center">
+						<sc-checkbox-column data-field="dapvl_cnd_amt_rv_yn" header-text="전결 대상 금액 검토 여부"   width="160" text-align="center" editable="true" check-value="Y" un-checked-value="N" display-checkbox="false"></sc-checkbox-column>
+						<sc-image-column  data-field="dapvl_cnd_amt_cur" width="30"  text-align="center" image-change-function="onImageChange"></sc-image-column>
+					</sc-group-column>
+<!--					<sc-data-column     data-field="dapvl_cnd_amt"     header-text="전결 대상 금액(이상)" width="140" text-align="right" data-type="number" format-type="amt" validator-type="amt" editor-regex-function="onRowRegex" validate-on-cell-paste="true" item-editable-function="itemEditableFunction" max-length="15"></sc-data-column>-->
+				</sc-grid-columns>
+				
+				<sc-grid-fields>
+					<sc-grid-field data-field="dapvl_uuid"     data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="dapvl_tbl_id"     data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="dapvl_apvlln_id" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="dapvl_apvr_uuid" data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+			
+			<sc-panel class="flex" validation-group="save" hidden="[[!formula('isAddAprvLine')]]">
+				<cc-sub-title-bar>
+					<sc-button text="저장" on-click="onSave"   auth-s hidden="[[!formula('isDetailEditable')]]"></sc-button>
+				</cc-sub-title-bar>
+				<table class="tb-form">
+					<colgroup>
+						<col style="width:300px; text-align: center;"></col>
+						<col></col>
+						<col></col>
+					</colgroup>
+					<tr>
+						<th>
+							<sc-label text="결재자 유형"></sc-label>
+						</th>
+						<td colspan="3">
+							<sc-radio-group-field class="w-300" name="aprvEmpTypeItems" display-field="label" value-field="data"
+												  items="{{codes.G005}}" value="{{detailInfo.apvr_typ_ccd}}" readonly="[[!formula('isDetailEditable')]]">
+							</sc-radio-group-field>
+						</td>
+					</tr>
+					<tr>
+						<th>
+							<sc-label text="결재자 검색 범위"></sc-label>
+						</th>
+						<td>
+							<sc-combobox-field class="w-250" value="{{detailInfo.apvr_srch_scop_ccd}}" items="{{codes.G008}}" display-field="label" value-field="data" required="true" on-change="onChangeAprvSrchRng" readonly="[[!formula('isDetailEditable')]]"></sc-combobox-field>
+
+						</td>
+						<td>
+							<cc-dept-search id="deptSearch" name="searchType" value="{{detailInfo.aprver_dept_nm}}" result-value="{{detailInfo.apvr_dept_cd}}" class="w-250" result-field="dept_cd" hidden="true" readonly="[[!formula('isDetailEditable')]]" required="true"></cc-dept-search>
+							<cc-user-search id="userSearch" name="searchType" value="{{detailInfo.aprver_user_nm}}" result-value="{{detailInfo.apvr_id}}" class="w-250" placeholder="결재자 명" hidden="true" readonly="[[!formula('isDetailEditable')]]" required="true"></cc-user-search>
+						</td>
+						<td>
+							<sc-combobox-field id="aprverRspnsSearch" class="w-250" items="{{codes.G012}}" display-field="label" value-field="data" required="true" value="{{detailInfo.apvr_jobtit_ccd}}" hidden="true" readonly="[[!formula('isDetailEditable')]]"></sc-combobox-field>
+						</td>
+					</tr>
+					<tr>
+						<th>
+							<sc-label text="전결 대상 금액"></sc-label>
+						</th>
+						<td colspan="1">
+							<sc-checkbox-field input-value="{{detailInfo.dapvl_cnd_amt_rv_yn}}" checked-value="Y" un-checked-value="N" readonly="[[!formula('isDetailEditable')]]" on-checkchange="onYnCheckChange"></sc-checkbox-field>
+<!--							<sc-number-field class="w-100" value="{{detailInfo.dapvl_cnd_amt}}" default-value="0" min-value="0" max-length="15" format-type="amt" validator-type="amt" readonly="[[!formula('isAmtCondY')]]"></sc-number-field>-->
+						</td>
+						<th>
+							<sc-label text="결재선 수정 가능 여부"></sc-label>
+						</th>
+						<td colspan="1">
+							<sc-checkbox-field input-value="{{detailInfo.apvlln_mod_poss_yn}}" checked-value="Y" un-checked-value="N" readonly="[[!formula('isDetailEditable')]]"></sc-checkbox-field>
+						</td>
+					</tr>
+					<tr hidden="[[!formula('isAmtCondY')]]">
+						<th>
+							<sc-label text="전결 대상 통화별 금액"></sc-label>
+						</th>
+						<td colspan="3">
+							<sc-grid id="curGrid" hidden="[[!formula('isAmtCondY')]]" class="flex" editable="true" use-selection="false" on-item-edit-end="onItemEditEnd" >
+								<sc-grid-columns>
+									<sc-data-column data-field="label" header-text="통화" ></sc-data-column>
+									<sc-data-column data-field="amount" header-text="금액" text-align="right" format-type="amt"  validator-type="amt"
+													editable="true" editor-regex-function="onAmountRegexFn" min-value="0" max-length="15"
+									></sc-data-column>
+								</sc-grid-columns>
+							</sc-grid>
+						</td>
+					</tr>
+				</table>
+			</sc-panel>
+		</div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "ep-arbitrary-aprv-line-detail-list",
+            properties: {
+                codes: { // 코드 데이터
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            G005: {
+                            	param: {
+                            		ccd: "G005",
+                            		cstr_cnd_cd: "DAPVL_USE_YN",
+                            		cstr_cnd_val: "Y"
+                            	},
+                            	result: []
+                            },
+                            G012: [],
+                        };
+                    }
+                },
+                headerData: { // 선택된 헤더
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                searchParam: { // 조회 조건
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                resultList: {
+                	type: Array,
+                	value: []
+                },
+                detailInfo: {
+                	type: Object,
+                	value: function(){
+                		return {
+                			isNew: false,
+                			apvr_typ_ccd: "APVL"
+                		};
+                	}
+                },
+				isAddAble: {
+					type: Boolean,
+					value: false
+				},
+				ccdCommons: {
+					type: Array,
+					value: function(){
+						return []
+					}
+				}
+            },
+            formulas: {
+                isEditable: function() {
+                    var me = this;
+                    if (UT.isNotEmpty(me.get("searchParam.dapvl_uuid")) && UT.isNotEmpty(me.get("searchParam.dapvl_tbl_id"))) {
+                        return me.get("headerData.dapvl_crn_sts_ccd") === "CRNG" || me.formula("isForceEditable");
+                    } else {
+                        return false;
+                    }
+                },
+                isForceEditable: function() {
+                    var me = this;
+                    return me.get("headerData.dapvl_crn_sts_ccd") === "CNFD" && me.get("headerData.ended_yn") === "N" && me.get("headerData._force_edit_yn") === "Y";
+                },
+                //상세내용 editable 가능체크
+                isDetailEditable: function(){
+                	var me = this;
+                	return (me.formula('isEditable') && (UT.isNotEmpty(this.get("detailInfo.dapvl_uuid")) || this.get("detailInfo.isNew")));
+                },
+                //금액조건 수정가능
+                isAmtCondY: function(){
+                	var me = this;
+                	return (me.formula("isDetailEditable") && me.get("detailInfo.dapvl_cnd_amt_rv_yn") === "Y");
+                },
+                //결재자검색범위가 상신자지정이면 직무선택 삭제
+                isAprvCrhRngAPPROVER: function(){
+                	return (this.get("detailInfo.aprv_srch_rng") === "APPROVER");
+                },
+				isAddAprvLine: function () {
+					return this.formula('isEditable') && this.get("isAddAble");
+				},
+				// 전결 결재선 명 수정 여부
+				isLineNameEditable: function(){
+					var me = this;
+					return (me.formula('isEditable') && this.get("searchParam.dapvl_apvlln_id") == null);
+				}
+            },
+            
+            initialized: function() {
+                var me = this;
+                
+                me.applyFormula();
+            },
+            
+            load: function(param, headerData, ccdCommons) {
+                var me = this;
+
+				me.codes.C004.forEach(item => {
+					item.amount = new BigNumber(0);
+				})
+				var curList = UT.copy(me.codes.C004);
+
+				me.$.curGrid.setDataProvider(curList);
+                
+                me.set("searchParam", param);
+                me.set("headerData", headerData);
+                me.applyFormula();
+				if(ccdCommons !== undefined) {
+					me.set("ccdCommons", ccdCommons)
+				}
+
+                me.onSearchList();
+            },
+            
+            //결재자검색범위 change이벤트
+            onChangeAprvSrchRng: function(e,obj){
+            	var me = this;
+            	var fields = me.querySelectorAll('[name=searchType]');
+            	for (var i = 0, len = fields.length; i < len; i++) {
+                    fields[i].hidden = true;
+                }
+
+            	me.$.aprverRspnsSearch.hidden = false;
+            	
+            	var selectVal = UT.copy(obj.value);
+				if(selectVal === "DEPT_DES"){ // ODEPT
+            		//타부서지정
+            		me.$.deptSearch.hidden = false;
+            		
+            		me.set("detailInfo.apprver_id","");
+            	}else if(selectVal === "APVR_DES"){ // APPROVER
+            		//결재자지정
+            		me.$.userSearch.hidden = false;
+            		me.$.aprverRspnsSearch.hidden = true;
+            		
+            		me.set("detailInfo.apprver_dept","");
+            		me.set("detailInfo.apvr_jobtit_ccd","");
+            	}else if(selectVal === "PIC"){ // INCHARGE
+            		//담당자파라미터를받는경우
+            		me.$.aprverRspnsSearch.hidden = true;
+            		me.set("detailInfo.apprver_id","");
+            		me.set("detailInfo.apprver_dept","");
+            		me.set("detailInfo.apvr_jobtit_ccd","");
+            	}else if(selectVal === "INCHR_DEPT"){ // CDEPT
+            		//담당자파라미터의 부서
+            		me.set("detailInfo.apprver_id","");
+            		me.set("detailInfo.apprver_dept","");
+            	}
+            	//결재자지정이면 required 제거
+            	me.applyFormula('isAprvCrhRngAPPROVER');
+
+			},
+            //그리드에서 결재자유형 클릭시 상세조회
+            onItemClick : function(event){
+  				var me = this,
+	  			data = event.detail.data,
+	  			item = event.detail.item;
+  				
+  				if(item.dataField === "apvr_typ_ccd"){
+  					me.set("detailInfo",data);
+  					me.applyFormula();
+  				}
+            	
+            },
+            //금액사용여부체크변경시
+            onYnCheckChange: function(event) {
+                var me = this, checked = event.detail;
+                if(!checked){
+                	me.set("detailInfo.dapvl_cnd_amt",0);
+                }
+                me.applyFormula("isAmtCondY");
+            },
+            // 목록조회
+            onSearchList: function() {
+                var me = this;
+                UT.request(me.$.searchList);
+            },
+
+            // 목록조회 완료
+            completeSearchList: function(e, res) {
+                var me = this;
+                me.set("resultList",res.response);
+                me.$.datagrid.setDataProvider(res.response);
+                // me.onAddData();
+            },
+            
+            // 추가
+            onAddData: function() {
+            	var me = this;
+            	var lastSort = 1;
+            	var resultList = me.get("resultList");
+				
+				this.set("isAddAble", true);
+				me.applyFormula('isAddAprvLine');
+            	
+            	if(resultList.length > 0){
+            		lastSort = resultList[resultList.length-1].sort + 1;
+            	}
+            	
+            	
+            	me.set("detailInfo",{
+            		apvr_typ_ccd: "APVL",
+            		isNew: true,
+            		sort: lastSort,
+            		apvlln_mod_poss_yn: "N",
+                    dapvl_cnd_amt_rv_yn: "N",
+                    dapvl_cnd_amt: 0});
+            	me.applyFormula();
+            	
+            },
+            // 상세저장
+            onSave: function() {
+                var me = this;
+				var provider = me.$.curGrid.getDataProvider();
+				var curList = provider.getItems();
+
+
+                if (!me.validate("save")) {
+                    UT.alert("STD.E0000"); // 유효하지 않은 입력값이 있습니다. 오류 정보를 확인해 주세요.
+                    return;
+                }
+
+				// if(me.detailInfo.dapvl_cnd_amt_rv_yn == 'Y') {
+				// 	curList = provider.getItems();
+				// 	provider.removeAll();
+				// }
+                
+                UT.confirm("STD.N1200", function() { // 저장 하시겠습니까?
+                	me.$.save.body = {
+               			headerData: me.get("searchParam"),
+               			detailInfo: me.get("detailInfo"),
+						ccdCommons: me.get("ccdCommons"),
+						curList: provider.getUpdateItems()
+                	};
+
+                    UT.request(me.$.save);
+                });
+            },
+
+            // 저장 완료
+            completeSave: function(e, res) {
+                var me = this;
+				var result = res.response;
+                var provider = me.$.curGrid.getDataProvider();
+
+				UT.completeAlert("저장", function () { // [저장] 처리를 완료 하였습니다
+					me.set("isAddAble", false);
+					me.applyFormula('isAddAprvLine');
+					me.searchParam = Object.assign({}, me.searchParam, result.headerData);
+					// me.headerData = result.headerData;
+                    me.onSearchList();
+					var curList = UT.copy(me.codes.C004);
+					me.$.curGrid.setDataProvider(curList);
+                    me.fire("saved-items");
+                });
+
+            },
+            
+            // 삭제
+            onDeleteList: function() {
+                var me = this;
+                var provider = me.$.datagrid.getDataProvider();
+                var selected = provider.selectionCheckedItems();
+
+                if (UT.isEmpty(selected)) {
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+                    return;
+                }
+
+                UT.confirm("STD.N1300", function() { // 삭제 하시겠습니까?
+                    var deleted = provider.removeItems();
+                    if (deleted.length > 0) {
+                        me.$.deleteList.body = {
+                            deleteAprvLineDetails: deleted
+                        };
+                        UT.request(me.$.deleteList);
+                    }
+                });
+            },
+
+            // 삭제 완료
+            completeDeleteList: function() {
+                var me = this;
+                UT.alert("STD.N2500", function() { // 삭제하였습니다
+                    me.onSearchList();
+                    me.fire("saved-items");
+                });
+            },
+            
+            // 
+            itemEditableFunction: function(data, item) {
+                var me = this;
+                switch (item.dataField) {
+                case "dapvl_cnd_amt":
+                    return data.dapvl_cnd_amt_rv_yn === "Y";
+                default:
+                    return false;
+                }
+            },
+            
+            //
+            onItemEditEnd: function(event) {
+                var me = this;
+                var data = event.detail.data;
+                var item = event.detail.item;
+                var provider = event.detail.provider;
+				var curProvider = me.$.curGrid.getDataProvider();
+                var newValue = event.detail.newValue;
+
+                switch (item.dataField) {
+                	case "dapvl_cnd_amt_rv_yn":
+                    	if (newValue !== "Y") {
+                        	provider.setCellValue(item.rowIndex, "dapvl_cnd_amt", "");
+                    	}
+                    	break;
+					case "amount":
+						if (newValue == "") {
+							curProvider.setCellValue(item.rowIndex, "amount", new BigNumber(0));
+						}
+						break;
+                	default:
+                    	break;
+                }
+            },
+            
+            completeCodeGroup: function() {
+                var me = this;
+                var filtered = [];
+                if (UT.isNotEmpty(me.codes.G005.result)) {
+                    filtered = me.codes.G005.result.filter(function(item) {
+                        return item.data !== "S"; // 기안 제외
+                    });
+                }
+                me.set("codes.G005", filtered);
+            },
+            
+            onRowRegex: function(data, item) {
+                var me = this;
+                switch (item.dataField) {
+                case "dapvl_cnd_amt":
+                    return CCPrecManager.regex("amt");
+                default:
+                    return null;
+                }
+            },
+			behaviors:[
+				Polymer.SCResizableBehavior
+			],
+			
+			listeners:{
+				'sc-resize':'doContentElementResize'
+			},
+			
+			doContentElementResize: function() {
+				this.$.datagrid.doContentElementResize();
+			},
+            
+            //
+            /*
+            onRowRegex: function(data, item) {
+                var me = this;
+                switch (item.dataField) {
+                case "dapvl_cnd_amt":
+                    return /^[-]?(\d{1,15}([.]\d{0,2})?)?$/; // 음수부호 가능, 정수 15자리, 소수 2자리 
+                default:
+                    return null;
+                }
+            },
+            */
+			completeFindCur: function(){
+				var me = this;
+
+				me.codes.C004.forEach(item => {
+					item.amount = new BigNumber(0);
+				})
+				var curList = UT.copy(me.codes.C004);
+
+				me.$.curGrid.setDataProvider(curList);
+				me.applyFormula();
+			},
+
+			onAmountRegexFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "amount") {
+					return CCPrecManager.regex("decimal");
+				}
+				return null;
+			},
+
+			onImageChange:function(data, item){
+				var me = this;
+				if(data["dapvl_cnd_amt_rv_yn"] == "Y"){
+					return "link";
+				}else{
+					return "";
+				}
+			},
+
+			onItemClick: function(e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+
+				if(item.dataField == "dapvl_cnd_amt_cur" && data["dapvl_cnd_amt_rv_yn"] == "Y") {
+					var curPopUp = UT.popup("ep-arbitrary-aprv-line-detail-list-cur", me, 450, 300, null, {titleText: "통화"});
+					curPopUp.show();
+					curPopUp.getWindowContent().load(data);
+				}
+			}
+
+        });
+    </script>
+
+</dom-module>

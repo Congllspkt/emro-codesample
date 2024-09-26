@@ -1,0 +1,283 @@
+<dom-module id="ep-sp-evalfactor-appeal">
+	<style>
+		:host{
+			@apply(--vbox-layout)
+		}
+	</style>
+	
+	<template>
+		<!-- 정성 평가항목 이의제기 상세조회 -->
+		<sc-ajax id="findAppealQualiDetail"
+		         url="findAppealQualiDetail.do"
+				 on-response="completeFindAppealDetail">
+		</sc-ajax>
+
+		<!-- 정성 평가항목 이의제기 제출 -->
+		<sc-ajax id="saveAppealQualiEvalfact"
+				 url="saveAppealQualiEvalfact.do"
+				 on-response="completeSaveAppealQualiEvalfact">
+		</sc-ajax>
+		
+		<!-- 정성 평가항목 이의제기(임시저장건) 삭제 -->
+		<sc-ajax id="deleteAppealQualiEvalfact"
+				 url="deleteAppealQualiEvalfact.do"
+				 on-response="completeDeleteAppealQualiEvalfact">
+		</sc-ajax>
+		
+		<cc-page-title-bar>
+			<sc-button text="삭제" 			on-click="onDelete"	auth-s 		hidden="[[!formula('isDelBtn')]]"></sc-button>
+			<sc-button text="저장" 		on-click="onTemp"	auth-s 		hidden="[[!formula('isVisibleBtn')]]"></sc-button>
+			<sc-button text="이의제기 제출"	on-click="onSubmit"	auth-s 		hidden="[[!formula('isVisibleBtn')]]"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="fit flex">
+			<cc-form-panel validation-group="qualifact">
+				<cc-fieldset column-span="2">
+					<sc-label text="평가 명"></sc-label>
+					<sc-text-field value="{{peInfo.eval_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="협력사 명"></sc-label>
+					<sc-text-field value="{{peInfo.vd_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기자"></sc-label>
+					<sc-text-field value="{{qualifactInfo.vd_pic_nm}}" max-length="50" required="true" readonly="[[!formula('isEditable')]]"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기자 전화번호"></sc-label>
+					<sc-text-field value="{{qualifactInfo.vd_pic_ctc}}" mask-re="/[0-9\-]/" strip-chars-re="/[ㄱ-힣]/" max-length="18" readonly="[[!formula('isEditable')]]"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="이의제기 일자"></sc-label>
+					<sc-date-field value="{{qualifactInfo.appeal_req_dt}}" string-date="true" default-value="0d" readonly="true"></sc-date-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<div class="vspace-5"></div>
+			
+			<cc-form-panel validation-group="qualifact">
+				<cc-fieldset column-span="2">
+					<sc-label text="평가항목 명"></sc-label>
+					<sc-text-field value="{{qualifactInfo.evalfact_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="가중치"></sc-label>
+					<sc-text-field value="{{qualifactInfo.evalfact_wgt}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="평가 점수"></sc-label>
+					<sc-text-field value="{{qualifactInfo.evalfact_sc}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="이의제기 사유"></sc-label>
+					<sc-textarea-field value="{{qualifactInfo.quali_evalfact_appeal_rsn}}" class="h-100" max-length="500" required="true" readonly="[[!formula('isEditable')]]"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<sc-upload id="upload" class="h-200" value="{{qualifactInfo.appeal_athg_uuid}}" editable="[[formula('isEditable')]]"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[!formula('isVisibleRetRsn')]]">
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{qualifactInfo.appeal_ret_rsn}}" class="h-100" max-length="500" required="true" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[!formula('isVisibleApvd')]]">
+					<sc-label text="검토 의견"></sc-label>
+					<sc-textarea-field value="{{qualifactInfo.appeal_prcsg_res_cont}}" class="h-100" max-length="500" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2" hidden="[[!formula('isVisibleApvd')]]">
+					<sc-label text="검토 자료"></sc-label>
+					<sc-upload class="h-200" value="{{qualifactInfo.appeal_prcsg_res_athg_uuid}}" editable="false"></sc-upload>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-sp-evalfactor-appeal',
+			properties : {
+				titleText: {
+					type: "String",
+					value: "정성 평가항목 이의제기",
+					reset: false
+				},
+				qualifactInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				btnMessage: {
+					type: "String",
+					value: "저장",
+				},
+			},
+			formulas: {
+				isAppealEd: function() {
+					var me = this,
+						data = me.get("qualifactInfo");
+					return data.appeal_sts_ccd == 'APPEAL_ED';
+				},
+				/* 이의제기 제출상태가 임시저장인 경우에만 보이도록 */
+				isDelBtn: function(){
+					var me = this,
+						data = me.get("qualifactInfo");
+					return !me.formula('isAppealEd') && data.appeal_subm_sts_ccd === 'APPEAL_CRNG';
+				},
+				/* 이의제기 제출상태가 null(작성화면) or 임시저장인 경우에만 보이도록 */
+				isVisibleBtn: function(){
+					var me = this,
+						data = me.get("qualifactInfo");
+					return !me.formula('isAppealEd') && (data.appeal_subm_sts_ccd == null || data.appeal_subm_sts_ccd === 'APPEAL_CRNG');
+				},
+				isEditable: function(){
+					var me = this,
+						data = me.get("qualifactInfo");
+					return !me.formula('isAppealEd') && (data.appeal_subm_sts_ccd == null || data.appeal_subm_sts_ccd === 'APPEAL_CRNG');
+				},
+				/* 이의제기 제출상태가 반려인 경우에만 보이도록 */
+				isVisibleRetRsn: function() {
+					var me = this,
+						data = me.get("qualifactInfo");
+					return data.appeal_subm_sts_ccd == 'APPEAL_RET';
+				},
+				/* 이의제기 제출상태가 처리완료인 경우에만 보이도록 */
+				isVisibleApvd: function() {
+					var me = this,
+						data = me.get("qualifactInfo");
+					return data.appeal_subm_sts_ccd == 'APPEAL_APVD' || data.appeal_subm_sts_ccd == 'APPEAL_RCPT';
+				}
+			},
+			
+			initialized : function(){
+			
+			},
+			
+			load: function(param, flag){
+				var me = this,
+					copyParam = UT.copy(param),
+					qualifactInfo = copyParam.qualifactInfo,
+					peInfo	= copyParam.peInfo;
+				
+				var current = SCSessionManager.currentUser;
+				
+				me.set("qualifactInfo", qualifactInfo);
+				me.set("peInfo", peInfo);
+				me.set("peInfo.vd_nm",current.vd_nm);
+				me.set("qualifactInfo.appeal_req_dt", new Date());	// 이의제기 요청일자
+				
+				if(flag.mode === 'read') {	// 조회(이의제기Tab > 평가항목명 click)
+					me.findAppealDetail(qualifactInfo);
+				}
+				
+				me.applyFormula();
+			},
+			
+			// 이의제기 상세조회
+			findAppealDetail: function(param) {
+				var me = this;
+				
+				me.$.findAppealQualiDetail.body = param;
+				UT.request(me.$.findAppealQualiDetail);
+			},
+			
+			// 이의제기 상세조회 후
+			completeFindAppealDetail: function(e, res) {
+				var me = this,
+					response = res.response;
+				
+				if(response) {
+					me.set("qualifactInfo", response);
+					if(response.appeal_req_dt === '' || response.appeal_req_dt === null) {
+						me.set("qualifactInfo.appeal_req_dt", new Date());	// 이의제기 요청일자
+					}
+				}
+				
+				me.applyFormula();
+			},
+			
+			// 삭제 Click
+			onDelete: function() {
+				var me = this;
+				
+				UT.confirm("STD.N1300", function() {	// 삭제 하시겠습니까?
+					me.$.deleteAppealQualiEvalfact.body = {
+						qualifactInfo: me.get("qualifactInfo")
+					}
+					UT.request(me.$.deleteAppealQualiEvalfact);
+				});
+				
+			},
+			
+			// 임시저장 Click
+			onTemp: function(){
+				var me = this;
+				
+				if(!me.validate('qualifact')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				me.set("btnMessage", "저장");
+				me.onSave("temp");
+			},
+			
+			// 이의제기 제출 click
+			onSubmit: function(){
+				var me = this;
+				
+				if(!me.validate('qualifact')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				me.set("btnMessage", "이의제기 제출");
+				me.onSave("submit");
+			},
+			
+			// 저장
+			onSave: function(saveType) {
+				var me = this;
+				
+				me.$.upload.upload().then(function () {
+					me.$.saveAppealQualiEvalfact.body = {
+						qualifactInfo: me.get("qualifactInfo"),
+						saveType : saveType
+					}
+					UT.request(me.$.saveAppealQualiEvalfact);
+				});
+			},
+			
+			// 저장 후 Handler
+			completeSaveAppealQualiEvalfact: function(e, res){
+				var me = this,
+					response = res.response;
+				
+				if(response.resultStatus === 'S'){
+					UT.completeAlert(me.get("btnMessage"), function () {	// 요청을 완료하였습니다.
+						me.set("btnMessage", "저장");
+						me.fire("complete");
+					});
+				}
+			},
+			
+			// 삭제 후 Handler
+			completeDeleteAppealQualiEvalfact: function(e, res) {
+				var me = this,
+					response = res.response;
+				
+				if(response.resultStatus === 'S'){
+					UT.completeAlert("삭제", function () {	// 요청을 완료하였습니다.
+						me.fire("complete");
+					});
+				}
+			},
+			
+			onClose: function(){
+				var me = this;
+				me.reset();
+				me.fire("complete-save");
+			}
+		});
+	</script>
+</dom-module>

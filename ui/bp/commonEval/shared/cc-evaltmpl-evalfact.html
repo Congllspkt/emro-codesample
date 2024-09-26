@@ -1,0 +1,1407 @@
+<!--
+/**
+ *
+ *	@description : 평가템플릿 - 평가항목 생성 및 수정 컴포넌트
+ *  <pre>
+ 			<cc-evaltmpl-evalfact id="evalTmplFact"
+ 								evaltmpl-nm="[[translate('평가템플릿 명')]]"
+ 								evaltmpl-expln="[[translate('평가템플릿 설명')]]"
+ 								on-saved-transform-evaltmpl="onSavedTransformEvaltmpl">
+ 			</cc-evaltmpl-evalfact>
+ * </pre>
+ */
+-->
+
+<sc-link rel="import" href="ep-evalfactorgrp.html"></sc-link>
+<sc-link rel="import" href="ep-evalfactor.html"></sc-link>
+<sc-link rel="import" href="ep-evaltmpl-list.html"></sc-link>
+
+<dom-module id="cc-evaltmpl-evalfact">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		 -->
+		<sc-request-group init>
+			<sc-code-group auto>
+				<!-- 사용여부 공통코드 조회 -->
+				<sc-code code="C009" value="{{codes.C009}}"></sc-code>
+				<!-- 평가항목 평가자 권한 -->
+				<sc-code code="R707" value="{{codes.R707}}"></sc-code>
+				<!-- 정량/정성 공통코드콤보 조회 -->
+				<sc-code code="R001" value="{{codes.R001}}"></sc-code>
+				<!-- 추가 조건 코드 콤보 -->
+				<sc-code code="EVKD" value="{{codes.EVKD}}" ></sc-code>
+			</sc-code-group>
+			<!-- 평가업무유형 -->
+			<sc-ajax
+					id="findListCommonCodeAttributeCode"
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.R704.param}}"
+					last-response="{{codes.R704.result}}">
+			</sc-ajax>
+		</sc-request-group>
+
+		<!-- 평가템플릿 정보 조회 -->
+		<sc-ajax
+				id="findEvalTmplInfo"
+				url="findEvalTmplInfo.do"
+				on-response="onFindResultHandler">
+		</sc-ajax>
+
+		<!-- 평가템플릿 평가항목 스케일 조회 -->
+		<sc-ajax
+				id="findListEvalTmplEvalFactScale"
+				url="findListEvalTmplEvalFactScale.do"
+				on-response="completeFindListEvalTmplEvalFactScale">
+		</sc-ajax>
+		
+		<!-- 평가템플릿 평가항목 스케일 저장 -->
+		<sc-ajax
+				id="saveEvalTmplEvalFactScale"
+				url="saveEvalTmplEvalFactScale.do"
+				on-response="completeSaveEvalTmplEvalFactScale">
+		</sc-ajax>
+		
+		<!-- 평가템플릿 Import 전환 -->
+		<sc-ajax
+				id="saveTransformImportEvaltmpl"
+				url="saveTransformImportEvaltmpl.do"
+				on-response="completeSaveTransformEvaltmpl">
+		</sc-ajax>
+		<!-- 평가템플릿 수정모드로 전환 -->
+		<sc-ajax
+				id="saveTransformModModeEvaltmpl"
+				url="saveTransformModModeEvaltmpl.do"
+				on-response="completeSaveTransformEvaltmpl">
+		</sc-ajax>
+		<!-- 평가템플릿 수정취소 -->
+		<sc-ajax
+				id="saveTransformModCancelEvaltmpl"
+				url="saveTransformModCancelEvaltmpl.do"
+				on-response="completeSaveTransformEvaltmpl">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-sub-title-bar>
+			<sc-button text="평가템플릿 Import" on-click="onImportEvaltmpl" hidden="{{!formula('isPossImport')}}" auth-s></sc-button>
+			<sc-button text="수정" on-click="onTransformModModeEvaltmpl" hidden="{{!formula('isPossModMode')}}" auth-s></sc-button>
+			<sc-button text="평가템플릿 작성 취소" on-click="onModCancelForBackToPrevEvaltmpl" hidden="{{!formula('isPossModCancel')}}" auth-s></sc-button>
+			<!--<sc-button text="수정 취소" on-click="onModCancelEvaltmpl" hidden="{{!formula('disableMode')}}" auth-s></sc-button>-->
+		</cc-sub-title-bar>
+		
+		<cc-form-panel hidden="[[formula('hdHidden')]]">
+			<cc-fieldset>
+				<sc-label text="[[evaltmplNm]]" i18n-disabled></sc-label>
+				<sc-text-field id="evaltmpl_nm" value="{{evalTmplInfo.evaltmpl_nm}}" max-length="100" readonly="[[!formula('isEditable')]]" required="[[formula('isEditable')]]"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="확정 여부"></sc-label>
+				<sc-checkbox-field input-value="{{evalTmplInfo.cnfd_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N" readonly="true"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="[[evaltmplExpln]]" i18n-disabled></sc-label>
+				<sc-textarea-field value="{{evalTmplInfo.rmk}}" max-length="1000" readonly="[[!formula('isEditable')]]"></sc-textarea-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가항목 권한 적용 여부"></sc-label>
+				<sc-checkbox-field input-value="{{evalTmplInfo.evalfact_authty_appl_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N" readonly="[[formula('isConfirmed')]]"></sc-checkbox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="평가항목군 가중치 합계"></sc-label>
+				<sc-text-field class="w-150" value="{{evalTmplInfo.totalWgtValue}}" readonly="true"></sc-text-field>
+			</cc-fieldset>
+		</cc-form-panel>
+
+		<sc-grid id="gridPanel" class="h-400" is-tree="true" use-state="[[formula('isEditable')]]" on-item-click="onDataCellClicked" editable="[[formula('isEditable')]]" use-selection="[[formula('isEditable')]]"
+				 on-item-edit-end="onCellEdited">
+			<cc-grid-toolbar title-text="평가항목">
+				<sc-button id="expandToggleBtn" text="항목펼치기" on-click="onExpandToggle" hidden="[[formula('disableMode')]]" auth-s></sc-button>
+				<sc-button text="평가항목군 추가" on-click="onAddFactorGrp" hidden="[[!formula('isEditable')]]" auth-s></sc-button>
+				<sc-button text="평가항목 추가" on-click="onAddFactor" hidden="[[!formula('isEditable')]]" auth-s></sc-button>
+				<sc-button text="삭제" on-click="onDeleteFactor" hidden="[[!formula('isEditable')]]" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="evalfact_nm" header-text="평가항목 명" width="500" text-align="left" item-style-function="onItemStyleFunction"></sc-data-column>
+				<sc-combobox-column	data-field="add_cnd_ccd"		header-text="추가 조건"		idth="80"
+									   display-field="label"		value-field="data"		items="{{codes.EVKD}}"></sc-combobox-column>
+				<sc-data-column data-field="efactg_wgt" header-text="평가항목군 가중치" width="120" text-align="right" data-type="number" item-editable-function="onItemEditableFn" format-type="decimal"></sc-data-column>
+				<sc-data-column data-field="evalfact_wgt" header-text="평가항목 가중치" width="120" text-align="right" data-type="number" item-editable-function="onItemEditableFn" format-type="decimal"></sc-data-column>
+				<sc-combobox-column data-field="evalfact_evaltr_authty_ccd" header-text="평가항목 평가자 권한" width="150"
+									display-field="label" value-field="data" items="{{codes.filteredR707}}" item-editable-function="onItemEditableFn"></sc-combobox-column>
+				<sc-data-column	data-field="sort" header-text="정렬" width="40" editable="[[formula('isEditable')]]"></sc-data-column>
+				<sc-combobox-column data-field="evalfact_typ_ccd" header-text="평가항목 유형" width="150"
+									display-field="label" value-field="data" items="{{codes.R001}}"></sc-combobox-column>
+				<sc-checkbox-column data-field="slfck_subj_yn" header-text="자체점검 대상 여부" width="130" text-align="center" item-editable-function="onItemEditableFn"
+									display-checkbox="true" checked-value="Y" un-checked-value="N"
+									visible="[[formula('isPfmcEvalshtTmpl')]]"></sc-checkbox-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="evaltmpl_efactg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evaltmpl_uuid"></sc-grid-field>
+				<sc-grid-field data-field="efactg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evaltmpl_evalfact_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_cd"></sc-grid-field>
+				<sc-grid-field data-field="efactg_cd"></sc-grid-field>
+				<sc-grid-field data-field="has_na"></sc-grid-field>
+				<sc-grid-field data-field="sort"></sc-grid-field>
+				<sc-grid-field data-field="etefg_uuid"></sc-grid-field>
+				<sc-grid-field data-field="scale_appl_yn"></sc-grid-field>
+				<sc-grid-field data-field="nullv_datfil_meth_ccd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-grid id="gridPanelQualiScale" class="h-200" hidden="[[!formula('isQualiScale')]]" use-state="[[formula('isEditable')]]" editable="[[formula('isEditable')]]" use-selection="false">
+			<cc-grid-toolbar title-text="평가항목 스케일">
+				<sc-button text="저장" on-click="onSaveScale" data-args="quali"	hidden="[[!formula('isNewEvalFact')]]" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="scale_nm" header-text="스케일 명" width="650" text-align="left" editable="false"
+								max-length="100" required="true" validator-function="gridValidatorFuncQuali" validation-group="quali"></sc-data-column>
+				<sc-data-column data-field="sc" header-text="점수" width="60" text-align="right" editable="true" max-length="6" item-editable-function="onScaleItemEditableFn"
+								data-type="number" format-type="srmScore" required="true" max-value="100" validation-group="quali" editor-regex-function="onRowRegex"
+								editor-maskre="{{formula('positiveScRegex')}}"></sc-data-column>
+				<sc-data-column data-field="scale_sort" header-text="정렬" width="40" text-align="right" editable="true" validation-group="quali" editor-regex-function="onRowRegex"
+								data-type="number" format-type="integer" max-length="2" item-editable-function="onScaleItemEditableFn"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="evalfact_scale_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_cd"></sc-grid-field>
+				<sc-grid-field data-field="scale_cd"></sc-grid-field>
+				<sc-grid-field data-field="scale_nm"></sc-grid-field>
+				<sc-grid-field data-field="scale_sort" data-type="number"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_typ_ccd"></sc-grid-field>
+				<sc-grid-field data-field="scale_appl_yn"></sc-grid-field>
+				<sc-grid-field data-field="sc" data-type="number"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-grid id="gridPanelQuantScale" class="h-200" hidden="[[!formula('isQuantScale')]]" use-state="[[formula('isEditable')]]" editable="[[formula('isEditable')]]" use-selection="false">
+			<cc-grid-toolbar title-text="평가항목 스케일">
+				<sc-button text="저장" on-click="onSaveScale" data-args="quant" hidden="[[!formula('isNewEvalFact')]]" auth-s></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="scale_nm" header-text="스케일 명" width="650" text-align="left" editable="false"
+								max-length="100" required="true" validator-function="gridValidatorFuncQuant"></sc-data-column>
+				<sc-data-column	data-field="st_val"	header-text="시작 값"	width="80"	text-align="right"	 item-editable-function="onScaleItemEditableFn" editor-regex-function="onRowRegex"
+								   data-type="number"		format-type="srmScore" required="true" max-length="15" ></sc-data-column>
+				<sc-data-column	data-field="stp_val"	header-text="멈춤 값"	width="80"	text-align="right"	 item-editable-function="onScaleItemEditableFn" editor-regex-function="onRowRegex"
+								   data-type="number"		format-type="srmScore" required="true" max-length="15" ></sc-data-column>
+				<sc-data-column data-field="sc" header-text="점수" width="60" text-align="right" editable="true" max-length="6" item-editable-function="onScaleItemEditableFn"
+								data-type="number" format-type="srmScore" required="true" max-value="100" validation-group="quali" editor-regex-function="onRowRegex"
+								editor-maskre="[[formula('positiveScRegex')]]"></sc-data-column>
+				<sc-checkbox-column data-field="nullv_appl_subj_scale_yn" header-text="NULL값 적용 대상 스케일 여부"      width="110"      text-align="center" visible="[[formula('isNullvApplSubj')]]"
+									item-editable-function="onNullvApplSubjItemEditableFn" display-checkbox="false" checked-value="Y" un-checked-value="N"></sc-checkbox-column>
+				<sc-data-column data-field="scale_sort" header-text="정렬" width="40" text-align="right" editable="true" validation-group="quali" editor-regex-function="onRowRegex"
+								data-type="number" format-type="integer" max-length="2" item-editable-function="onScaleItemEditableFn"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="evalfact_scale_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_uuid"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_cd"></sc-grid-field>
+				<sc-grid-field	data-field="eval_task_typ_ccd"	></sc-grid-field>
+				<sc-grid-field	data-field="st_val"	data-type="number"></sc-grid-field>
+				<sc-grid-field	data-field="stp_val"	data-type="number"></sc-grid-field>
+				<sc-grid-field data-field="scale_cd"></sc-grid-field>
+				<sc-grid-field data-field="scale_nm"></sc-grid-field>
+				<sc-grid-field data-field="scale_sort" data-type="number"></sc-grid-field>
+				<sc-grid-field data-field="evalfact_typ_ccd"></sc-grid-field>
+				<sc-grid-field data-field="scale_appl_yn"></sc-grid-field>
+				<sc-grid-field data-field="add_cnd_cd"></sc-grid-field>
+				<sc-grid-field data-field="sc" data-type="number"></sc-grid-field>
+				
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'cc-evaltmpl-evalfact',
+			properties: {
+				// 공통코드목록
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							R704: {
+								param: {
+									ccd: 'R704',
+									cstr_cnd_cd: 'MDCD'  //모듈구분속성 조회
+								},
+								result: []
+							},                    // 평가업무구분 (공통코드 속성 조회)
+							C009: [],          // 사용여부
+							R001: [],
+							R707: [],
+							filteredR707: [],
+							EVKD: [],          // 추가 조건
+						};
+					}
+				},
+				evaltmplNm: {
+					type: String,
+					value: function() {
+						return this.translate("평가템플릿 명");
+					}
+				},
+				evaltmplExpln: {
+					type: String,
+					value: function() {
+						return this.translate("평가템플릿 설명");
+					}
+				},
+				// 비활성화모드 여부
+                disableMode: {
+                    type : Boolean,
+                    value : false
+                },
+				// 헤더영역 숨김
+				hdHidden: {
+                    type : Boolean,
+                    value : false
+                },
+				// 업무연계버튼 사용여부 (Import/수정 모드/수정취소)
+                workMode: {
+                    type : Boolean,
+                    value : false
+                },
+				// 평가템플릿 Object
+				evalTmplInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				evalTmplFactorList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				evalTmplFactorGrpList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				dialogTempInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				evalTargetListInitiazlied: {
+					type: Boolean,
+					value: false
+				},
+				evalTmplTabInitialized: {
+					type: Boolean,
+					value: false
+				},
+				evalFactorInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				//펼침인지 판단 여부
+				isExpanded: {
+					type: Object,
+					value: function(){
+						return false;
+					}
+				}
+			},
+			observers: [
+						'onChangeEvalfactAuthtyApplYn(evalTmplInfo.evalfact_authty_appl_yn)'
+			],
+			formulas: {
+				// 비활성화 모드
+				disableMode: function() {
+					var me = this;
+					return me.get("disableMode");
+				},
+				// 헤더영역 숨김
+				hdHidden: function(){
+					var me = this;
+					return me.get("hdHidden");
+				},
+				// 업무연계버튼 사용여부 (Import/수정 모드/수정취소)
+				workMode: function(){
+					var me = this;
+					return me.get("workMode");
+				},
+				// 신규 데이터 여부
+				isNewData: function() {
+					var me = this;
+					var evaltmplUuid = me.get("evalTmplInfo.evaltmpl_uuid");
+					// 신규 데이터 여부 설정
+					return !(!UT.isEmpty(evaltmplUuid) && evaltmplUuid != "");
+				},
+				// 확정 여부
+				isConfirmed: function() {
+					var me = this;
+					var cnfdYn = me.get("evalTmplInfo.cnfd_yn");
+					return (!UT.isEmpty(cnfdYn) && cnfdYn == "Y");
+				},
+				// 수정가능 여부
+				isEditable: function() {
+					var me = this;
+					return !me.formula("disableMode") && !me.formula("isConfirmed");
+				},
+				/*isTempSaved: function() {
+					var me = this;
+					// 임시 저장 여부 설정
+					return (!me.formula("isNewData") && !me.formula("isConfirmed"));
+				},        // 임시저장여부*/
+				evalTypNameText: function() {
+					var me = this;
+					var list = me.get("codes.R704.result"),
+						code = me.get("evalTmplInfo.eval_task_typ_ccd");
+					return me.getCodeName(list, code, "data", "label");
+				},
+				// 스케일 그리드에서 사용하는 점수 정규식
+				positiveScRegex: function() {
+					var me = this;
+					var addCndCcd = me.get("evalFactorInfo.add_cnd_ccd")
+					return (addCndCcd === "NA") ? "/[0-9.]/" : "";
+				},
+				// 정성세부항목 여부
+				isQualiScale: function(){
+					var me = this;
+					var evalfactTypCcd = me.get("evalFactorInfo.evalfact_typ_ccd");
+					return evalfactTypCcd == "QUALI" || evalfactTypCcd == "QUALI_MULTPL_SEL";    // 정성 단일선택, 정성 다중선택인 경우
+				},
+				// 정량 세부항목 여부
+				isQuantScale: function(){
+					var me = this;
+					var evalfactTypCcd = me.get("evalFactorInfo.evalfact_typ_ccd");
+					var scale_appl_yn = me.get("evalFactorInfo.scale_appl_yn");
+					return evalfactTypCcd == "QUANT" && scale_appl_yn == "Y";    // 정량항목 && 스케일 적용 여부 Y
+				},
+				// 정량 평가항목일 경우 null값 적용 점수
+				isNullvApplSubj : function() {
+					var me = this;
+					var data = me.get("evalFactorInfo");
+					var evalfactTypCcd = data.evalfact_typ_ccd,
+						scaleApplYn = data.scale_appl_yn,
+						nullvDatfilMethCcd = data.nullv_datfil_meth_ccd;
+					
+					return (evalfactTypCcd == "QUANT" && scaleApplYn != "N" && nullvDatfilMethCcd == "SCALE_SEL_APPL");
+				},
+				// 항목별 평가자 권한 설정 대상 (=평가자 유형이 '평가항목 담당자')
+				isEvaltrTypCcdByFact: function(){
+					var me = this;
+					var evaltrTypCcd = me.get("evalTmplInfo.evaltr_typ_ccd");
+					return UT.isEmpty(evaltrTypCcd) || evaltrTypCcd == "EVALFACT_AUTHTY_PIC";  // EVALFACT_AUTHTY_PIC: 평가항목 권한 담당자
+				},
+				// 퍼포먼스 평가 템플릿 여부
+				isPfmcEvalshtTmpl: function(){
+					var me = this;
+					var evalTaskTypCcd = me.get("evalTmplInfo.eval_task_typ_ccd");
+					var slfckSubjYn = me.get("evalTmplInfo.slfck_subj_yn");
+					
+					return !UT.isEmpty(evalTaskTypCcd) && evalTaskTypCcd == "PE"
+							&& !UT.isEmpty(slfckSubjYn) && slfckSubjYn == "Y";  // PE: 정기평가 && 자체점검 대상
+				},
+				// 평가템플릿 평가항목 신규 추가 여부
+				isNewEvalFact: function(){
+					var me = this;
+					var etEvalFactUuid = me.get("evalFactorInfo.evaltmpl_evalfact_uuid");
+					
+					return me.formula('isEditable') && UT.isNotEmpty(etEvalFactUuid) && etEvalFactUuid != "";
+				},
+				// Import 사용 가능
+				isPossImport: function(){
+					var me = this;
+					var workEvaltmplUuid = me.get("evalTmplInfo.work_evaltmpl_uuid"); // 템플릿 import 시 연결될 시트 존재 필요
+					return me.formula('workMode') && (me.formula('isConfirmed') || me.formula('isNewData')) && !UT.isEmpty(workEvaltmplUuid);
+				},
+				// 수정 모드 사용 가능
+				isPossModMode: function(){
+					var me = this;
+					var workEvaltmplUuid = me.get("evalTmplInfo.work_evaltmpl_uuid");
+					return me.formula('workMode') && me.formula('isConfirmed') && !UT.isEmpty(workEvaltmplUuid);
+				},
+				// 작성취소 사용 가능
+				isPossModCancel: function(){
+					var me = this;
+					var workEvaltmplUuid = me.get("evalTmplInfo.work_evaltmpl_uuid");
+					var preEvaltmplUuid = me.get("evalTmplInfo.pre_evaltmpl_uuid");
+					return me.formula('workMode') && !UT.isEmpty(preEvaltmplUuid);
+				},
+				/*// 수정취소 사용 가능
+				isPossModCancel: function(){
+					var me = this;
+					return me.formula('workMode') && me.formula('isConfirmed');
+				}*/
+			},
+			//
+			initialized: function() {
+				var me = this;
+			},
+			
+			getCodeName: function(list, code, cdField, nmField) {
+				var me = this;
+				var cdField = cdField || "data", nmField = nmField || "label";
+				var codeName = "", filtered = [];
+				
+				if(UT.isEmpty(list) || UT.isEmpty(code)) {
+					return codeName;
+				}
+				
+				filtered = list.filter(function(item) {
+					if(item[cdField] === code) {
+						return item;
+					}
+				});
+				if(UT.isNotEmpty(filtered)) {
+					codeName = filtered[0][nmField];
+				}
+				return codeName;
+			},
+			
+			onChangeEvalfactAuthtyApplYn: function(applYn){
+				var me = this;
+
+				me.setEvalfactEvaltrAuthtyCcd(applYn);
+			},
+			load: function(param) {
+				var me = this;
+				me.set("evalTmplInfo", param.evalTmplInfo);
+				me.set("disableMode", param.disableMode == null ? me.get("disableMode") : param.disableMode);
+				me.set("hdHidden", param.hdHidden == null ? me.get("hdHidden") : param.hdHidden);
+				me.set("workMode", param.workMode == null ? me.get("workMode") : param.workMode);
+				me.applyFormula();
+				
+				if(!UT.isEmpty(me.get("evalTmplInfo.evaltmpl_uuid"))){
+					// 평가 템플릿 조회
+					me.onSearchEvaltmpl();
+				}else{
+					// 평가 템플릿 초기화
+					me.$.gridPanel.setDataProvider([]);
+					// 평가항목군 초기화
+					me.$.gridPanelQualiScale.setDataProvider([]);
+					
+					// 평가항목 평가자 권한 공통코드 설정
+					me.setEvalfactEvaltrAuthtyCcd();
+				}
+			},
+
+			/**
+			 * 템플릿 정보 조회
+			 */
+			onSearchEvaltmpl: function(){
+				var me = this;
+
+				me.$.findEvalTmplInfo.body = me.get("evalTmplInfo");
+				UT.request(me.$.findEvalTmplInfo);
+			},
+			/**
+			 * 템플릿 정보 조회 callback
+			 */
+			onFindResultHandler: function(e, res) {
+				var me = this,
+					result = res.response;
+
+				if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					var evalTmplInfo = result.resultData.evalTmplInfo;
+					var evalTmplFactorGrpList = result.resultData.evalTmplFactorGrpList;
+					var evalTmplFactorList = result.resultData.evalTmplFactorList;
+					
+					evalTmplInfo.work_evaltmpl_uuid = me.get("evalTmplInfo.work_evaltmpl_uuid");
+					evalTmplInfo.pre_evaltmpl_uuid = me.get("evalTmplInfo.pre_evaltmpl_uuid");
+					evalTmplInfo.slfck_subj_yn = me.get("evalTmplInfo.slfck_subj_yn");
+					evalTmplInfo.evaltr_typ_ccd = me.get("evalTmplInfo.evaltr_typ_ccd");
+					me.set("evalTmplInfo", evalTmplInfo);
+					me.set("evalTmplFactorGrpList", evalTmplFactorGrpList);
+					me.set("evalTmplFactorList", evalTmplFactorList);
+
+					me.onMakeTree();
+				}
+
+				me.applyFormula();
+			},
+			
+			/**
+			 * 평가템플릿 평가항목 스케일 조회
+			 */
+			onFindEvalTmplFactScale : function(){
+				var me = this;
+				
+				me.$.findListEvalTmplEvalFactScale.set("body", me.evalFactorInfo);
+				UT.request(me.$.findListEvalTmplEvalFactScale);
+			},
+
+			onDataCellClicked: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item,
+					fieldName         = item.dataField,
+					provider          = me.$.gridPanel.getDataProvider();
+				
+				if(fieldName == "evalfact_nm") {
+					if(UT.isNotEmpty(data.evalfact_uuid)) {
+						// 평가항목 클릭
+						me.set("evalFactorInfo", data); // 선택한 평가항목
+						me.applyFormula();
+						
+						me.onFindEvalTmplFactScale();
+						
+					} else {
+						// 평가항목군 클릭
+						me.$.gridPanelQualiScale.setDataProvider([]);
+					}
+				}
+			},
+			//그리드 셀 데이타 수정 완료 이벤트
+			onCellEdited: function(e){
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item,
+					grid = me.$.gridPanel,
+					provider = grid.getDataProvider(),
+					fieldName = item.dataField;
+				
+				var limitValue = new BigNumber(100);
+				
+				if(fieldName == "evalfact_wgt"){ // 평가항목 가중치
+					if(limitValue < data["evalfact_wgt"]) {
+						UT.alert("STD.SRM1357");		//가중치는 100%를 넘길 수 없습니다.
+						provider.setItemAt(item.rowIndex, {"evalfact_wgt": "0"});
+					}
+					var parentIndex = provider.getParentIndex(item.nodeIndex);
+					var evalFactWgtVal = me.getSumEvalFactWgtVal(provider, parentIndex);  // 자식 평가항목 가중치 합 계산
+					provider.setItemAt(parentIndex, { evalfact_wgt: evalFactWgtVal });
+					
+					me.calculateTotalWgtValue();
+				}else if(fieldName == "efactg_wgt"){
+					if(limitValue < data["efactg_wgt"]) {
+						UT.alert("STD.SRM1357");		//가중치는 100%를 넘길 수 없습니다.
+						provider.setItemAt(item.rowIndex, {"efactg_wgt": "0"});
+					}
+					
+					// 평가항목군 가중치 합 계산
+					me.calculateEvalFactWgtValTotal();
+					
+					me.calculateTotalWgtValue();
+				}
+			},
+			onItemEditableFn: function(data, item) {
+				var me = this;
+				if(item.dataField === "efactg_wgt") {
+					// 평가항목군 가중치 (etefg_uuid가 ROOT면 평가항목군)
+					// 가중 항목이 없는 경우 항목군 가중치 입력 불가
+					return data.etefg_uuid == "ROOT" && me.checkAddCndCcd(data, item) && me.formula('isEditable') ? true : false;
+				}
+				if(item.dataField === "evalfact_wgt") {
+					// 평가항목 가중치
+					return data.etefg_uuid != "ROOT" && data.add_cnd_ccd == "NA" && me.formula('isEditable') ? true : false;
+				}
+				if(item.dataField === "evalfact_evaltr_authty_ccd") {
+					// 정량항목인 경우 비활성화
+					if(data.evalfact_typ_ccd == "QUANT"){
+						return false;
+					} else {
+						var codeLength = me.codes.filteredR707.length == 1 ? false : true;
+						
+						// 평가항목인 경우 && 평가항목 권한 설정 여부가 Y인 경우만 활성화
+						return data.etefg_uuid != "ROOT" && me.formula('isEditable') && codeLength ? true : false;
+					}
+				}
+				if(item.dataField === "slfck_subj_yn") {
+					// 평가항목인 경우만 활성화
+					return data.etefg_uuid != "ROOT" && me.formula('isEditable') ? true : false;
+				}
+				return false;
+			},
+			
+			onItemStyleFunction: function(data, item) {
+				var me = this;
+				// 평가항목군이 아닌 평가항목만 style-link처리
+				if(UT.isNotEmpty(data) && data.etefg_uuid != "ROOT") {
+					return {
+						fontWeight: "bold",
+						fontColor: "#0e006f"
+					};
+				}
+			},
+			
+			onScaleItemEditableFn: function(data, item){
+				var me = this;
+				return me.formula('isNewEvalFact');
+			},
+			onNullvApplSubjItemEditableFn : function(data, item) {
+				var me = this;
+				return me.formula('isNewEvalFact') && me.formula('isNullvApplSubj');
+			},
+			completeFindListEvalTmplEvalFactScale: function(e, res) {
+				var me = this;
+				var result = res.response;
+				// 정성 항목 스케일 그리드
+				if(me.formula('isQualiScale')) {
+					me.$.gridPanelQualiScale.setDataProvider(result);
+				}
+				// 정량 항목 스케일 그리드
+				else if(me.formula('isQuantScale')) {
+					me.$.gridPanelQuantScale.setDataProvider(result);
+				}
+			},
+			
+			onMakeTree: function() {
+				var me = this;
+				var factorList = me.get("evalTmplFactorList");
+				var factorGrpList = me.get("evalTmplFactorGrpList");
+				var result = factorList.concat(factorGrpList);
+				
+				var hier = new CCHierachicalData();
+				var hierachiDatas = hier.HierachyTransformByKey(result, "etef_uuid", "etefg_uuid", "children", "ROOT", "sort_field", true);
+				me.$.gridPanel.setHierachyDataProvider(hierachiDatas, "children");
+				me.$.gridPanel.expandAll();
+				
+				me.set("isExpanded",true);
+				me.$.expandToggleBtn.text = "항목접기";
+				
+				// 평가템플릿 평가항목군 가중치 합 계산
+				me.calculateEvalFactWgtValTotal();
+				
+				// 평가템플릿 평가항목군 가중치 합 계산
+				me.calculateTotalWgtValue();
+				
+				// 평가항목 평가자 권한 공통코드 설정
+				me.setEvalfactEvaltrAuthtyCcd();
+			},
+			/**
+			 * 항목군추가 버튼 클릭
+			 */
+			onAddFactorGrp: function() {
+				var me = this;
+				
+				var evalFactorListPop = UT.popup("ep-evalfactorgrp", me, "60%", "90%", {
+					"selected-items": function(popup, e) {
+						var selectedItems = e.detail;
+						me.onAddSelectedEvalFactGrp(selectedItems);
+					}
+				});
+				evalFactorListPop.show();
+				evalFactorListPop.getWindowContent().load();
+			},
+			
+			/**
+			 * 항목추가 버튼 클릭
+			 */
+			onAddFactor: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				var selected = provider.selectionCheckedItems();
+				if(selected.length == 1) {
+					if(selected[0].efactg_uuid == null || selected[0].efactg_uuid == '') {
+						UT.alert("STD.SRM1051");	// 평가항목군을 선택하세요.
+						return;
+					}
+				} else if(selected.length == 0) {
+					UT.alert("STD.SRM1051");    // 평가항목군을 선택하세요.
+					return;
+				} else {
+					UT.alert("STD.SRM1311");    // 하나의 평가항목군을 선택하세요.
+					return;
+				}
+				
+				var evalFactorListPop = UT.popup("ep-evalfactor", me, "80%", "95%", {
+					"selected-items": function(popup, e) {
+						var selectedItems = e.detail;
+						me.onAddSelectedEvalFact(selectedItems);
+					},
+					"sc-window-hided": function(popup, e){
+						me.$.gridPanel.selectionCheckAll(false); // 체크된 모든 아이템 체크 해제
+					}
+				});
+				evalFactorListPop.show();
+				evalFactorListPop.getWindowContent().load({
+					searchParam: {
+						eval_task_typ_ccd : me.get("evalTmplInfo.eval_task_typ_ccd"),
+						eval_task_typ_nm : me.get("evalTmplInfo.eval_task_typ_nm")
+					}
+				});
+			},
+			/**
+			 * 평가항목군 추가
+			 */
+			onAddSelectedEvalFactGrp: function(selectedItems) {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var duplCnt = 0; // 중복 아이템수 count
+				
+				for(var i = 0; i < selectedItems.length; i++) {
+					var allItems = (provider.getItemSize() > 0) ? provider.getItems() : []; // 트리그리드의 모든 row를 가져온다.
+					var findRow = [];    // 선택된 아이템과 동일한 row의 row목록
+					var selectedItem = UT.copy(selectedItems[i]);
+					selectedItem.evalfact_nm = selectedItems[i].efactg_nm;
+					selectedItem.etefg_uuid = "ROOT";
+					
+					if(allItems) {
+						for(var j = 0; j < allItems.length; j++) {
+							var value = allItems[j]["efactg_cd"];
+							if(UT.isNotEmpty(value) && value.indexOf(selectedItem.efactg_cd) > -1) {
+								// 선택된 아이템과 같은 값을 갖는 row가 존재하면 findRowIds 배열에 담는다.
+								findRow.push(allItems[j]);
+							}
+						}
+						
+						if(findRow.length < 1) {
+							// 선택된 아이템과 같은 평가항목군 코드 값을 갖는 row가 존재하지 않는 경우
+							provider.addChildItem(-1, selectedItem);
+						} else {
+							// 선택된 아이템과 같은 평가항목군 코드 값을 갖는 row가 존재하는 경우 중복 카운트
+							duplCnt++;
+						}
+					} else {
+						// 부모 노드로 추가
+						provider.addChildItem(-1, selectedItem);
+					}
+					
+					// 중복을 제외한 아이템 추가 메시지 출력
+					UT.alert(me.translate("STD.N2010",null, duplCnt),null,true);
+				}
+			},
+			
+			/**
+			 * 평가항목 추가
+			 */
+			onAddSelectedEvalFact: function(selectedItems) {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var duplCnt = 0; // 중복 아이템수 count
+				var parentItem = provider.selectionCheckedItems(); // 선택한 항목군
+				var parentNodeIndex = provider.findNodeIndex(parentItem[0]); // 항목군의 index
+				
+				var applyYn = me.get("evalTmplInfo.evalfact_authty_appl_yn");
+				
+				for(var i = 0; i < selectedItems.length; i++) {
+					var allChildItems = provider.getItems().filter(function(data) { return data.etefg_uuid != "ROOT"}) || []; // 평가항목 목록을 가져온다. (평가항목군 제외)
+					var findRow = [];    // 선택된 아이템과 동일한 row의 row목록
+					var selectedItem = UT.copy(selectedItems[i]);
+
+					if(allChildItems){
+						
+						for (var j = 0; j < allChildItems.length; j++) {
+							// rowId를 기준으로 평가 항목 코드 필드 값을 구한다.
+							var value = allChildItems[j]["evalfact_cd"];
+							if (UT.isNotEmpty(value) && value.indexOf(selectedItem.evalfact_cd) > -1) {
+								// 선택된 아이템과 같은 값을 갖는 row가 존재하면 findRowIds 배열에 담는다.
+								findRow.push(allChildItems[j]);
+							}
+							
+						}
+						
+						if(findRow.length < 1){
+							selectedItem.efactg_uuid = parentItem[0].efactg_uuid; // 항목에 항목군 uuid추가
+							selectedItem.evaltmpl_efactg_uuid = parentItem[0].evaltmpl_efactg_uuid; // 이미 추가된 항목군에 항목을 추가한다면 템플릿 항목군 uuid추가
+							selectedItem.etefg_uuid = parentItem[0].evaltmpl_efactg_uuid;
+							if(selectedItem.evalfact_typ_ccd !== "QUANT") {
+								if(applyYn == "N"){	// 평가항목 권한 적용 여부 N인 경우에만 ALL 세팅
+									selectedItem.evalfact_evaltr_authty_ccd = "ALL";	// 정량항목이 아닌 평가항목 평가자 권한 default : 전체
+								}
+							}
+							
+							// 선택한 항목군에 항목 추가
+							provider.addChildItem(parentNodeIndex, selectedItem);
+						}else{
+							// 선택된 아이템과 같은 평가 항목 코드 값을 갖는 row가 존재하는 경우 중복 카운트
+							duplCnt++;
+						}
+					}else{
+						// 항목군에 항목이 없는 경우. 바로 항목 추가
+						selectedItem.efactg_uuid = parentItem[0].efactg_uuid; // 항목에 항목군 uuid추가
+						selectedItem.evaltmpl_efactg_uuid = parentItem[0].evaltmpl_efactg_uuid; // 이미 추가된 항목군에 항목을 추가한다면 템플릿 항목군 uuid추가
+						selectedItem.etefg_uuid = parentItem[0].evaltmpl_efactg_uuid;
+						// 선택한 항목군에 항목 추가
+						provider.addChildItem(parentNodeIndex, selectedItem);
+					}
+					
+				}
+				
+				me.$.gridPanel.expandAll(parentNodeIndex);
+				me.set("isExpanded",true);
+				
+				me.set("evalTmplFactorList", provider.getItems());
+				// 중복을 제외한 아이템 추가 메시지 출력
+				UT.alert(me.translate("STD.N2010",null, duplCnt),null,true);
+			},
+			/**
+			 * 평가항목 삭제
+			 */
+			onDeleteFactor: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				
+				if(selected.length == 0) {
+					UT.alert("STD.N1600");    //선택된 항목이 없습니다
+					return;
+				} else {
+					provider.removeItems(true, true); // grid에서 row 제거.
+					me.calculateWgtVal(); // 평가항목군 별 평가항목 가중치 합 재계산
+				}
+			},
+			
+			//clear
+			onClear: function() {
+				var me = this;
+				me.set("evalTmplInfo", me.getPropertyInfo("evalTmplInfo").value());
+				me.reset();
+			},
+			
+			/**
+			 * 닫기 버튼 클릭
+			 */
+			onClose: function() {
+				var me = this;
+				me.onClear();
+				me.fire("close");
+			},
+
+			/**
+			 * 평가시트 or 프로세스 상세정보 저장 시 템플릿 정보를 반환 한다.
+			 * returnParam = {isValid: 유효여부, resultMessage: 유효성체크 실패 메시지, evalTmplInfo: 템플릿 생성 API Param, usedEvalfactEvaltrAuthtyCcd: 사용된 평가항목 평가자 권한 목록}
+			 */
+			getSaveParameter: function(saveMode){
+				var me = this;
+				var evalTmplFactProvider = me.$.gridPanel.getDataProvider();
+				var isValid = true;
+				var msg = "";
+				var sumWgtValue = 100;
+				var sumEfactgWgtValue = 100;
+				var evalTmplInfo = me.get("evalTmplInfo");
+
+				if(saveMode == "confirmSave") {     // 확정처리인 경우에만 데이터 유효성 확인
+					var allItems = evalTmplFactProvider.getItems();
+					
+					// '시스템' 평가 가능한 평가템플릿인지 체크
+					var evaltrTypCcd = me.get("evalTmplInfo.evaltr_typ_ccd");
+					if(evaltrTypCcd == "SYS"){
+						var notQuantItems = allItems.filter(function(item){
+							return item.etefg_uuid != "ROOT" && item.evalfact_typ_ccd != "QUANT";
+						});
+						if(!UT.isEmpty(notQuantItems) && notQuantItems.length > 0){
+							isValid = false;
+							msg = me.translate("STD.VS1064");  // 시스템 평가인 경우 정량 평가항목으로 구성된 평가템플릿만 선택 가능합니다
+						}
+					}
+					
+					if(isValid) {
+						evalTmplFactProvider.setItemAtBatch(true, function(index, data) {
+							if(data.etefg_uuid === "ROOT") {
+								return {has_na: me.checkAddCndCcd(data)};	// 일반 평가항목 여부 확인
+							}
+						});
+						if(!allItems || allItems.length < 1) {
+							isValid = false;
+							msg = me.translate("STD.SRM1072"); // 평가항목을 등록하세요.
+						} else {
+							for(var i = 0; i < allItems.length; i++) {
+								var data = allItems[i];
+								if(data.etefg_uuid === "ROOT") {
+									
+									// 평가항목군의 평가항목 존재 여부 판단
+									var childItems = allItems.filter(function(item) {
+										if(item.etefg_uuid == data.etef_uuid) {
+											return item;
+										}
+									});
+									
+									if(childItems.length == 0) {
+										isValid = false;
+										msg = me.translate("STD.SRM1303", null, data.evalfact_nm); // '{0}' 평가항목군에 평가항목을 등록하세요.
+										break;
+									}
+									
+									var evalfactWgt = data.evalfact_wgt ? data.evalfact_wgt : 0;
+									
+									if(evalfactWgt != sumWgtValue && data.has_na === "true") {
+										// 평가항목군의 평가항목 가중치 합이 0인지 확인
+										// 평가항목군이 가감점 항목들로만 이루어졌다면 pass.
+										isValid = false;
+										// {0} 평가항목군의 평가항목 가중치 합은 {1}이어야 합니다. (현재 : {2})
+										msg = me.translate("STD.SRM1073", null, data.evalfact_nm, sumWgtValue, evalfactWgt);
+										break;
+									}
+								} else {
+									if(data.evalfact_typ_ccd !== "QUANT" && evalTmplInfo.evalfact_authty_appl_yn == "Y") {
+										// 평가 템플릿의 평가항목 권한 적용 여부에 따라 평가항목 평가자 권한 체크
+										if(UT.isEmpty(data.evalfact_evaltr_authty_ccd)) {
+											isValid = false;
+											msg = me.translate("STD.N4200", null, me.translate("평가항목 평가자 권한"));	// '{0}'을(를) 선택하세요.
+											break;
+										}
+									}
+									if(data.add_cnd_ccd == "NA" && UT.isEmpty(data.evalfact_wgt)) {
+										// 가중 평가항목에 평가항목 가중치 값이 설정되지 않은 경우
+										isValid = false;
+										// '{0}'은(는) 필수 입력 항목입니다.
+										msg = me.translate("STD.E1001", null, me.translate("평가항목 가중치"));
+										break;
+									}
+								}
+								
+								// 평가항목군 가중치 합 확인
+								var sumEfactgWgt = evalTmplInfo.sum_efactg_wgt ? evalTmplInfo.sum_efactg_wgt : 0;
+								if(sumEfactgWgt != sumEfactgWgtValue) {
+									isValid = false;
+									msg = me.translate("STD.SRM1076", null, sumEfactgWgtValue, sumEfactgWgt); // 평가항목군 가중치 합은 {0}이어야 합니다. (현재 : {1})
+									break;
+								}
+							}
+						}   // 평가시트헤더에 항목이 존재하는 경우
+					}
+				}   // 확정처리 시 데이터 유효성 확인 END
+
+				var returnParam = {};
+				if(isValid){
+					var evalTmplFactInfo = {
+						insertEvalTmplFactList : evalTmplFactProvider.getNewItems(),
+						updateEvalTmplFactList : evalTmplFactProvider.getUpdateItems(),
+						deleteEvalTmplFactList : evalTmplFactProvider.getRemoveItems()
+					};
+					evalTmplInfo.evalTmplFactInfo = evalTmplFactInfo;
+					
+					returnParam = {
+						isValid : isValid,
+						evalTmplInfo : evalTmplInfo,
+						usedEvalfactEvaltrAuthtyCcd : (saveMode == "confirmSave" || saveMode == "modEvaltr" ? me.getUsedEvalfactEvaltrAuthtyCcd() : null)  // 사용된 평가항목 평가자 권한 목록
+					};
+				}else{
+					returnParam = {
+						isValid : isValid,
+						resultMessage : msg,
+						evalTmplInfo : evalTmplInfo
+					};
+				}
+
+				return returnParam;
+			},
+			
+			/* 사용된 평가항목 평가자 권한 목록 */
+			getUsedEvalfactEvaltrAuthtyCcd: function(){
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				var usedEvalfactEvaltrAuthtyCcd = me.codes.R707.filter(function(item){
+					var nodeIndex = provider.findNodeIndex({evalfact_evaltr_authty_ccd: item.data});
+					if(nodeIndex >= 0){
+						return item;
+					}
+				});
+				return usedEvalfactEvaltrAuthtyCcd;
+			},
+
+			/**
+			 * 평가시트 or 프로세스에서 변경된 템플릿 정보를 setting 한다.
+			 * param = {slfck_subj_yn: 자체점검 대상 여부, evaltr_typ_ccd: 평가자 유형}
+			 */
+			setEvaltmplInfo: function(evalTmplInfo){
+				var me = this;
+				
+				if(!UT.isEmpty(evalTmplInfo)){
+					me.set("evalTmplInfo.slfck_subj_yn", evalTmplInfo.slfck_subj_yn);
+					me.set("evalTmplInfo.evaltr_typ_ccd", evalTmplInfo.evaltr_typ_ccd);
+					me.applyFormula();
+				}
+			},
+			
+			/**
+			 * 자식 평가항목의 가중치합 구하기
+			 */
+			getSumEvalFactWgtVal : function(provider, nodeIndex) {
+				var me = this;
+				var children = provider.getChildItems(nodeIndex);
+				var sumVal = 0;
+				var filter = {
+					field : "add_cnd_ccd",
+					value : "NA"
+				};
+				
+				if(children && children.length > 0){
+					for(var i=0; i<children.length; i++){
+						var data = children[i];
+						var val = data["evalfact_wgt"];
+						
+						sumVal += (data[filter.field] == filter.value) ? UT.toNumber(val) : 0;
+					}
+				}
+				return sumVal.toFixed(2);
+			},
+
+			/**
+			 * 평가항목군 가중치 합 계산
+			 */
+			calculateEvalFactWgtValTotal : function(){
+				var me = this;
+				var sumVal = me.$.gridPanel.getDataProvider().getSummary("efactg_wgt","sum");
+				me.set("evalTmplInfo.sum_efactg_wgt", sumVal);
+			},
+			
+			/**
+			 * 평가템플릿 평가항목 스케일 저장
+			 */
+			onSaveScale : function(e, data) {
+				var me = this;
+				var evalfactTyp = e.target.dataset.args;
+				var provider = evalfactTyp === "quali" ? me.$.gridPanelQualiScale.getDataProvider() : me.$.gridPanelQuantScale.getDataProvider();
+				
+				var evalfactTypCcd = me.get("evalFactorInfo.evalfact_typ_ccd");
+				var addCndCcd = me.get("evalFactorInfo.add_cnd_ccd");
+				
+				// 필요 시 다국어 등록 후 사용
+				/*
+				if(addCndCcd== "NA" && evalfactTypCcd == "QUALI"){ // 가중 항목 && 단일 선택인 경우
+					var scItem = provider.filterItems({sc: "100"});
+					if(UT.isEmpty(scItem) || scItem.length == 0){
+						UT.alert("평가항목이 단일 선택인 경우 스케일 항목에 100점이 존재해야 합니다.");
+						return;
+					}
+				} else if(addCndCcd== "NA" && evalfactTypCcd == "QUALI_MULTPL_SEL") {	// 가중 항목 && 정성 다중 선택인 경우
+					var sumVal = provider.getSummary("sc","sum");
+					if(sumVal != 100) {
+						UT.alert("평가항목이 다중 선택인 경우 스케일 항목 점수의 합이 100이어야 합니다.");
+						return;
+					}
+				}
+				*/
+				if(me.formula("isQuantScale")){ // 정량 스케일 항목이 존재하는 경우
+					
+					if(me.formula('isNullvApplSubj')){
+						var item = me.$.gridPanelQuantScale.getDataProvider().filterItem({nullv_appl_subj_scale_yn : "Y"});
+						if(UT.isEmpty(item)){
+							// 	STD.N4300	'{0}'을(를) {1}개 선택하세요.
+							// -> 'NULL값 적용 대상 스케일 여부'을(를) 1개 선택하세요.
+							return UT.alert(me.translate("STD.N4300", null, me.translate("NULL값 적용 대상 스케일 여부"), "1"), null, true);
+						}
+					}
+					// 정량 스케일 항목 그리드 입력 값 유효성 체크
+					if(!me.$.gridPanelQuantScale.validate()){
+						UT.alert("STD.E0000");
+						return;
+					}
+					// 정량 스케일 항목 스케일범위 유효성 체크
+					if(!me.isValidQuantScaleRange()){
+						return;
+					}
+				}
+				var updateScaleList = provider.getUpdateItems();
+				
+				UT.confirm("STD.N1200", function() { // 저장하시겠습니까?
+					me.$.saveEvalTmplEvalFactScale.set("body",{
+						scaleList : updateScaleList
+					});
+					UT.request(me.$.saveEvalTmplEvalFactScale);
+				});
+			},
+			/**
+			 * 정량 스케일 범위 유효성 확인
+			 */
+			isValidQuantScaleRange: function() {
+				var me = this;
+				var grid = me.$.gridPanelQuantScale;
+				
+				var chkScaleList = grid.getDataProvider().getItems();
+				
+				for(var i=0; i<chkScaleList.length; i++){
+					var seqSection = chkScaleList[i];
+					var chkCnt = 0;
+					
+					if(parseFloat(seqSection.st_val) >= parseFloat(seqSection.stp_val)) {
+						UT.alert(me.translate("STD.E1010",null, "시작 값", "멈춤 값"),null,true);    // minText은(는) maxText 보다 작은 값으로 입력하십시오
+						return false;
+					}
+					
+					for(var j=0; j<chkScaleList.length; j++){
+						var seqScale = chkScaleList[j];
+						
+						if(seqScale && (i != j)){
+							if(parseFloat(seqSection.stp_val) <= parseFloat(seqScale.stp_val)
+									&& parseFloat(seqSection.stp_val) > parseFloat(seqScale.st_val)) {
+								chkCnt++;
+							}
+							if(parseFloat(seqSection.st_val) < parseFloat(seqScale.stp_val)
+									&& parseFloat(seqSection.st_val) >= parseFloat(seqScale.st_val)) {
+								chkCnt++;
+							}
+						}
+					}
+					
+					if(chkCnt > 0) {
+						UT.alert("STD.SRM1041"); // 스케일 시작, 멈춤 구간값의 중첩 등록이 불가능합니다.
+						return false;
+					}
+				}
+				return true;
+			},
+			/**
+			 * 평가템플릿 평가항목 스케일 저장 callback
+			 */
+			completeSaveEvalTmplEvalFactScale : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					UT.completeAlert("저장", function() {
+						// 재조회
+						me.onFindEvalTmplFactScale();
+					});
+				} else {
+					//저장실패
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onRowRegex: function(data, item) {
+				var me = this;
+				switch (item.dataField) {
+					case "sc":
+					case "st_val":
+					case "stp_val":
+						return CCPrecManager.regex("srmScore");
+					case "scale_sort":
+						return CCPrecManager.regex("integer");
+					default:
+						return null;
+				}
+			},
+			onExpandToggle : function(e) {
+				var me = this;
+				var target = e.target;
+				var itemCnt = me.$.gridPanel.getDataProvider().getItemSize();
+				var flag = me.get("isExpanded");
+				
+				if(itemCnt < 1){
+					return;
+				}
+				
+				if(flag){
+					me.$.gridPanel.collapseAll();
+					target.text = "항목펼치기";
+				}else{
+					me.$.gridPanel.expandAll();
+					target.text = "항목접기";
+				}
+				
+				me.set("isExpanded", !flag);
+			},
+			
+			// 평가항목군의 평가항목에 '가중' 항목이 있으면 true
+			checkAddCndCcd : function(data, item){
+				var me = this;
+				var isNaFactor = false;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				var items = provider.getItems();
+				var childItems = items.filter(function(item){
+				    if(item.etefg_uuid == data.etef_uuid){
+				        return item;
+				    }
+				});
+				
+				if(childItems.length == 0 && UT.isNotEmpty(item)){
+					childItems = provider.getChildItems(item.nodeIndex);
+				}
+				for(var i=0;i<childItems.length;i++){
+					if(childItems[i].add_cnd_ccd == "NA"){
+						isNaFactor = true;
+						break;
+					}
+				}
+				
+				return isNaFactor;
+			},
+			// 평가 템플릿 평가항목군 가중치 합 계산
+			calculateTotalWgtValue : function() {
+				var me = this;
+				var totalWgtValue = 0;
+				var provider = me.$.gridPanel.getDataProvider();
+				
+				var items = provider.getItems();
+				for(var i=0;i<items.length;i++){
+					if(items[i].etefg_uuid == "ROOT"){
+						var efactgWgt = UT.isEmpty(items[i].efactg_wgt) ? 0 : UT.toNumber(items[i].efactg_wgt);
+						var evalfactWgt = UT.isEmpty(items[i].evalfact_wgt) ? 0 : UT.toNumber(items[i].evalfact_wgt);
+						totalWgtValue += efactgWgt * evalfactWgt * 0.01;
+					}
+				}
+				
+				me.set("evalTmplInfo.totalWgtValue", totalWgtValue.toFixed(2));
+			},
+			
+			// 항목군별 평가항목 가중치합 재 계산
+			calculateWgtVal: function(){
+				var me = this,
+				provider = me.$.gridPanel.getDataProvider();
+				
+				provider.setItemAtBatch(true, function(index, data){
+					if(data.etefg_uuid == "ROOT"){
+						var evalFactWgtVal = me.getSumEvalFactWgtVal(provider, index);  // 자식 평가항목 가중치 합 계산
+						return { evalfact_wgt: evalFactWgtVal };
+					}
+				});
+				
+				// 평가 템플릿 평가항목군 가중치 합 계산
+				me.calculateTotalWgtValue();
+				me.calculateEvalFactWgtValTotal();
+			},
+			
+			/**
+			 * 평가템플릿 Import 버튼 클릭
+			 */
+			onImportEvaltmpl: function(){
+				var me = this;
+				
+				if(!me.formula("isNewData")){  // 평가템플릿을 Import 하시겠습니까?
+					UT.confirm("STD.SRM1317", function () {
+						me.onShowEvatmplListPopup();
+					});
+					return;
+				}
+				
+				me.onShowEvatmplListPopup()
+			},
+			/* 평가템플릿 리스트 팝업 조회 */
+			onShowEvatmplListPopup: function(){
+				var me = this;
+				
+				var param = {
+					eval_task_typ_ccd : me.get("evalTmplInfo.eval_task_typ_ccd"),
+					evalfact_authty_appl_yn : me.get("evalTmplInfo.evaltr_typ_ccd")  == "EVALFACT_AUTHTY_PIC" ? "Y" : "N"
+				}  // EVALFACT_AUTHTY_PIC: 평가항목 권한 담당자
+				
+				var evatmplListPopup = UT.popup("ep-evaltmpl-list", me, "70%", "60%", {
+					"selected-item": function(popup, e) {
+						var selectedItem = e.detail;
+						var evalTmplInfo = selectedItem;
+						var workEvaltmplUuid = me.get("evalTmplInfo.work_evaltmpl_uuid");
+						
+						if(!UT.isEmpty(workEvaltmplUuid)){
+							evalTmplInfo.work_evaltmpl_uuid = workEvaltmplUuid;
+						
+							me.$.saveTransformImportEvaltmpl.set("body", evalTmplInfo);
+							UT.request(me.$.saveTransformImportEvaltmpl);
+						}else{
+							me.set("evalTmplInfo", evalTmplInfo);
+					
+							// 평가 템플릿 조회
+							me.onSearchEvaltmpl();
+						}
+						popup.close();
+					}
+				},{titleText : "평가템플릿 Import"});
+				evatmplListPopup.show();
+				evatmplListPopup.getWindowContent().load(param);
+			},
+			/**
+			 * 평가템플릿 수정 모드 버튼 클릭
+			 */
+			onTransformModModeEvaltmpl: function(){
+				var me = this;
+				
+				UT.confirm("STD.SRM1318", function(btn) {  // 평가템플릿을 변경하시겠습니까?
+					var evalTmplInfo = me.get("evalTmplInfo");
+					evalTmplInfo.copy_nm = me.translate("STD.N2102");
+					
+                    me.$.saveTransformModModeEvaltmpl.set("body", evalTmplInfo);
+                    UT.request(me.$.saveTransformModModeEvaltmpl);
+                });
+			},
+			onModCancelForBackToPrevEvaltmpl: function(){
+				var me = this;
+
+				UT.confirm("STD.SRM1334", function(btn) {  // 수정을 취소하시겠습니까?
+					var evalTmplInfo = me.get("evalTmplInfo");
+
+                    me.$.saveTransformModCancelEvaltmpl.set("body", evalTmplInfo);
+                    UT.request(me.$.saveTransformModCancelEvaltmpl);
+                });
+			},
+			/**
+			 * 평가템플릿 전환 callback
+			 */
+			completeSaveTransformEvaltmpl: function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(UT.isNotEmpty(result) && result.resultStatus == "S"){
+					me.set("evalTmplInfo", result.resultData);
+					
+					// 평가 템플릿 조회
+					me.onSearchEvaltmpl();
+					me.fire("saved-transform-evaltmpl");
+				}
+			},
+			setEvalfactEvaltrAuthtyCcd: function(applYn){
+				var me = this;
+				
+				if(UT.isEmpty(applYn)){
+					applYn = me.get("evalTmplInfo.evalfact_authty_appl_yn");
+				}
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				var evalTmplFactorList = me.get("evalTmplFactorList");
+				if(me.formula("isConfirmed")) {
+					me.set("codes.filteredR707", me.get("codes.R707"));
+					return;
+				}
+				
+				if(applYn == "Y") {
+					// 평가항목 평가자 권한에서 'ALL' 제외
+					var code = me.codes.R707;
+					var filteredR707 = code.filter(function(data) {
+						if(data.data != "ALL") {
+							return data;
+						}
+					});
+					me.set("codes.filteredR707", filteredR707);
+					
+					if(UT.isNotEmpty(evalTmplFactorList)) {
+						provider.setItemAtBatch(true, function(nodeIndex, data) {
+							if(data["etefg_uuid"] !== "ROOT" && data["evalfact_evaltr_authty_ccd"] == "ALL") {
+								return {"evalfact_evaltr_authty_ccd": null};
+							}
+						});
+					}
+				} else {
+					// 평가항목 평가자 권한 모두 'ALL' 세팅 (정량항목 제외)
+					var code = me.codes.R707;
+					var filteredR707 = code.filter(function(data) {
+						if(data.data == "ALL") {
+							return data;
+						}
+					});
+					me.set("codes.filteredR707", filteredR707);
+					
+					if(UT.isNotEmpty(evalTmplFactorList)) {
+						provider.setItemAtBatch(true, function(nodeIndex, data) {
+							if(data["etefg_uuid"] !== "ROOT" && data["evalfact_typ_ccd"] !== "QUANT") {
+								return {"evalfact_evaltr_authty_ccd": "ALL"};
+							}
+						});
+					}
+				}
+			}
+		});
+	</script>
+</dom-module>

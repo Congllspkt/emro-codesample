@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-obd-eval">
+	<select id="findListOorgCdAll" parameterType="String" resultType="map">
+		/* sp-obd-eval.findListOorgCdAll */
+		/* 운영단위 유형 별 운영조직 목록 조회 */
+		/* 콤보박스 or 그리드 콤보박스에 사용 */
+		SELECT O.OORG_CD AS DATA  /* 운영조직코드 */
+			 , CASE WHEN 'ko_KR' = #{g.locale}
+					THEN CONCAT(CONCAT(CONCAT('[', OUNIT.OUNIT_NM), '] '), LO.LOGIC_ORG_NM)
+					ELSE CONCAT(CONCAT(CONCAT('[', OUNIT.OUNIT_NM_EN), '] '), LO.LOGIC_ORG_NM_EN)
+				END AS LABEL
+		FROM ( SELECT TEN_ID
+					, OORG_CD
+					, PARNODE_OORG_CD
+					, OUNIT_CD
+					, LOGIC_ORG_CD
+					, PARNODE_LOGIC_ORG_CD
+					, CHDNODE_YN AS LEAF_YN  /* 최하위 조직여부 */
+					, LOGIC_ORG_TYP_CCD
+			   FROM OORG                     /* 운영조직 */
+			   WHERE TEN_ID       = #{g.tenant}
+		       <if test="p != null and p != ''">
+			   	 AND OUNIT_CD     = #{p}
+			   </if>
+				 AND USE_YN       = 'Y'
+				 AND CHDNODE_YN   = 'Y'
+				 AND STS         != 'D'
+			 ) O
+				 INNER JOIN LOGIC_ORG LO
+				 		 ON LO.TEN_ID            = O.TEN_ID
+				 		AND LO.LOGIC_ORG_TYP_CCD = O.LOGIC_ORG_TYP_CCD
+				 		AND LO.LOGIC_ORG_CD      = O.LOGIC_ORG_CD
+				 INNER JOIN OUNIT OUNIT
+						 ON O.TEN_ID   = OUNIT.TEN_ID
+						AND O.OUNIT_CD = OUNIT.OUNIT_CD
+		WHERE LO.USE_YN = 'Y'
+		  AND LO.STS  != 'D'
+		ORDER BY O.LOGIC_ORG_CD
+	</select>
+	<select id="findListOnboardingEvalFulfill" resultType="map">
+		/* sp-obd-eval.findListOnboardingEvalFulfill : 온보딩평가 수행 목록 조회 */
+		SELECT OP.TEN_ID
+		     , O.VD_CD
+			 , VD.ERP_VD_CD
+		     , O.OORG_CD
+		     , OPER.EVALTR_ID     /* 평가자 아이디 */
+		     , OPER.EVAL_PRGS_STS_CCD                   /* 평가자의 평가 프로세스 진행상태 */
+		     , CASE WHEN OPER.EVAL_PRGS_STS_CCD = 'WTG' THEN NULL
+		            ELSE OPER.MOD_DTTM END AS FUFL_DTTM /* 수행일자 */
+		     , OESHT.EVALSHT_CD   /* 평가시트 코드 */
+		     , OESHT.EVALSHT_NM   /* 평가시트 명 */
+		     , DTLML.DTLCD_NM AS PRCS_CCD_NM
+			 , ( SELECT EVALTMPL_NM
+				 FROM EVALTMPL
+				 WHERE TEN_ID      = OESHTP.TEN_ID
+				 AND EVALTMPL_UUID = OESHTP.EVALTMPL_UUID ) AS EVALTMPL_NM /* 평가템플릿 명 */
+		     , OEG.OEG_CD         /* 평가그룹 코드 */
+		     , OEG.OEG_NM         /* 평가그룹 명 */
+		     , CASE WHEN #{g.locale} = 'ko_KR' OR (VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '') THEN VD.VD_NM ELSE VD_NM_EN END AS VD_NM
+			 , O.OE_UUID                       /* 온보딩 평가 UUID */
+			 , OP.OE_PRCS_UUID                 /* 온보딩 평가 프로세스 UUID */
+			 , OPER.EVAL_SUBJ_EVALTR_RES_UUID  /* 평가대상 평가자 결과 UUID */
+		FROM OE_PRCS OP   /* 온보딩평가 프로세스 */
+		INNER JOIN (
+		    SELECT ROW_NUMBER() OVER(PARTITION BY OPE.OE_PRCS_UUID ORDER BY (CASE OPE.EVAL_STS_CCD WHEN 'WTG' THEN 1 ELSE 2 END)) EVALTR_ROWNUM,
+		           OPE.TEN_ID, OPE.EVALTR_ID, OPE.EVAL_SUBJ_EVALTR_RES_UUID, OPE.OE_PRCS_UUID, ESER.EVAL_PRGS_STS_CCD, ESER.MOD_DTTM
+		    FROM OE_PRCS_EVALTR OPE /* 온보딩평가 프로세스 평가자 */
+		    INNER JOIN EVAL_SUBJ_EVALTR_RES ESER
+		    ON OPE.TEN_ID                     = ESER.TEN_ID
+		    AND OPE.EVAL_SUBJ_EVALTR_RES_UUID = ESER.EVAL_SUBJ_EVALTR_RES_UUID /* 평가대상 평가자 결과 */
+		    WHERE OPE.TEN_ID  = #{g.tenant}
+		    AND OPE.EVALTR_ID = #{g.username}
+		<if test="p.eval_prgs_sts_ccd != null and p.eval_prgs_sts_ccd != ''">
+		    AND ESER.EVAL_PRGS_STS_CCD = #{p.eval_prgs_sts_ccd}
+		</if>
+		    AND OPE.STS      != 'D'
+		) OPER ON OPER.TEN_ID = OP.TEN_ID AND OPER.OE_PRCS_UUID = OP.OE_PRCS_UUID AND OPER.EVALTR_ROWNUM = 1
+		INNER JOIN OBD_EVALSHT OESHT ON OP.TEN_ID = OESHT.TEN_ID AND OESHT.OBD_EVALSHT_UUID = OP.OBD_EVALSHT_UUID /* 온보딩 평가시트 */
+		INNER JOIN OBD_EVALSHT_PRCS OESHTP ON OP.TEN_ID = OESHTP.TEN_ID AND OESHTP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID AND OESHTP.STS != 'D' /* 온보딩 평가시트 프로세스 */
+		 LEFT OUTER JOIN DTLCD_MULTLANG DTLML  /* 프로세스 코드 명 */
+           ON DTLML.TEN_ID              = OESHTP.TEN_ID
+          AND DTLML.CCD                 = 'E916'
+          AND DTLML.DTLCD               = OESHTP.PRCS_CCD
+          AND DTLML.LANG_CCD            = #{g.locale}
+		INNER JOIN OE O ON OP.TEN_ID = O.TEN_ID AND O.OE_UUID = OP.OE_UUID /* 온보딩평가 */
+		INNER JOIN OEG OEG ON O.TEN_ID = OEG.TEN_ID AND O.OEG_UUID = OEG.OEG_UUID /* 온보딩평가그룹 */
+		LEFT OUTER JOIN VD VD ON VD.TEN_ID = O.TEN_ID AND VD.VD_CD = O.VD_CD
+		WHERE OP.TEN_ID = #{g.tenant}
+		  AND OP.STS   != 'D'
+		  AND O.STS    != 'D'
+		  AND OP.OE_PRCS_STS_CCD IN ('EVAL_WTG', 'EVAL_PRGSG') /* 온보딩평가 절차 수행 대기, 진행중인 건만 조회 */
+		  AND O.OORG_CD = #{p.oorg_cd}
+		  AND O.VD_CD   = #{g.vd_cd}
+		<if test="p.evalsht_nm != null and p.evalsht_nm != ''">
+			<bind name="evalsht_nm" value="'%' + p.evalsht_nm + '%'"/>
+			AND OESHT.EVALSHT_NM LIKE #{evalsht_nm}
+		</if>
+		<if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+			<bind name="erpCdPatten" value="'%' + p.erp_vd_cd + '%'"/>
+			AND UPPER(VD.ERP_VD_CD) LIKE UPPER(#{erpCdPatten})
+		</if>
+		<if test="p.vd_nm != null and p.vd_nm != ''">
+			<bind name="vdNamePattern" value="'%' + p.vd_nm + '%'"/>
+			AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNamePattern}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNamePattern}))
+		</if>
+		ORDER BY OP.REG_DTTM DESC
+	</select>
+	<select id="findOnboardingEvalSubjectInfo" resultType="map">
+		/* sp-obd-eval.findOnboardingEvalSubjectInfo: 온보딩평가 수행 정보 및 대상 조회 */
+		SELECT O.TEN_ID
+			 , 'OE' AS EVAL_TASK_TYP_CCD
+			 , O.VD_CD
+			 , O.OORG_CD
+			 , O.OE_UUID                      /* 온보딩 평가 UUID */
+			 , OP.OE_PRCS_UUID                /* 온보딩 평가 프로세스 UUID */
+			 , VD.ERP_VD_CD
+			 , CASE WHEN #{g.locale} = 'ko_KR' OR (VD.VD_NM_EN IS NULL OR VD.VD_NM_EN = '') THEN VD.VD_NM ELSE VD_NM_EN END AS VD_NM
+			 , OP.OBD_EVALSHT_UUID
+			 , OEG.OEG_CD                     /* 온보딩평가그룹 코드 */
+			 , OEG.OEG_NM                     /* 온보딩평가그룹 명 */
+			 , O.OE_REQ_DT                    /* 온보딩평가 요청일자 */
+			 , O.OE_PRGS_STS_CCD               /* 온보딩평가 진행 상태 */
+			 , OP.OE_PRCS_STS_CCD          /* 온보딩평가 프로세스 상태 */
+			 , OPE.EVAL_STS_CCD               /* 평가 수행상태 */
+			 , OPE.EVALTR_ID                  /* 평가자 ID */
+			 , ( SELECT CASE WHEN #{g.locale} = 'ko_KR' OR (USR_NM_EN IS NULL OR USR_NM_EN = '') THEN USR_NM ELSE USR_NM_EN END
+			     FROM USR
+			     WHERE TEN_ID = O.TEN_ID AND USR_ID = OPE.EVALTR_ID) AS EVALTR_NM /* 평가자명 */
+			 , OPE.EVALFACT_EVALTR_AUTHTY_CCD /* 평가항목 평가자 권한 공통코드 */
+			 , ESER.EVAL_PRGS_STS_CCD         /* 평가 진행 상태 공통코드 */
+			 , ESER.EVALTR_SC                 /* 점수 */
+			 , ESER.ATHG_UUID                 /* 첨부파일 */
+			 , ( SELECT COUNT(1)
+			     FROM ATHF
+			     WHERE TEN_ID = #{g.tenant}
+			     AND ATHG_UUID = ESER.ATHG_UUID) AS ATT_CNT
+			 , OESHTP.EVALTMPL_UUID           /* 평가템플릿 UUID */
+			 , OESHTP.PRCS_CCD                /* 프로세스 공통코드 */
+			 , OESHTP.EVALDOC_LYT_TYP_CCD     /* 평가문서 레이아웃 유형 */
+			 , OESHTP.EVALTR_TYP_CCD          /* 평가자 유형 */
+			 , OESHTP.OBD_EVALSHT_PRCS_UUID   /* 온보딩 평가시트 프로세스 UUID */
+			 , OPE.OE_PRCS_EVALTR_UUID        /* 온보딩평가 프로세스 평가자 UUID */
+			 , ESER.EVAL_SUBJ_RES_UUID        /* 평가 대상 결과 UUID */
+			 , OPE.EVAL_SUBJ_EVALTR_RES_UUID  /* 평가 대상 평가자 결과 UUID */
+		FROM OE O /* 온보딩평가 */
+		INNER JOIN OE_PRCS OP ON OP.TEN_ID = O.TEN_ID AND OP.OE_PRCS_UUID = #{p.oe_prcs_uuid} /* 온보딩평가 프로세스 */
+		INNER JOIN OE_PRCS_EVALTR OPE ON OPE.TEN_ID = O.TEN_ID AND OPE.OE_PRCS_UUID = OP.OE_PRCS_UUID /* 온보딩평가 프로세스 평가자 */
+								  <choose>
+								  	  <when test="p.evaltr_id != null and p.evaltr_id !=''">
+								  	  AND OPE.EVALTR_ID = #{p.evaltr_id}
+								  	  </when>
+								  	  <when test="p.evaltr_typ_ccd != null and p.evaltr_typ_ccd eq 'VD'">
+								  	  AND OPE.EVALTR_ID = #{g.vd_cd}
+								  	  </when>
+								  	  <otherwise>
+								  	  AND OPE.EVALTR_ID = #{g.username}
+								  	  </otherwise>
+								  </choose>
+		INNER JOIN OEG OEG ON OEG.TEN_ID = O.TEN_ID AND OEG.OEG_UUID = O.OEG_UUID /* 온보딩평가그룹 */
+		INNER JOIN EVAL_SUBJ_EVALTR_RES ESER ON OPE.TEN_ID = ESER.TEN_ID AND OPE.EVAL_SUBJ_EVALTR_RES_UUID = ESER.EVAL_SUBJ_EVALTR_RES_UUID /* 평가대상 평가자 결과 */
+		LEFT OUTER JOIN OBD_EVALSHT_PRCS OESHTP ON OESHTP.TEN_ID = O.TEN_ID AND OESHTP.OBD_EVALSHT_PRCS_UUID = OP.OBD_EVALSHT_PRCS_UUID /* 온보딩평가 시트 프로세스 */
+		LEFT OUTER JOIN VD VD ON VD.TEN_ID = O.TEN_ID AND VD.VD_CD = O.VD_CD
+		WHERE O.TEN_ID  = #{g.tenant}
+		  AND O.VD_CD   = #{g.vd_cd}
+		  AND O.OE_UUID = #{p.oe_uuid}
+		  AND O.STS    != 'D'
+	</select>
+	<update id="updateObdEvalPrcsEvaltrSc">
+		/* sp-obd-eval.updateObdEvalPrcsEvaltrSc: 온보딩평가 프로세스 평가자 점수, 상태 업데이트 */
+		UPDATE OE_PRCS_EVALTR
+		SET   EVAL_STS_CCD = #{p.eval_sts_ccd}
+			, EVALTR_SC    = #{p.evaltr_sc}                   /* 평가자 점수 */  , MODR_ID      = #{g.username}
+		    , MOD_DTTM     = #{g.now}
+		WHERE TEN_ID              = #{g.tenant}
+		  AND OE_PRCS_EVALTR_UUID = #{p.oe_prcs_evaltr_uuid}
+	</update>
+	<update id="updateObdEvalPrcsSc">
+		/* sp-obd-eval.updateObdEvalPrcsSc: 온보딩평가 프로세스 점수, 상태 업데이트 */
+		UPDATE OE_PRCS
+		SET   OE_PRCS_STS_CCD = #{p.oe_prcs_sts_ccd}
+			, PRCS_EVAL_SC    = #{p.prcs_eval_sc}                   /* 프로세스 평가 점수 */  , MODR_ID         = #{g.username}
+		    , MOD_DTTM        = #{g.now}
+		WHERE TEN_ID       = #{g.tenant}
+		  AND OE_PRCS_UUID = #{p.oe_prcs_uuid}
+	</update>
+	<update id="saveOnboardingEvalComplete">
+		/* sp-obd-eval.saveOnboardingEvalComplete : 온보딩평가 평가 완료 - OE update */
+		UPDATE OE
+		SET OE_PRGS_STS_CCD = 'EVAL_CMPLD'                 /* 진행 상태 코드 (EVAL_CMPLD: 평가 완료) */
+		  , OE_RES_STS_CCD  = (CASE WHEN (SELECT COUNT(*) FROM OE_PRCS WHERE TEN_ID = OE.TEN_ID AND OE_UUID = OE.OE_UUID AND OE_PRCS_STS_CCD = 'PRCS_CONL_PASS') &gt; 0
+									 THEN 'CONL_PASS' ELSE 'PASS' END)
+		<bind name="getFormatNow" value="g.getFormatNow(g.now,'yyyyMMdd')"/>
+		  , OE_ED_DT        = #{getFormatNow}
+		  , MODR_ID         = #{g.username}
+          , MOD_DTTM        = #{g.now}
+		WHERE TEN_ID        = #{g.tenant}
+		AND OE_UUID         = #{p.oe_uuid}
+	</update>
+	<select id="getObdEvalPrcsStatusClosedYn" resultType="string">
+        /* sp-obd-eval.getObdEvalPrcsStatusClosedYn : 평가 마감 여부 조회 */
+        SELECT /* 온보딩평가 진행상태 공통코드에서 속성이 RESULT 인 상태 혹은 집계오류 상태인 경우 마감 Y */
+               CASE WHEN OE_PRCS_STS_CCD IN (
+                                       SELECT DTLCD.DTLCD
+                                         FROM DTLCD
+                                        INNER JOIN CCD_CSTR_CND_VAL CND_VAL
+                                           ON DTLCD.TEN_ID = CND_VAL.TEN_ID
+                                          AND DTLCD.CCD    = CND_VAL.CCD
+                                          AND DTLCD.DTLCD  = CND_VAL.DTLCD
+                                          AND CND_VAL.CSTR_CND_CD  = 'RESULT'
+                                          AND CND_VAL.CSTR_CND_VAL = 'Y'
+                                        WHERE DTLCD.TEN_ID = #{g.tenant}
+                                          AND DTLCD.CCD    = 'E007'
+                                          AND DTLCD.USE_YN = 'Y'
+                                          AND DTLCD.STS   != 'D')
+                    THEN 'Y'
+                    ELSE 'N'
+                END
+          FROM OE_PRCS  /* 온보딩평가 요청 */
+         WHERE TEN_ID       = #{g.tenant}
+           AND OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </select>
+    <update id="startCloseObdEval">
+        /* sp-obd-eval.startCloseObdEval : 온보딩평가 프로세스 마감 로직 시작 시 온보딩평가 프로세스 상태를 "평가집계" 로 수정 */
+        UPDATE OE_PRCS
+           SET OE_PRCS_STS_CCD = 'EVAL_RES'
+             , MODR_ID         = #{g.username}
+             , MOD_DTTM        = #{g.now}
+         WHERE TEN_ID       = #{g.tenant}
+           AND OE_PRCS_UUID = #{p.oe_prcs_uuid}
+    </update>
+</mapper>

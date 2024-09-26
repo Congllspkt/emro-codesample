@@ -1,0 +1,275 @@
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-single.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-multi.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-rank.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-dropdown.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-linear.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-short.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-essay.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-date.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-answer-time.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/answer/es-survey-grid-response.html"></sc-link>
+
+<dom-module id="es-survey-question">
+	<style>
+		:host {
+			position: relative;
+		}
+		.overlay {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			z-index: 10; /* 부모 엘리먼트의 위에 오도록 설정 */
+			pointer-events: none; /* 기본적으로 이벤트를 차단하지 않음 */
+		}
+		.overlay.locked {
+			pointer-events: all; /* 잠긴 상태에서는 이벤트 차단 */
+			background-color: rgba(255, 255, 255, 0.7); /* 반투명 흰색 배경 */
+		}
+	</style>
+	<template>
+		<div class="title">[[formula('numberView')]][[languageParse(question.surv_qn_nm)]]</div>
+		
+		<div class="overlay"></div>
+		<div id="answerForm" class="answer"></div>
+		<div id="gridRespForm" class="answer"></div>
+		
+		<es-survey-answer-single hidden></es-survey-answer-single>
+		<es-survey-answer-multi hidden></es-survey-answer-multi>
+		<es-survey-answer-rank hidden></es-survey-answer-rank>
+		<es-survey-answer-dropdown hidden></es-survey-answer-dropdown>
+		<es-survey-answer-linear hidden></es-survey-answer-linear>
+		<es-survey-answer-short hidden></es-survey-answer-short>
+		<es-survey-answer-essay hidden></es-survey-answer-essay>
+		<es-survey-answer-date hidden></es-survey-answer-date>
+		<es-survey-answer-time hidden></es-survey-answer-time>
+		<es-survey-grid-response hidden></es-survey-grid-response>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-question",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {};
+					}
+				},
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				question: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				number: {
+					type: String
+				},
+				editable: {
+					type: Object,
+					value: function() {
+						return true;
+					}
+				}
+			},
+			formulas: {
+				numberView: function() {
+					var me = this;
+					var survey = me.survey;
+					return survey.qn_no_dspy_yn === "Y" ? this.number + ". " : "";
+				},
+				editableFromParent: function() {
+					var me = this;
+					var parSurvAnsOptUuid = me.question.par_surv_ans_opt_uuid;
+					if(parSurvAnsOptUuid == null) {
+						return true;
+					}
+					var parAnswer = me.question.par_answer;
+					if(parAnswer == parSurvAnsOptUuid) {
+						return true;
+					}
+					return false;
+				}
+			},
+			
+			languageParse: function(str) {
+				return SCLanguageManager.parse(str);
+			},
+			
+			load: function(param) {
+				var me = this;
+				var sectionForm = param.sectionForm;
+				var question = param.question;
+				
+				me.set("question", question);
+				me.addExplain(question);
+				
+				var childrenQuestions = question.questions || [];
+				if(question.grid_resp_yn === "N") {
+					for(var i = 0; i < childrenQuestions.length; i++) {
+						var childrenQuestion = childrenQuestions[i];
+						sectionForm.addQuestion(sectionForm, childrenQuestion, me.get("number") + "-" + (i + 1));
+					}
+					me.addAnswer(question);
+				} else {
+					me.loadGridRespPanel(question, childrenQuestions);
+				}
+				
+				me.applyFormula();
+				me.syncEditableByParentAnswer();
+			},
+			
+			addExplain: function(question) {
+				var me = this;
+				var expln = SCLanguageManager.parse(question.surv_qn_expln);
+				var content = expln.replace(/\n/g, '<br>');
+				if(!content) {
+					return;
+				}
+				
+				var answerForm = me.$.answerForm;
+				var explainForm = document.createElement('div');
+				explainForm.classList.add("explain");
+				
+				me.insertBefore(explainForm, answerForm);
+				explainForm.innerHTML = content;
+			},
+			
+			loadGridRespPanel: function(question, childrenQuestions) {
+				var me = this;
+				var gridRespForm = me.$.gridRespForm;
+				
+				var questionForm = document.createElement("es-survey-grid-response");
+				questionForm.set("codes", me.codes);
+				questionForm.set("editable", me.editable);
+				questionForm.set("question", question);
+				questionForm.set("childrenQuestions", childrenQuestions);
+				
+				Polymer.dom(gridRespForm).appendChild(questionForm);
+				Polymer.dom.flush();
+				questionForm.load();
+			},
+			
+			addAnswer: function(question) {
+				var me = this;
+				var answerForm = me.$.answerForm;
+				var ansTypCcd = question.ans_typ_ccd;
+				var answer;
+				if(ansTypCcd === "SINGLE") {
+					answer = document.createElement("es-survey-answer-single");
+				} else if(ansTypCcd === "MULTI") {
+					answer = document.createElement("es-survey-answer-multi");
+				} else if(ansTypCcd === "RANK") {
+					answer = document.createElement("es-survey-answer-rank");
+				} else if(ansTypCcd === "DROPDOWN") {
+					answer = document.createElement("es-survey-answer-dropdown");
+				} else if(ansTypCcd === "LINEAR") {
+					answer = document.createElement("es-survey-answer-linear");
+				} else if(ansTypCcd === "SHORTANS") {
+					answer = document.createElement("es-survey-answer-short");
+					answer.set("codes", me.codes);
+				} else if(ansTypCcd === "ESSAYANS") {
+					answer = document.createElement("es-survey-answer-essay");
+				} else if(ansTypCcd === "DATE") {
+					answer = document.createElement("es-survey-answer-date");
+				} else if(ansTypCcd === "TIME") {
+					answer = document.createElement("es-survey-answer-time");
+				}
+				if(UT.isEmpty(answer)) {
+					return;
+				}
+				answer.set("editable", me.editable);
+				answer.set("question", question);
+				Polymer.dom(answerForm).appendChild(answer);
+				Polymer.dom.flush();
+				answer.load();
+			},
+			
+			setParentAnswer: function(parentValue) {
+				var me = this;
+				me.question.par_answer = parentValue;
+				me.applyFormula();
+				me.syncEditableByParentAnswer();
+				
+				var form;
+				if(me.question.grid_resp_yn === "Y") {
+					form = me.querySelector('[id="gridRespForm"]');
+				} else {
+					form = me.querySelector('[id="answerForm"]');
+				}
+				var answerElement = form.firstChild;
+				answerElement.setParentAnswer(parentValue);
+			},
+			
+			syncEditableByParentAnswer: function() {
+				var me = this;
+				var editableFromParent = me.formula('editableFromParent');
+				var overlay = me.querySelector('.overlay');
+				
+				if(editableFromParent) {
+					overlay.classList.remove('locked');
+				} else {
+					overlay.classList.add('locked');
+				}
+			},
+			
+			validator: function() {
+				var me = this;
+				var question = me.question;
+				var answerForm = me.$.answerForm;
+				var gridRespForm = me.$.gridRespForm;
+				
+				var children;
+				if(question.grid_resp_yn === "Y") {
+					children = gridRespForm.firstChild;
+				} else {
+					children = answerForm.firstChild;
+				}
+				if(!children.validator()) {
+					me.classList.add('invalid');
+					me.scrollIntoView({behavior: 'smooth', block: 'center'});
+					/*UT.alert("STD.E0000");*/
+					return false;
+				} else {
+					me.classList.remove('invalid');
+				}
+				return true;
+			},
+			
+			get getValue() {
+				var me = this;
+				var question = me.question;
+				
+				if(question.grid_resp_yn === "N") {
+					return me.getSingleQuestionAnswerValue;
+				} else {
+					return me.getGridRespQuestionAnswerValue;
+				}
+			},
+			
+			get getSingleQuestionAnswerValue() {
+				var me = this;
+				var question = me.question;
+				var answerForm = me.$.answerForm;
+				var children = answerForm.firstChild;
+				return children.getValue;
+			},
+			
+			get getGridRespQuestionAnswerValue() {
+				var me = this;
+				var question = me.question;
+				var gridRespForm = me.$.gridRespForm;
+				var children = gridRespForm.firstChild;
+				return children.getValue;
+			}
+		})
+	</script>
+</dom-module>

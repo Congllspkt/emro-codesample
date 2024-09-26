@@ -1,0 +1,152 @@
+<dom-module id="ep-evalfactor-copy">
+<!-- 
+/**
+ *
+ *	@description : 평가항목 관리 > 평가항목 복사 팝업
+ *  <pre>
+ * </pre>
+ * @변경이력 : [2023. 06. 01] cyhwang
+ */
+-->
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 콤보 목록 조회 서비스 그룹 -->
+        <sc-request-group init>
+            <!-- 평가업무유형 -->
+            <sc-ajax 
+                id="findListCommonCodeAttributeCode"
+                url="findListCommonCodeAttributeCode.do"
+                body="{{codes.R704.param}}"
+                last-response="{{codes.R704.result}}">
+            </sc-ajax>
+        </sc-request-group>
+        
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+        
+        <!-- 평가항목 복사본 목록 저장 -->   
+        <sc-ajax 
+            id="saveListCopyFactor"
+            url="saveListCopyFactor.do"
+            on-response="onSaveResultHandler">
+        </sc-ajax>
+        
+<!--  
+    화면
+-->
+
+	<div class="vbox flex">
+		<cc-page-title-bar>
+            <sc-button text="복사" auth-s on-click="onSaveCopyFactor"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel>
+			<cc-fieldset>
+				<sc-label text="평가 업무 유형"></sc-label>
+				<sc-multi-combobox-field display-field="label" value-field="data" selected-index="0"  required="true"
+								   items="{{codes.R704.result}}" value="{{copyData.eval_task_typ_ccds}}" enable-check-all="true"  placeholder="선택">
+				</sc-multi-combobox-field>
+			</cc-fieldset>
+		</cc-form-panel>
+    </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is: "ep-evalfactor-copy",
+            properties: {
+            	titleText:{
+                    type: String,
+					value: "평가항목 복사"
+				},
+                // 콤보 목록
+                codes : {
+                    type: Object,
+                    value : function() {
+                        return {
+                            R704 : {
+                                param : {
+                                    ccd : 'R704',
+									cstr_cnd_cd : 'MDCD'  //모듈구분속성 조회
+                                },
+                                result : []
+                            }
+                        };
+                    },
+                    reset:false
+                },
+                // 원본 Data 
+                originData : {
+                    type : Object,
+                    value : function(){
+                        return {
+                            param : {},
+                            list : []
+                        };
+                    }
+                },
+                // 복사본 
+                copyData : {
+                    type : Object,
+                    value : function(){
+                        return {};
+                    }
+                }
+            },
+
+            initialized: function() {
+                var me = this;
+            },
+            
+            /**
+             * parameter setting
+             */
+            load: function(itemList, param) {
+                var me = this;
+
+                me.set("originData.list", itemList);
+                me.set("originData.param", UT.copy(param));
+                me.set("copyData", UT.copy(param));
+            },
+            
+            /**
+             * 평가항목 복사본 저장
+             */ 
+            onSaveCopyFactor: function() {
+                var me = this;
+                
+                if(!me.validate()){
+                    UT.alert("STD.E0000");
+                    return;
+                }
+                me.set("copyData.copy_nm", me.translate("STD.N2102"));
+                me.$.saveListCopyFactor.set("body", {
+                    saveParam: me.get("copyData"),
+                    insertList: me.get("originData.list")
+                });
+                UT.confirm("STD.N2100", function(btn){    // "STD.N2100" : 복사하시겠습니까?
+                    UT.request(me.$.saveListCopyFactor);
+                });
+            },
+            
+            // 평가항목 복사본 목록 저장 callback
+            onSaveResultHandler: function(e, res) {
+                var me = this;
+                var result = res.response;
+                if (UT.isObject(result) && result.resultStatus === "S") {
+                    UT.completeAlert("복사", function() {
+                        me.fire("complete-save");
+                    });
+                }else{
+                    //저장실패
+                    UT.alert("STD.E9999");
+                }
+            }
+        });
+    </script>
+
+</dom-module>

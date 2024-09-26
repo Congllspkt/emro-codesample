@@ -1,0 +1,204 @@
+<dom-module id="ep-sp-task-memo">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+
+    <template>
+        <sc-ajax id="findListSpMemo"
+                 url="findListSpMemo.do"
+                 body="{{searchParam}}"
+                 on-response="completeFindListSpMemo"></sc-ajax>
+        <sc-ajax id="updateListSpMemo"
+                 url="updateListSpMemo.do"
+                 on-response="completeUpdateListNote"></sc-ajax>
+        <sc-ajax id="deleteListSpMemo"
+        		url="deleteListSpMemo.do"
+        		on-response="completeDeleteListNote">
+        </sc-ajax>
+
+        <sc-code-group >
+            <sc-code code="C022" value="{{codes.use_yn}}"></sc-code>
+        </sc-code-group>
+
+        <cc-page-title-bar>
+            <sc-button text="등록" on-click="onClickMemo"></sc-button>
+            <sc-button text="삭제" on-click="onClickDeleteMemo" hidden="[[!formula('isMemoY')]]"></sc-button>
+        </cc-page-title-bar>
+		
+		<cc-form-panel collapsible="false" column="1" i18n-disabled>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{memoData.tit}}" required="true" max-length="250"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="메모"></sc-label>
+				<sc-textarea-field  value="{{memoData.memo}}" class="h-100" max-length="1000"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+
+        <sc-grid id="taskGrid" class="flex" data-provider="{{taskList}}">
+            <cc-grid-toolbar title-text="대상 업무"></cc-grid-toolbar>
+            <sc-grid-columns>
+				<sc-data-column data-field="display_main_task_nm" header-text="메인 업무"></sc-data-column>
+				<sc-date-column data-field="clsg_dt" header-text="마감 일자" width="130" display-format="yyyy/MM/dd"></sc-date-column>
+				<sc-data-column data-field="task_tit" header-text="업무 제목" width="300" text-align="left"></sc-data-column>
+				<sc-date-column data-field="snd_dttm" header-text="발신 일시" width="130" display-format="yyyy/MM/dd HH:mm:ss"></sc-date-column>
+				<sc-data-column data-field="sndr_nm" header-text="발신자"></sc-data-column>
+            </sc-grid-columns>
+            <sc-grid-fields>
+				<sc-grid-field data-field="task_uuid"></sc-grid-field>
+				<sc-grid-field data-field="task_authty_uuid"></sc-grid-field>
+            </sc-grid-fields>
+        </sc-grid>
+    </template>
+
+    <script>
+        Polymer({
+            is : 'ep-sp-task-memo',
+
+            properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function () {
+						return {};
+					}
+				},
+                titleText: {
+                    type: String,
+                    value: I18N.translate("메모")
+                },
+                taskList: {
+                    type: Array,
+                    value: function () {
+                        return [];
+                    }
+                },
+                searchParam: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                },
+                memoData: {
+                    type: Object,
+                    value: function () {
+                        return {};
+                    }
+                }
+            },
+            
+            formulas: {
+            	isMemoY: function(){
+            		var me = this;
+            		return (UT.isNotEmpty(me.get("memoData.memo")));
+            	}
+            },
+
+            load: function (checkedItems) {
+                var me = this;
+                
+                if(UT.isNotEmpty(checkedItems)){
+					if(!UT.isArray(checkedItems)){
+						checkedItems = [checkedItems];
+					}
+					
+					me.$.findListSpMemo.body = {
+						task_uuids: checkedItems.map(function(data) { return data.task_uuid; }),
+						task_authty_uuids: checkedItems.map(function(data) { return data.task_authty_uuid; })
+					};
+    				UT.request(me.$.findListSpMemo);
+                }
+			},
+			completeFindListSpMemo: function (e, res) {
+				var me = this;
+				var result = res.response;
+
+				me.set("taskList", result);
+				if(result.length === 1){
+					var memoData = UT.copy(result[0]);
+					
+					me.set("memoData", {
+						tit : memoData.tit,
+						memo: memoData.memo
+					});
+				}
+				
+				me.applyFormula();
+				me.$.taskGrid.selectionCheckAll(true);
+			},
+			
+			/* 등록 */
+			onClickMemo: function () {
+				var me = this;
+
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+
+				var memoData = me.memoData || {},
+				    memoList = me.$.taskGrid.getDataProvider().selectionCheckedItems();
+				
+				if(memoList.length === 0){
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.WRK1024", function() {	// 선택된 업무의 메모를 등록하시겠습니까?
+					me.$.updateListSpMemo.body = {
+						memo        : memoData.memo,
+						tit         : memoData.tit,
+						taskList    : memoList
+					};
+	                UT.request(me.$.updateListSpMemo);
+				});
+            },
+            completeUpdateListNote: function(e, res) {
+                var me = this;
+                var result = res.response;
+                if(result && result.resultStatus === "S") {
+					UT.completeAlert();  // 요청을 완료 하였습니다.
+					me.fire("complete-save");
+				} else {
+					UT.alert("STD.E9999");
+				}
+            },
+			
+			/* 삭제 */
+			onClickDeleteMemo: function(){
+				var me = this;
+
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var memoList = me.$.taskGrid.getDataProvider().selectionCheckedItems();
+				if(memoList.length === 0){
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.N1300", function() {	// 삭제하시겠습니까?
+					me.$.deleteListSpMemo.body = {
+						taskList: memoList
+					};
+	                UT.request(me.$.deleteListSpMemo);
+				});
+			},
+			completeDeleteListNote: function(e, res) {
+                var me = this;
+                var result = res.response;
+                if(result && result.resultStatus === "S") {
+					UT.alert("STD.N2500");	// 삭제하였습니다.
+					me.fire("complete-save");
+				} else {
+					UT.alert("STD.E9999");
+				}
+            }
+        });
+    </script>
+</dom-module>

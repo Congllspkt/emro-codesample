@@ -1,0 +1,325 @@
+<sc-link rel="import" href="../popup/ep-cntr-clause-detail.html"></sc-link>
+<sc-link rel="import" href="../popup/ep-cntr-clause-add.html"></sc-link>
+
+<dom-module id="es-cntrdoc-template-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 공통코드 조회 -->
+		<sc-code-group>
+			<sc-code code="D006" value="{{codes.datTypCcd}}"></sc-code><!-- D006 : 입력타입 -->
+			<sc-code code="D012" value="{{codes.htmlInpTagCcd}}"></sc-code><!-- D012 : 입력창타입 -->
+		</sc-code-group>
+
+		<!-- 그리드 : 계약항목 조회 -->
+		<sc-ajax id="findListCntrClause"
+				url="largeFindListCntrClause.do"
+				body="{{findListCntrClause.param}}"
+				on-response="completeFindListCntrClause"></sc-ajax>
+
+		<!-- 계약서 템플릿 내용 조회 -->
+		<sc-ajax id="findCntrTmplCont"
+				url="findCntrformCont.do"
+				body="{{tmplCont.param}}"
+				last-response="{{tmplCont.result}}"></sc-ajax>
+		
+		<!-- 계약서 템플릿 내용 저장 -->
+		<sc-ajax id="saveCntrTmplCont"
+				url="saveCntrFormCont.do"
+				body="{{tmplCont.result}}"
+				on-response="completeSaveCntrTmplCont"></sc-ajax>
+		
+		<!-- 그리드 : 계약항목 조회 -->
+		<sc-ajax id="findCntrClauseTag"
+				 url="findCntrClauseTag.do"></sc-ajax>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<cc-page-title-bar title-text="계약서 템플릿 상세">
+			<sc-button text="저장"	on-click="onSave"	auth-s></sc-button>
+			<sc-button text="닫기"	on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-3">
+				<cc-search-condition-panel title-text="계약 조항" on-search="onSearchCntrClause" on-enter="onSearchCntrClause" auth-r>
+					<cc-fieldset>
+						<sc-label text="계약 조항 명"></sc-label>
+						<sc-text-field value="{{findListCntrClause.param.cntr_cl_nm}}" max-length="50"></sc-text-field>
+					</cc-fieldset>
+				</cc-search-condition-panel>
+				
+				<sc-grid id="gridCntrClause" class="flex" use-selection="false" is-tree="true" use-state="false" data-provider="{{findListCntrClause.result}}"
+							on-item-click="onItemClick">
+					<cc-grid-toolbar>
+						<sc-button text="추가"	on-click="popupNewCntrClause"	auth-s></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="cntr_cl_nm" header-text="계약 조항 명" width="150" text-align="left" item-style-function="onItemStyleFn"></sc-data-column>
+						<sc-combobox-column data-field="dat_typ_ccd" header-text="데이터 유형" width="130" items="{{codes.datTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+						<sc-group-column hide-child-headers="true" header-text="입력값 상세" width="140">
+							<sc-data-column data-field="dflt_val" header-text="" width="100" text-align="left" text-wrap="ellipsis"></sc-data-column>
+							<sc-image-column data-field="cont_btn" header-text="" width="40" image-change-function="onImageChangeFn"></sc-image-column>
+						</sc-group-column>
+						<sc-data-column data-field="cntr_cl_aka" header-text="앨리어스" width="100" text-align="left"></sc-data-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="cntr_cl_uuid"></sc-grid-field>
+						<sc-grid-field data-field="cntr_cl_id"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+				
+				<sc-toolbar>
+					<sc-label text="변경 사유"></sc-label>
+				</sc-toolbar>
+				<sc-textarea-field id="textArea" class="h-150" value="{{tmplCont.result.chg_rsn}}"></sc-textarea-field>
+			</div>
+
+			<div class="hspace-5"></div>
+			
+			<div class="vbox flex-7">
+				<sc-editor id="editor" class="flex" value="{{tmplCont.result.cntrdoc_tmpl_cont}}" editable="true" xss-filter="false"></sc-editor>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-cntrdoc-template-detail",
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							datTypCcd: [],
+							htmlInpTagCcd: []
+						};
+					}
+				},
+				findListCntrClause: {
+					type: Object,
+					value: function () {
+						return {
+							param: {
+								use_yn: "Y"
+							},
+							result: {}
+						}
+					}
+				},
+				tmplCont: {
+					type: Object,
+					value: function () {
+						return {
+							param: {},
+							result: {}
+						}
+					}
+				}
+			},
+
+			initialized: function() {
+				var me = this;
+
+			},
+
+			load: function(param) {
+				var me = this;
+				me.set("tmplCont.param", param);
+				me.onSearchCntrTmplCont();
+				me.onSearchCntrClause();
+			},
+
+			/* 그리드 아이템 클릭 이벤트 */
+			onItemClick: function(e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+
+				if(item.dataField === "cntr_cl_nm") { // 계약 조항 명
+					if(data["up_cl_grp_ccd"] === "ROOT"){
+						return;
+					}
+					me.onInputItem(data);
+				} else if(item.dataField === "cont_btn") { // 입력값 상세보기
+					
+					if( data["dat_typ_ccd"] === "TMPL"
+						|| data["dat_typ_ccd"] === "DSCRT") {
+						me.popupClauseDetail(data);
+					}
+					
+				}
+			},
+			
+			/* 그리드 아이템 이미지 변경 function */
+			onImageChangeFn: function(data, item) {
+				if(data["up_cl_grp_ccd"] === "ROOT"){
+					return "";
+				}
+				
+				if( data["dat_typ_ccd"] === "TMPL"
+					|| data["dat_typ_ccd"] === "DSCRT" ){
+					return "search";
+				}else{
+					return "";
+				}
+				
+			},
+			
+			/* 계약서 템플릿 내용 조회 */
+			onSearchCntrTmplCont: function() {
+				UT.request(this.$.findCntrTmplCont);
+			},
+
+			/* 계약 조항 그리드 조회 */
+			onSearchCntrClause: function() {
+				UT.request(this.$.findListCntrClause);
+			},
+			
+			/* 계약서 템플릿 내용 저장 */
+			onSave: function() {
+				var me = this;
+				var textValue = me.$.textArea.value;
+				if (UT.isEmpty(textValue)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("변경 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				} 
+
+				me.$.editor.syncValue();
+				if (UT.isEmpty(me.$.editor.value)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("템플릿 내용")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				// 사용되는 계약항목 리스트 전달
+				var useClauseList = me.getCntrClauseList();
+				me.set("tmplCont.result.use_clause_list", useClauseList);
+				
+				UT.confirm("STD.N1200", function () {	// 저장 하시겠습니까?
+					UT.request(me.$.saveCntrTmplCont);
+				});
+			},
+			
+			/* 계약서 템플릿 내용 저장 callback */
+			completeSaveCntrTmplCont: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === 'S') {
+					UT.alert("STD.N1500", function() { // 요청이 완료되었습니다.
+						me.onClose();
+					});
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			/* 닫기 */
+			onClose: function () {
+				var me = this;
+				me.reset();
+				me.fire("close-remove");
+			},
+			
+			/* 선택한 계약 조항을 에디터에 삽입 */
+			onInputItem: function (data) {
+				var me = this;
+				
+				me.$.findCntrClauseTag.body = data;
+				UT.request(me.$.findCntrClauseTag, function(e,res){
+					var result = res.response;
+					me.$.editor.setInsertHtml(result);
+				});
+			},
+			
+			/* 입력값 상세보기 팝업 */
+			popupClauseDetail: function(param) {
+				var me = this;
+				var height = param.dat_typ_ccd === "TMPL"? "750" : "400";
+				param["view_mode"] = true;
+				
+				var clauseDetailPopup = UT.popup("ep-cntr-clause-detail", me, "1000", height, {}, {titleText: "입력값 상세", alwaysNew:true});
+				clauseDetailPopup.show();
+				clauseDetailPopup.getWindowContent().load(param);
+			},
+			
+			/* 계약 조항 추가 팝업 */
+			popupNewCntrClause: function() {
+				var me = this;
+				
+				var newCntrClausePopup = UT.popup("ep-cntr-clause-add", me, "45%", "55%", {
+					"save": function(popup, e) {
+						me.onSearchCntrClause();
+						popup.close();
+					}
+				}, {titleText: "계약 조항 추가"}); 
+				newCntrClausePopup.show();
+				newCntrClausePopup.getWindowContent().load();
+			},
+			
+			// 템플릿에서 계약 조항을 가져오는 함수
+			getCntrClauseList: function () {
+				var me = this;
+				
+				var iframe = document.getElementById("contIframe");
+				if(!iframe){
+					iframe = document.createElement("iframe");
+					iframe.id = "contIframe";
+					document.body.appendChild(iframe);
+				}
+				
+				iframe.contentDocument.body.innerHTML = me.$.editor.value;
+				
+				var contHtmlDiv = iframe.contentDocument;
+				var inputArr = contHtmlDiv.getElementsByTagName("input");
+ 				var textArr = contHtmlDiv.getElementsByTagName("textarea");
+ 				var spanArr = contHtmlDiv.getElementsByTagName("span");
+				var resultArr = [];
+				function pushName(param) {
+					if (UT.isNotEmpty(param)) {
+						resultArr.push(param);
+					}
+				}
+				
+				for (var i = 0; i < inputArr.length; i++) {
+					pushName(inputArr[i].getAttribute("name"));
+				}
+				for (var i = 0; i < textArr.length; i++) {
+					pushName(textArr[i].getAttribute("name"));
+				}
+				for (var i = 0; i < spanArr.length; i++) {
+					pushName(spanArr[i].getAttribute("name"));
+				}
+
+				return resultArr;
+			},
+			completeFindListCntrClause: function(e,res){
+				var me = this;
+				var result = res.response;
+				
+				var hier = new CCHierachicalData();
+				var datas = hier.HierachyTransformByKey(result, "cntr_cl_uuid", "up_cl_grp_ccd", "children", "ROOT", null, true);
+				me.$.gridCntrClause.setHierachyDataProvider(datas, "children");
+				
+				me.$.gridCntrClause.expandAll(); // 그리드 트리 전체 펼침
+			},
+			
+			onItemStyleFn: function(data, item) {
+				var me = this;
+				
+				if(data["up_cl_grp_ccd"] === "ROOT"){
+					return {};
+				}
+				return {
+					fontWeight: "bold",
+					fontColor: "#276EF1"
+				};
+			}
+		});
+	</script>
+</dom-module>

@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-bid-notice">
+	<select id="findListSpBidNoti" resultType="map">
+		/* 협력사-입찰공고현황 조회  : sp-bid-notice.findListSpBidNoti */
+		SELECT RFX_PRENTC.TEN_ID
+		     , RFX_PRENTC.RFX_PRENTC_UUID
+		     , RFX_PRENTC.RFX_PRENTC_NO
+		     , RFX_PRENTC.RFX_PRENTC_RND
+		     , RFX_PRENTC.OORG_CD
+		     , RFX_PRENTC.RFX_PRENTC_STS_CCD
+		     , CASE WHEN RFX_PRENTC.PTCP_QUALEVAL_CMPLD_YN IS NOT NULL  THEN RFX_PRENTC_AFP.PTCP_QUALEVAL_RES_CCD
+		            ELSE CASE WHEN RFX_PRENTC_AFP.AFP_SUBM_STS_CCD = 'SUBM' THEN 'SN_WTG' ELSE '' END
+		        END AS PTCP_QUALEVAL_RES_CCD
+		     , RFX_PRENTC_AFP.RFX_PRENTC_PTCP_DQ_RSN
+		     , CASE WHEN RFX_PRENTC_AFP.AFP_SUBM_STS_CCD IS NULL OR RFX_PRENTC_AFP.AFP_SUBM_STS_CCD = '' THEN 'SUBM_WTG'
+		            ELSE RFX_PRENTC_AFP.AFP_SUBM_STS_CCD
+		        END AS AFP_SUBM_STS_CCD
+		     , RFX_PRENTC.RFX_PRENTC_TYP_CCD
+		     , RFX_PRENTC.RFX_PRENTC_CRN_TYP_CCD
+		     , RFX_PRENTC.RFX_PRENTC_TIT
+		     , RFX_PRENTC.COMP_TYP_CCD
+		     , RFX_PRENTC.RFX_PRENTC_ST_DTTM
+		     , RFX_PRENTC.RFX_PRENTC_CLSG_DTTM
+		     , RFX_PRENTC_AFP.RFX_PRENTC_AFP_UUID
+		     , RFX_PRENTC.PRE_RFX_PRENTC_UUID
+		     , CASE WHEN RFX_PRENTC.RFX_PRENTC_CRN_TYP_CCD = 'RENTC' THEN RFX_PRENTC.PRE_RFX_PRENTC_NO
+		            ELSE ''
+		        END AS PRE_RFX_PRENTC_NO
+		  FROM RFX_PRENTC RFX_PRENTC
+		  LEFT OUTER JOIN RFX_PRENTC_AFP RFX_PRENTC_AFP
+		    ON RFX_PRENTC_AFP.TEN_ID          = RFX_PRENTC.TEN_ID
+		   AND RFX_PRENTC_AFP.RFX_PRENTC_UUID = RFX_PRENTC.RFX_PRENTC_UUID
+		   AND RFX_PRENTC_AFP.VD_CD           = #{g.vd_cd}
+		   AND RFX_PRENTC_AFP.STS            != 'D'
+		 WHERE RFX_PRENTC.TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC.RFX_PRENTC_STS_CCD NOT IN ('CRNG', 'APVL_PRGSG', 'APVL_RET', 'PRENTC_WTG')     /* 진행상태제외 : 저장, 결재진행, 결재반려, 공고대기*/
+		   <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND RFX_PRENTC.OORG_CD IN
+		       <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   <if test="p.from_rfx_prentc_st_dttm != null">
+		       AND RFX_PRENTC.RFX_PRENTC_ST_DTTM &gt;= #{p.from_rfx_prentc_st_dttm}
+		   </if>
+		   <if test="p.to_rfx_prentc_st_dttm != null">
+		       <bind name="toDatePattern" value="g.getPlusDays(p.to_rfx_prentc_st_dttm,1)"/>
+		       AND RFX_PRENTC.RFX_PRENTC_ST_DTTM <![CDATA[<]]> #{toDatePattern}
+		   </if>
+		   <if test="p.comp_typ_ccd != null and p.comp_typ_ccd != ''">
+		       AND RFX_PRENTC.COMP_TYP_CCD = #{p.comp_typ_ccd}
+		   </if>
+		   <choose>
+		       <when test="p.rfx_prentc_nos != null and p.rfx_prentc_nos.size() != 0">
+		           AND UPPER(RFX_PRENTC.RFX_PRENTC_NO) IN
+		           <foreach close=")" collection="p.rfx_prentc_nos" item="rfx_prentc_no" open="(" separator=",">
+		               #{rfx_prentc_no}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           <if test="p.rfx_prentc_no != null and p.rfx_prentc_no != ''">
+		               <bind name="noPattern" value="'%' + p.rfx_prentc_no + '%'"/>
+		               AND UPPER(RFX_PRENTC.RFX_PRENTC_NO) LIKE UPPER(#{noPattern})
+		           </if>
+		       </otherwise>
+		   </choose>
+		   <if test="p.rfx_prentc_tit != null and p.rfx_prentc_tit != ''">
+		       <bind name="namePattern" value="'%' + p.rfx_prentc_tit + '%'"/>
+		       AND UPPER(RFX_PRENTC.RFX_PRENTC_TIT) LIKE UPPER(#{namePattern})
+		   </if>
+		   <if test="p.rfx_prentc_sts_ccd != null and p.rfx_prentc_sts_ccd != ''">
+		       AND RFX_PRENTC.RFX_PRENTC_STS_CCD = #{p.rfx_prentc_sts_ccd}
+		   </if>
+		   <if test="p.rfx_prentc_typ_ccd != null and p.rfx_prentc_typ_ccd != ''">
+		       AND RFX_PRENTC.RFX_PRENTC_TYP_CCD = #{p.rfx_prentc_typ_ccd}
+		   </if>
+		   AND (
+		        RFX_PRENTC.COMP_TYP_CCD != 'CBID' OR
+		        EXISTS (
+		                SELECT 1
+		                  FROM RFX_PRENTC_VD RFX_PRENTC_VD
+		                 WHERE RFX_PRENTC_VD.TEN_ID          = RFX_PRENTC.TEN_ID
+		                   AND RFX_PRENTC_VD.RFX_PRENTC_UUID = RFX_PRENTC.RFX_PRENTC_UUID
+		                   AND RFX_PRENTC_VD.VD_CD           = #{g.vd_cd}
+		               )
+		       )
+		   AND RFX_PRENTC.STS != 'D'
+		 ORDER BY RFX_PRENTC.RFX_PRENTC_NO DESC, RFX_PRENTC.RFX_PRENTC_RND DESC
+	</select>
+	<select id="findInfoSpBidPart" resultType="map">
+		/* sp-bid-notice.findInfoSpBidPart : 입찰참가신청 입찰기본정보 */
+		SELECT TEN_ID
+		     , RFX_PRENTC_UUID
+		     , RFX_PRENTC_NO
+		     , RFX_PRENTC_RND
+		     , OORG_CD
+		     , RFX_PRENTC_TIT
+		     , RFX_PRENTC_ST_DTTM
+		     , RFX_PRENTC_CLSG_DTTM
+		     , COMP_TYP_CCD
+		     , RFX_PRENTC_CRN_TYP_CCD
+		     , RFX_PRENTC_TYP_CCD
+		     , RFX_PRENTC_STS_CCD
+		     , RFX_PRENTC_RES_STS_CCD
+		     , RFX_PRENTC_BIZ_EXPLN
+		     , RFX_PRENTC_EXPLN
+		     , VD_ATHG_UUID
+		     , RFX_PRENTC_CORR_RSN
+		     , RFX_PRENTC_CNCL_RSN
+		  FROM RFX_PRENTC
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   AND STS            != 'D'
+	</select>
+	<select id="isExistsSpNotiPartAttach" resultType="boolean">
+		/* sp-bid-notice.isExistsSpNotiPartAttach : 첨부파일 체크 */
+		SELECT CASE WHEN COUNT(RFX_PRENTC_SUBMDDOC_UUID) &gt; 0 THEN 1
+		            ELSE 0
+		        END
+		  FROM RFX_PRENTC_VD_SUBMDDOC
+		 WHERE TEN_ID              = #{g.tenant}
+		   AND RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND STS                != 'D'
+	</select>
+	<select id="checkSpNotiPartSts" resultType="map">
+		/* sp-bid-notice.checkSpNotiPartSts : 입찰 공고 상태 체크 */
+		SELECT RFX_PRENTC_UUID
+		     , RFX_PRENTC_STS_CCD
+		  FROM RFX_PRENTC
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   AND STS            != 'D'
+	</select>
+	<select id="checkSpNotiPartTime" resultType="map">
+		/* sp-bid-notice.checkSpNotiPartTime : 입찰 공고 마감시간 체크 */
+		SELECT CASE WHEN RFX_PRENTC.RFX_PRENTC_CLSG_DTTM <![CDATA[<]]> #{g.now} THEN 'N'
+		            ELSE 'Y'
+		        END AS SUBMIT_RFX_BID_EFCT_YN
+		  FROM RFX_PRENTC RFX_PRENTC
+		 WHERE RFX_PRENTC.TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC.RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   AND RFX_PRENTC.STS            != 'D'
+	</select>
+	<select id="findInfoSpBidPartVendor" resultType="map">
+		/* sp-bid-notice.findInfoSpBidPartVendor : 입찰참가신청 업체정보 조회*/
+		SELECT VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VD_NM_EN
+		            ELSE VD_NM
+		        END AS VD_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN CEO_NM_EN
+		            ELSE CEO_NM
+		        END AS VD_CEO_NM
+		     , CASE WHEN 'en_US' = #{g.locale} THEN CONCAT(CONCAT(DTL_ADDR_EN_1, ' '), DTL_ADDR_EN_2)
+		            ELSE CONCAT(CONCAT(DTL_ADDR_1, ' '), DTL_ADDR_2)
+		        END AS VD_ADDR
+		  FROM VD
+		 WHERE TEN_ID = #{g.tenant}
+		   AND VD_CD  = #{g.vd_cd}
+		   AND STS   != 'D'
+	</select>
+	<select id="findInfoSpBidPartVendorChr" resultType="map">
+		/* sp-bid-notice.findInfoSpBidPartVendorChr : 입찰참가신청 업체 담당자정보 조회*/
+		SELECT VD_PIC_NM
+		     , VD_PIC_MOB
+		     , VD_PIC_TEL
+		     , VD_PIC_EML
+		     , AFP_OPN
+		     , AFP_SUBM_STS_CCD
+		  FROM RFX_PRENTC_AFP
+		 WHERE TEN_ID              = #{g.tenant}
+		   AND RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND STS                != 'D'
+	</select>
+	<select id="findListSpBidPartAttach" resultType="map">
+		/* sp-bid-notice.findListSpBidPartAttach : 입찰참가신청 제출서류*/
+		SELECT DTLCD.TEN_ID
+		     , #{g.vd_cd}              AS VD_CD
+		     , DTLCD.DTLCD             AS SUBMDDOC_TYP_CCD
+		     , DTLCD_MULTLANG.DTLCD_NM AS SUBMDDOC_TYP_NM
+		     , CCD_CSTR_CND_VAL.CSTR_CND_VAL AS SUBMDDOC_MAND_YN /* 제출 필수 여부*/
+		     , DTLCD.DTLCD_SORT
+		  FROM DTLCD DTLCD
+		 INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD.TEN_ID = DTLCD_MULTLANG.TEN_ID
+		   AND DTLCD.CCD    = DTLCD_MULTLANG.CCD
+		   AND DTLCD.DTLCD  = DTLCD_MULTLANG.DTLCD
+		  LEFT OUTER JOIN CCD_CSTR_CND_VAL CCD_CSTR_CND_VAL
+		    ON CCD_CSTR_CND_VAL.TEN_ID      = DTLCD.TEN_ID
+		   AND CCD_CSTR_CND_VAL.CCD         = DTLCD.CCD
+		   AND CCD_CSTR_CND_VAL.DTLCD       = DTLCD.DTLCD
+		   AND CCD_CSTR_CND_VAL.CSTR_CND_CD = 'MAND_YN'
+		 WHERE DTLCD.TEN_ID   = #{g.tenant}
+		   AND DTLCD.CCD      = 'P217' /* 첨부구분 코드 */
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		 ORDER BY DTLCD.DTLCD_SORT
+	</select>
+	<select id="findListSpBidPartedAttach" resultType="map">
+		/* sp-bid-notice.findListSpBidPartedAttach : 입찰참가신청 제출서류*/
+		SELECT RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_SUBMDDOC_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.VD_CD
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_NO
+		     , RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_RND
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_TYP_CCD
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_TYP_NM
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_MAND_YN
+		     , RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID
+		     , RFX_PRENTC_VD_SUBMDDOC.ATHF_NM
+		     , RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_SORT
+		     , (
+		        SELECT COUNT(ATHF.ATHF_UUID)
+		          FROM ATHF ATHF
+		         WHERE ATHF.TEN_ID        = RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		           AND ATHF.ATHG_UUID = RFX_PRENTC_VD_SUBMDDOC.ATHG_UUID
+		           AND ATHF.STS          != 'D'
+		       ) AS ATHF_CNT
+		  FROM RFX_PRENTC_VD_SUBMDDOC RFX_PRENTC_VD_SUBMDDOC
+		  LEFT OUTER JOIN DTLCD DTLCD
+		    ON DTLCD.TEN_ID = RFX_PRENTC_VD_SUBMDDOC.TEN_ID
+		   AND DTLCD.DTLCD  = RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_TYP_CCD
+		   AND DTLCD.CCD = 'P217'
+		 WHERE RFX_PRENTC_VD_SUBMDDOC.TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC_VD_SUBMDDOC.RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND RFX_PRENTC_VD_SUBMDDOC.STS != 'D'
+		 ORDER BY DTLCD.DTLCD_SORT, RFX_PRENTC_VD_SUBMDDOC.SUBMDDOC_SORT
+	</select>
+	<update id="deleteSpBidNotiAtt">
+		/* sp-bid-notice.deleteSpBidNotiAtt : 입찰참가 첨부파일 삭제 */
+		DELETE
+		  FROM RFX_PRENTC_VD_SUBMDDOC
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND VD_CD = #{g.vd_cd}
+	</update>
+	<update id="deleteSpBidNoti">
+		/* sp-bid-notice.deleteSpBidNoti : 입찰참가 정보 삭제 */
+		DELETE
+		  FROM RFX_PRENTC_AFP
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND VD_CD = #{g.vd_cd}
+	</update>
+	<select id="isExistSpBindNotiPart" resultType="boolean">
+		/* sp-bid-notice.isExistSpBindNotiPart : 참가 정보 조회 */
+		SELECT CASE WHEN COUNT(RFX_PRENTC_AFP_UUID) &gt; 0 THEN 1
+		            ELSE 0
+		        END
+		  FROM RFX_PRENTC_AFP
+		 WHERE TEN_ID          = #{g.tenant}
+		   AND RFX_PRENTC_UUID = #{p.rfx_prentc_uuid}
+		   AND VD_CD           = #{g.vd_cd}
+		   AND STS            != 'D'
+	</select>
+	<update id="updateSpBidNoti">
+		/* sp-bid-notice.updateSpBidNoti */
+		UPDATE RFX_PRENTC_AFP
+		   SET VD_PIC_MOB          = #{p.vd_pic_mob}
+		     , VD_PIC_TEL          = #{p.vd_pic_tel}
+		     , VD_PIC_EML          = #{p.vd_pic_eml}
+		     , AFP_OPN             = #{p.afp_opn}
+		     , PTCP_QUALEVAL_RES_CCD   = 'SN_WTG'
+		     , AFP_SUBM_DTTM       = #{g.now}
+		     , AFP_SUBM_STS_CCD    = #{p.afp_subm_sts_ccd}
+		     , STS                 = 'U'
+		     , MODR_ID             = #{g.username}
+		     , MOD_DTTM            = #{g.now}
+		 WHERE TEN_ID              = #{g.tenant}
+		   AND RFX_PRENTC_AFP_UUID = #{p.rfx_prentc_afp_uuid}
+		   AND RFX_PRENTC_UUID     = #{p.rfx_prentc_uuid}
+		   AND VD_CD               = #{g.vd_cd}
+	</update>
+	<insert id="insertSpBidNoti">
+		/* sp-bid-notice.insertSpBidNoti */
+		INSERT INTO RFX_PRENTC_AFP (
+			TEN_ID
+			, RFX_PRENTC_AFP_UUID
+			, VD_CD
+			, RFX_PRENTC_UUID
+			, VD_NM
+			, RFX_PRENTC_NO
+			, RFX_PRENTC_RND
+			, AFP_SUBM_DTTM
+			, AFP_SUBM_STS_CCD
+			, VD_PIC_NM
+			, VD_PIC_MOB
+			, VD_PIC_TEL
+			, VD_PIC_EML
+			, AFP_OPN
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_prentc_afp_uuid}
+			, #{g.vd_cd}
+			, #{p.rfx_prentc_uuid}
+			, #{p.vd_nm}
+			, #{p.rfx_prentc_no}
+			, #{p.rfx_prentc_rnd}
+			, #{g.now}
+			, #{p.afp_subm_sts_ccd}
+			, #{p.vd_pic_nm}
+			, #{p.vd_pic_mob}
+			, #{p.vd_pic_tel}
+			, #{p.vd_pic_eml}
+			, #{p.afp_opn}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+	<update id="updateSpBidNotiAttach">
+		/* sp-bid-notice.updateSpBidNotiAttach */
+		UPDATE RFX_PRENTC_VD_SUBMDDOC
+		   SET VD_CD            = #{g.vd_cd}
+		     , RFX_PRENTC_UUID  = #{p.rfx_prentc_uuid}
+		     , RFX_PRENTC_NO    = #{p.rfx_prentc_no}
+		     , RFX_PRENTC_RND   = CAST(#{p.rfx_prentc_rnd} AS INT)
+		     , SUBMDDOC_TYP_CCD = #{p.submddoc_typ_ccd}
+		     , SUBMDDOC_TYP_NM  = #{p.submddoc_typ_nm}
+		     , SUBMDDOC_MAND_YN = #{p.submddoc_mand_yn}
+		     , ATHG_UUID        = #{p.athg_uuid}
+		     , ATHF_NM          = #{p.athf_nm}
+		     , SUBMDDOC_SORT    = #{p.submddoc_sort}
+		     , STS              = 'U'
+		     , MODR_ID          = #{g.username}
+		     , MOD_DTTM         = #{g.now}
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_PRENTC_SUBMDDOC_UUID = #{p.rfx_prentc_submddoc_uuid}
+		   AND RFX_PRENTC_AFP_UUID      = #{p.rfx_prentc_afp_uuid}
+	</update>
+	<insert id="insertSpBidNotiAttach">
+		/* sp-bid-notice.insertSpBidNotiAttach */
+		INSERT INTO RFX_PRENTC_VD_SUBMDDOC (
+			TEN_ID
+			, RFX_PRENTC_SUBMDDOC_UUID
+			, RFX_PRENTC_AFP_UUID
+			, VD_CD
+			, RFX_PRENTC_UUID
+			, RFX_PRENTC_NO
+			, RFX_PRENTC_RND
+			, SUBMDDOC_TYP_CCD
+			, SUBMDDOC_TYP_NM
+			, SUBMDDOC_MAND_YN
+			, ATHG_UUID
+			, ATHF_NM
+			, SUBMDDOC_SORT
+			, STS
+			, REGR_ID
+			, REG_DTTM
+		) VALUES (
+			#{g.tenant}
+			, #{p.rfx_prentc_submddoc_uuid}
+			, #{p.rfx_prentc_afp_uuid}
+			, #{g.vd_cd}
+			, #{p.rfx_prentc_uuid}
+			, #{p.rfx_prentc_no}
+			, #{p.rfx_prentc_rnd}
+			, #{p.submddoc_typ_ccd}
+			, #{p.submddoc_typ_nm}
+			, #{p.submddoc_mand_yn}
+			, #{p.athg_uuid}
+			, #{p.athf_nm}
+			, #{p.submddoc_sort}
+			, 'C'
+			, #{g.username}
+			, #{g.now}
+		)
+	</insert>
+</mapper>

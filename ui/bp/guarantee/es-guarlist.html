@@ -1,0 +1,508 @@
+<sc-link rel="import" href="./popup/ep-offline-guarinfo.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-sgic-guardetail.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-ksfc-guardetail.html"></sc-link>
+<sc-link rel="import" href="./popup/ep-sendinfo.html"></sc-link>
+
+<dom-module id="es-guarlist">
+	<style>
+		:host {
+			@apply (--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 그리드 : 보증보험현황 조회 -->
+		<sc-ajax id="findGuarList"
+				 url="largeFindGuarList.do"
+				 body="{{findGuarList.param}}"
+				 last-response="{{findGuarList.result}}"></sc-ajax>
+				 
+		<!-- 그리드 : 보증 수신 테스트(서울보증보험에서 데이터 송신하는 역활) -->
+		<sc-ajax id="recv"
+				 url="sgic/sgicRecvTest.do"
+				 on-response="completeRecv"></sc-ajax>
+				 
+		<sc-ajax id="cancelSgicGuar"
+				 url="sgic/cancelGuar.do"
+				 body="{{guarInfo}}"
+				 on-response="completeCancel"></sc-ajax>
+				 
+		<sc-ajax id="cancelKsfcGuar"
+				 url="ksfc/cancelGuar.do"
+				 body="{{guarInfo}}"
+				 on-response="completeCancel"></sc-ajax>
+
+		<!-- D010 : 보증보험구분(보증종류), D011 : 보증보험발행상태(진행상태) -->
+		<sc-code-group>
+			<sc-code code="D010" value="{{codes.gurTypCcd}}"></sc-code>
+			<sc-code code="D011" value="{{codes.gurStsCcd}}"></sc-code>
+			<sc-code code="D013" value="{{codes.guarComp}}"></sc-code>
+			<sc-code code="C009" value="{{codes.useYnCcd}}" ></sc-code>
+			<sc-code code="D029" value="{{codes.gurAthTypCcd}}" ></sc-code>
+		</sc-code-group>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<!-- 툴바 보증보험 처리현황 조회 -->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<!-- 조회 조건 -->
+		<cc-search-condition-panel on-search="onSearchGuarlist" on-enter="onSearchGuarlist" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-multi-combobox-field value="{{findGuarList.param.oorg_cd}}" oper-unit-cd="PO" required="true"
+												id="operorgcombobox"  placeholder="선택 없음"></cc-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="보증 유형"></sc-label>
+				<sc-combobox-field value="{{findGuarList.param.gur_typ_ccd}}" placeholder="전체"
+									value-field="data" display-field="label" items={{codes.gurTypCcd}}></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 번호"></sc-label>
+				<sc-text-field value="{{findGuarList.param.cntr_no}}" max-length="20"></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="계약 일자"></sc-label>
+				<sc-period-date-field from-value="{{findGuarList.param.cntr_from_date}}" to-value="{{findGuarList.param.cntr_to_date}}"
+									default-from-value="-2M" string-date="true"></sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="보증 상태"></sc-label>
+				<sc-combobox-field value="{{findGuarList.param.gur_sts_ccd}}" placeholder="전체"
+									value-field="data" display-field="label" items={{codes.gurStsCcd}}></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사"></sc-label>
+				<div class="field-box">
+					<sc-text-field value="{{findGuarList.param.erp_vd_cd}}" class="w-100" placeholder="코드"></sc-text-field>
+					<div class="hspace-5"></div>
+					<sc-text-field value="{{findGuarList.param.vd_nm}}" placeholder="협력사 명"></sc-text-field>
+				</div>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+		<!-- 보증보험처리 그리드 -->
+		<sc-grid id="gridView" class="flex" use-selection="[[formula('guarSendBtn')]]" selection-mode="radio" use-state="false" data-provider="{{findGuarList.result}}"
+				on-item-click="onItemClick" cursor-function="onCursorFunction" selection-able-function="onSelectionAbleFunction" on-selection-checked="onSelectionChecked">
+			<cc-grid-toolbar>
+				<sc-button text="보증서 로컬 수신테스트" hidden="[[!formula('localRecvTestAble')]]" on-click="onRecvTest"></sc-button>
+				<sc-button text="지급보증 보험 신청" hidden="[[!formula('guarSendBtn')]]" on-click="onSendInfo"></sc-button>
+				<sc-button text="지급보증 보험 취소" hidden="[[!formula('guarSendBtn')]]" on-click="onCancelGuar"></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="150"
+								display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-data-column data-field="cntr_no" header-text="계약 번호" width="130" text-align="center" style-name="link"></sc-data-column><!--계약번호-->
+				<sc-data-column data-field="cntr_revno" header-text="차수" width="40" text-align="center"></sc-data-column><!--차수-->
+				<sc-data-column data-field="cntr_nm" header-text="계약 명" width="250" text-align="left"></sc-data-column><!--계약명-->
+				<sc-data-column data-field="erp_vd_cd" header-text="협력사 코드" width="100" text-align="center"></sc-data-column>
+				<sc-data-column data-field="vd_nm" header-text="협력사 명" width="200" text-align="left"></sc-data-column>\
+				<sc-combobox-column data-field="gur_insco_ccd" header-text="보험사" width="130" text-align="center"
+									display-field="label" value-field="data" items="{{codes.guarComp}}"></sc-combobox-column>
+				<sc-combobox-column data-field="gur_typ_ccd" header-text="보증 유형" width="130" text-align="center"
+									display-field="label" value-field="data" items="{{codes.gurTypCcd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="gur_sts_ccd" header-text="보증 상태" width="130" text-align="center"
+									display-field="label" value-field="data" items="{{codes.gurStsCcd}}"
+									item-style-function="onItemStyleFunction"></sc-combobox-column>
+				<sc-combobox-column data-field="gur_ath_typ_ccd"   header-text="보증 첨부 유형"	width="100" text-align="center" display-field="label" value-field="data" items="{{codes.gurAthTypCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="gur_bond_no" header-text="증권 번호" width="200" text-align="center" style-name="link"></sc-data-column><!--보증증권번호-->
+				<sc-data-column data-field="cntr_amt" header-text="계약 금액" width="120" text-align="right" data-type="number" format-type="amt"></sc-data-column><!--계약금액-->
+				<sc-data-column data-field="apymt_pymt_amt" header-text="선급금 지급 금액" width="120" text-align="right" data-type="number" format-type="amt"></sc-data-column><!--선급금 지급 금액-->
+				<sc-data-column data-field="gur_ro" header-text="보증 비율 (%)" width="100" text-align="right"></sc-data-column><!--보증금율-->
+				<sc-data-column data-field="gur_amt" header-text="보증 금액" width="120" text-align="right" data-type="number" format-type="amt"></sc-data-column><!--이행금액-->
+				<sc-date-column data-field="cntr_dt" header-text="계약 일자" width="100" text-align="center"></sc-date-column><!--계약일-->
+				<sc-date-column data-field="gur_st_dt" header-text="보증 시작 일자" width="100" text-align="center"></sc-date-column><!--보험시작일-->
+				<sc-date-column data-field="gur_exp_dt" header-text="보증 만료 일자" width="100" text-align="center"></sc-date-column><!--보험종료일-->
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="cntr_uuid"></sc-grid-field><!--계약아이디-->
+				<sc-grid-field data-field="gur_uuid"></sc-grid-field><!--보증아이디-->
+				<sc-grid-field data-field="prog_sts_nm"></sc-grid-field><!--진행상태-->
+				<sc-grid-field data-field="pdf_down"></sc-grid-field><!--파일첨부-->
+				<sc-grid-field data-field="cont_numb_text"></sc-grid-field>
+				<sc-grid-field data-field="add_file"></sc-grid-field>
+				<sc-grid-field data-field="term"></sc-grid-field>
+				<sc-grid-field data-field="apymt_pymt_dt"></sc-grid-field>
+				<sc-grid-field data-field="bond_kind_code"></sc-grid-field>
+				<sc-grid-field data-field="att_seq"></sc-grid-field>
+				<sc-grid-field data-field="bizregno"></sc-grid-field>
+				<sc-grid-field data-field="grp_cd"></sc-grid-field>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+				<sc-grid-field data-field="cntrdoc_typ_ccd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+		
+		<sc-dialog id="dialog" title-text="{{dialog.reasonTitle}}" style="width:600px; height:230px" modal="true" draggable="true">
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{dialog.reason}}" readonly="true"></sc-textarea-field>
+		</sc-dialog>
+	</template>
+
+	<!-- 스크립트 -->
+	<script>
+		Polymer({
+			is: 'es-guarlist',
+			properties: {
+				//코드
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							gurTypCcd: [],
+							gurStsCcd: [],
+							guarComp: [],
+							oorgCd: [],
+							useYnCcd: [],
+							gurAthTypCcd: []
+							
+						};
+					}
+				},
+				//보증보험현황 조회조건
+				findGuarList: {
+					type: Object,
+					value: function () {
+						return {
+							param: {},
+							result: {}
+						};
+					}
+				},
+				dialog: {
+					type: Object,
+					value: function () {
+						return {
+							reasonTitle: "",
+							reason: ""
+						};
+					}
+				},
+				guarInfo: {
+					type: Object,
+					value: function () {
+						return {};
+					}
+				}
+			},
+			
+			formulas : {
+				guarSendBtn : function(){
+					var me = this;
+					
+					if(SCSessionManager.currentUser.usr_id == "DAESUNG86.LEE"){ //보증서 수신 테스트( 본사 테스트용 버튼) 내부 자체에서 데이터를 생성하여 보증용서버로 보증서를 송신 버튼
+						return true;
+					}else{
+						return false;
+					}	
+				},
+				localRecvTestAble: function () {
+					var gurAthTypCcd = this.get("guarInfo.gur_ath_typ_ccd");
+					var gurStsCcd = this.get("guarInfo.gur_sts_ccd");
+					/* 전자보증 && 수신 대기중인 경우에만 보증서 수신 테스트 가능 */
+					return gurAthTypCcd === "EGUR" && gurStsCcd == "RCPT_WTG" && this.formula('guarSendBtn');
+				}
+			},
+
+			initialized: function () {
+				var me = this;
+				var filtered = me.codes.gurStsCcd.filter(function(item){
+					if(item.data !== 'GUR_REQ_WTG') {
+						return item;
+					}
+				});
+				me.set("codes.gurStsCcd", filtered);
+				me.set("codes.oorgCd", me.$.operorgcombobox.codes.operOrgCd);
+				me.applyFormula();
+			},
+			
+			load : function(){
+				var me = this;
+			},
+			
+			onItemStyleFunction: function (data, item) {
+				// 반려, 파기
+				if(data["gur_sts_ccd"] == "RCPT_RET" || data["gur_sts_ccd"] == "DESTR") {
+					return {
+						fontColor : "#ff0000",
+						fontWeight : "bold"
+					}
+				};
+			},
+
+			onItemClick: function (e) {
+				var me = this;
+				var data = e.detail.data;
+				var item = e.detail.item;
+
+				if (item.dataField === "gur_bond_no" && UT.isNotEmpty(data.gur_bond_no)) {
+					if(data.gur_ath_typ_ccd === "EGUR") {
+						me.popupGuarDetail(data);
+					} else if(data.gur_ath_typ_ccd === "OFFL") {
+						me.popupOffGuarDetail(data);
+					}
+				} else if (item.dataField === "cntr_no") {
+					
+					me.fire("show-detail", {
+						cntr_uuid: data.cntr_uuid
+					});
+				} else if(item.dataField === "gur_sts_ccd") {
+					if(data.gur_sts_ccd === "RCPT_RET" || data.gur_sts_ccd === "DESTR"){
+						var title = data.gur_sts_ccd === "RCPT_RET" ? "반려 사유" : "파기 사유";
+						me.set("dialog.reasonTitle", title);
+						me.set("dialog.reason", data.ret_rsn);
+						me.$.dialog.show();
+					}
+				}
+			},
+			
+			onCursorFunction : function(rowIndex, fieldName, rowObj) {
+				if(fieldName === "gur_bond_no" && !UT.isEmpty(rowObj.gur_bond_no)) {
+					return 'pointer';
+				} else if(fieldName === "ecntr_no") {
+					return 'pointer';
+				} else if(fieldName === "gur_sts_ccd" && !UT.isEmpty(rowObj.ret_rsn)) {
+					return 'pointer';
+				} else {
+					return 'default';
+				}
+			},
+			
+			onSelectionAbleFunction : function(data) {
+				var me = this;
+				return true;
+				if(data.gur_typ_ccd === "PAYINF") {
+					return true;
+				} else {
+					return false;
+				}
+			},
+
+			//계약상세내용(팝업)
+			popupCntrManager: function (data) {
+				var me = this;
+				var cntrManagerPopup = UT.popup("es-cntrmanager", me, "90%", "80%", {
+					//계약 상태가 변경되었을 때 재조회(계약서식발송, 계약 삭제 등)
+					"close-remove": function (popup, e) {
+						popup.close();
+						me.onSearchGuarlist();
+					}
+				});
+				data.isPopup = true;
+				cntrManagerPopup.show();
+				cntrManagerPopup.getWindowContent().load(data);
+			},
+			
+		 	// 오프라인팝업
+			openOfflineCntrFilePopup : function(data){
+				var me = this;
+				var offlineCntrFilePopup = UT.popup("ep-offline-cntr-file", me, "60%", "550", {
+					"close": function (popup, e) {}
+				});
+				offlineCntrFilePopup.show();
+				offlineCntrFilePopup.getWindowContent().load(data, "view");
+			},
+			
+			popupOffGuarDetail: function (data) {
+				var me = this;
+				var offGuarDetailPopup = UT.popup("ep-offline-guarinfo", me, "60%", "65%", {
+					"completeGuar": function (popup, e){
+						popup.close();
+						me.onSearchGuarlist();
+					}
+				});
+				offGuarDetailPopup.show();
+				offGuarDetailPopup.getWindowContent().load(data);
+			},
+			
+			popupGuarDetail: function (data) {
+				var me = this;
+
+				if(data.gur_insco_ccd == "SGI"){ //서울보증보험
+					me.popupSgicGuarDetail(data);	
+				}else if(data.gur_insco_ccd == "KSFC"){//소프트공제조합
+					me.popupKsfcGuarDetail(data);
+				} 
+			},
+			
+			popupSgicGuarDetail : function(data){
+				var me = this;
+				var guarDetailPopup = UT.popup("ep-sgic-guardetail", me, "815", "80%", {
+					"completeGuar": function (popup, e){
+						popup.close();
+						me.onSearchGuarlist();
+					}
+				});
+				guarDetailPopup.show();
+				guarDetailPopup.getWindowContent().load(data);
+			},
+			
+			popupKsfcGuarDetail : function(data){
+				var me = this;
+				var guarDetailPopup = UT.popup("ep-ksfc-guardetail", me, "730", "60%", {
+					"completeGuar": function (popup, e){
+						popup.close();
+						me.onSearchGuarlist();
+					}
+				});
+				guarDetailPopup.show();
+				guarDetailPopup.getWindowContent().load(data);
+			},
+
+			/**
+			 *	검색, 조회조건
+			 **/
+			onSearchGuarlist: function () {
+				var me = this;
+				if(!me.validate('search')){
+		 			UT.alert("STD.E0000");
+		 			return;
+		 		}
+				UT.request(me.$.findGuarList);
+			},
+			
+			onRecvTest : function(){
+				var me = this;
+				var provider = me.$.gridView.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				
+				if(checked.length < 1){
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				me.$.recv.body = checked[0];
+				UT.request(me.$.recv);
+			},
+			
+			completeRecv : function(e, res){
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S"){
+					UT.alert("STD.N7003");	//처리 완료하였습니다
+				}else{
+					UT.alert("STD.E9999");	//오류가 발생하였습니다.<br/>시스템관리자에게 문의하세요.
+				}
+				me.onSearchGuarlist();
+			},
+			
+			onSendInfo: function () {
+				var me = this;
+				var checked = me.$.gridView.getDataProvider().selectionCheckedItems();
+				var data = checked[0];
+
+				if (checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				}
+				if (data.gur_sts_ccd !== "PUBL_WTG" && data.gur_sts_ccd !== "RCPT_RET" ) {
+					UT.alert("STD.EDO1029"); // 신청 가능한 상태가 아닙니다.<br/>(가능상태 : 발행대기,반려)
+					return;
+				}
+
+				me.set("guarInfo", data);
+				me.popupGuarRqst();
+			},
+
+			onCancelGuar: function () {
+				var me = this;
+				var checked = me.$.gridView.getDataProvider().selectionCheckedItems();
+				var data = checked[0];
+
+				if (checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				} 
+				if (data.gur_sts_ccd !== "RCPT_WTG") {
+					UT.alert("STD.EDO1031"); // 취소 가능한 상태가 아닙니다.<br/>(가능상태 : 수신대기)
+					return;
+				}
+				
+				UT.confirm("STD.N5200", function() { //취소하시겠습니까?
+					me.set("guarInfo", data);
+					me.set("guarInfo.gur_sts_ccd", "PUBL_WTG");
+					
+					if(data.gur_insco_ccd === "SGI" ){	//서울보증보험
+						me.$.cancelSgicGuar.body = me.get("guarInfo");
+						UT.request(me.$.cancelSgicGuar);
+					}else if(data.gur_insco_ccd === "KSFC"){	//소프트공제조합
+						me.$.cancelKsfcGuar.body = me.get("guarInfo");
+						UT.request(me.$.cancelKsfcGuar);
+					}
+				});
+			},
+			
+			completeCancel: function (el, res) {
+				var me = this;
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); //요청이 완료되었습니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+				me.onSearchGuarlist();
+			},
+			
+			popupGuarRqst: function () {
+				var me = this;
+				var data = me.guarInfo;
+				
+				var sgicSendInfo = UT.popup("ep-sendinfo", me, "50%", "60%", {
+					"close": function (popup, e) {
+						popup.close();
+						me.onSearchGuarlist();
+					}
+				});
+				sgicSendInfo.show();
+				sgicSendInfo.getWindowContent().load(data);
+			},
+			
+			// Adobe Reader 설치 체크
+			checkAdobeReader : function(){
+				if(Polymer.isIE){
+					// IE일 경우만 체크
+					var getActiveXObject = function(name){
+						try{return new ActiveXObject(name); } catch(e){console.log(name);} // 미존재시 error
+					}
+					var getPDFPlugin = function(){
+						// AcroPDF.PDF 7이상 버전, PDF.PdfCtrl 6이하버전  (load activeX control)
+						return getActiveXObject("AcroPDF.PDF") || getActiveXObject("PDF.PdfCtrl");
+					}
+					return !!getPDFPlugin();
+				}else{
+					return true;
+				}
+			},
+			
+			// 비표준계약 팝업
+			openNonStandardPopup : function(data){
+				var me = this;
+				
+				if(!me.checkAdobeReader()){
+					UT.alert("STD.EDO1058"); // Adobe Reader가 설치되어있지 않습니다.<br/>https://get.adobe.com/kr/reader/ 에서 Aodbe Reader를 설치해 주세요.
+					return;
+				}
+				
+				var nonStandardPopup = UT.popup("ep-non-standard-cntrmanager", me, "90%", "80%", {
+					"close" : function(){}
+				}, {destroyOnHided:true});
+				data.isPopup = true;
+				nonStandardPopup.show();
+				nonStandardPopup.getWindowContent().load(data);
+			},
+			
+			onSelectionChecked: function(e) {
+				var me = this,
+					checked = e.detail.checked,
+					data = e.detail.data;
+				
+				if(checked) {
+					me.set("guarInfo", data);
+				} else {
+					me.set("guarInfo", {});
+				}
+				
+				me.applyFormula();
+			}
+		});
+	</script>
+</dom-module>

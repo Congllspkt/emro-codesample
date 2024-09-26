@@ -1,0 +1,472 @@
+<sc-link rel="import" href="ep-sp-stl-cancel-cause.html"></sc-link>
+<dom-module id="es-sp-rfx-list">
+	<!--
+    /**
+     *
+     *	@description :
+     *  <pre>
+     * </pre>
+     * @author : Yeon-u Kim
+     * @FileName :
+     * @Since 2016. 5. 16.
+     * @변경이력 : [2016. 5. 16.] Yeon-u Kim 최초작성
+     */
+    -->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- ajax 선언 부 -->
+		<sc-ajax id="findListRfxVd"
+				 url="findListRfxVd.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindList">
+		</sc-ajax>
+		
+		<sc-ajax id="checkQtaCreatableByRfxCs"
+				 url="checkBidCreatableByRfxCs.do"
+				 on-response="completeCheckQtaCreatableByRfxCs">
+		</sc-ajax>
+		
+		<sc-ajax id="checkRfxPreInspCompYByRfx"
+				 url="checkRfxPreInspCompYByRfx.do"
+				 on-response="completeCheckRfxPreInspCompYByRfx">
+		</sc-ajax>
+		
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgOfSp"
+					 url="findListOperationOrganizationBySupplier.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<!-- 코드 조회 code group -->
+			<sc-code-group id="codes">
+				<!-- 경쟁 방식 -->
+				<sc-code code="P211" value="{{codes.compTypCcd}}"></sc-code>
+				<!-- 품목 선정 유형(총액별/품목별) -->
+				<sc-code code="P002" value="{{codes.itemSlctnTypCcd}}"></sc-code>
+				<!-- RFX 상태 -->
+				<sc-code code="P013" value="{{codes.rfxStsCcd}}"></sc-code>
+				<!-- 역경매 결과 상태 -->
+				<sc-code code="P014" value="{{codes.rfxResStsCcd}}"></sc-code>
+				<!-- 진행상태 -->
+				<sc-code code="P024" value="{{codes.rfxBidStsCcd}}"></sc-code>
+				<!-- RFx 유형 -->
+				<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+				<!-- 구매 유형 -->
+				<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar></cc-page-title-bar>
+			
+			<cc-search-condition-panel on-search="onFindList" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-multi-combobox-field value="{{searchParam.oorg_cds}}" oper-unit-cd="PO" id="operorgcombobox" placeholder="전체">
+					</cc-sp-operorg-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 등록 일자"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_crn_dt}}" to-value="{{searchParam.to_rfx_crn_dt}}"
+										  default-from-value="-3M" default-to-value="0d" string-date="false">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="구매 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.p2pPurcTypCcd}}" value="{{searchParam.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.rfxTypCcd}}" value="{{searchParam.rfx_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 마감 일시"></sc-label>
+					<sc-period-date-field from-value="{{searchParam.from_rfx_clsg_dttm}}" to-value="{{searchParam.to_rfx_clsg_dttm}}"
+										  string-date="false">
+					</sc-period-date-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="경쟁 유형"></sc-label>
+					<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.compTypCcd}}" value="{{searchParam.comp_typ_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 상태"></sc-label>
+					<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.rfxStsCcd}}" value="{{searchParam.rfx_sts_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="RFX 번호"></sc-label>
+					<cc-multi-text-field value="{{searchParam.rfx_no}}" multi-value="{{searchParam.rfx_nos}}" placeholder="전체" on-enter="onFindList" title="RFX 번호"></cc-multi-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{searchParam.rfx_tit}}" on-enter="onFindList" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="투찰 상태"></sc-label>
+					<sc-multi-combobox-field display-field="label" value-field="data" items="{{codes.rfxBidStsCcd}}" value="{{searchParam.rfx_bid_sts_ccds}}" placeholder="전체"></sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="투찰 번호"></sc-label>
+					<cc-multi-text-field value="{{searchParam.rfx_bid_no}}" multi-value="{{searchParam.rfx_bid_nos}}" placeholder="전체" on-enter="onFindList" title="투찰 번호"></cc-multi-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="품목 선정 유형"></sc-label>
+					<sc-combobox-field display-field="label" value-field="data" items="{{codes.itemSlctnTypCcd}}" value="{{searchParam.item_slctn_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<!-- 그리드 -->
+			<sc-grid id="gridPanel" class="flex" use-dummy="false"
+					 editable="false"
+					 use-selection="false"
+					 use-state="false"
+					 row-style-function="onRowStyleFn"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column	data-field="oorg_cd"		header-text="운영조직"		width="170"	text-align="center" 	display-field="logic_org_nm"	value-field="oorg_cd"	items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_sts_ccd"		header-text="RFX 상태"	width="100"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.rfxStsCcd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="rfx_bid_sts_ccd"			header-text="투찰 상태"		width="100"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.rfxBidStsCcd}}"	item-style-function="onItemStyleFn"></sc-combobox-column>
+					<sc-data-column		data-field="cstm_use_yn"				header-text="컨소시엄 사용 여부"	width="120"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="rfx_res_sts_ccd_c_yn"	header-text="유찰 여부"		width="70"	text-align="center"	></sc-data-column>
+					<sc-data-column 	data-field="img_slctn_yn"			header-text="선정 여부"		width="70"	item-style-function="onItemStyleFn"></sc-data-column>
+					<sc-image-column 	data-field="img_slctn_cncl_rsn" header-text="선정 취소 사유" width="100"	text-align="center" image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="rfx_typ_ccd"			header-text="RFX 유형"		width="80"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.rfxTypCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_no"				header-text="RFX 번호"		width="120"	text-align="center"	style-name="link"></sc-data-column>
+					<sc-data-column		data-field="rfx_rnd"			header-text="진행차수"			width="90"	text-align="center"	></sc-data-column>
+					<sc-data-column		data-field="rfx_tit"			header-text="제목"			width="250"	text-align="left"	></sc-data-column>
+					<sc-data-column		data-field="rfx_item_cnt"		header-text="품목 수"		width="80"	text-align="right"	data-type="number"		format-type="integer"></sc-data-column><!-- 품목수는 수량과 다르므로 format-type을 qty로 하지 않고 integer로 한다 -->
+					<sc-combobox-column	data-field="comp_typ_ccd"		header-text="경쟁 유형"		width="80"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.compTypCcd}}"></sc-combobox-column>
+					<sc-combobox-column	data-field="item_slctn_typ_ccd"			header-text="품목 선정 유형"		width="100"	text-align="center"	display-field="label"	value-field="data"	items="{{codes.itemSlctnTypCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="rfx_bid_no"				header-text="투찰 번호"		width="120"	text-align="center"	></sc-data-column>
+					<sc-date-column		data-field="rfx_crn_dt"			header-text="RFX 등록 일자"	width="100"	text-align="center"	></sc-date-column>
+					<sc-date-column		data-field="rfx_st_dttm"		header-text="RFX 시작 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+					<sc-date-column		data-field="rfx_clsg_dttm"		header-text="RFX 마감 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+					<sc-date-column		data-field="rfx_bid_dttm"		header-text="투찰 일시"		width="150"	text-align="center"	format-type="datetime"		string-date="false"></sc-date-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="slctn_yn" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="rfx_presn_use_yn" data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		<sc-dialog id="dialog_abd_cause" title-text="포기 사유" title-align="left" style="width:400px;height:170px" modal="true">
+			<table class="tb-form">
+				<tr>
+					<td>
+						<sc-textarea-field id="abn_cause_text" class="h-80" readonly="true"></sc-textarea-field>
+					</td>
+				</tr>
+			</table>
+		</sc-dialog>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'es-sp-rfx-list',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				selectedItem: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							rfxBidStsCcd: [],
+							rfxResStsCcd: [],
+							rfxStsCcd: [],
+							rfxProgStsFilterCd: [],
+							rfxTypCcd: [],
+							compTypCcd: [],
+							itemSlctnTypCcd: [],
+							p2pPurcTypCcd: [],
+							oorgCd: []
+						};
+					},
+					reset: false
+				}
+			},
+			
+			/**************************************************
+			 * 초기화 설정
+			 **************************************************/
+			// 1. 화면 로딩시 최초 호출
+			initialized: function() {
+				var me = this;
+				
+				me.initComboColumns();
+				me.load();
+			},
+			// 2. 화면 load
+			load: function(param) {
+				var me = this;
+				
+				if(UT.isNotEmpty(param)) {
+					// 컴포넌트 별 default 값이 셋팅되어 있을 수 있으므로 파라미터로 넘어온 값만 셋팅한다.
+					for(var key in param) {
+						if(param.hasOwnProperty(key)) {
+							// me.get("searchParam")[key] = param[key];
+							var paramKey = "searchParam." + key;
+							me.set(paramKey, param[key]);
+						}
+					}
+				}
+				me.onFindList();
+			},
+			
+			/**************************************************
+			 * 그리드 초기화
+			 **************************************************/
+			// 그리드 combo column 설정
+			initComboColumns: function() {
+				var me = this;
+				
+				var rfxTypCcd = me.codes.rfxTypCcd, filteredRfxTypCd = [];
+				if(UT.isArray(rfxTypCcd)) {
+					for(var i = 0; i < rfxTypCcd.length; i++) {
+						var item = rfxTypCcd[i];
+						
+						// 역경매 제외
+						if(item["data"] !== "RAUC" && item["data"] !== "RFI") {
+							filteredRfxTypCd.push(item);
+						}
+					}
+				}
+				me.set("codes.rfxTypCcd", filteredRfxTypCd);
+				
+				var rfxStsCcd = me.codes.rfxStsCcd, filteredRfxProgStsCd = [];
+				if(UT.isArray(rfxStsCcd)) {
+					for(var j = 0; j < rfxStsCcd.length; j++) {
+						var item = rfxStsCcd[j];
+						
+						if(["CRNG", "APVL_PRGSG", "NEGO_PRGSG"].indexOf(item["data"]) === -1) {
+							filteredRfxProgStsCd.push(item);
+						}
+					}
+				}
+				me.set("codes.rfxStsCcd", filteredRfxProgStsCd);
+			},
+			
+			/**************************************************
+			 * 그리드 이벤트
+			 **************************************************/
+			// grid item click 이벤트
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				me.set("selectedItem", UT.copy(data));
+				if(item.dataField === "rfx_no") {
+					//RFx사전심사사용중일때 사전심사여부체크
+					if(data["rfx_presn_use_yn"] === "Y") {
+						me.$.checkRfxPreInspCompYByRfx.body = {"rfx_uuid": data.rfx_uuid};
+						UT.request(me.$.checkRfxPreInspCompYByRfx);
+					} else {
+						// 컨소시엄 여부가 "Y"일 때, RFx진행중에 아직 견적서를 작성하지 않았을 경우
+						if(data["cstm_use_yn"] === "Y" && data["rfx_sts_ccd"] === "PRGSG" && UT.isEmpty(data["rfx_bid_uuid"])) {
+							
+							/**
+							 * validation : QTCS 존재여부 확인
+							 * 0. 견적서 작성건 존재 시 견적상세로 이동
+							 * 1. 내가 대표업체이면서 모든 구성원이 승인되어 견적 작성이 가능한 경우 견적상세로 이동
+							 * 2. 내가 대표업체이면서 QTCS가 작성중이거나 구성원들의 승인을 대기중인 경우 메시지(공동수급협정서가 완료되지 않았습니다.)
+							 * 3. (공개입찰)내가 대표업체가 아닌 구성원으로, 승인해야할 QTCS가 존재하는 경우 메시지 (협정서 현황에서 승인 진행하세요.)
+							 * 4. (공개입찰)내가 대표업체가 아닌 구성원으로, QTCS 승인한 경우 또는 QTCS가 아직 발송되지 않은 경우 (구성원은 견적서 제출 불가합니다.)
+							 * 5. 그 외 QTCS 미존재 시 messagebox
+							 **/
+							me.$.checkQtaCreatableByRfxCs.body = {"rfx_uuid": data.rfx_uuid};
+							UT.request(me.$.checkQtaCreatableByRfxCs);
+							
+						} else {
+							//상세 조회 화면 호출
+							me.fire('show-detail', data);
+						}
+					}
+				} else if(item.dataField === "img_slctn_cncl_rsn") {
+					// 선정 취소 사유 화면 호출
+					if(data["slctn_yn"] === "N" && UT.isNotEmpty(data["slctn_cncl_rsn"])) {
+						//선정 취소 사유 화면 호출
+						var stlCancelCausePopup = UT.popup("ep-sp-stl-cancel-cause", me, 800, 230, null, {titleText: "선정 취소 사유"});
+						stlCancelCausePopup.show();
+						stlCancelCausePopup.getWindowContent().load(data);
+					}
+				} else if(item.dataField === "rfx_bid_sts_ccd" && data["rfx_bid_sts_ccd"] === "GUP") {
+					me.$.abn_cause_text.value = data["gup_rsn"];
+					me.$.dialog_abd_cause.show();
+				}
+			},
+			
+			completeCheckQtaCreatableByRfxCs: function(e, res) {
+				var me           = this,
+					result       = res.response,
+					resultStatus = result.resultStatus,
+					resultData   = result.resultData || {},
+					data         = me.get("selectedItem");
+				
+				if(resultStatus === "S") {
+					if(UT.isNotEmpty(resultData.rfx_bid_uuid)) {
+						// 견적서 작성건 존재 시 견적상세로 이동
+						me.fire('show-detail', data);
+						
+					} else if(UT.isNotEmpty(resultData.rep_vd_yn)) {
+						// 내가 대표업체
+						if(resultData.rep_vd_yn === "Y") {
+							if(resultData.cstm_ptcp_req_snd_yn === "Y" && resultData.all_sbmt_yn === "Y") {
+								// 협정서 발송 후 모든 구성원이 승인한 경우, 견적상세로 이동
+								me.fire('show-detail', data);
+							} else {
+								// 공동수급 협정서가 완료되지 않아 견적서 작성이 불가합니다.<br/>해당 내용은 '공동수급협정서 현황'에서 확인하실 수 있습니다.
+								UT.alert("STD.CS1017");
+							}
+							// 구성원
+						} else {
+							// 해당 RFx에 공동수급 구성원으로 등록되어 견적서 작성이 불가합니다.
+							var msg = me.translate("STD.CS1018");
+							
+							// 협정서가 발송되었으나 아직 승인하지 않은 경우
+							if(resultData.cstm_ptcp_req_snd_yn === "Y" && resultData.cstm_ptcp_confm_yn === "N") {
+								// '공동수급협정서 현황'에서 협정서 승인을 진행하시기 바랍니다.
+								msg += "<br/>" + me.translate("STD.CS1019");
+							}
+							UT.alert(msg, null, true);
+						}
+					} else {
+						var noCsBtnId  = "단독 투찰",
+							csWrtBtnId = "협정서 작성",
+							closeBtnId = "닫기";
+						
+						// 선택하신 입찰은 공동수급 대상 입찰 건입니다.<br/>견적서를 작성하시겠습니까?
+						UT.messageBox("STD.CS1008", function(id) {
+							// 단독참여
+							if(id === noCsBtnId) {
+								// 견적상세로 이동
+								me.fire('show-detail', data);
+								// 협정서 작성
+							} else if(id === csWrtBtnId) {
+								// CS 상세 조회 화면 호출
+								me.fire('show-cs-detail', data);
+							}
+						}, false, {buttons: noCsBtnId + "," + csWrtBtnId + "," + closeBtnId, titleText: "STD.N1100"});
+					}
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			completeCheckRfxPreInspCompYByRfx: function(e, res) {
+				var me           = this,
+					result       = res.response,
+					resultStatus = result.resultStatus,
+					resultData   = result.resultData || {}
+				data = me.get("selectedItem");
+				
+				if(result.success) {
+					//심사완료
+					// 컨소시엄 여부가 "Y"일 때, RFx진행중에 아직 견적서를 작성하지 않았을 경우
+					if(data["cstm_use_yn"] === "Y" && data["rfx_sts_ccd"] === "PRGSG" && UT.isEmpty(data["rfx_bid_uuid"])) {
+						
+						/**
+						 * validation : QTCS 존재여부 확인
+						 * 0. 견적서 작성건 존재 시 견적상세로 이동
+						 * 1. 내가 대표업체이면서 모든 구성원이 승인되어 견적 작성이 가능한 경우 견적상세로 이동
+						 * 2. 내가 대표업체이면서 QTCS가 작성중이거나 구성원들의 승인을 대기중인 경우 메시지(공동수급협정서가 완료되지 않았습니다.)
+						 * 3. (공개입찰)내가 대표업체가 아닌 구성원으로, 승인해야할 QTCS가 존재하는 경우 메시지 (협정서 현황에서 승인 진행하세요.)
+						 * 4. (공개입찰)내가 대표업체가 아닌 구성원으로, QTCS 승인한 경우 또는 QTCS가 아직 발송되지 않은 경우 (구성원은 견적서 제출 불가합니다.)
+						 * 5. 그 외 QTCS 미존재 시 messagebox
+						 **/
+						me.$.checkQtaCreatableByRfxCs.body = {"rfx_uuid": data.rfx_uuid};
+						UT.request(me.$.checkQtaCreatableByRfxCs);
+						
+					} else {
+						//상세 조회 화면 호출
+						me.fire('show-detail', data);
+					}
+				} else if(resultStatus === "BEFORE_RFX_PRE_INSP") {
+					UT.alert("STD.RPI002"); //RFX 사전심사가 진행중입니다.
+				} else if(resultStatus === "PRE_INSP_COMP_BEFORE") {
+					//심사완료 안됨
+					UT.alert("STD.RPI002"); //RFX 사전심사가 진행중입니다.
+				} else if(resultStatus === "CLOSE_RFX_PRE_INSP") {
+					UT.alert("STD.RPI011"); //STD.RPI011	RFX 사전심사를 제출하지 않아 견적서 제출이 불가합니다.
+				} else if(resultStatus === "NO_PASS") {
+					//미적합 업체
+					UT.alert("STD.RPI003"); //RFx 사전심사 결과 부적합합니다
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			// 그리드 row-style-function
+			onRowStyleFn: function(data) {
+				if(data["rfx_bid_sts_ccd"] === "GUP") {	// 포기
+					return {
+						"background": "#E0E0E0"
+					}
+				}
+			},
+			
+			// 그리드 컬럼 스타일
+			onItemStyleFn: function(data, item) {
+				var styleObj = {};
+				
+				//선정 여부
+				if(item.dataField === "img_slctn_yn") {
+					styleObj.iconUrl = "ui/assets/img/grid/" + ((data["slctn_yn"] === "Y") ? "ico_choice.png" : "ico_nonchoice.png");
+					styleObj.iconLocation = "center";
+				} else if(item.dataField === "rfx_bid_sts_ccd" && data["rfx_bid_sts_ccd"] === "GUP") {
+					return {
+						"fontColor": "#0e006f",
+						"fontWeight": "bold"
+					}
+				}
+				return styleObj;
+			},
+			
+			// grid 컬럼 선정 취소 사유
+			onImageChangeFn: function(data, item) {
+				var styleObj = {};
+				
+				// 미 선정 && 취소사유가 존재하는 경우
+				if(data["slctn_yn"] === "N" && UT.isNotEmpty(data["slctn_cncl_rsn"])) {
+					return "search";
+				} else {
+					return null;
+				}
+			},
+			
+			/**************************************************
+			 * 버튼 이벤트
+			 **************************************************/
+			// 조회 버튼 클릭시
+			onFindList: function() {
+				var me = this;
+				
+				//검색조건의 필수값 체크
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(me.$.findListRfxVd);
+			},
+			completeFindList: function(el, res) {
+				var me = this;
+				
+				me.$.gridPanel.setDataProvider(res.response);
+			}
+		});
+	</script>
+</dom-module>

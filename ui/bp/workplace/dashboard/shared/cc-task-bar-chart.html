@@ -1,0 +1,205 @@
+<!--
+    ******************************************************************************************
+    ** Description     : cc-task-bar-chart
+    ** Author          : choijh
+    ******************************************************************************************
+-->
+<dom-module id="cc-task-bar-chart">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	
+	</style>
+	
+    <template>
+        <sc-ajax id="findListMainTaskCount"
+                url="findListMainTaskCount.do"
+                on-response="completeFindListMainTaskCount"></sc-ajax>
+
+        <div id="chartTitle">Main Task</div>
+		
+		<cc-echart id="taskBarChart" class="flex" style="margin-top: 5px; height:100%"></cc-echart>
+		
+        <!--<div id="chartContainer"></div>-->
+    </template>
+    <script>
+		Polymer({
+			is: "cc-task-bar-chart",
+
+			behaviors:[
+				Polymer.SCResizableBehavior,
+                Polymer.CCModuleBehavior
+			],
+
+			listeners:{
+				'sc-resize':'doContentResize'
+			},
+			
+			properties: {
+				categories: {
+					type: Array,
+					value: function () {
+						return []
+					}
+				},
+				mainTaskUuids: {
+					type: Array,
+					value: function () {
+						return []
+					}
+				},
+				items: {
+					type: Array,
+					value: function () {
+						return [];
+					}
+				},
+				taskBarChartOptions : {
+					type: Object,
+					value: function() {
+						return {
+							/*title: {
+								text: I18N.translate("Main Task Status")
+							},*/
+							tooltip: {
+								trigger: 'axis',
+								axisPointer: {
+									type: 'shadow'
+								}
+							},
+							legend: {
+								top : 0
+							},
+							xAxis: {
+								type: 'category',
+								data : [],
+							},
+							yAxis: {
+								type: 'value',
+								scale: 2
+							},
+							series: [{
+								type : 'bar',
+								name: I18N.translate("지연"),
+								seriesIndex: "0",
+								id : "delay",
+								color : "#EB7575",
+								itemWidth : 0.7,
+								data : [],
+								label: {
+									fontSize: 11,
+									show : true,
+									position : "top"
+								},
+								animation : true,
+								tooltip: {}
+							}, {
+								type : 'bar',
+								name: I18N.translate("임박"),
+								seriesIndex: 1,
+								id: "immnt",
+								color : "#F5BC5F",
+								itemWidth : 0.7,
+								data : [],
+								label : {
+									fontSize: 11,
+									show : true,
+									position : "top"
+								},
+								animation: true,
+								tooltip: {}
+							}, {
+								type : 'bar',
+								name: I18N.translate("정상"),
+								seriesIndex: 2,
+								id: "norm",
+								color : "#72B0EA",
+								itemWidth: 0.7,
+								data : [],
+								label : {
+									fontSize: 11,
+									show : true,
+									position : "top"
+								},
+								animation: true,
+								tooltip: {}
+							}],
+						};
+					}
+				}
+			},
+
+			doContentResize: function(){
+				var me = this;
+				/*if(me.chartMain && me.isVisible(true)){
+					me.chartMain.resize();
+				}*/
+			},
+
+			initialized: function() {
+                this.load();
+			},
+
+            refresh: function () {
+            	this.load();
+			},
+
+			load: function () {
+				var me = this;
+				UT.request(me.$.findListMainTaskCount);
+			},
+
+			drawChart: function() {
+				var me = this;
+				var option = me.taskBarChartOptions;
+				option.series.forEach(function(series, index) {
+					series.data = UT.isEmpty(me.items[index]) ? [] : me.items[index];
+				});
+				
+				var echart = me.$.taskBarChart.generateChart(option);
+				echart.on("click", function(item) {
+					var param = {
+						value: item.data,
+						categoryIdx: item.dataIndex,
+						main_task_uuid: me.mainTaskUuids[item.dataIndex],
+						display_main_task_nm: me.taskBarChartOptions.xAxis.data[item.dataIndex],
+						category: item.name,
+						label: item.name,
+						seriesIndex: item.seriesIndex,
+						seriesStatus: "series_" + item.seriesId
+					};
+					me.onItemClicked(param);
+				});
+				
+			},
+
+			onItemClicked: function (param) {
+				var me = this;
+				me.fire("item-click", param);
+			},
+			completeFindListMainTaskCount: function (e, res) {
+				var me = this;
+                var result = res.response;
+
+                if(result && result.length) {
+					var categories = [], delay_tot_cnt = [], immnt_tot_cnt = [], norm_tot_cnt = [], mainTaskUuids = [];
+                	for(var i=0; i<result.length; i++) {
+                		var mainTask = result[i];
+						mainTaskUuids.push(mainTask["main_task_uuid"]);
+						categories.push(mainTask["display_main_task_nm"]);
+						delay_tot_cnt.push(mainTask["delay_tot_cnt"]);
+						immnt_tot_cnt.push(mainTask["immnt_tot_cnt"]);
+						norm_tot_cnt.push(mainTask["norm_tot_cnt"]);
+                    }
+
+					me.set("taskBarChartOptions.xAxis.data", categories);
+					me.set("mainTaskUuids", mainTaskUuids);
+					me.set("items", [delay_tot_cnt, immnt_tot_cnt, norm_tot_cnt]);
+
+					me.drawChart();
+                }
+			}
+		});
+    </script>
+</dom-module>

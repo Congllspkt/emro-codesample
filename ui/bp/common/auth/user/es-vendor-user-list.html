@@ -1,0 +1,228 @@
+<dom-module id="es-vendor-user-list">
+    <!--
+        ******************************************************************************************
+        ** @Program-name 	: 협력사 사용자 정보
+        ** @Description		:
+        ** @Author 			: jeKim
+        ** @Create Date 	: 2016.11.02
+        ** @History 		: 2016.11.02 jeKim 최초작성
+        ******************************************************************************************
+    -->
+    <style>
+        :host {
+            @apply(--hbox-layout);
+        }
+    </style>
+
+    <template>
+        <!--
+            ************************************************************************************************************
+            * Service Area
+            ************************************************************************************************************
+        -->
+        <sc-request-group init>
+            <sc-code-group>
+                <!-- 타임존 -->
+                <sc-code code="C025" value="{{codes.C025}}" ></sc-code>
+                <sc-code code="C087" value="{{codes.C087}}" ></sc-code> <!-- 계정 상태 -->
+                <sc-code code="C088" value="{{codes.C088}}" ></sc-code> <!-- 계정 잠금 유형 -->
+                <sc-code code="C009" value="{{codes.useYn}}" ></sc-code> <!-- 사용여부 -->
+            </sc-code-group>
+        </sc-request-group>
+
+        <!-- 협력사 사용자 목록 조회 -->
+        <sc-ajax id="findListVendorUser"
+                 url="findListVendorUser.do"
+                 body="{{searchParam}}"
+                 last-response="{{resultList}}">
+        </sc-ajax>
+
+        <sc-ajax id="updateListUserAccountLock"
+                 url="updateListUserAccountLock.do"
+                 on-response="completeLockList">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+        <!--
+            ************************************************************************************************************
+            * UI Area
+            ************************************************************************************************************
+        -->
+        <div class="vbox flex">
+			<cc-sub-title-bar title-text="사용자 목록">
+			</cc-sub-title-bar>
+            <cc-search-condition-panel on-search="onSearch" search-condition-cls="label-row" auth-r>
+                <cc-fieldset>
+                    <sc-label text="협력사 코드"></sc-label>
+                    <sc-text-field placeholder="협력사 코드" value="{{searchParam.vd_cd}}" on-enter="onSearch"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="사용자 아이디"></sc-label>
+                    <sc-text-field value="{{searchParam.usr_id}}" on-enter="onSearch"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="협력사 명"></sc-label></th>
+                    <sc-text-field placeholder="협력사 명" value="{{searchParam.vd_nm}}" on-enter="onSearch"></sc-text-field>
+                </cc-fieldset>
+                <cc-fieldset>
+                    <sc-label text="사용자 명"></sc-label></th>
+                    <sc-text-field value="{{searchParam.usr_nm}}" on-enter="onSearch"></sc-text-field>
+                </cc-fieldset>
+            </cc-search-condition-panel>
+
+            <sc-grid id="gridPanel" data-provider="{{resultList}}" editable="true" class="flex"
+                     on-item-click="onItemClick">
+                <cc-grid-toolbar>
+                    <sc-button text="계정 잠금" on-click="onLockUser" auth-s></sc-button>
+                    <sc-button text="계정 잠금 해제" on-click="onUnLockUser" auth-s></sc-button>
+                </cc-grid-toolbar>
+                <sc-grid-columns>
+                    <sc-data-column data-field="usr_id" header-text="사용자 아이디" width="90" text-align="center" style-name="link"></sc-data-column>
+                    <sc-data-column data-field="usr_nm" header-text="사용자 명" width="180" text-align="left"></sc-data-column>
+                    <sc-data-column data-field="usr_nm_en" header-text="사용자 명 영문" width="180" text-align="left"></sc-data-column>
+                    <sc-combobox-column data-field="use_yn" header-text="사용 여부" width="70" text-align="center" items="{{codes.useYn}}" display-field="label" value-field="data"></sc-combobox-column>
+                    <sc-combobox-column data-field="acct_sts_ccd" header-text="계정 상태" width="70" text-align="center" items="{{codes.C087}}" display-field="label" value-field="data"></sc-combobox-column>
+                    <sc-combobox-column data-field="lckd_typ_ccd" header-text="잠금 유형" width="70" text-align="center" items="{{codes.C088}}" display-field="label" value-field="data"></sc-combobox-column>
+                    <sc-data-column data-field="vd_cd" header-text="협력사 코드" width="90" text-align="center"></sc-data-column>
+                    <sc-data-column data-field="vd_nm" header-text="협력사 명" width="180" text-align="left"></sc-data-column>
+                    <sc-data-column data-field="vd_nm_en" header-text="협력사 명 영문" width="180" text-align="left"></sc-data-column>
+                </sc-grid-columns>
+            </sc-grid>
+        </div>
+
+    </template>
+
+    <!--
+        ************************************************************************************************************
+        * Script Area
+        ************************************************************************************************************
+    -->
+    <script>
+        Polymer({
+            is: "es-vendor-user-list",
+
+            properties : {
+                // 협력사 사용자 목록 : 조회조건
+                searchParam: {
+                    type : Object,
+                    value : function(){
+                        return {};
+                    }
+                },
+
+                // 사용자 정보 : 조회조건
+                searchDetailParam: {
+                    type: Object,
+                    value : function(){
+                        return {};
+                    }
+                },
+
+                // 협력사 사용자 목록 : 조회 결과
+                resultList: {
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+
+                codes: {
+                    type: Object,
+                    value: function () {
+                        return {
+                            useYn: []
+                        };
+                    }
+                }
+            },
+
+
+            /******************************
+             * 초기화 설정
+             ******************************/
+            // 초기화 완료 후 호출 함수
+            initialized : function() {
+                var me = this;
+                // 사용자 조회
+                me.onSearch();
+                me.fire("find-user-list");
+            },
+
+            /******************************
+             * 그리드 이벤트
+             ******************************/
+            // 그리드 cell click 이벤트
+            onItemClick: function(event){
+                var me = this,
+                    data = event.detail.data,
+                    item = event.detail.item;
+
+                if(item.dataField === "usr_id"){
+                    me.fire("find-userinfo",data);
+                }
+            },
+
+            /******************************
+             * 버튼 이벤트
+             ******************************/
+            // 협력사 사용자 목록 조회
+            onSearch : function() {
+                var me = this;
+                UT.request(me.$.findListVendorUser);
+            },
+
+            onLockUser : function() {
+                var me = this,
+                    provider = me.$.gridPanel.getDataProvider();
+
+                var checked = provider.selectionCheckedIndexes();
+                if (checked.length === 0) {
+                    UT.alert("STD.N1600");  // "선택된 항목이 없습니다",
+                    return;
+                }
+
+                UT.confirm("STD.ADM1090", function() { // "잠금 하시겠습니까?"
+                    var selected = provider.selectionCheckedItems();
+                    if(selected.length > 0){
+                        me.$.updateListUserAccountLock.body = {
+                            userList : selected,
+                            lockStatus : "Y"
+                        };
+                        UT.request(me.$.updateListUserAccountLock);
+                    }
+                });
+            },
+            onUnLockUser : function() {
+                var me = this,
+                    provider = me.$.gridPanel.getDataProvider();
+
+                var checked = provider.selectionCheckedIndexes();
+                if (checked.length === 0) {
+                    UT.alert("STD.N1600");  // "선택된 항목이 없습니다",
+                    return;
+                }
+
+                UT.confirm("STD.ADM1003", function() { // "잠금 해제 하시겠습니까?"
+                    var selected = provider.selectionCheckedItems();
+                    if(selected.length > 0){
+                        me.$.updateListUserAccountLock.body = {
+                            userList : selected,
+                            lockStatus : "N"
+                        };
+                        UT.request(me.$.updateListUserAccountLock);
+                    }
+                });
+            },
+            completeLockList : function() {
+                var me = this,
+                    message = "STD.N1500";
+
+                UT.alert(message, function(){
+                    me.onSearch();
+                });
+            },
+        });
+    </script>
+
+</dom-module>

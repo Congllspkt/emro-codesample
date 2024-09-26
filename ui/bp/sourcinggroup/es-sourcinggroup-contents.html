@@ -1,0 +1,167 @@
+<!--<sc-link rel="import" href="ep-sg-profile.html"></sc-link>-->
+
+<dom-module id="es-sourcinggroup-contents">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+    </style>
+    
+    <template>
+        <!-- 소싱그룹 정보 저장 -->   
+        <sc-ajax 
+            id="saveSourcingGroupInfo"
+            url="saveSourcingGroupInfo.do"
+            on-response="onResultSaveHandler">
+        </sc-ajax>
+
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+    
+    	<cc-sub-title-bar>
+            <!--<sc-button text="SG Profile"	on-click="onOpenSgProfilePopup"	hidden="[[!formula('sgProfileBtn')]]"></sc-button>-->
+            <sc-button text="저장"			on-click="onSaveSgInfo"			hidden="[[!formula('editable')]]"	auth-s></sc-button>
+    	</cc-sub-title-bar>
+       
+        <div class="vbox flex">
+			<cc-form-panel>
+				<cc-fieldset>
+					<sc-label text="소싱그룹 코드"></sc-label>
+					<sc-label text="{{sgInfo.sg_cd}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="소싱그룹 분류"></sc-label>
+					<sc-text-field value="{{sgInfo.sg_path}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="소싱그룹 명"></sc-label>
+					<sc-text-field value="{{sgInfo.sg_nm}}" max-length="60" required="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="소싱그룹 명 영문"></sc-label>
+					<sc-text-field value="{{sgInfo.sg_nm_en}}" max-length="60"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="정규 협력사 수"></sc-label>
+					<sc-label text="{{sgInfo.vd_cnt}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="품목 수"></sc-label>
+					<sc-label text="{{sgInfo.item_cnt}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="잠재 협력사 수"></sc-label>
+					<sc-label text="{{sgInfo.ptntl_vd_cnt}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="신규 협력사 수"></sc-label>
+					<sc-label text="{{sgInfo.new_vd_cnt}}" i18n-disabled></sc-label>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="사용 여부"></sc-label>
+					<sc-checkbox-field class="w-150" input-value="{{sgInfo.use_yn}}" checked-value="Y" un-checked-value="N" editable="[[formula('editable')]]" style="margin-left:5px;"></sc-checkbox-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-upload id="upload" value="{{sgInfo.att_no}}" editable="[[formula('editable')]]" style="height:200px;"></sc-upload>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="비고"></sc-label>
+					<sc-textarea-field class="h-200" value="{{sgInfo.rmk}}" max-length="1000"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+	    </div>
+    </template>
+    
+    <script>
+        Polymer({
+            is : "es-sourcinggroup-contents",
+            
+            properties:{
+                codes:{
+                    type: Object,
+                    value : function(){
+                        return {};
+                    },
+                    reset: false
+                },
+                // 파라미터 데이터 binding object
+                sgInfo : {
+                    type : Object,
+                    value : function() {
+                        return {
+                        	sg_cd: "",
+                        	vd_cnt: "",
+                        	ptntl_vd_cnt: "",
+                        	item_cnt: ""
+                        };
+                    }
+                }
+            },
+
+            formulas:{
+                isTargetable: function(){
+                    return (this.get("sgInfo.lvl") == 3);
+                },
+                editable: function(){
+                    return (!UT.isEmpty(this.sgInfo.sg_cd));
+                },
+                sgProfileBtn : function() {
+                	return this.formula("editable") && this.formula("isTargetable");
+                }
+            },
+
+            load: function(param){
+                var me = this;
+                
+                me.set("sgInfo", param);
+                me.applyFormula();
+            },
+            
+            /**
+             * SG Profile 버튼 클릭
+             */
+             onOpenSgProfilePopup : function() {
+                var me = this;
+                
+                var sgProfilePopup = UT.popup("ep-sg-profile", me, 1000, 600, {
+              		'reload' : function(popup, e) {
+              			me.onSearch();
+              		}
+              	});
+                sgProfilePopup.show();
+                sgProfilePopup.getWindowContent().load(UT.copy(me.get("sgInfo")));
+            },
+            
+            /**
+             * 소싱그룹 정보 저장
+             */
+            onSaveSgInfo : function() {
+                var me = this;
+
+                if(!me.validate()) {
+                    UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요.
+                    return;
+                }
+
+                UT.confirm("STD.N1200", function() {
+                    me.$.saveSourcingGroupInfo.set("body", me.get("sgInfo"));
+                    me.$.upload.upload().then(function(){
+                        UT.request(me.$.saveSourcingGroupInfo);
+                    });
+                });
+            },
+            
+            /**
+             * 소싱그룹 정보 저장 완료 event handler
+             */
+            onResultSaveHandler : function(e, res) {
+                var me = this;
+                var result = res.response;
+                if (result && result.resultStatus === "S") {
+					UT.completeAlert("저장",function(){
+                        me.fire("complete-save-cont", me.get("sgInfo"));
+                    });
+                }
+            }
+        });
+    </script>
+</dom-module>

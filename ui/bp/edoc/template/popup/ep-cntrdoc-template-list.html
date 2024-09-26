@@ -1,0 +1,148 @@
+<dom-module id="ep-cntrdoc-template-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 공통코드 조회 -->
+		<sc-code-group>
+			<sc-code code="D003" value="{{codes.cntrTypCcd}}"></sc-code><!-- D003 : 계약서 유형 -->
+			<sc-code code="D009" value="{{codes.sgnordTypCcd}}"></sc-code> <!-- D009 : 서명순서 유형 -->
+			<sc-code code="D004" value="{{codes.appxTypCcd}}"></sc-code> <!-- D004 : 부속서류 문서 유형 -->
+		</sc-code-group>
+		
+		<!-- 계약서 템플릿 목록 조회 -->
+		<sc-ajax id="findListCntrTmpl"
+				url="largeFindListCntrForm.do"
+				body="{{cntrTmplList.param}}"
+				last-response="{{cntrTmplList.result}}"></sc-ajax>
+	
+		<!-- 계약서 템플릿 내용 조회 -->
+		<sc-ajax id="findCntrTmplCont"
+				url="findCntrformCont.do"
+				on-response="completeFindCntrTmplCont"></sc-ajax>
+				
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<div class="hbox flex">
+			<div class="vbox flex-4">
+				<cc-search-condition-panel on-search="onSearchCntrTmpl" on-enter="onSearchCntrTmpl" auth-r>
+					<cc-fieldset>
+						<sc-label text="템플릿 명"></sc-label>
+						<sc-text-field value="{{cntrTmplList.param.cntrdoc_tmpl_nm}}" max-length="60"></sc-text-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="계약서 유형"></sc-label>
+						<sc-combobox-field value="{{cntrTmplList.param.cntrdoc_typ_ccd}}" placeholder="전체" readonly
+											items="{{codes.cntrTypCcd}}" value-field="data" display-field="label"></sc-combobox-field>
+					</cc-fieldset>
+				</cc-search-condition-panel>
+				<sc-grid id="gridCntrTmpl" class="flex" selection-mode="radio" use-state="false" data-provider="{{cntrTmplList.result}}"
+						on-selection-checked="onSelectionChecked">
+					<cc-grid-toolbar>
+						<sc-button text="선택" on-click="onSelect"></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="cntrdoc_tmpl_nm" header-text="템플릿 명" width="300" text-align="left"></sc-data-column>
+						<sc-combobox-column data-field="cntrdoc_typ_ccd" header-text="계약서 유형" width="150" items="{{codes.cntrTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="cntrdoc_tmpl_uuid"></sc-grid-field>
+						<sc-grid-field data-field="sgnord_typ_ccd"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+			<div class="hspace-5"></div>
+			<div class="vbox flex-6">
+				<iframe id="contHtml" class="fit"></iframe>
+			</div>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: "ep-cntrdoc-template-list",
+			properties: {
+				titleText:{
+					type: String,
+					value: "계약서 템플릿 목록"
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							cntrTypCcd: []
+						};
+					},
+					reset: false
+				},
+				cntrTmplList: {
+					type: Object,
+					value: function() {
+						return {
+							param: {},
+							result: {}
+						};
+					}
+				}
+			},
+
+			initialized: function() {
+				var me = this;
+			},
+
+			load: function(data) {
+				var me = this;
+				me.set("cntrTmplList.param", data);
+				me.onSearchCntrTmpl();
+			},
+			
+			/* 계약서 템플릿 그리드 조회 */
+			onSearchCntrTmpl: function() {
+				var me = this;
+				UT.request(me.$.findListCntrTmpl);
+			},
+			
+			//체크박스를 클릭하였을때 호출
+			onSelectionChecked: function(e) {
+				var me = this;
+				// html content 초기화
+				me.$.contHtml.contentDocument.body.innerHTML = '';
+				
+				if(e.detail.checked) {
+					// html content 조회
+					me.$.findCntrTmplCont.body = e.detail.data;
+					UT.request(me.$.findCntrTmplCont);
+				}
+			},
+			
+			completeFindCntrTmplCont: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(UT.isNotEmpty(result.cntrdoc_tmpl_cont)) {
+					me.$.contHtml.contentDocument.body.innerHTML = result.cntrdoc_tmpl_cont;
+				}
+			},
+			
+			onSelect: function() {
+				var me = this;
+				var provider = me.$.gridCntrTmpl.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				
+				if(selected.length == 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				if(UT.isEmpty(me.$.contHtml.contentDocument.body.innerHTML)) {
+					UT.alert("STD.EDO1064"); // 템플릿의 내용이 없습니다. 관리자에게 문의하시기 바랍니다.
+					return;
+				}
+				
+				me.fire('selected', selected[0]);
+			}
+		});
+	</script>
+</dom-module>

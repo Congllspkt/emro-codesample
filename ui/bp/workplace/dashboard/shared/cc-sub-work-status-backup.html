@@ -1,0 +1,176 @@
+<!--
+    ******************************************************************************************
+    ** Description     : cc-work-bar-chart
+    ** Author          : choijh
+    ******************************************************************************************
+-->
+<dom-module id="cc-sub-work-status">
+
+	<style>
+		.worksSub .worksWrap .rowWrap .workCard {
+			width:210px
+		}
+		.worksSub .worksWrap .rowWrap .workCard span {
+			width:180px
+		}
+		
+		.worksSub .worksWrap .rowWrap i.afterIcon {
+			left:187px;
+		}
+	
+	</style>
+    <template>
+        <sc-ajax id="findListSubWorkStatus" url="findListSubWorkStatus.do" body="{{searchParam}}" on-response="completeFindListSubWorkStatus"></sc-ajax>
+
+        <div id="workSubBox" class="worksSub" on-click="onClickWork">
+            <span class="hline2"></span>
+            <!-- Main Work dom-repeat -->
+            <template is="dom-repeat" items="[[flowData]]" index="index" as="mainWork">
+            	<div class="worksWrap">
+		           	<h4 data-up-id$="[[mainWork.up_work_id]]"><b>[[mainWork.up_work_nm]]</b> <span class="circleB"></span></h4>
+		           	<div class="rowWrap">
+		           		<!-- Sub Work dom repeat -->
+		           		<template id="subWork" is="dom-repeat" items="[[mainWork.sub_work_list]]" index="index" as="subWork">
+		           			<div data-id$="[[subWork.work_id]]" class$="workCard [[setAssign(subWork)]]"  title="[[convertTitle(mainWork, subWork, 'all')]]"
+		           					data-wrnn_yn$="[[subWork.wrnn_yn]]" data-new_yn$="[[subWork.new_yn]]" data-norm_yn$="[[subWork.norm_yn]]" data-dely_yn$="[[subWork.dely_yn]]">
+			           			<i class="beforeIcon" title="[[convertTitle(mainWork, subWork, 'before')]]"></i>
+			           			<span>[[subWork.work_nm]]</span>
+			           			<i class="afterIcon" title="[[convertTitle(mainWork, subWork, 'after')]]"></i>
+		           			</div>
+	           				<div class$="[[convertFlowTypClass(subWork)]]"></div>
+		           		</template>
+		           	</div>
+            	</div>
+            </template>
+        </div>
+    </template>
+    <script>
+		Polymer({
+			is: "cc-sub-work-status",
+
+			behaviors:[
+				Polymer.SCResizableBehavior,
+                Polymer.CCModuleBehavior,
+				Polymer.CCFlowBehavior
+			],
+			
+			properties : {
+				flowData : {
+					type : Array,
+					value : function(){
+						return [];
+					}
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.load();
+			},
+			
+			refresh: function () {
+				var me = this;
+				me.load();
+			},
+			
+            load: function () {
+				var me = this;
+				// 기존 상태 초기화
+				/*
+				Array.prototype.forEach.call(me.querySelectorAll(".rowWrap [data-id]"), function(initTarget) {
+					["dely_yn", "wrnn_yn", "new_yn", "norm_yn"].forEach(function(initClass) {
+						var prefix = "data-";
+						if(initTarget.getAttribute(prefix + initClass) === "Y") {
+							initTarget.removeAttribute(prefix + initClass);
+                        }
+                    });
+					if(initTarget.classList.contains("assign")) {
+						initTarget.classList.remove("assign");
+                    }
+                });*/
+				UT.request(me.$.findListSubWorkStatus);
+			},
+
+			onClickWork: function (e) {
+				var me = this;
+				if(e.target.dataset.id && e.target.classList.contains("assign")) {	// 배정된 SUB WORK 클릭 시
+					var dataset = e.target.dataset;
+
+					this.fire("item-click", {
+						workList: [{work_id: dataset.id, work_nm: e.target.querySelector("span").innerText}],
+						up_work_id: e.target.parentElement.parentElement.querySelector("h4").dataset.upId,
+                        up_work_nm: e.target.parentElement.parentElement.querySelector("b").innerText
+					});
+				} else if(e.target.dataset.upId) {	// MAIN WORK 클릭 시
+					this.fire("item-click", {
+						up_work_id: e.target.dataset.upId,
+                        up_work_nm: e.target.querySelector("b").innerText
+					});
+                } else if(e.target.classList.contains("beforeIcon")) {	// 지연,도래
+					var seriesIndex;
+					if(e.target.parentElement.dataset.dely_yn === "Y") {
+						seriesIndex = 0;
+                    } else if(e.target.parentElement.dataset.wrnn_yn === "Y") {
+						seriesIndex = 1;
+                    }
+					this.fire("item-click", {
+						workList: [{work_id: e.target.parentElement.dataset.id, work_nm: e.target.parentElement.querySelector("span").innerText}],
+						up_work_id: e.target.parentElement.parentElement.parentElement.querySelector("h4").dataset.upId,
+						up_work_nm: e.target.parentElement.parentElement.parentElement.querySelector("b").innerText,
+                        seriesIndex: seriesIndex
+					});
+                } else if(e.target.classList.contains("afterIcon")) {	// 신규
+					this.fire("item-click", {
+						workList: [{work_id: e.target.parentElement.dataset.id, work_nm: e.target.parentElement.querySelector("span").innerText}],
+						up_work_id: e.target.parentElement.parentElement.parentElement.querySelector("h4").dataset.upId,
+						up_work_nm: e.target.parentElement.parentElement.parentElement.querySelector("b").innerText,
+						seriesIndex: 3
+					});
+				}
+			},
+			
+			isLastIndex : function(length, index){
+				return ((length-1) == index);
+			},
+			
+            setAssign : function(subWork){
+                var stateFields = ["dely_yn", "wrnn_yn", "new_yn", "norm_yn"];
+                for(var i=0; i<stateFields.length; i++){
+                    if(UT.isNotEmpty(subWork[stateFields[i]])){
+                        if(subWork[stateFields[i]] === "Y"){
+                            return "assign";
+                        }
+                    }
+                }
+                return "";
+            },
+
+			completeFindListSubWorkStatus: function (e, res) {
+				var me = this;
+				var result = res.response;
+				me.set("flowData", result);
+				
+				// 그후 State를 표시한다. (필요시 수정)
+				// me.setItemStateEachColumn(me.$.workSubBox, result, "work_id", ["dely_yn", "wrnn_yn", "new_yn", "norm_yn"]);
+			},
+			
+			convertTitle : function(mainWork, subWork, type) {
+				var me = this,
+					title = "[" + me.translate(mainWork.up_work_nm) + " - " + me.translate(subWork.work_nm) + "]";
+				if(type === "before") {
+					if(UT.isNotEmpty(subWork["dely_yn"]) && subWork["dely_yn"] === "Y") {
+						title += " " + me.translate("지연");
+					} else if(UT.isNotEmpty(subWork["wrnn_yn"]) && subWork["wrnn_yn"] === "Y") {
+						title += " " + me.translate("도래");
+					}
+				} else if(type === "after") {
+					title += " " + me.translate("신규");
+				}
+				return title;
+			},
+			convertFlowTypClass: function(subWork) {
+				return "arrowS_" + subWork.flow_typ_cd || 4;
+			}
+		});
+    </script>
+</dom-module>

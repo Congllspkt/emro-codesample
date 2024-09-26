@@ -1,0 +1,143 @@
+<sc-link rel="import" href="es-sg-contents.html"></sc-link>
+<sc-link rel="import" href="es-sg-item-category-list.html"></sc-link>
+
+<dom-module id="es-sg-tab">
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 소싱그룹 정보 조회 -->
+		<sc-ajax id="findSourcingGroupDetail" url="findSourcingGroupDetail.do" body="{{sgInfo}}"></sc-ajax>
+		
+		<sc-tab-navigation id="tabNavi" selected-index="0" class="fit" disabled="true">
+			<es-sg-contents id="sgContents" title-text="정보" on-complete-save-cont="onCompleteSaveContents"></es-sg-contents>
+			<template>
+				<es-sg-item-category-list id="sgItemCategoryList" title-text="품목분류" on-initialized="_onInitialized" on-complete-save-item="onCompleteSave"></es-sg-item-category-list>
+			</template>
+		</sc-tab-navigation>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-sg-tab",
+			
+			properties: {
+				sgInfo: {
+					type : Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			clear: function() {
+				const me = this;
+				const tab = me.$.tabNavi,
+					  modules = tab.items;
+				
+				me.set("sgInfo", {});
+				me.resetTabModules(modules);
+				
+				if(UT.isNotEmpty(modules) && modules[0] && typeof modules[0].applyFormula == "function") {
+					modules[0].applyFormula();
+					tab.selectItem(modules[0]);
+				}
+				tab.disabled = true;
+			},
+			
+			resetTabModules: function(modules) {
+				const me = this;
+				
+				modules.forEach(module => {
+					if(module && module.isInitialized){
+						module.reset();
+					}
+				});
+			},
+			
+			load: function(param) {
+				const me = this;
+				
+				me.clear();
+				me.set("sgInfo", param);
+				me.onSearchSgDetail();
+			},
+			
+			loadTabModules: function(modules) {
+				const me = this,
+					  sgInfo = me.get("sgInfo");
+				
+				modules.forEach(module => {
+					if(module && module.isInitialized){
+						module.load(sgInfo);
+					}
+				})
+			},
+			
+			_onInitialized: function(e) {
+				const me = this,
+					  target = e.target;
+				
+				if(target && typeof target.load === "function") {
+					target.load(me.get("sgInfo"));
+				}
+			},
+			
+			setTabBarDisabled: function(val) {
+				const me = this,
+					  tab = me.$.tabNavi,
+					  tabBar = tab.querySelector("sc-tabbar.tabbar");
+				
+				if(tab.disabled) {
+					tab.disabled = false;
+				}
+				tabBar.disabled = val;
+			},
+			
+			onCompleteSaveContents: function(event) {
+				const me = this,
+					  data = event.detail;
+				
+				me.set("sgInfo", data);
+				me.onCompleteSave();
+				
+				/*UT.request(me.$.findSourcingGroupInfo, function(e, res) {
+					const result = res.response;
+					if(result) {
+						me.set("sgInfo", result);
+						
+					}
+					me.onCompleteSave();
+				})*/
+			},
+			
+			onCompleteSave: function() {
+				const me = this;
+				me.fire("complete-save");
+			},
+			
+			onSearchSgDetail: function() {
+				const me = this;
+				
+				UT.request(me.$.findSourcingGroupDetail, function(e, res) {
+					const result = res.response || {},
+						  tab = me.$.tabNavi;
+					let	modules = (tab.items || []).concat(),
+						sgContent = modules.splice(0, 1);
+					
+					me.set("sgInfo", result);
+					me.loadTabModules(sgContent);
+					
+					me.loadTabModules(modules);
+					me.setTabBarDisabled(false);
+					
+					modules = null;
+					sgContent = null;
+				});
+			}
+		});
+	</script>
+</dom-module>

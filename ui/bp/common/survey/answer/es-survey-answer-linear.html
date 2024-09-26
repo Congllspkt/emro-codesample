@@ -1,0 +1,197 @@
+<dom-module id="es-survey-answer-linear">
+	<style>
+		:host {
+			display: block;
+		}
+	</style>
+	
+	<template>
+		<div class="vbox" validation-group="answerValidation">
+			<div class="field-box" style="width:100%">
+				<span>[[languageParse(question.lnr_min_nm)]]</span>
+				<sc-radio-group-field id="answer" items="{{question.answers}}"
+									  value-field="surv_ans_opt_uuid" label-field="disp_opt_nm"
+									  value="{{subjectAnswerOption.surv_ans_opt_uuids}}" required="[[formula('isRequired')]]" i18n-disabled
+									  disable-auto-select="true"
+									  readonly="[[!formula('editable')]]"
+									  on-change="onSelectAnswer">
+				</sc-radio-group-field>
+				<span>[[languageParse(question.lnr_max_nm)]]</span>
+			</div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isOther')]]">
+				<div class="w-80">[[translate('기타')]]</div>
+				<sc-text-field class="w-300" value="{{subjectAnswer.surv_subj_otrs_val}}" on-change="onChangeOther" readonly="[[!formula('editable')]]"></sc-text-field>
+			</div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isAttach')]]">
+				<div class="w-80">[[translate('첨부파일')]]</div>
+				<sc-upload-field class="w-300" value="{{subjectAnswer.surv_subj_athg_uuid}}" auto-upload="true" required="[[formula('isAttachRequired')]]" readonly="[[!formula('editable')]]"></sc-upload-field>
+			</div>
+			<div class="hbox" style="margin-top: 10px;" hidden="[[!formula('isComment')]]">
+				<div class="w-80">[[translate('댓글')]]</div>
+				<sc-text-field class="w-300" value="{{subjectAnswer.surv_subj_cmnt_val}}" readonly="[[!formula('editable')]]"></sc-text-field>
+			</div>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-answer-linear",
+			
+			properties: {
+				question: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjectAnswer: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				subjectAnswerOption: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				editable: {
+					type: Object,
+					value: function() {
+						return true;
+					}
+				}
+			},
+			formulas: {
+				isRequired: function() {
+					return this.question.ans_mand_yn === "Y";
+				},
+				isOther: function() {
+					return this.question.otrs_ans_yn === "Y";
+				},
+				isComment: function() {
+					return this.question.cmnt_add_yn === "Y";
+				},
+				isAttach: function() {
+					return this.question.ath_poss_yn === "Y";
+				},
+				isAttachRequired: function() {
+					return this.formula('isAttach') && this.question.ath_mand_yn === "Y";
+				},
+				editable: function() {
+					return this.editable && this.formula('editableFromParent');
+				},
+				editableFromParent: function() {
+					var me = this;
+					var parSurvAnsOptUuid = me.question.par_surv_ans_opt_uuid;
+					if(parSurvAnsOptUuid == null) {
+						return true;
+					}
+					var parAnswer = me.question.par_answer;
+					if(parAnswer == parSurvAnsOptUuid) {
+						return true;
+					}
+					return false;
+				}
+			},
+			
+			languageParse: function(str) {
+				return SCLanguageManager.parse(str);
+			},
+			
+			load: function() {
+				var me = this;
+				me.set("subjectAnswer", me.question.subjectAnswer || {});
+				me.set("subjectAnswerOption", me.question.subjectAnswerOpt || {});
+				this.publishParentValue();
+				this.applyFormula();
+			},
+			
+			validator: function() {
+				var me = this;
+				if(!me.validate("answerValidation")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				var survAnsOptUuids = me.subjectAnswerOption.surv_ans_opt_uuids;
+				var survSubjOtrsVal = me.subjectAnswer.surv_subj_otrs_val;
+				if(UT.isEmpty(survAnsOptUuids) && UT.isEmpty(survSubjOtrsVal)) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				return true;
+			},
+			
+			setParentAnswer: function(parentValue) {
+				var me = this;
+				me.question.par_answer = parentValue;
+				me.applyFormula();
+				
+				if(!me.formula('editableFromParent')) {
+					me.set("subjectAnswerOption.surv_ans_opt_uuids", null);
+					me.set("subjectAnswer.surv_subj_otrs_val", null);
+					me.set("subjectAnswer.surv_subj_athg_uuid", null);
+					me.set("subjectAnswer.surv_subj_cmnt_val", null);
+				}
+			},
+			
+			onSelectAnswer: function() {
+				var me = this;
+				me.$.answer.required = me.formula('isRequired');
+				me.set("subjectAnswer.surv_subj_otrs_val", null);
+				me.publishParentValue();
+			},
+			
+			publishParentValue: function() {
+				var me = this;
+				var question = me.question;
+				if(question.questions != null) {
+					var childQuestionSize = question.questions.length;
+					var questionForm = me.domHost;
+					for(var i = 0; i < childQuestionSize; i++) {
+						questionForm = questionForm.nextElementSibling;
+						questionForm.setParentAnswer(me.get("subjectAnswerOption.surv_ans_opt_uuids"));
+						/*var answerForm = questionForm.querySelector('[id="answerForm"]');
+						var answerElement = answerForm.firstChild;
+						answerElement.setParentAnswer(me.get("subjectAnswerOption.surv_ans_opt_uuids"));*/
+					}
+				}
+			},
+			
+			onChangeOther: function() {
+				var me = this;
+				me.$.answer.required = false;
+				me.set("subjectAnswerOption.surv_ans_opt_uuids", null);
+			},
+			
+			selectedAnswerOption: function() {
+				var me = this;
+				var answers = me.question.answers;
+				var value = me.subjectAnswerOption.surv_ans_opt_uuids;
+				return answers.filter(function(answer) {
+					if(answer.surv_ans_opt_uuid === value) {
+						return true;
+					}
+				})[0];
+			},
+			
+			get getValue() {
+				var question = this.question;
+				var selectedAnswer = this.selectedAnswerOption() || {};
+				var subjectAnswer = this.subjectAnswer;
+				return {
+					surv_uuid: question.surv_uuid,
+					surv_sect_uuid: question.surv_sect_uuid,
+					surv_qn_uuid: question.surv_qn_uuid,
+					surv_subj_ans_val: subjectAnswer.surv_subj_ans_val,
+					surv_subj_athg_uuid: subjectAnswer.surv_subj_athg_uuid,
+					surv_subj_cmnt_val: subjectAnswer.surv_subj_cmnt_val,
+					surv_subj_otrs_val: subjectAnswer.surv_subj_otrs_val,
+					surv_ans_opt_uuid: selectedAnswer.surv_ans_opt_uuid,
+					surv_ans_opt_sc: selectedAnswer.opt_sc
+				};
+			}
+		})
+	</script>
+</dom-module>

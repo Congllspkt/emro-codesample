@@ -1,0 +1,257 @@
+﻿<sc-link rel="import" href="es-itemcat-info.html"></sc-link>
+<sc-link rel="import" href="es-itemcat-history.html"></sc-link>
+
+<dom-module id="es-itemcat-detail">
+	
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<!-- 분류해설&이력정보 조회 -->
+		<sc-ajax
+				id="findInfoItemCat"
+				url="findInfoItemCat.do"
+				body="{{searchParam}}"
+				on-response="completeFindInfoItemCat">
+		</sc-ajax>
+		
+		<!-- 저장 -->
+		<sc-ajax id="saveInfoItemCat"
+				 url="saveInfoItemCat.do"
+				 on-response="completeSaveInfoItemCat">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="품목분류 정보">
+			<sc-button text="저장" on-click="onSave" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<!-- 탭화면 -->
+		<sc-tab-navigation id="tabNavi" class="flex" selected="0">
+			<es-itemcat-info id="info" title-text="품목분류 설명" on-search="onSearch"></es-itemcat-info>
+			<es-itemcat-history id="history" title-text="이력 정보"></es-itemcat-history>
+		</sc-tab-navigation>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-itemcat-detail",
+			
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				parentItem: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				itemCatInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				
+				historyTargets: {
+					type: Object,
+					value: function() {
+						return ["itemcat_cd", "itemcat_nm", "itemcat_nm_en", "itemcat_simword",
+							"itemcat_path", "itemcat_path_en", "mgmt_dept_cd", "usg_expln", "mand_yn", "use_yn", "scr_dspy_ord"];
+					}
+				},
+				
+				historyTargetsDesc: {
+					type: Object,
+					value: function() {
+						return {mand_yn: "필수 여부", use_yn: "사용 여부", scr_dspy_ord: "정렬 순서"};
+					}
+				},
+				
+				isChanged : {
+					type : Boolean,
+					value : false
+				}
+			},
+			
+			load: function(param) {
+				var me = this;
+				
+				me.$.tabNavi.selectItem(me.$.info);
+				if(param.is_add) {
+					me.addNode(param);
+				} else if(param.is_find) {
+					me.findInfoItemCat(param);
+				}
+			},
+			
+			onSearch: function() {
+				var me = this;
+				me.findInfoItemCat();
+			},
+			
+			// 품목분류정보(분류해설&배정속성&이력정보) 조회
+			findInfoItemCat: function(data) {
+				var me = this;
+				
+				if(data) {
+					me.set("searchParam", data.curItem);
+					me.set("parentItem", data.parItem);
+				}
+				
+				UT.request(me.$.findInfoItemCat);
+			},
+			
+			completeFindInfoItemCat: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(UT.isNotEmpty(result.itemCatInfo)) {
+					result.itemCatInfo.itemcat_path = me.get("searchParam.itemcat_path");
+				}
+				
+				// 분류해설 원본
+				me.set("itemCatInfo", UT.copy(result.itemCatInfo));
+				// 분류해설 탭
+				me.$.info.setClassInfo(res, me.get("parentItem"));
+				// 이력정보 탭
+				me.$.history.load(UT.copy(me.get("itemCatInfo")));
+			},
+			
+			/**
+			 * 신규 추가
+			 */
+			addNode: function(data) {
+				var me = this;
+				me.$.info.addClassInfo(data);
+			},
+			
+			/**
+			 * 저장
+			 */
+			onSave: function() {
+				var me = this;
+				
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				// 품목분류정보 - 분류해설 탭
+				var info = me.$.info;
+				var historyList = me.getChangedValues(info.getItemCatInfo(), me.get("itemCatInfo"), info.getSimilarList());
+				
+				var objItemCatInfo = info.getItemCatInfo();
+				
+				if(objItemCatInfo) {
+					
+					// request body에 데이타 셋팅
+					me.$.saveInfoItemCat.body = {
+						// 분류정보
+						itemCatInfo: objItemCatInfo
+						// 유사분류
+						, similarList: info.getSimilarList()
+						// 이력정보
+						, historyList: historyList
+					};
+					
+					UT.confirm("STD.N1200", function() {
+						UT.request(me.$.saveInfoItemCat);
+					});
+				}
+			},
+			
+			getChangedValues: function(itemCatInfo, orgItemCatInfo, similarList) {
+				var me = this;
+				var result = [];
+				
+				// 신규일 경우
+				if(UT.isEmpty(orgItemCatInfo)) {
+					return result;
+				}
+				// Form 변경정보 구성
+				var historyTargets = me.get("historyTargets");
+				var historyTargetsDesc = me.get("historyTargetsDesc");
+				for(var i = 0; i < historyTargets.length; i++) {
+					var field = historyTargets[i];
+					if(itemCatInfo[field] != orgItemCatInfo[field]) {
+						result.push(me.newHistory(itemCatInfo, field, "BEFORE : " + orgItemCatInfo[field] + ", AFTER : " + itemCatInfo[field]));
+					}
+				}
+				// 유사분류 목록 추가 정보 구성
+				for(var i = 0; i < similarList.length; i++) {
+					var item = similarList[i];
+					result.push(me.newHistory(itemCatInfo, "SIM_CLS_LIST_ADD", "SIMILAR CATEGORY CODE : " + item.sim_itemcat_cd + ", CATEGORY NAME : " + item.itemcat_nm));
+				}
+				
+				return result;
+			},
+			
+			newHistory: function(itemCatInfo, chgTypCcd, modCont) {
+				var me = this;
+				return {
+					itemcat_cd: itemCatInfo.itemcat_cd,
+					itemcat_lvl: itemCatInfo.itemcat_lvl,
+					itemcat_uuid: UT.generateUUID(),
+					chg_typ_ccd: chgTypCcd,
+					mod_cont: modCont
+				};
+			},
+			
+			// 저장 callback
+			completeSaveInfoItemCat: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(UT.isObject(result) && result.resultStatus === "S") {
+					UT.completeAlert("저장", function() {
+						me.set("searchParam", me.$.saveInfoItemCat.body.itemCatInfo);
+						me.set("isChanged", true);
+						// 품목분류정보 재조회
+						me.findInfoItemCat();
+					});
+				} else {
+					if(UT.isNotEmpty(result.resultMessage)) {
+						UT.alert(result.resultMessage);
+					} else {
+						UT.alert("STD.E9999");
+					}
+				}
+			},
+			
+			/**
+			 * 데이터 초기화 함수
+			 */
+			onClear: function() {
+				var me = this;
+				
+				me.reset();
+				// 분류해설 탭
+				me.$.info.clear();
+				
+			},
+			
+			/**
+			 * 닫기
+			 */
+			onClose: function() {
+				var me = this;
+				
+				me.$.tabNavi.selectItem(me.$.info);
+				me.fire("close-remove", me.get("isChanged"));
+				me.onClear();
+			}
+		});
+	</script>
+</dom-module>

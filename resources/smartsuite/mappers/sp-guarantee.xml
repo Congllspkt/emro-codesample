@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="sp-guarantee">
+	<select id="findSpGuarList" resultType="map">
+		/* sp-guarantee.findSpGuarList */
+		SELECT GUR.TEN_ID
+		, GUR.GUR_UUID
+		, GUR.CNTR_UUID
+		, GUR.GUR_INSCO_CCD
+		, GUR.GUR_ATH_TYP_CCD
+		, GUR.VD_CD
+		, GUR.GUR_TYP_CCD
+		, GUR.GUR_BOND_NO
+		, CNTR.CNTR_AMT
+		, CASE WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR'       /* 선급금 이행 보증 */
+			   THEN (GUR.APYMT_PYMT_AMT * GUR.GUR_RO) / 100
+			   ELSE CNTR.CNTR_AMT * GUR.GUR_RO / 100
+				END AS GUR_AMT
+		, GUR.GUR_STS_CCD
+		, GUR.GUR_RO AS GUR_RO
+		, GUR.GUR_ST_DT
+		, GUR.GUR_EXP_DT
+		, GUR.RET_RSN
+	    , GUR.APYMT_PYMT_AMT
+		, VDGL.VD_NM
+		, VDGL.ERP_VD_CD
+		, CNTR.OORG_CD
+		, CNTR.CNTR_NO
+		, CNTR.CNTR_REVNO
+		, CNTR.CNTR_NM
+		, CNTR.CNTRDOC_TYP_CCD
+		, CNTR.CNTR_STS_CCD
+		, CNTR.CNTR_SGNMETH_CCD
+		, CONCAT(GUR.CNTR_NO, TRIM(TO_CHAR(LPAD(CNTR.CNTR_REVNO, 2, '0'))))  AS CONT_NUMB_TEXT
+		, CASE WHEN GUR.gur_typ_ccd = 'CPGUR'
+		THEN '002'
+		WHEN GUR.gur_typ_ccd = 'APYMTPGUR'
+		THEN '004'
+		WHEN GUR.gur_typ_ccd = 'DEFPGUR'
+		THEN '003'
+		WHEN GUR.gur_typ_ccd = 'PAYINF'
+		THEN '006'
+		ELSE ''
+		END AS BOND_KIND_CODE
+		, CNTR.CNTR_DT
+		, VDGL.BIZREGNO
+		FROM GUR GUR
+		INNER JOIN CNTR CNTR
+		ON GUR.TEN_ID = CNTR.TEN_ID
+		AND GUR.CNTR_UUID = CNTR.CNTR_UUID
+		INNER JOIN VD VDGL
+		ON VDGL.TEN_ID = CNTR.TEN_ID
+		AND VDGL.VD_CD = CNTR.VD_CD
+		WHERE GUR.TEN_ID = #{g.tenant}
+		AND GUR.VD_CD = #{g.vd_cd}
+		AND CNTR.CNTR_STS_CCD = 'CNTR_CMPLD'
+		AND GUR.GUR_STS_CCD IN ( 'PUBL_WTG', 'RCPT_WTG', 'APVL_WTG', 'APVD', 'DESTR', 'RCPT_RET')
+		<if test="p.cntr_no != null and p.cntr_no != ''">
+			<bind name="cntrNoPattern" value="'%' + p.cntr_no + '%'"/>
+			AND UPPER(CNTR.CNTR_NO) like upper(#{cntrNoPattern})
+		</if>
+		<if test="p.gur_typ_ccd != null and p.gur_typ_ccd != ''">
+			AND GUR_TYP_CCD = #{p.gur_typ_ccd}
+		</if>
+		<if test="p.gur_sts_ccd != null and p.gur_sts_ccd !='' ">
+			AND GUR.GUR_STS_CCD = #{p.gur_sts_ccd}
+		</if>
+		<if test="p.cntr_from_date != null and p.cntr_from_date !='' ">
+			AND CNTR.CNTR_DT &gt;= #{p.cntr_from_date}
+		</if>
+		<if test="p.cntr_to_date != null and p.cntr_to_date !='' ">
+			AND CNTR.CNTR_DT <![CDATA[<=]]> #{p.cntr_to_date}
+		</if>
+		<choose>
+			<when test="p.oorg_cd != null and p.oorg_cd.size() != 0">
+				AND CNTR.OORG_CD IN
+				<foreach close=")" collection="p.oorg_cd" item="oorg_cd" open="(" separator=",">
+					#{oorg_cd}
+				</foreach>
+			</when>
+			<otherwise>
+				AND CNTR.OORG_CD = '0'
+			</otherwise>
+		</choose>
+		ORDER BY CNTR.CNTR_NO DESC, CNTR.CNTR_REVNO DESC
+	</select>
+	<select id="getOfflineBondInfo" resultType="map">
+		/* sp-guarantee.getOfflineBondInfo 오프라인보증정보 조회 */
+		SELECT
+			GUR.GUR_INSCO_CCD
+			 ,GUR.GUR_BOND_NO
+			 ,GUR.GUR_TYP_CCD
+			 ,CNTR.CNTR_AMT * GUR.GUR_RO / 100 AS GUR_AMT
+			 ,GUR.GUR_ST_DT
+			 ,GUR.GUR_EXP_DT
+			 ,GUR.ATHG_UUID
+			 ,GUR.GUR_RO
+			 ,GUR.RET_RSN
+			 ,GUR.GUR_UUID
+			 ,GUR.GUR_STS_CCD
+			 ,CNTR.CNTR_NO
+			 ,CNTR.CNTR_NM
+			 ,CNTR.CNTR_ST_DT
+			 ,CNTR.CNTR_EXP_DT
+			 ,CNTR.CNTR_DT
+		FROM GUR GUR
+	   INNER JOIN CNTR CNTR
+		  ON CNTR.TEN_ID = GUR.TEN_ID
+		 AND CNTR.CNTR_UUID = GUR.CNTR_UUID
+		WHERE GUR.TEN_ID = #{g.tenant}
+		  AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+	<update id="saveOfflineGuarInfo">
+		/* sp-guarantee.saveOfflineGuarInfo :*/
+		UPDATE GUR
+		   SET ATHG_UUID = #{p.athg_uuid}
+		      ,GUR_STS_CCD = #{p.gur_sts_ccd}
+		      ,GUR_ATH_TYP_CCD = #{p.gur_ath_typ_ccd}
+		<if test="p.gur_st_dt != null and p.gur_st_dt != ''">
+			,GUR_ST_DT = #{p.gur_st_dt}
+		</if>
+		<if test="p.gur_exp_dt != null and p.gur_exp_dt != ''">
+			, GUR_EXP_DT = #{p.gur_exp_dt}
+		</if>
+		<if test="p.gur_insco_ccd != null and p.gur_insco_ccd != ''">
+			, GUR_INSCO_CCD = #{p.gur_insco_ccd}
+		</if>
+		<if test="p.gur_bond_no != null and p.gur_bond_no != ''">
+			, GUR_BOND_NO = #{p.gur_bond_no}
+		</if>
+		WHERE TEN_ID = #{g.tenant}
+		  AND GUR_UUID = #{p.gur_uuid}
+	</update>
+	<update id="saveOfflineGuarCancel">
+		/* sp-guarantee.saveOfflineGuarCancel : 오프라인 보증 취소 */
+		UPDATE GUR
+		SET ATHG_UUID = null
+		   ,GUR_STS_CCD = #{p.gur_sts_ccd}
+		   ,GUR_ATH_TYP_CCD = null
+		   ,GUR_BOND_NO = null
+		   ,GUR_INSCO_CCD = NULL
+		WHERE TEN_ID = #{g.tenant}
+		AND GUR_UUID = #{p.gur_uuid}
+	</update>
+	<select id="getRequestBond" resultType="map">
+		/* sp-guarantee.getRequestBond : 보증요청정보 조회*/
+		SELECT GUR.GUR_UUID
+		, GUR.GUR_INSCO_CCD
+		, GUR.GUR_TYP_CCD
+		, GUR.GUR_ST_DT
+		, GUR.GUR_EXP_DT
+		, CASE WHEN GUR.GUR_TYP_CCD = 'APYMTPGUR'           /* 선급금 이행 보증 */
+			   THEN (GUR.APYMT_PYMT_AMT * GUR.GUR_RO) / 100
+			   ELSE CNTR.CNTR_AMT * GUR.GUR_RO / 100
+				END AS GUR_AMT
+		, GUR.GUR_RO
+		, CONCAT(GUR.CNTR_NO, TRIM(TO_CHAR(LPAD(CNTR.CNTR_REVNO, 2, '0'))))  AS CONT_NUMB_TEXT
+		, CNTR.CNTR_NO
+		, CNTR.CNTR_NM
+		, CNTR.CNTR_DT
+		, CNTR.CNTR_ST_DT
+		, CNTR.CNTR_EXP_DT
+		, CNTR.CNTR_AMT
+		, USR.USR_NM
+		, USR.TEL
+		, USR.MOB
+		, USR.EML
+		, VD.VD_NM
+		, VD.BIZREGNO
+		, VD.CEO_NM AS VD_CEO_NM
+		, SUBSTR(REPLACE(VD.ZIPCD,'-',''),1,6)  AS VD_ZIPCD
+		, VD.DTL_ADDR_1
+		, ORG.CEO_NM
+		, ORG.LOGIC_ORG_NM AS COMP_NM
+		, REPLACE( ORG.CORPNO ,'-','') AS CORPNO
+		, REPLACE( ORG.BIZREGNO, '-','') AS BIZREGNO
+		, SUBSTR(REPLACE(ORG.ZIPCD,'-',''),1,6)  AS ZIPCD
+		, ORG.ADDR
+	    , CASE WHEN (SELECT DEPT_NM FROM DEPT WHERE TEN_ID = USR.TEN_ID AND DEPT_CD = USR.DEPT_CD) IS NULL
+	             OR (SELECT DEPT_NM FROM DEPT WHERE TEN_ID = USR.TEN_ID AND DEPT_CD = USR.DEPT_CD) = ''
+	           THEN 'none'
+	           ELSE (SELECT DEPT_NM FROM DEPT WHERE TEN_ID = USR.TEN_ID AND DEPT_CD = USR.DEPT_CD)
+	            END AS DEPT_NM
+		, ECNTR_UUID
+		FROM GUR GUR
+		INNER JOIN CNTR CNTR
+		ON CNTR.TEN_ID = GUR.TEN_ID
+		AND CNTR.CNTR_UUID = GUR.CNTR_UUID
+		INNER JOIN ECNTR ECNTR
+		ON ECNTR.TEN_ID = CNTR.TEN_ID
+		AND ECNTR.CNTR_UUID = CNTR.CNTR_UUID
+		INNER JOIN LOGIC_ORG ORG
+		ON ORG.TEN_ID = CNTR.TEN_ID
+		AND ORG.LOGIC_ORG_CD = CNTR.LOGIC_ORG_CD
+		AND ORG.LOGIC_ORG_TYP_CCD = 'COMPANY'
+		INNER JOIN USR USR
+		ON USR.TEN_ID = CNTR.TEN_ID
+		AND USR.USR_ID = CNTR.CNTR_PIC_ID
+		AND USR.USE_YN = 'Y'
+		INNER JOIN VD VD
+		ON VD.TEN_ID = CNTR.TEN_ID
+		AND VD.VD_CD = CNTR.VD_CD
+		WHERE GUR.TEN_ID = #{g.tenant}
+		AND GUR.GUR_UUID = #{p.gur_uuid}
+	</select>
+</mapper>

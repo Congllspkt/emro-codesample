@@ -1,0 +1,447 @@
+<sc-link rel="import" href="ep-gr-evalsheet-list.html"></sc-link>
+
+<dom-module id="es-gr-evalsheet-info">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 콤보 목록 조회 서비스 그룹 -->
+		<sc-request-group init>
+			<sc-code-group id="codes">
+				<sc-code code="R709" value="{{codes.evaldocLytTypCcd}}"></sc-code>
+				<sc-code code="P240" value="{{codes.evaltrDivCcd}}"></sc-code>
+				<sc-code code="P238" value="{{codes.prcsCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<cc-auth-checker check-list="auth-s"></cc-auth-checker>
+		
+		<div class="vbox flex">
+			<cc-sub-title-bar>
+				<sc-button text="평가시트 Import" on-click="onImportGrEvalsht" hidden="{{!formula('isPossImport')}}" auth-s></sc-button>
+				<sc-button id="tempSave" text="저장" on-click="onSaveGrEvalsht" hidden="{{!formula('isEditable')}}" auth-s></sc-button>
+				<sc-button id="confirmSave" text="확정" on-click="onConfirmGrEvalsht" hidden="{{!formula('isEditable')}}" auth-s></sc-button>
+				<sc-button text="확정 취소" on-click="onConfirmCancelGrEvalsht" hidden="{{!formula('isPossConfirmCancel')}}" auth-s></sc-button>
+				<sc-button text="갱신" on-click="onVersionUpGrEvalsht" hidden="{{!formula('isPossVersonUp')}}" auth-s></sc-button>
+				<sc-button text="평가시트 삭제" on-click="onDeleteGrEvalsht" hidden="{{!formula('isPossDelete')}}" auth-s></sc-button>
+			</cc-sub-title-bar>
+			
+			<cc-form-panel column="2" validation-group="grEvalshtInfo">
+				<cc-fieldset>
+					<sc-label text="입고/기성 평가시트"></sc-label>
+					<div class="field-box">
+						<sc-text-field value="{{grEvalshtInfo.evalsht_cd}}" readonly="true"></sc-text-field>
+						<div class="hspace-10"></div>
+						<sc-text-field value="{{grEvalshtInfo.evalsht_nm}}" max-length="100" readonly="{{!formula('isEditable')}}" required="{{formula('isEditable')}}"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="유효 기간"></sc-label>
+					<div class="field-box">
+						<sc-date-field value="{{grEvalshtInfo.efct_st_dt}}" min-date="{{toDate}}" readonly="{{!formula('isEditable')}}" required="{{formula('isEditable')}}"></sc-date-field>
+						&nbsp;~&nbsp;
+						<sc-date-field value="{{grEvalshtInfo.efct_exp_dt}}" readonly="true" required="{{formula('isEditable')}}"></sc-date-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="확정 여부"></sc-label>
+					<sc-checkbox-field input-value="{{grEvalshtInfo.cnfd_yn}}" default-input-value="N" checked-value="Y" un-checked-value="N" readonly="true"></sc-checkbox-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<sc-grid id="grEvalshtPrcsGridPanel" class="flex" use-selection="false" use-state="{{formula('isEditable')}}" editable="{{formula('isEditable')}}"
+					 on-item-edit-end="onItemEditEnd" validation-group="grEvalshtInfo"
+					 data-provider="{{grEvalshtInfoPrcses}}">
+				<cc-grid-toolbar title-text="입고/기성평가 프로세스"></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="prcs_ccd" header-text="프로세스 코드" width="100" editable="false" text-align="center"></sc-data-column>
+					<sc-data-column data-field="prcs_ccd_nm" header-text="프로세스 명" width="250" editable="false" text-align="left"></sc-data-column>
+					<sc-combobox-column data-field="evaldoc_lyt_typ_ccd" header-text="평가 레이아웃 유형" width="150" editable="false"
+										items="{{codes.evaldocLytTypCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+					<sc-combobox-column data-field="evaltr_typ_ccd" header-text="평가자 구분" width="180" editable="false"
+										items="{{codes.evaltrDivCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+					<sc-checkbox-column data-field="application_yn" header-text="적용 여부" width="80" editable="true"></sc-checkbox-column>
+					<sc-data-column data-field="prcs_sort" header-text="프로세스 정렬" width="100" editable="true" text-align="center"
+									item-editable-function="itemEditableFunction" validator-function="validateFunction" validate-on-cell-paste="true"
+									data-type="number" format-type="integer" validator-type="integer" max-length="10"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="ten_id"></sc-grid-field>
+					<sc-grid-field data-field="gr_evalsht_prcs_uuid"></sc-grid-field>
+					<sc-grid-field data-field="gr_evalsht_uuid"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-gr-evalsheet-info",
+			properties: {
+				toDate: {
+					type: Object,
+					value: function() {
+						var nowDate = new Date();
+						nowDate.setHours(0, 0, 0, 0);
+						return nowDate;
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							evaldocLytTypCcd: [],
+							evaltrDivCcd: [],
+							prcsCcd: []
+						};
+					},
+					reset: false
+				},
+				geg: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalshtInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				grEvalshtInfoPrcses: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			
+			formulas: {
+				isReadonlyMode: function() {
+					var me = this;
+					return me.get("readonlyMode");
+				},
+				isNew: function() {
+					var me = this;
+					return UT.isEmpty(me.get("geg.geg_uuid"));
+				},
+				// 신규 데이터 여부
+				isNewSht: function() {
+					var me = this;
+					// 신규 데이터 여부 설정
+					return UT.isEmpty(me.get("grEvalshtInfo.gr_evalsht_uuid"));
+				},
+				// 평가시트 확정
+				isConfirm: function() {
+					var me = this;
+					var cnfdYn = me.get("grEvalshtInfo.cnfd_yn");
+					
+					return !UT.isEmpty(cnfdYn) && cnfdYn == "Y";
+				},
+				// 수정 가능
+				isEditable: function() {
+					var me = this;
+					return !me.formula("isNew") && !me.formula("isConfirm");
+				},
+				// 입고/기성평가 생성된 평가시트
+				isCreateGe: function() {
+					var me = this;
+					var isCreateGeYn = me.get("grEvalshtInfo.isCreateGeYn");
+					return !(UT.isEmpty(isCreateGeYn) || isCreateGeYn == "N");
+				},
+				// 최신 평가시트
+				isCurrentEvalsht: function() {
+					var me = this;
+					var currentEvalsht = me.get("grEvalshtInfo.current_evalsht");  // 현재 유효한 평가시트 여부
+					return (!UT.isEmpty(currentEvalsht) && currentEvalsht == "Y") || me.formula("isNewSht");
+				},
+				// 평가시트 확정취소 가능 여부
+				isPossConfirmCancel: function() {
+					var me = this;
+					// 입고/기성평가 생성 전인 경우 취소가능
+					return me.formula("isCurrentEvalsht") && me.formula("isConfirm") && !me.formula("isCreateGe") && !me.formula("isReadonlyMode");
+				},
+				// 평가시트 버전업 가능 여부
+				isPossVersonUp: function() {
+					var me = this;
+					// 입고/기성평가 생성 후인 경우 버전업 필요
+					return !me.formula("isReadonlyMode") && me.formula("isCurrentEvalsht") && me.formula("isConfirm") && me.formula("isCreateGe");
+				},
+				// 평가시트 Import 가능 여부
+				isPossImport: function() {
+					var me = this;
+					return !me.formula("isReadonlyMode")
+							&& (me.formula("isPossVersonUp") ||
+									(me.formula("isCurrentEvalsht") && me.formula("isEditable") && me.formula("isNewSht")));
+				},
+				// 평가시트 삭제 가능 여부
+				isPossDelete: function() {
+					var me = this;
+					return me.formula("isEditable") && !me.formula("isNewSht");
+				}
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("geg", param.geg);
+				me.set("grEvalshtInfo", param.grEvalshtInfo);
+				me.set("readonlyMode", param.readonlyMode);
+				if(me.formula("isNewSht")) {
+					// 만료일 무제한으로 기본셋팅
+					var date = new Date("2999/12/31");
+					me.set("grEvalshtInfo.efct_exp_dt", date);
+					// 평가시트 명 Default
+					me.set("grEvalshtInfo.evalsht_nm", me.get("geg.geg_nm") + " " + me.translate("평가시트"));
+				}
+				me.set("grEvalshtInfoPrcses", param.grEvalshtInfoPrcses);
+				
+				me.applyFormula();
+			},
+			
+			/**
+			 * 입고/기성 평가시트 - 입고/기성 프로세스 그리드 제어
+			 */
+			itemEditableFunction: function(data, item) {
+				if(item.dataField == "prcs_sort") {  // 정렬
+					return data["application_yn"] == "Y";
+				}
+				return false;
+			},
+			validateFunction: function(headerText, dataField, data) {
+				var me = this;
+				
+				if(dataField == "prcs_sort") {  // 정렬
+					if(data["application_yn"] == "Y" && (UT.isEmpty(data[dataField]) || data[dataField] == ""))
+						return me.translate("STD.E1001", null, me.translate(headerText));   // '{0}'은(는) 필수 입력 항목입니다.
+				}
+				return true;
+			},
+			onItemEditEnd: function(event) {
+				var me        = this,
+					data      = event.detail.data,
+					item      = event.detail.item,
+					dataField = item.dataField,
+					provider  = event.detail.provider;
+				
+				if(dataField == "application_yn") {
+					if(data[dataField] != "Y") {
+						provider.setItemAt(item.rowIndex, {prcs_sort: null});
+					}
+				}
+			},
+			
+			/* '입고/기성 평가시트' 정보  유효성 체크 */
+			validator: function() {
+				var me = this;
+				var provider = this.$.grEvalshtPrcsGridPanel.getDataProvider();
+				
+				if(!me.validate("grEvalshtInfo")) {
+					return {result: false, msg: "STD.E0000"};
+				}
+				
+				// 날짜 Check
+				var grEvalshtInfo = me.get("grEvalshtInfo");
+				var today = UT.formatDate(new Date(), "yyyyMMdd");
+				if(UT.toNumber(grEvalshtInfo.efct_st_dt) > UT.toNumber(grEvalshtInfo.efct_exp_dt)) {
+					return {result: false, msg: "STD.ADM1051"};  // 유효하지 않은 적용기간입니다.
+				}
+				
+				// '입고/기성 평가시트 - 입고/기성 프로세스' 정보 validate
+				var usePrcs = provider.filterItems({application_yn: 'Y'});
+				if(UT.isEmpty(usePrcs) || usePrcs.length == 0) {
+					return {result: false, msg: "STD.VS1123"};  // 입고/기성 프로세스를 선택해야 합니다.
+				}
+				
+				var processes = me.domHost.querySelectorAll('es-gr-evalsheet-process-info');
+				var totalPrcsWgt = 0;
+				for(var i = 0; i < processes.length; i++) {
+					var process = processes[i];
+					var grEvalshtInfoPrcs = process.grEvalshtInfoPrcs;
+					totalPrcsWgt = totalPrcsWgt + Number(grEvalshtInfoPrcs.prcs_wgt);
+				}
+				if(totalPrcsWgt !== 100) {
+					return {result: false, msg: me.translate("STD.GR1054", null, '100', totalPrcsWgt), translate: true};  // 프로세스 가중치 합은 {0}이어야 합니다. (현재 : {1})
+				}
+				
+				return {result: true};
+			},
+			
+			/**
+			 * 입고/기성 평가시트 저장
+			 */
+			onSaveGrEvalsht: function(e) {
+				var me = this;
+				var saveMode = e.target.id;
+				var provider = this.$.grEvalshtPrcsGridPanel.getDataProvider();
+				var grEvalshtPrcs = provider.getUpdateItems();
+				
+				/* '입고/기성 평가시트' 정보  유효성 체크 */
+				var validateResult = me.validator();
+				if(!validateResult.result) {
+					UT.alert(validateResult.msg);
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function() {  // 저장 하시겠습니까?
+					var grEvalshtInfo = me.get("grEvalshtInfo");
+					grEvalshtInfo.saveMode = saveMode;
+					var body = {
+						gegInfo: me.get("geg"),
+						grEvalshtInfo: grEvalshtInfo,
+						grEvalshtPrcs: grEvalshtPrcs
+					};
+					me.fire("save-gr-evalsht", body);
+				});
+			},
+			
+			/*
+			 * 입고/기성 평가시트 확정 전 validation 체크
+			 */
+			onConfirmGrEvalsht: function(e) {
+				var me = this;
+				var saveMode = e.target.id;
+				var provider = this.$.grEvalshtPrcsGridPanel.getDataProvider();
+				
+				// 확정인 경우, 유효성 체크
+				// 1. 입고/기성 프로세스 설정 완료 여부
+				var updateItems = provider.getUpdateItems();
+				if(!UT.isEmpty(updateItems)) {
+					UT.alert("STD.VS1305")  // 입고/기성 프로세스 설정 완료 후 평가시트 확정이 가능합니다.
+					return;
+				}
+				
+				// 2. '입고/기성 평가시트' 정보  유효성 체크
+				var validateResult = me.validator();
+				if(!validateResult.result) {
+					UT.alert(validateResult.msg, null, validateResult.translate || false);
+					return;
+				}
+				
+				// 3. 입고/기성 프로세스 유효성 체크
+				var validateParam = {
+					usedPrcs: provider.filterItems({application_yn: "Y"}),
+					saveMode: saveMode
+				};
+				me.fire("validate-gr-evalsht-prcs", validateParam);
+			},
+			/**
+			 * 입고/기성 프로세스 유효성 체크 callback
+			 */
+			returnValidateResult: function(param) {
+				var me = this;
+				
+				// 입고/기성 프로세스 유효성 체크 fail
+				var validateResult = param.validateResult;
+				if(!validateResult.result) {
+					var prcsCcdInfo = me.codes.prcsCcd.filter(function(item) {
+						if(item.data == param.validateUnpassedPrcsCcd) {
+							return item;
+						}
+					});
+					var message = "[" + prcsCcdInfo[0].label + "] : " + me.translate(validateResult.msg);
+					UT.alert(message, null, true);
+					return;
+				}
+				
+				// 입고/기성 프로세스 유효성 체크 success
+				// 입고/기성 평가시트 및 프로세스 전체 저장
+				UT.confirm("STD.SRM1065", function() {  // 평가시트를 확정 하시겠습니까?
+					var grEvalshtInfo = me.get("grEvalshtInfo");
+					grEvalshtInfo.saveMode = "confirmSave";
+					var prcsInfoList = param.prcsInfoList;
+					var body = {
+						gegInfo: me.get("geg"),
+						grEvalshtInfo: grEvalshtInfo,
+						prcsInfoList: prcsInfoList
+					};
+					me.fire("save-gr-evalsht", body);
+				});
+			},
+			
+			/**
+			 * 입고/기성 평가시트 확정 취소
+			 */
+			onConfirmCancelGrEvalsht: function() {
+				var me = this;
+				
+				UT.confirm("STD.SRM1312", function() {  // 평가시트를 확정 취소하시겠습니까?
+					var body = {
+						gegInfo: me.get("geg"),
+						cnfdYn: "N"
+					};
+					
+					me.fire("confirm-cancel-gr-evalsht", body);
+				});
+			},
+			
+			/**
+			 * 입고/기성 평가시트 Import
+			 */
+			onImportGrEvalsht: function() {
+				var me = this;
+				
+				if(!me.formula("isNewSht")) {  // 평가템플릿을 Import 하시겠습니까?
+					UT.confirm("STD.SRM1317", function() {
+						me.onShowEvalshtListPopup();
+					});
+					return;
+				}
+				
+				me.onShowEvalshtListPopup()
+			},
+			/* 입고/기성 평가시트 리스트 팝업 조회 */
+			onShowEvalshtListPopup: function() {
+				var me = this;
+				
+				var evatmplListPopup = UT.popup("ep-gr-evalsheet-list", me, "70%", "60%", {
+					"selected-item": function(popup, e) {
+						var selectedItem = e.detail;
+						UT.confirm("STD.SRM1320", function() {  // 평가시트를 Import 하시겠습니까?
+							var body = {
+								gegInfo: me.get("geg"),
+								grEvalshtInfo: selectedItem
+							};
+							me.fire("import-gr-evalsht", body);
+						});
+						popup.close();
+					}
+				}, {titleText: "평가시트 Import"});
+				evatmplListPopup.show();
+				evatmplListPopup.getWindowContent().load(me.get("geg.oorg_cd"));
+			},
+			
+			/**
+			 * 입고/기성 평가시트 버전업
+			 */
+			onVersionUpGrEvalsht: function() {
+				var me = this;
+				
+				UT.confirm("STD.SRM1313", function() {  // 평가시트를 갱신 하시겠습니까?
+					var body = me.get("geg");
+					me.fire("versionup-gr-evalsht", body);
+				});
+			},
+			
+			/**
+			 * 입고/기성 평가시트 삭제
+			 */
+			onDeleteGrEvalsht: function() {
+				var me = this;
+				
+				UT.confirm("STD.SRM1316", function() {  // 평가시트를 삭제하시겠습니까?
+					var body = {
+						gegInfo: me.get("geg"),
+						grEvalshtInfo: me.get("grEvalshtInfo")
+					};
+					me.fire("delete-gr-evalsht", body);
+				});
+			},
+		});
+	</script>
+
+</dom-module>

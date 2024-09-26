@@ -1,0 +1,200 @@
+<dom-module id="sc-widget-work-list">
+	<template>
+		<sc-ajax id="findListMainTask"	 url="findListMainTask.do"	last-response="{{codes.mainTask}}"></sc-ajax>
+		<sc-ajax id="findListTaskByWidget" url="findListTaskByWidget.do" body="{{param}}" on-response="completeFindListTaskByWidget"></sc-ajax>
+		
+		<div class="vbox flex workcont">
+			
+			<cc-search-condition-panel column="2" id="searchCont" class="work_searchbox" on-search="findListTaskByWidget" auth-r validation-group="search">
+				<cc-fieldset>
+						<sc-label text="업무유형"></sc-label>
+						<sc-multi-combobox-field id="mainTaskCombo" selected-all="true" enable-check-all="true" display-field="display_main_task_nm" value-field="main_task_uuid" items="{{codes.mainTask}}" value="{{param.main_task_uuids}}" placeholder="선택" required="true"></sc-multi-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+						<sc-label text="Work상태"></sc-label>
+						<sc-multi-combobox-field id="stsCombo" selected-all="true" enable-check-all="true" display-field="label" value-field="data" items="{{codes.stsCcd}}" value="{{param.stss}}" placeholder="선택" required="true"></sc-multi-combobox-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<sc-grid id="taskGrid" class="flex taskList worklist" use-state="false" use-selection="false"
+					 show-tooltip="true"
+					 on-item-click="onItemClick">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column data-field="col_color_sts" header-text="상태" width="60" converter="convertStatus" item-style-function="itemStyleFunction"></sc-data-column>
+					<sc-data-column data-field="task_tit" header-text="업무 제목" width="200" text-align="left" style-name="link" item-style-function="itemStyleFunction" content-tooltip-callback="columnTooltipCallbackFn"></sc-data-column>
+					<sc-date-column data-field="clsg_dt" header-text="마감 일자" width="100" display-format="yyyy/MM/dd" item-style-function="itemStyleFunction"></sc-date-column>
+					<sc-data-column data-field="display_main_task_nm" header-text="메인 업무"></sc-data-column>
+					<sc-data-column data-field="display_task_sts_nm" header-text="업무 상태"></sc-data-column>
+					<sc-date-column data-field="snd_dttm" header-text="발신 일시" width="130" display-format="yyyy/MM/dd HH:mm:ss"></sc-date-column>
+					<sc-data-column data-field="sndr_nm" header-text="발신자"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="task_uuid"></sc-grid-field>
+					<sc-grid-field data-field="task_authty_uuid"></sc-grid-field>
+					<sc-grid-field data-field="col_color"></sc-grid-field>
+					<sc-grid-field data-field="alrm_yn"></sc-grid-field>
+					<sc-grid-field data-field="memo_yn"></sc-grid-field>
+					<sc-grid-field data-field="menu_cd"></sc-grid-field>
+					<sc-grid-field data-field="xcept_yn"></sc-grid-field>
+					<sc-grid-field data-field="dat_src_logic_nm"></sc-grid-field>
+					<sc-grid-field data-field="dat_src_phyc_nm"></sc-grid-field>
+					<sc-grid-field data-field="pre_clsg_dt"></sc-grid-field><!-- 직전 마감일자 -->
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is : 'sc-widget-work-list',
+			properties: {
+				param: {
+					type: Object,
+					value: function() {
+						return {
+							stss: ["C1", "C2", "C3", "C4"]
+						}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						var me = this;
+						return {
+							mainTask:[],
+							stsCcd:[
+								{data:"C1", label: me.translate("지연")},
+								{data:"C2", label: me.translate("임박")},
+								{data:"C3", label: me.translate("일반")},
+								{data:"C4", label: me.translate("신규")}
+							]
+						};
+					},
+					reset: false
+				}
+			},
+			behaviors: [Polymer.CCModuleBehavior, Polymer.CCWorkplaceBehavior],
+			listeners: {
+				'refresh-widget': 'refresh'
+			},
+			
+			initialized: function() {
+				var me = this;
+				me.doContentResize();
+				
+				UT.request(me.$.findListMainTask, function(e, res) {
+					me.findListTaskByWidget();
+				});
+			},
+			
+			doContentResize: function(e) {
+				var me = this;
+				if(!me.isVisible(true)) {
+					return;
+				}
+				me.$.taskGrid.doContentElementResize();
+			},
+			
+			refresh: function() {
+				var me = this;
+				me.findListTaskByWidget();
+			},
+			
+			findListTaskByWidget: function() {
+				var me = this;
+				//유효성검사
+		  		//if(!me.$.upWorkCombo.validate() || !me.$.stsCombo.validate()) {
+		  		if(!me.validate()) {
+		  			UT.alert("STD.E0000");
+					 return;
+				}
+				
+				var stss = me.get("param.stss");
+				me.set("param.delay_srch_yn", "N");
+				me.set("param.immnt_srch_yn", "N");
+				me.set("param.norm_srch_yn", "N");
+				me.set("param.new_srch_yn", "N");
+				
+				for(var i=0,len=stss.length; i<len; i++) {
+					var sts = stss[i];
+					if(sts === "C1") {
+						me.set("param.delay_srch_yn", "Y");
+					} else if(sts === "C2") {
+						me.set("param.immnt_srch_yn", "Y");
+					} else if(sts === "C3") {
+						me.set("param.norm_srch_yn", "Y");
+					} else if(sts === "C4") {
+						me.set("param.new_srch_yn", "Y");
+					}
+				}
+				UT.request(me.$.findListTaskByWidget, function(e, res) {
+					
+					me.$.taskGrid.setDataProvider(res.response);
+				});
+			},
+			onItemClick: function(event) {
+				var me = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === 'task_tit' && UT.isNotEmpty(data.menu_cd)) {
+					var menuCd = data.menu_cd;
+					//상세 조회 화면 호출
+					me.createTaskModule(menuCd, data);
+				}
+			},
+			itemStyleFunction :function(data, item) {
+				var styleObj = {};
+				
+				if(data["col_color"] === "C1") {
+					styleObj.fontColor = "#EB7575";
+				} else if(data["col_color"] === "C2") {
+					styleObj.fontColor = "#F5BC5F";
+				}
+				// else if(data["col_color"] === "C3") {
+				// 	styleObj.fontColor = "#72B0EA";
+				// }
+				
+				if(item.dataField === "task_tit") {
+					if(data["new_yn"] === "Y") {
+						styleObj.iconUrl = "ui/lib/custom/html/workplace/img/ico_new_circle.png";
+						styleObj.iconLocation = "right";
+					}
+					styleObj.textWrap = "ellipsis";
+				}
+				return styleObj;
+			},
+			
+			columnTooltipCallbackFn: function(rowIndex, value, dataField, data, displayValue) {
+				var me = this;
+				
+				if(dataField === "task_tit") {
+					return value;
+				}
+				return "";
+			},
+			
+			
+			convertStatus: function(rowIndex, dataField, data) {
+				var me = this;
+					
+				if(data["col_color"] === "C1") {
+					return me.translate("지연");
+				} else if(data["col_color"] === "C2") {
+					return me.translate("도래");
+				} else if(data["col_color"] === "C3") {
+					return me.translate("일반");
+				}
+			},
+			
+			columnTooltipCallbackFn: function(rowIndex, value, dataField, data, displayValue) {
+				var me = this;
+				
+				if(dataField === "tick_tit") {
+					return value;
+				}
+				return "";
+			},
+		});
+	</script>
+</dom-module>

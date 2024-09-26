@@ -1,0 +1,164 @@
+<sc-link rel="import" href="/ui/bp/common/survey/execute/es-survey-cover.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/common/survey/execute/es-survey-section.html"></sc-link>
+
+<dom-module id="ep-survey-preview">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-request-group init>
+			<!-- 답변 입력 형식 -->
+			<sc-ajax url="findListCommonCodeAttributeCode.do"
+					 body="{{codes.inpFormCcdParam}}"
+					 last-response="{{codes.inpFormCcd}}">
+			</sc-ajax>
+		</sc-request-group>
+		
+		<sc-pages id="pages" selected="0" class="fit page"></sc-pages>
+		<div style="align-self: center;">
+			<sc-button text="이전" on-click="onPreviousPage" hidden="[[!formula('visiblePreviousBtn')]]"></sc-button>
+			<sc-button text="다음" on-click="onNextPage" hidden="[[!formula('visibleNextBtn')]]"></sc-button>
+			<sc-button text="검증" on-click="currentPageValidator" hidden="[[!formula('visiblePageValidator')]]"></sc-button>
+		</div>
+		
+		<es-survey-cover hidden></es-survey-cover>
+		<es-survey-section hidden></es-survey-section>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "ep-survey-preview",
+			
+			properties: {
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							inpFormCcdParam: {
+								ccd: "C091",
+								cstr_cnd_cd: "REGEXP"
+							}
+						};
+					}
+				},
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			formulas: {
+				isScrollLayout: function() {
+					return this.survey.lyt_ccd === "SCROLL";
+				},
+				visiblePreviousBtn: function() {
+					var pages = this.$.pages;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === 0) {
+						return false;
+					}
+					return true;
+				},
+				visibleNextBtn: function() {
+					var pages = this.$.pages;
+					var childrenCount = pages.childElementCount;
+					var currentIndex = pages.selectedIndex;
+					if(currentIndex === childrenCount - 1) {
+						return false;
+					}
+					return true;
+				},
+				visiblePageValidator: function() {
+					var pages = this.$.pages;
+					var currentItem = pages.selectedItem;
+					if(!!currentItem && currentItem.localName === "es-survey-section") {
+						return true;
+					}
+					return false;
+				}
+			},
+			
+			languageParse: function(str) {
+				return SCLanguageManager.parse(str);
+			},
+			
+			load: function(surveyData) {
+				var me = this;
+				var survey = surveyData.survey;
+				var sections = surveyData.sections;
+				
+				me.set("survey", survey);
+				
+				var forms;
+				if(survey.lyt_ccd === "SCROLL") {
+					forms = me.$.sectionForms;
+				} else {
+					forms = me.$.pages;
+					forms.set("selected", 0);
+				}
+				
+				me.addCover(forms, survey, "front");
+				for(var i = 0; i < sections.length; i++) {
+					var section = sections[i];
+					me.addSection(forms, section, i + 1);
+				}
+				me.addCover(forms, survey, "back");
+				me.applyFormula();
+			},
+			
+			addCover: function(forms, survey, type) {
+				var me = this;
+				
+				if(survey[type + "_cover_yn"] === "N") {
+					return;
+				}
+				
+				var coverForm = document.createElement("es-survey-cover");
+				Polymer.dom(forms).appendChild(coverForm);
+				Polymer.dom.flush();
+				coverForm.load(survey[type + "_cover_cont"]);
+			},
+			
+			addSection: function(sectionForms, section, number) {
+				var me = this;
+				var survey = me.get("survey");
+				
+				var sectionForm = document.createElement("es-survey-section");
+				sectionForm.set("codes", me.codes);
+				sectionForm.set("survey", survey);
+				sectionForm.set("number", number);
+				
+				Polymer.dom(sectionForms).appendChild(sectionForm);
+				Polymer.dom.flush();
+				sectionForm.load(section);
+			},
+			
+			onPreviousPage: function() {
+				var me = this;
+				me.$.pages.selectPrevious();
+				me.applyFormula();
+			},
+			
+			onNextPage: function() {
+				var me = this;
+				me.$.pages.selectNext();
+				me.applyFormula();
+			},
+			
+			currentPageValidator: function() {
+				var me = this;
+				var pages = me.$.pages;
+				var currentItem = pages.selectedItem;
+				if(currentItem.localName === "es-survey-section" && !currentItem.validator()) {
+					return false;
+				}
+				return true;
+			},
+		})
+	</script>
+</dom-module>

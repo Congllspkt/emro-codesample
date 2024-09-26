@@ -1,0 +1,198 @@
+<!-- 
+/**
+ * @description : 우선협상 대상 리스트
+ * @Since 2022. 9. 02.
+ * @변경이력 : [2022. 9. 02.]
+ */
+-->
+<dom-module id="es-nego-target-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+
+		<sc-request-group init>
+			<sc-ajax id="findListOperOrgByUser"
+					 url="findListOperationOrganizationByUser.do"
+					 body="PO"
+					 content-type="text/plain"
+					 last-response="{{codes.oorgCd}}">
+			</sc-ajax>
+			<sc-code-group>
+				<!-- RFX 유형 -->
+				<sc-code code="P033" value="{{codes.rfxTypCcd}}"></sc-code>
+				<!-- 구매 유형 -->
+				<sc-code code="P045" value="{{codes.p2pPurcTypCcd}}"></sc-code>
+				<!-- 견적요청 진행 상태 -->
+				<sc-code code="P013" value="{{codes.rfxStsCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+
+		<sc-ajax id="findNegoTargetList"
+				 url="findNegoTargetList.do"
+				 body="{{searchParam}}"
+				 last-response="{{resultList}}">
+		</sc-ajax>
+
+		<sc-ajax id="cancelNegoTargetList"
+				 url="cancelNegoTargetList.do"
+				 on-response="completeCancelNegoTargetList">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindNegoTargetList" validation-group="search" auth-r>
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-operorg-multi-combobox-field id="operorgcombobox" oper-unit-cd="PO" value="{{searchParam.oorg_cds}}"
+												 placeholder="선택 없음" required="true"></cc-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFX 등록 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_rfx_crn_dt}}" to-value="{{searchParam.to_rfx_crn_dt}}"
+									  default-from-value="-1M" default-to-value="0d" string-date="false">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="구매 유형"></sc-label>
+				<sc-combobox-field display-field="label" value-field="data" items="{{codes.p2pPurcTypCcd}}" value="{{searchParam.purc_typ_ccd}}" placeholder="전체"></sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="RFX 번호"></sc-label>
+				<cc-multi-text-field value="{{searchParam.rfx_no}}" multi-value="{{searchParam.rfx_nos}}" placeholder="전체" on-enter="onFindNegoTargetList" title="RFX 번호"></cc-multi-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{searchParam.rfx_tit}}" on-enter="onFindNegoTargetList" max-length="200"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+
+		<sc-grid id="gridPanel"
+				 class="flex"
+				 data-provider="{{resultList}}"
+				 editable="false"
+				 use-state="false"
+				 on-item-click="onItemClick"
+				 selection-able-function="selectionAbleFn">
+			<cc-grid-toolbar>
+				<sc-button text="협상 취소" on-click="onCancelNego" auth-s></sc-button>
+			</cc-grid-toolbar>
+
+			<sc-grid-columns>
+				<sc-combobox-column    data-field="oorg_cd"        header-text="운영조직"        width="170"    text-align="center"     display-field="logic_org_nm"    value-field="oorg_cd"    items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column    data-field="rfx_sts_ccd"       header-text="RFX 상태"            width="130" text-align="center"     display-field="label"     value-field="data"             items="{{codes.rfxStsCcd}}"></sc-combobox-column>
+				<sc-data-column        data-field="rfx_typ_ccd"            header-text="RFX 유형"            width="80"    text-align="center"     display-field="label"   value-field="data"          items="{{codes.rfxTypCcd}}"></sc-data-column>
+				<sc-combobox-column    data-field="purc_typ_ccd"           header-text="구매 유형"            width="100"    text-align="center"     display-field="label"   value-field="data"         items="{{codes.p2pPurcTypCcd}}" ></sc-combobox-column>
+				<sc-data-column        data-field="rfx_no"             header-text="RFX 번호"            width="120"    text-align="center"     style-name="link"></sc-data-column>
+				<sc-data-column        data-field="rfx_rnd"            header-text="RFX 진행차수"            width="90"    text-align="center"     data-type="number"></sc-data-column>
+				<sc-data-column        data-field="rfx_tit"            header-text="제목"            width="300"    text-align="left"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="rfx_uuid"></sc-grid-field>
+				<sc-grid-field data-field="nego_uuids" data-type="object"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-nego-target-list',
+			properties: {
+				resultList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							oorgCd: [],
+							rfxTypCcd: [],
+							p2pPurcTypCcd: [],
+							rfxStsCcd: []
+						};
+					}
+				},
+
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			initialized: function() {
+				this.onFindNegoTargetList();
+			},
+
+			load: function() {
+			},
+
+			onFindNegoTargetList: function() {
+				if(!this.validate('search')){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.request(this.$.findNegoTargetList);
+			},
+
+			/* 그리드 클릭 이벤트 */
+			onItemClick: function(event) {
+				var data = event.detail.data;
+				var item = event.detail.item;
+				var provider = event.detail.provider;
+
+				if(item.dataField === "rfx_no") {
+					this.fire('show-list', data);
+				}
+			},
+
+			onCancelNego: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+				var selectedItems = provider.selectionCheckedItems();
+				var len = selectedItems.length;
+				if(len < 1) {
+					UT.alert("STD.NG1003"); //선택한 항목이 없습니다.
+					return;
+				}
+
+				for(var i = 0; i < len; i++) {
+					if('NEGO_PRGSG' !== selectedItems[i].rfx_sts_ccd) {
+						UT.alert("STD.NG1004"); //진행상태가 협상진행중일 때 협상을 취소할 수 있습니다.
+						return;
+					}
+				}
+
+				UT.confirm("STD.NG1005", function() { //협상을 취소하시겠습니까?
+					me.$.cancelNegoTargetList.body = {
+						selectedItems: selectedItems
+					}
+					UT.request(me.$.cancelNegoTargetList);
+				});
+			},
+
+			completeCancelNegoTargetList: function(e) {
+				this.onFindNegoTargetList();
+				UT.alert("STD.NG1006"); //협상을 취소했습니다.
+			},
+
+			selectionAbleFn: function(data) {
+				if('NEGO_PRGSG' !== data.rfx_sts_ccd) {
+					return false;
+				}
+				return true;
+			}
+
+		})
+	</script>
+</dom-module>

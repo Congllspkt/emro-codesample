@@ -1,0 +1,753 @@
+<sc-link rel="import" href="popup/ep-task-assign-exception.html"></sc-link>
+<sc-link rel="import" href="popup/ep-task-assign-exception-restore.html"></sc-link>
+<sc-link rel="import" href="popup/ep-task-reassign.html"></sc-link>
+<sc-link rel="import" href="popup/ep-task-memo.html"></sc-link>
+<sc-link rel="import" href="popup/ep-task-closed-change.html"></sc-link>
+<dom-module id="es-dashboard-task-list">
+	<template>
+		<sc-ajax id="findListTask" url="findListTask.do" body="{{taskListSearchParam}}" on-response="completeFindListTask"></sc-ajax>
+		<sc-ajax id="findListTaskCount" url="findListTaskCount.do" body="{{taskListSearchParam}}" on-response="completeFindListTaskCount"></sc-ajax>
+		<sc-ajax id="findListTaskStatusByMainTaskUuid" url="findListTaskStatusByMainTaskUuid.do" body="{{mainTaskUuIdSearchParam}}"></sc-ajax>
+
+		<sc-panel class="es-dashboard-task-list vbox boxType" title-text="Task List" collapsible="true" i18n-disabled style="height:350px;width: 100%">
+			<div class="innerPanel" >
+				<div class="tabBar" >
+					<a class="all on" on-click="onClickSearchMain" data-main-task-uuid="all">All</a>
+					<template is="dom-repeat" items="[[mainTaskList]]">
+						<a on-click="onClickSearchMain" data-main-task-uuid$="[[item.main_task_uuid]]">[[item.display_main_task_nm]]</a>
+					</template>
+				</div>
+				<div class="tabContent h-300">
+					<div class="taskBar" hidden="true">
+						<span class="taskT all" on-click="onClickDeleteTask">All</span>
+						<template is="dom-repeat" items="[[taskStatusList]]">
+							<span class="taskT" >[[item.display_task_sts_nm]]<b class="close" on-click="onClickDeleteTask" data-task-sts-uuid$="[[item.task_sts_uuid]]"></b></span>
+						</template>
+					</div>
+					<div class="statusBar" style="background: #fff;">
+						<span style="font-weight:600; display:none">Due Date Basis</span>
+						<div class="statusT due_date_basis" style="background: lightyellow; border: 1px solid green; pointer-events: none;">
+							<!-- <span id="due_date_basis_label" style="color:#666666;">[[getStatusBarFrontLabel()]]</span> -->
+							<span id="due_date_basis_label" style="color:green;">[[statusBarFrontLabel]]</span>
+						</div>
+						<div class="statusT bg_all all on" data-param="all_yn"   on-click="onClickState">
+							<span class="check"></span>
+							<span>All</span>
+							<span class="number text_all">[[getStatusCount(statusCountObj.all_cnt)]]</span>
+						</div>
+						<div class="statusT bg_delay series_delay on"  data-param="delay_srch_yn"   on-click="onClickState">
+							<span class="check"></span>
+							<span>Delay</span>
+							<span class="number text_delay">[[getStatusCount(statusCountObj.c1_cnt)]]</span>
+						</div>
+						<div class="statusT bg_imminent series_immnt on"  data-param="immnt_srch_yn"   on-click="onClickState">
+							<span class="check"></span>
+							<span>Imminent</span>
+							<span class="number text_imminent">[[getStatusCount(statusCountObj.c2_cnt)]]</span>
+						</div>
+						<div class="statusT bg_normal series_norm on"  data-param="norm_srch_yn"   on-click="onClickState">
+							<span class="check"></span>
+							<span>Normal</span>
+							<span class="number text_normal">[[getStatusCount(statusCountObj.c3_cnt)]]</span>
+						</div>
+						<div class="statusT bg_new series_new on"  data-param="new_srch_yn"   on-click="onClickState">
+							<span class="check"></span>
+							<span>New</span>
+							<span class="number text_new">[[getStatusCount(statusCountObj.new_cnt)]]</span>
+						</div>
+					</div>
+					<div class="gridBox">
+						<sc-grid id="workGrid" class="h-200"
+						 show-tooltip="true"
+						 on-item-click="onItemClick" style="background: #fff;">
+							<cc-grid-toolbar style="background: #fff;">
+								<sc-button text="제외" on-click="onClickAssignException"></sc-button>
+								<sc-button text="복원" on-click="onClickAssignExceptionRestore"></sc-button>
+								<sc-button text="메모" on-click="onClickMemo"></sc-button>
+								<sc-button text="마감 일자 변경" on-click="onClickClsdChange"></sc-button>
+								<!--<sc-button text="알람" on-click="onClickAlarm"></sc-button>-->
+								<sc-button text="재배정" on-click="onClickReassign"></sc-button>
+							</cc-grid-toolbar>
+							<sc-grid-columns>
+							<!--
+								<sc-image-column data-field="col_color_img" header-text="Work상태" width="35" image-change-function="imageChangeFunction" content-tooltip-callback="columnTooltipCallbackFn"></sc-image-column>
+							 -->
+								<sc-data-column data-field="col_color_sts" header-text="상태" width="60" converter="convertStatus" item-style-function="itemStyleFunction"></sc-data-column>
+								<sc-data-column data-field="task_tit" header-text="업무 제목" width="450" text-align="left" style-name="link" item-style-function="itemStyleFunction" content-tooltip-callback="columnTooltipCallbackFn"></sc-data-column>
+								<sc-date-column data-field="due_dt" header-text="마감 일자" width="100" display-format="yyyy/MM/dd" item-style-function="itemStyleFunction"></sc-date-column>
+								<sc-data-column data-field="display_main_task_nm" header-text="메인 업무"></sc-data-column>
+								<sc-data-column data-field="display_task_sts_nm" header-text="업무 상태"></sc-data-column>
+								<sc-image-column data-field="memo_yn_img" header-text="메모" width="50" image-change-function="imageChangeFunction"></sc-image-column>
+								<sc-image-column data-field="noti_yn_img" header-text="재배정" width="110" image-change-function="imageChangeFunction"></sc-image-column>
+								<sc-date-column data-field="snd_dttm" header-text="발신 일시" width="130" display-format="yyyy/MM/dd HH:mm:ss"></sc-date-column>
+								<sc-data-column data-field="sndr_nm" header-text="발신자"></sc-data-column>
+							</sc-grid-columns>
+							<sc-grid-fields>
+								<sc-grid-field data-field="task_uuid"></sc-grid-field>
+								<sc-grid-field data-field="task_authty_uuid"></sc-grid-field>
+								<sc-grid-field data-field="col_color"></sc-grid-field>
+								<sc-grid-field data-field="alrm_yn"></sc-grid-field>
+								<sc-grid-field data-field="memo_yn"></sc-grid-field>
+								<sc-grid-field data-field="menu_cd"></sc-grid-field>
+								<sc-grid-field data-field="xcept_yn"></sc-grid-field>
+								<sc-grid-field data-field="dat_src_logic_nm"></sc-grid-field>
+								<sc-grid-field data-field="dat_src_phyc_nm"></sc-grid-field>
+								<sc-grid-field data-field="orgn_due_dt"></sc-grid-field><!-- 직전 마감일자 -->
+							</sc-grid-fields>
+						</sc-grid>
+					</div>
+				</div>
+			</div>
+		</sc-panel>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'es-dashboard-task-list',
+
+			behaviors: [Polymer.CCFlowBehavior, Polymer.CCWorkplaceBehavior],
+
+			properties: {
+				mainTaskList : {
+					type : Object,
+					value : function() {
+						return [];
+					}
+				},
+				ticketStatusCount: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				ticketStatusWorkList: {
+					type: Object,
+					value: function() {
+						return [];
+					}
+				},
+				taskList: {
+					type: Object,
+					value: function() {
+						return [];
+					}
+				},
+				taskListSearchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				statusCountObj: {
+					type: Object,
+					value: function() {
+						return {
+							all_cnt:0,
+							c3_cnt: 0,
+							c2_cnt: 0,
+							c1_cnt: 0,
+							new_cnt: 0
+						}
+					}
+				},
+				taskStatusList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				allTaskStatusList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				main_task_nm: "ALL",
+				mainTaskUuIdSearchParam : {
+					type : Object,
+					value : function() {
+						return {};
+					}
+				},
+				statusBarFrontLabel : {
+					type : String,
+					value : ""
+				}
+			},
+			
+			formulas: {
+				isSubWorkList: function(){
+					var me = this;
+					return UT.isNotEmpty(me.get("taskStatusList"));
+				}
+			},
+
+			initialized: function(e) {
+				var me = this;
+				me.load({init: true});
+			},
+
+			load: function(param) {
+				var me = this;
+
+				me.isNotiSearch = param.isNotiSearch || false;
+				// sub work 선택 시
+				if(param.taskStatusList) {
+					// 선택된 sub work로 그리드 상단 서브 워크 컴포넌트 목록 구성
+					me.taskStatusList = param.taskStatusList;
+					// 조회조건으로 업무 조회
+					me.mainTaskUuIdSearchParam.main_task_uuid =  param.main_task_uuid;
+					for(var key in me.searchParam) {
+						me.mainTaskUuIdSearchParam[key] = me.searchParam[key];
+					}
+					
+					UT.request(me.$.findListTaskStatusByMainTaskUuid, function(e, res) {
+						me.allTaskStatusList = res.response || [];
+						me.loadAfter(param);
+					});
+				}
+				// main work 선택 시
+				else if(param.main_task_uuid) {
+					me.$.findListTaskStatusByMainTaskUuid.body = {
+						main_task_uuid: param.main_task_uuid
+					}
+					UT.request(me.$.findListTaskStatusByMainTaskUuid, function(e, res) {
+						var allTaskStatusList = res.response || [];
+						me.set("allTaskStatusList", allTaskStatusList);
+						me.setTaskStatusList(allTaskStatusList);
+						me.loadAfter(param);
+					});
+				}
+				// 워크플레이스 화면 로드 시 초기 조회
+				else {
+					me.taskStatusList = [];
+					me.allTaskStatusList = [];
+					me.loadAfter(param);
+				}
+			},
+
+			loadAfter: function(param) {
+				var me = this;
+
+				param.main_task_nm = param.main_task_nm || "ALL";
+				me.set("display_main_task_nm", param.display_main_task_nm);
+				me.set("main_task_nm", param.main_task_nm);
+
+				// 조회조건 초기화 후 조회
+				Array.prototype.forEach.call(me.querySelectorAll(".statusBar .statusT[data-param]"), function(task, index) {
+					if(param.init) {
+						// all, delay,imminent, norm, new
+							param[task.dataset.param] =  "Y";
+							task.classList.add("on");
+					} else if(UT.isEmpty(param.seriesStatus)) {
+						param[task.dataset.param] =  "Y";
+						task.classList.add("on");
+						task.classList.remove("off");
+					} else {
+						if(param.seriesStatus === "series_all") {
+							// all, delay,imminent, norm, new
+							param[task.dataset.param] =  "Y";
+							task.classList.add("on");
+							task.classList.remove("off");
+						} else if(task.classList.contains(param.seriesStatus)) {
+							param[task.dataset.param] =  "Y";
+							task.classList.add("on");
+							task.classList.remove("off");
+						} else {
+							param[task.dataset.param] =  "N";
+							task.classList.add("off");
+							task.classList.remove("on");
+						}
+					}
+				});
+				
+				// tab bar main work 선택 상태
+				if(UT.isNotEmpty(param.main_task_uuid)) {
+					// 다른 mainWork의 선택상태 제거
+					var selectMainEle = me.querySelectorAll('.tabBar>a');
+					for(var i = 0; i < selectMainEle.length; i++) {
+						if(selectMainEle[i].dataset.mainTaskUuid === param.main_task_uuid) {
+							selectMainEle[i].classList.add("on");
+						} else {
+							selectMainEle[i].classList.remove("on");
+							
+						}
+					}
+				}
+				
+				me.applyFormula();
+				me.findListTask(param);
+			},
+
+			findListTask: function(param) {
+				var me = this;
+
+				if(UT.isNotEmpty(param)) {
+					param.task_sts_uuids = me.taskStatusList.map(function(work) {
+						return work.task_sts_uuid;
+					});
+					me.set("taskListSearchParam", param);
+				}
+				for(var key in me.searchParam) {
+					me.taskListSearchParam[key] = me.searchParam[key];
+				}
+				UT.request(me.$.findListTask);
+				UT.request(me.$.findListTaskCount);
+			},
+			completeFindListTask : function(e, res) {
+				var me = this,
+					result = res.response;
+				var grid = me.$.workGrid;
+				grid.setDataProvider(result);
+				me.set("statusBarFrontLabel", me.getStatusBarFrontLabel());
+			},
+			refresh: function() {
+				var me = this;
+				me.findListTask();
+			},
+			// all / delay / imminent / normal / new 클릭 시
+			onClickState: function(e) {
+				var me = this;
+				if(e.target.classList.contains("statusT")) {
+					var task = e.target;
+					
+					// all 클릭
+					if(e.target.classList.contains("all")) {
+						// off -> on 여부
+						var allY = e.target.classList.contains("off");
+						var addClass = null, removeClass = null;
+						if(allY) {
+							addClass = "on";
+							removeClass ="off";
+						} else {
+							addClass = "off";
+							removeClass = "on";
+						}
+						var allState = e.target.parentElement.children;
+						// delay, imminent, normal, new 클릭 상태로 전환
+						for(var i = 0; i < allState.length; i++) {
+							allState[i].classList.add(addClass);
+							allState[i].classList.remove(removeClass);
+						}
+					}
+					// all 아닌 경우, 각 상태의 on, off 전환
+					else {
+						task.classList.toggle("on");
+						task.classList.toggle("off");
+						// off 상태로 전환 시 all 의 상태도 off로 전환.
+						// delay, norm, immnt, new 버튼을 off 상태로 전환 시 all 버튼의 상태도 off로 전환.
+						if(task.classList.contains("off")) {
+							e.target.parentElement.getElementsByClassName("all")[0].classList.remove("on");
+							e.target.parentElement.getElementsByClassName("all")[0].classList.add("off");
+						}
+					}
+					var statusTList = e.target.parentElement.getElementsByClassName("statusT");
+					for(var i = 0; i < statusTList.length; i++) {
+						var statusT = statusTList[i];
+						if(UT.isNotEmpty(statusT.dataset.param)) {
+							// 조회조건 설정
+							// 버튼이 on 인 상태의 status를 검색조건에 추가
+							if(statusT.classList.contains("on")) {
+								me.taskListSearchParam[statusT.dataset.param] =  "Y";
+							} else {
+								// 버튼이 on 상태 아닌 status는 검색조건에서 제거
+								delete me.taskListSearchParam[statusT.dataset.param];
+							}
+						}
+					}
+					
+					me.findListTask(me.taskListSearchParam);
+				}
+			},
+			//상태 전체선택
+			onClickAllState: function(){
+				var me = this;
+				var workStateList = me.querySelectorAll('.statusT');
+				
+				for(var i = 0,len = workStateList.length ; i < len; i++){
+					var task = workStateList[i];
+					if(!task.classList.contains("on")) {
+						task.classList.toggle("on");
+						task.classList.toggle("off");
+						me.taskListSearchParam[task.dataset.param] =  "Y";
+					}
+				}
+				me.findListTask(me.taskListSearchParam);
+			},
+			/********************************************
+			*
+			* 그리드
+			*
+			*********************************************/
+			// 제외
+			onClickAssignException: function() {
+				var me = this;
+				var checkedItems = me.$.workGrid.getDataProvider().selectionCheckedItems();
+
+				if(checkedItems.length === 0){
+					UT.alert("STD.N1600"); //선택된 항목이 없습니다.
+					return;
+				}
+
+				var assignExceptionPopup = UT.popup("ep-task-assign-exception", me, 900, 600, {
+					"complete-save": function(popup, e) {
+						popup.close();
+						me.fire("complete-save");
+					}
+				});
+				
+				assignExceptionPopup.show();
+				assignExceptionPopup.getWindowContent().load(checkedItems);
+			},
+			// 제외복원
+			onClickAssignExceptionRestore: function() {
+				var me = this;
+				
+				// 제외복원 버튼 클릭 시 팝업에서 제외목록 조회
+				var assignExceptionRestorePopup = UT.popup("ep-task-assign-exception-restore", me, 1100, 600, {
+					"complete-save": function(popup, e) {
+						popup.close();
+						me.fire("complete-save");
+					}
+				});
+				
+				assignExceptionRestorePopup.show();
+				assignExceptionRestorePopup.getWindowContent().load();
+			},
+
+			// 업무 재배정
+			onClickReassign: function() {
+				var me = this;
+				var checkedItems = me.$.workGrid.getDataProvider().selectionCheckedItems();
+
+				if(checkedItems.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+
+				me.onShowReassignPopup(checkedItems, me.isNotiSearch);
+			},
+			// 업무 재배정 팝업 호출
+			onShowReassignPopup: function(data, isNotiSearch) {
+				var me = this;
+				
+				var reassignPopup = UT.popup("ep-task-reassign", me, 900, 700, {
+					"complete-save": function(popup, e) {
+						popup.close();
+						me.fire("complete-save");
+					}
+				});
+
+				reassignPopup.show();
+				reassignPopup.getWindowContent().load(data, isNotiSearch);
+			},
+
+			// 메모
+			onClickMemo: function() {
+				var me = this;
+				var checkedItems = me.$.workGrid.getDataProvider().selectionCheckedItems();
+
+				if(checkedItems.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+
+				me.onShowMemoPopup(checkedItems);
+			},
+			// 메모 팝업 호출
+			onShowMemoPopup: function(data){
+				var me = this;
+
+				var notePopup = UT.popup("ep-task-memo", me, 900, 600, {
+					"complete-save": function(popup, e) {
+						popup.close();
+						me.fire("complete-save");
+					}
+				});
+
+				notePopup.show();
+				notePopup.getWindowContent().load(data);
+			},
+			
+			// 마감변경
+			onClickClsdChange: function() {
+				var me = this;
+				var checkedItems = me.$.workGrid.getDataProvider().selectionCheckedItems();
+
+				if(checkedItems.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+
+				var scheChangePopup = UT.popup("ep-task-closed-change", me, 1000, 600, {
+					"complete-save": function(popup, e) {
+						popup.close();
+						me.fire("complete-save");
+					}
+				});
+
+				scheChangePopup.show();
+				scheChangePopup.getWindowContent().load(checkedItems);
+			},
+
+			imageChangeFunction: function(data, item) {
+				var dataField = item.dataField;
+
+				/*
+				if(dataField === "col_color_img" && data["col_color"] === "C1") {
+					return "ui/lib/custom/html/workplace/img/ico_grid_delay.png";
+				} else if(dataField === "col_color_img" && data["col_color"] === "C2") {
+					return "ui/lib/custom/html/workplace/img/ico_grid_soon.png";
+				} else if(dataField === "col_color_img" && data["col_color"] === "C3") {
+					return "";
+				}
+				*/
+
+				if(dataField === "noti_yn_img" && data["noti_yn"] === "Y") {
+					return "ui/assets/img/ico_grid_notifi.png";
+				}
+				if(dataField === "memo_yn_img" && data["memo_yn"] === "Y") {
+					return "ui/assets/img/ico_grid_memo.png";
+				}
+			},
+			
+			convertStatus: function(rowIndex, dataField, data) {
+				var me = this;
+					
+				var tralsateLabel = function(langNm) {
+					return langNm.charAt(0).toUpperCase() + langNm.substring(1, langNm.length);
+				};
+				
+				if(data["col_color"] === "C1") {
+					return tralsateLabel(me.translate("지연"));
+				} else if(data["col_color"] === "C2") {
+					return tralsateLabel(me.translate("임박"));
+				} else if(data["col_color"] === "C3") {
+					return tralsateLabel(me.translate("일반"));
+				}
+				
+			},
+			
+			itemStyleFunction :function(data, item) {
+				var styleObj = {};
+				
+				if(data["col_color"] === "C1") {
+					styleObj.fontColor = "#EB7575";
+				} else if(data["col_color"] === "C2") {
+					styleObj.fontColor = "#F5BC5F";
+				}
+				// else if(data["col_color"] === "C3") {
+				// 	styleObj.fontColor = "#72B0EA";
+				// }
+				
+				if(item.dataField === "task_tit") {
+					if(data["new_yn"] === "Y") {
+						styleObj.iconUrl = "ui/assets/img/ico_new_circle.png";
+						styleObj.iconLocation = "right";
+					}
+					styleObj.textWrap = "ellipsis";
+				}
+				return styleObj;
+			},
+
+			columnTooltipCallbackFn: function(rowIndex, value, dataField, data, displayValue) {
+				var me = this;
+				
+				/* 상태 컬럼
+				if(dataField === "col_color_img") {
+					if(data["col_color"] === "C1") {
+						return me.translate("지연");
+					} else if(data["col_color"] === "C2") {
+						return me.translate("임박");
+					} else if(data["col_color"] === "C3") {
+						return me.translate("일반");
+					}
+				} else */
+				if(dataField === "task_tit") {
+					return value;
+				}
+				return "";
+			},
+			
+			onItemClick: function(event) {
+				var me = this,
+					data = event.detail.data,
+					item = event.detail.item;
+					
+				if(item.dataField === 'task_tit' && UT.isNotEmpty(data.menu_cd)) {
+					var menuCd = data.menu_cd;
+					//상세 조회 화면 호출
+					// var menuInfo = me._getMenuInfo(menuCd);
+					//
+					// MDIUT.createWindow(menuCd, menuInfo.menu_nm, menuInfo.menu_url, function(module) {
+					// 	me._workplaceAppIdByDetailId(module,data);
+					// });
+					me.createTaskModule(menuCd, data);
+					
+				} else if(item.dataField === 'memo_yn_img' && data['memo_yn'] === "Y"){
+					// 메모 팝업 호출
+					me.onShowMemoPopup(data);
+				} else if(item.dataField === 'noti_yn_img' && data["noti_yn"] === "Y"){
+					// 업무할당 팝업 호출
+					me.onShowReassignPopup(data, true);
+				}
+			},
+			
+			
+			onClickNewAdd: function() {
+				var me = this;
+				var targets = me.querySelectorAll(".searchContainer");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.setAttribute("hidden", "true");
+				}
+
+				var targets = me.querySelectorAll(".btnContainer");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.removeAttribute("hidden");
+				}
+			},
+
+			onClickTaskSearch: function() {
+				var me = this;
+				var targets = me.querySelectorAll(".searchContainer");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.removeAttribute("hidden");
+				}
+
+				var targets = me.querySelectorAll(".btnContainer, .taskSrch, .newAdd");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.setAttribute("hidden", "true");
+				}
+			},
+
+			onClickClose: function() {
+				var me = this;
+
+				var targets = me.querySelectorAll(".searchContainer,.btnContainer");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.setAttribute("hidden", "true");
+				}
+
+				var targets = me.querySelectorAll(".taskSrch, .newAdd");
+				for(var i=0, len=targets.length; i<len; i++) {
+					var target = targets[i];
+					target.removeAttribute("hidden");
+				}
+			},
+
+			getStatusCount: function(count) {
+				return count ? count: 0;
+			},
+
+			onClickDeleteTask: function(e) {
+				var me = this;
+				var id = e.target.dataset.taskStsUuid;
+
+				if(id) {
+					me.taskStatusList = me.taskStatusList.filter(function(taskStatus) {
+						return taskStatus.task_sts_uuid !== id;
+					});
+					if(me.taskStatusList.length > 0) {
+						me.findListTask(me.taskListSearchParam);
+					} else {
+						me.taskList = [];
+						me.taskStatusList = [];
+						me.statusCountObj = {};
+					}
+					e.stopPropagation();
+				} else {
+					me.onClickResetSubWork();
+				}
+			},
+
+			//taskStatusList subState 모두선택으로 변경
+			onClickResetSubWork: function(){
+				var me = this;
+				   	me.taskStatusList = me.allTaskStatusList;
+				   	me.findListTask(me.taskListSearchParam);
+			},
+			onClickNewWork: function(e) {
+				var dataset = e.target.dataset;
+				var menu_cd = dataset.menuCd;
+				var execId = dataset.execId;
+				var moduleSelector = dataset.moduleSelector;
+
+				UT.createWindowByMenuId(menu_cd, function(module) {
+					var execModule = module.querySelector(moduleSelector);
+					execModule.$[execId].click();
+				});
+			},
+
+			onEnterSearch: function(e) {
+				var me = this;
+				var keyCode = e.keyCode;
+				if(keyCode === 13) { //enter
+					me.onClickSearch();
+				}
+			},
+
+			completeFindListTaskCount : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				if(UT.isEmpty(result)) {
+					return;
+				}
+		   		result.all_cnt = new BigNumber(result.c1_cnt || 0).plus(new BigNumber(result.c2_cnt || 0)).plus(new BigNumber(result.c3_cnt || 0)).toFixed();
+				me.set("statusCountObj", result);
+				
+			},
+			onClickSearchMain: function(e) {
+				var me = this,
+					target = e.target,
+					dataSet = e.target.dataset;
+				
+				// 다른 mainWork의 선택상태 제거
+				var selectedMainEle = target.parentElement.querySelectorAll('a.on');
+				for(var i = 0; i < selectedMainEle.length; i++) {
+					selectedMainEle[i].classList.remove("on");
+				}
+				target.classList.toggle("on");
+				// all클릭 시 전체검색
+				if(target.classList.contains("all")) {
+					me.load({});
+				} else {
+					me.load({main_task_uuid : dataSet.mainTaskUuid});
+				}
+				me.set("statusBarFrontLabel", me.getStatusBarFrontLabel());
+			},
+			onRefrash: function(){
+				var me = this;
+				me.load({init: true});
+			},
+			setMainTaskList : function(mainTaskList) {
+				var me = this;
+				me.set("mainTaskList", mainTaskList);
+			},
+			setTaskStatusList : function(taskStatusList) {
+				var me = this;
+				me.set("taskStatusList", taskStatusList);
+			},
+			getStatusBarFrontLabel : function() {
+				var me = this;
+				var label = "Due Date Basis";
+				var selectedWorkEle = me.querySelectorAll(".tabBar :not(.all).on");
+				if(selectedWorkEle != null && selectedWorkEle.length > 0) {
+					label += " : " + selectedWorkEle[0].innerHTML;
+				}
+				return label;
+			}
+		});
+	</script>
+</dom-module>

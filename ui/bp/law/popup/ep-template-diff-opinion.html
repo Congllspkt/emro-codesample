@@ -1,0 +1,189 @@
+<dom-module id="ep-template-diff-opinion">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!-- 검토요청 템플릿 비교 정보 조회 -->
+		<sc-ajax id="findReqReviewTmplDiff"
+				url="findReqReviewTmplDiff.do"
+				body="{{paramData}}"
+				on-response="completeFindTmplDiff">
+		</sc-ajax>
+		<!-- 템플릿 검토 의견 저장 -->
+		<sc-ajax id="saveTmplOpn"
+				url="saveReqReviewTmplOpn.do"
+				on-response="completeSaveTmplOpn">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r,auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="저장" on-click="onSave" hidden="[[!formula('saveable')]]" auth-s></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="vbox flex">
+			<div class="vbox flex-9">
+				<sc-doc-comprsn id="scDocComprsn"></sc-doc-comprsn>
+			</div>
+			<div class="vpsace-5"></div>
+			<div class="vbox flex-1">
+				<cc-form-panel>
+					<cc-fieldset>
+						<sc-label text="검토 의견"></sc-label>
+						<sc-textarea-field value="{{comment.lgl_rv_opn}}" class="h-100" max-length="1000" readonly="[[!formula('editable')]]" required="[[formula('editable')]]"></sc-textarea-field>
+					</cc-fieldset>
+					<cc-fieldset>
+						<sc-label text="법무 팀장 의견"></sc-label>
+						<sc-textarea-field value="{{comment.lgl_tmld_rv_opn}}" class="h-100" max-length="1000" readonly="[[!formula('confirmable')]]" required="[[formula('confirmable')]]"></sc-textarea-field>
+					</cc-fieldset>
+				</cc-form-panel>
+			</div>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: "ep-template-diff-opinion",
+			properties: {
+				titleText:{
+					type: String,
+					value: "템플릿 검토"
+				},
+				paramData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				comment : {
+					type : String,
+					value : function(){
+						return {
+							lgl_rv_opn: "",
+							lgl_tmld_rv_opn: ""
+						};
+					}
+				},
+				result : {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas : {
+				editable: function() {
+					return (this.get("paramData.editable") || false);
+				},
+				confirmable: function() {
+					return (this.get("paramData.confirmable") || false);
+				},
+				saveable: function() {
+					return this.formula("editable") || this.formula("confirmable");
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("paramData", param);
+				me.onFindTmplDiff();
+			},
+			
+			onFindTmplDiff: function() {
+				var me = this;
+				UT.request(me.$.findReqReviewTmplDiff);
+			},
+			
+			completeFindTmplDiff: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					me.set("comment.lgl_rv_opn", result.resultData.rvOpn);
+					me.set("comment.lgl_tmld_rv_opn", result.resultData.rvTmldOpn);
+					me.set("result", JSON.parse(decodeURIComponent(result.resultData.rvResult)));
+					me.loadContents();
+					me.applyFormula();
+				} else {
+					UT.alert("STD.E9999");
+					me.onClose();
+				}
+			},
+			
+			loadContents: function() {
+				var me = this;
+				var params = me.get("result");
+				
+				// 코멘트 작성자 설정
+				params.options.usrId = SCSessionManager.userDetails.userInfo.usr_id;
+				params.options.usrNm = SCSessionManager.userDetails.userInfo.usr_nm;
+				// 코멘트 버튼 사용 여부 처리
+				if(me.formula("saveable")) {
+					params.options.useCommentButton = true;
+				} else {
+					params.options.useCommentButton = false;
+				}
+				// exportCommentList의 저장/삭제 버튼 노출 여부 결정(현재 usrId의 코멘트만 수정/삭제 가능하도록 함)
+				params.exportCommentList && params.exportCommentList.forEach(wrapObj => {
+					wrapObj.commentList.forEach(commentObj => {
+						if(me.formula("saveable") && commentObj.usrId === SCSessionManager.userDetails.userInfo.usr_id) {
+						  commentObj.isEditButton = true;
+						} else {
+						  commentObj.isEditButton = false;
+						}
+					})
+				});
+				
+				me.$.scDocComprsn.initReview(params);
+				me.$.scDocComprsn.startReview();
+			},
+			
+			onSave: function() {
+				var me = this;
+				
+				if(!me.validate()) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				
+				var resultData = me.$.scDocComprsn.exportData();
+				var origData = UT.copy(me.get("paramData"));
+				
+				me.$.saveTmplOpn.body = {
+					cntrdoc_lgl_rv_tmpl_uuid: origData.cntrdoc_lgl_rv_tmpl_uuid,
+					lgl_rv_opn: me.get("comment.lgl_rv_opn"),
+					lgl_tmld_rv_opn: me.get("comment.lgl_tmld_rv_opn"),
+					lgl_rv_tmpl_res: encodeURIComponent(JSON.stringify(resultData.result))
+				};
+				UT.request(me.$.saveTmplOpn);
+			},
+			
+			completeSaveTmplOpn: function(e, res) {
+				var me = this;
+				var result = res.response;
+				if(result.resultStatus === "S") {
+					UT.alert("STD.N1500"); // 요청이 완료되었습니다.
+					me.fire("complete-save");
+					me.onFindTmplDiff();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			}
+		});
+	</script>
+</dom-module>

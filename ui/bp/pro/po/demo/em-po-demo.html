@@ -1,0 +1,166 @@
+<sc-link rel="import" href="es-po-demo-list.html"></sc-link>
+<sc-link rel="import" href="../es-po-detail.html"></sc-link>
+<sc-link rel="import" href="../es-po-detail-mod.html"></sc-link>
+<sc-link rel="import" href="../es-po-eval-set-detail.html"></sc-link>
+
+<sc-link rel="import" href="/ui/bp/contract/common/es-contract-detail.html"></sc-link>
+
+<dom-module id="em-po-demo">
+	<!--
+	/**
+	 *
+	 *	@description : 계약및발주현황
+	 *  <pre>
+	 * </pre>
+	 * @author : Yeon-u Kim
+	 * @FileName :
+	 * @Since 2016. 12. 26. reNew 9.1ver
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--fit-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-ajax id="findPo" url="../findPo.do"></sc-ajax>
+		
+		<sc-pages id="pages" selected="0" class="fit">
+			<es-po-demo-list id="list" on-selected-po="onSelectedPo" on-selected-cntr="onSelectedCntr" on-create-po="onShowDetail"></es-po-demo-list>
+			<template>
+				<es-po-detail id="detail" on-close="onShowList" on-modify-po="onShowModDetail" on-show-po-gr-eval-detail="onShowPoGrEvalDetail"></es-po-detail>
+			</template>
+			<template>
+				<es-po-detail-mod id="modDetail" on-close="onShowList" on-show-po-gr-eval-detail="onShowPoGrEvalDetail"></es-po-detail-mod>
+			</template>
+			<template>
+				<es-contract-detail id="cntrDetail" on-close-remove="onShowList"></es-contract-detail>
+			</template>
+			<template>
+				<es-po-eval-set-detail id="poEvalSet" on-show-detail="onClosePoEvalSet"></es-po-eval-set-detail>
+			</template>
+		</sc-pages>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: "em-po-demo",
+			
+			initialized: function(e) {
+				var me = this;
+				
+				// 타 모듈에서 mdi.createWindow 를 통해 화면 open 하는 경우
+				var param = me.params;
+				
+				if(param.task_uuid) {					// mdi 를 통해 app_id 값이 넘어오는 경우
+					
+					me.$.findPo.body = {po_uuid: param.task_uuid};
+					
+					UT.request(me.$.findPo, function(e, res) {
+						var result = res.response;
+
+						if(UT.isNotEmpty(param.workplace_yn)) { result.workplace_yn = param.workplace_yn }
+						
+						// 상세화면 조회
+						me.onSelectedPo(e, result);
+					});
+					
+				} else if(param.po_sts_ccd) {		// po_sts_ccd 값이 넘어오는 경우
+					// 목록화면 조회
+					me.$.list.load({po_prog_stss: param.po_sts_ccd.split(",")});
+				}
+			},
+			
+			// PO가 선택됨
+			onSelectedPo: function(e, data) {
+				var me = this;
+				
+				var poRev = UT.toNumber(data.po_revno);	// 차수
+				var poProgSts = data.po_sts_ccd;			// 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+				var modTyp = data.po_chg_typ_ccd;				// 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+				var poCompYn = data.po_cmpld_yn;			// 발주종료여부
+				
+				// - 1차수 이상, 변경요청(R),임시저장(T), 변경(C),해지(R)
+				if(poRev > 1 && (poProgSts === "CHG_REQ" || poProgSts === "CRNG") && (modTyp === "CHG" || modTyp === "TRMN") && poCompYn !== "Y") {
+					// 발주변경 상세
+					me.onShowModDetail(null, data);
+				} else {
+					// 발주 상세
+					me.onShowDetail(null, data);
+				}
+			},
+			
+			onSelectedCntr: function(e, data) {
+				var me = this;
+				
+				/*var poRev = UT.toNumber(data.po_revno);	// 차수
+				var poProgSts = data.po_sts_ccd;			// 발주진행상태 - WTG: 대기중, CRNG: 임시저장, PRGSG: 발주진행중, APVD: 발주승인완료, CHG_REQ: 변경요청, CHG: 발주변경, CHG_RET: 변경반송, TRMN: 발주해지
+				var modTyp = data.po_chg_typ_ccd;				// 변경유형 - NEW: 신규, CHG: 변경, TRMN: 해지
+				var poCompYn = data.po_cmpld_yn;			// 발주종료여부*/
+				
+				/*// - 1차수 이상, 변경요청(R),임시저장(T), 변경(C),해지(R)
+				if(poRev > 1 && (poProgSts === "CHG_REQ" || poProgSts === "CRNG") && (modTyp === "CHG" || modTyp === "TRMN") && poCompYn !== "Y") {
+					// 계약변경 상세
+					me.onShowCntrModDetail(null, data);
+				} else {
+					// 계약 상세
+					me.onShowCntrDetail(null, data);
+				}*/
+				me.onShowCntrDetail(null, data);
+			},
+			onShowCntrDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.cntrDetail);
+				me.$.cntrDetail.load({
+					cntr_uuid: data.cntr_uuid
+				});
+			},
+			// 발주 상세 보기
+			onShowDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.detail);
+				me.$.detail.load(data);
+			},
+			
+			// 발주변경 상세 보기
+			onShowModDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.modDetail);
+				me.$.modDetail.load(data);
+			},
+			
+			// 목록 보기
+			onShowList: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.list);
+				me.$.list.load(data);
+			},
+			
+			onShowPoGrEvalDetail: function(e, data) {
+				var me = this;
+				me.$.pages.selectItem(me.$.poEvalSet);
+				me.$.poEvalSet.load(data);
+			},
+			
+			onClosePoEvalSet: function(e, data) {
+				var me = this;
+				var detail;
+				if(data.closeView === "PO") {
+					detail = me.$.detail;
+				} else if(data.closeView === "PO_MOD") {
+					detail = me.$.modDetail;
+				} else if(data.closeView === "CNTR") {
+					detail = me.$.cntrDetail;
+				} else if(data.closeView === "CNTR_MOD") {
+					detail = me.$.cntrModDetail;
+				}
+				
+				me.$.pages.selectItem(detail);
+				detail.load(data);
+			}
+		});
+	</script>
+
+</dom-module>

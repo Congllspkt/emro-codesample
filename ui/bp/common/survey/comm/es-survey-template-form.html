@@ -1,0 +1,1058 @@
+<sc-link rel="import" href="../template/ep-survey-template-detail-selector.html"></sc-link>
+
+<dom-module id="es-survey-template-form">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<cc-sub-title-bar title-text="목차">
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="설문 템플릿 불러오기" on-click="onLoadTemplate" hidden="[[!formula('editable')]]"></sc-button>
+			<sc-button text="복사" on-click="onCopyForm" hidden="[[!formula('editable')]]"></sc-button>
+			<!--<sc-menu-button text="추가">-->
+				<sc-button text="섹션 추가" on-click="onAddSectionForm" hidden="[[!formula('editable')]]"></sc-button>
+				<sc-button text="질문 추가" on-click="onAddQuestionForm" hidden="[[!formula('editable')]]"></sc-button>
+			<!--</sc-menu-button>-->
+			<sc-button text="목차 선택" on-click="onSelectIndex" hidden="[[!selector]]"></sc-button>
+		</cc-sub-title-bar>
+		<div class="vbox flex container" id="container">
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-survey-template-form",
+			
+			properties: {
+				survey: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				sections: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				},
+				editable: {
+					type: Object,
+					observer: "editableChanged",
+					value: function() {
+						return true;
+					}
+				},
+				selector: {
+					type: Object,
+					value: function() {
+						return false;
+					}
+				}
+			},
+			
+			formulas: {
+				editable: function() {
+					return this.editable;
+				}
+			},
+			
+			initialized: function() {
+				var me = this;
+				var container = me.$.container;
+				var draggingElement = null;
+				var previousElement = null;
+				
+				container.addEventListener('dragstart', (e) => {
+					draggingElement = e.target;
+					previousElement = e.target.previousElementSibling;
+					e.target.classList.add('dragging');
+				});
+				
+				container.addEventListener('dragend', (e) => {
+					e.target.classList.remove('dragging');
+					
+					if(previousElement === e.target.previousElementSibling) {
+						draggingElement = null;
+						previousElement = null;
+						return;
+					}
+					if(draggingElement.type === "section") {
+						var questions = container.querySelectorAll('[sectionid="' + draggingElement.id + '"]')
+						var nextSibling = draggingElement.nextElementSibling;
+						
+						if(nextSibling) {
+							for(var i = questions.length - 1; i >= 0; i--) {
+								me.moveChildrenQuestion(container, nextSibling, questions[i]);
+							}
+						} else {
+							for(var i = 0; i < questions.length; i++) {
+								me.moveChildrenQuestion(container, nextSibling, questions[i]);
+							}
+						}
+						questions = me.findChildrenQuestions(draggingElement);
+						for(var i = 0; i < questions.length; i++) {
+							questions[i].setAttribute("sectionid", draggingElement.id);
+						}
+					}
+					draggingElement = null;
+				});
+				
+				container.addEventListener('dragover', (e) => {
+					e.preventDefault();
+					const afterElement = this.getDragAfterElement(container, e.clientY);
+					if(afterElement == null) {
+						container.appendChild(draggingElement);
+					} else {
+						container.insertBefore(draggingElement, afterElement);
+					}
+				});
+			},
+			
+			existTypeChildren: function(container, type) {
+				var element = container.firstChild;
+				var exist = false;
+				
+				while(element) {
+					if(element.type === type) {
+						exist = true;
+						break;
+					}
+					
+					element = element.nextElementSibling;
+				}
+				return exist;
+			},
+			
+			getTypeChildrens: function(container, type) {
+				var element = container.firstChild;
+				var childrens = [];
+				
+				while(element) {
+					if(element.type === type) {
+						childrens.push(element);
+						break;
+					}
+					
+					element = element.nextElementSibling;
+				}
+				return childrens;
+			},
+			
+			findChildrenQuestions: function(section) {
+				var questions = [];
+				var nextSibling = section.nextElementSibling;
+				
+				while(nextSibling) {
+					if(nextSibling.type !== "question") {
+						break;
+					}
+					
+					questions.push(nextSibling);
+					nextSibling = nextSibling.nextElementSibling;
+				}
+				return questions;
+			},
+			
+			moveChildrenQuestion: function(container, nextSibling, question) {
+				if(nextSibling) {
+					container.insertBefore(question, nextSibling);
+				} else {
+					container.appendChild(question);
+				}
+			},
+			
+			getDragAfterElement: function(container, y) {
+				const draggableElements = [...container.querySelectorAll('.draggable:not(.dragging)')];
+				
+				return draggableElements.reduce((closest, child) => {
+					const box = child.getBoundingClientRect();
+					const offset = y - box.top - box.height / 2;
+					if(offset < 0 && offset > closest.offset) {
+						return {offset: offset, element: child};
+					} else {
+						return closest;
+					}
+				}, {offset: Number.NEGATIVE_INFINITY}).element;
+			},
+			
+			load: function(param) {
+				var me = this;
+				me.set("survey", param.survey);
+				me.set("sections", param.sections);
+				me.applyFormula();
+				
+				me.addBasicForm(param.survey);
+				me.addCoverForm(param.survey);
+				me.addSectionForms(param.sections);
+			},
+			
+			addBasicForm: function(survey) {
+				var me = this;
+				var container = me.$.container;
+				
+				var div = document.createElement("div");
+				div.classList.add("template");
+				div.classList.add("selection");
+				div.id = "basic";
+				div.type = "basic";
+				div.data = survey;
+				div.textContent = me.translate("기본정보");
+				div.addEventListener("click", function(e) {
+					me.selectForm(e);
+				});
+				container.appendChild(div);
+			},
+			
+			addCoverForm: function(survey) {
+				var me = this;
+				var survey = me.get("survey");
+				var container = me.$.container;
+				
+				if(survey.front_cover_yn === "Y") {
+					me.addCoverFormDiv(survey, "front");
+					me.fire("add-cover-form", {
+						id: "basic-front",
+						type: "front"
+					});
+				}
+				if(survey.back_cover_yn === "Y") {
+					me.addCoverFormDiv(survey, "back");
+					me.fire("add-cover-form", {
+						id: "basic-back",
+						type: "back"
+					});
+				}
+			},
+			
+			addCoverFormDiv: function(survey, type) {
+				var me = this;
+				var container = me.$.container;
+				
+				var div = document.createElement("div");
+				div.classList.add("template");
+				div.style.marginLeft = "20px";
+				div.style.padding = "5px 10px";
+				div.id = "basic-" + type;
+				div.data = survey[type + '_cover_cont'];
+				div.type = type;
+				div.textContent = type === "front" ? me.translate("앞 표지") : me.translate("뒤 표지");
+				div.addEventListener("click", function(e) {
+					me.selectForm(e);
+				});
+				
+				if(type === "front") {
+					var basicForm = container.querySelector('[id="basic"]');
+					if(!basicForm) return;
+					
+					var afterElement = basicForm.nextElementSibling;
+					if(!afterElement) {
+						container.appendChild(div);
+					} else {
+						container.insertBefore(div, afterElement);
+					}
+				} else {
+					var form = container.querySelector('[id="basic-front"]');
+					if(!form) {
+						form = container.querySelector('[id="basic"]');
+					}
+					if(!form) return;
+					
+					var afterElement = form.nextElementSibling;
+					if(!afterElement) {
+						container.appendChild(div);
+					} else {
+						container.insertBefore(div, afterElement);
+					}
+				}
+				
+				return div;
+			},
+			
+			addSectionForms: function(sections) {
+				var me = this;
+				var container = me.$.container;
+				
+				for(var i = 0; i < sections.length; i++) {
+					me.addSectionForm(container, sections[i]);
+				}
+			},
+			
+			addSectionForm: function(container, section, afterElement) {
+				var me = this;
+				
+				var div = document.createElement("div");
+				div.classList.add("template");
+				div.classList.add("draggable");
+				div.draggable = true;
+				div.id = section.id;
+				div.data = section;
+				div.type = "section";
+				div.textContent = "S. " + SCLanguageManager.parse(section.surv_sect_nm || "");
+				div.addEventListener("click", function(e) {
+					me.selectForm(e);
+				});
+				
+				if(afterElement) {
+					container.insertBefore(div, afterElement);
+				} else {
+					container.appendChild(div);
+				}
+				
+				var questions = section.questions || [];
+				for(var i = 0; i < questions.length; i++) {
+					me.addQuestionForm(container, section, questions[i]);
+				}
+				
+				return div;
+			},
+			
+			addQuestionForm: function(container, section, question, afterElement) {
+				var me = this;
+				var div = document.createElement("div");
+				div.classList.add("template");
+				div.classList.add("draggable");
+				div.style.marginLeft = "20px";
+				div.style.padding = "5px 10px";
+				div.draggable = true;
+				div.id = question.id;
+				div.setAttribute("sectionid", section.id);
+				div.data = question;
+				div.type = "question";
+				div.textContent = "Q. " + SCLanguageManager.parse(question.surv_qn_nm || "");
+				div.addEventListener("click", function(e) {
+					me.selectForm(e);
+				});
+				
+				if(afterElement) {
+					container.insertBefore(div, afterElement);
+				} else {
+					container.appendChild(div);
+				}
+				
+				return div;
+			},
+			
+			selectForm: function(e, force) {
+				var me = this;
+				var container = me.$.container;
+				var target = e.target;
+				
+				var ctrlKey = e.ctrlKey;
+				var shiftKey = e.shiftKey;
+				var getSelection = me.getSelection();
+				if(getSelection.length == 0 || (!ctrlKey && !shiftKey)) {
+					me.removeSelection();
+					me.targetSelection(target);
+					me.fireSelect(target, force);
+					return;
+				}
+				
+				var targetType = target.type;
+				if(targetType !== "section" && targetType !== "question" && !me.selector) {
+					return;
+				}
+				
+				if(ctrlKey) {
+					me.targetSelection(target);
+				} else if(shiftKey && getSelection.length === 1) {
+					var selectedIndex = me.getChildIndex(container, getSelection[0])
+					var targetIndex = me.getChildIndex(container, target);
+					
+					var rangeChildrens = me.getRangeOfChildren(
+							container,
+							selectedIndex < targetIndex ? getSelection[0] : target,
+							selectedIndex < targetIndex ? target : getSelection[0]
+					);
+					for(var i = 0; i < rangeChildrens.length; i++) {
+						me.targetSelection(rangeChildrens[i]);
+					}
+				}
+			},
+			
+			targetSelection: function(target) {
+				target.classList.add("selection");
+			},
+			
+			getSelection: function() {
+				var container = this.$.container;
+				var selectionChildrens = container.querySelectorAll('[class*="selection"]');
+				return selectionChildrens;
+			},
+			
+			removeSelection: function() {
+				var container = this.$.container;
+				var selectionChildrens = container.querySelectorAll('[class*="selection"]');
+				for(var i = 0; i < selectionChildrens.length; i++) {
+					selectionChildrens[i].classList.remove("selection");
+				}
+			},
+			
+			getRangeOfChildren: function(parent, startChild, endChild) {
+				let children = Array.from(parent.children);
+				let startIndex = children.indexOf(startChild);
+				let endIndex = children.indexOf(endChild);
+				
+				if(startIndex === -1 || endIndex === -1 || startIndex > endIndex) {
+					return [];
+				}
+				
+				return children.slice(startIndex, endIndex + 1);
+			},
+			
+			getChildIndex: function(parent, child) {
+				var children = Array.from(parent.children);
+				return children.indexOf(child);
+			},
+			
+			fireSelect: function(target, force) {
+				this.fire("select-form", {
+					id: target.id,
+					data: target.data,
+					type: target.type,
+					force: force || false
+				});
+			},
+			
+			changeTitle: function(detail) {
+				var me = this;
+				var container = me.$.container;
+				var children = container.querySelector('[id="' + detail.id + '"]');
+				
+				var prefix = "S. ";
+				if(children.type === "question") {
+					prefix = "Q. ";
+				}
+				children.textContent = prefix + detail.title;
+			},
+			
+			changeCover: function() {
+				var me = this;
+				if(me.get("stopChangeCover")) {
+					return;
+				}
+				var container = me.$.container;
+				var basicForm = container.querySelector('[id="basic"]');
+				if(!basicForm) return;
+				
+				var frontCoverForm = container.querySelector('[id="basic-front"]');
+				var backCoverForm = container.querySelector('[id="basic-back"]');
+				
+				var survey = basicForm.data;
+				var frontCoverYn = survey.front_cover_yn;
+				var backCoverYn = survey.back_cover_yn;
+				
+				if(frontCoverYn === "Y") {
+					if(!frontCoverForm) {
+						var cover = me.addCoverFormDiv(survey, "front");
+						me.fire("add-cover-form", {
+							id: "basic-front",
+							data: survey.front_cover_cont,
+							type: "front"
+						});
+						me.selectForm({
+							target: cover
+						});
+					}
+				} else {
+					if(!!frontCoverForm) {
+						me.fire("remove-form", {
+							id: frontCoverForm.id
+						});
+						container.removeChild(frontCoverForm);
+					}
+				}
+				if(backCoverYn === "Y") {
+					if(!backCoverForm) {
+						var cover = me.addCoverFormDiv(survey, "back");
+						me.fire("add-cover-form", {
+							id: "basic-back",
+							data: survey.back_cover_cont,
+							type: "back"
+						});
+						me.selectForm({
+							target: cover
+						});
+					}
+				} else {
+					if(!!backCoverForm) {
+						me.fire("remove-form", {
+							id: backCoverForm.id
+						});
+						container.removeChild(backCoverForm);
+					}
+				}
+			},
+			
+			dataCleaner: function() {
+				var me = this;
+				var container = me.$.container;
+				var sections = me.get("sections");
+				for(var i = 0; i < sections.length; i++) {
+					var sectionForm = container.querySelector('[id="' + sections[i].id + '"]');
+					delete sectionForm.data.questions;
+				}
+			},
+			
+			clearForm: function() {
+				var me = this;
+				var container = me.$.container;
+				
+				while(container.firstChild) {
+					container.removeChild(container.firstChild);
+				}
+			},
+			
+			onDelete: function() {
+				var me = this;
+				var selections = me.getSelection();
+				me.delete(selections);
+			},
+			
+			delete: function(selections) {
+				var me = this;
+				if(selections.length === 0) {
+					UT.alert("STD.SURV0003"); // 선택한 목차가 없습니다.
+					return;
+				}
+				
+				if(!me.deleteValidator(selections)) {
+					return;
+				}
+				
+				var container = me.$.container;
+				var questions = [];
+				var sections = [];
+				for(var i = 0; i < selections.length; i++) {
+					var selection = selections[i];
+					
+					if(selection.type === "front" || selection.type === "back") {
+						me.fire("remove-form", {
+							id: selection.id
+						});
+						me.fire("remove-cover", selection.type);
+					} else if(selection.type === "question") {
+						questions.push(selection);
+					} else if(selection.type === "section") {
+						sections.push(selection);
+					}
+				}
+				for(var i = 0; i < questions.length; i++) {
+					var question = questions[i];
+					
+					me.fire("remove-form", {
+						id: question.id
+					});
+					container.removeChild(question);
+				}
+				for(var i = 0; i < sections.length; i++) {
+					var section = sections[i];
+					var sectionQuestions = me.findChildrenQuestions(section);
+					
+					for(var j = 0; j < sectionQuestions.length; j++) {
+						var question = sectionQuestions[j];
+						me.fire("remove-form", {
+							id: question.id
+						});
+						container.removeChild(question);
+					}
+					
+					me.fire("remove-form", {
+						id: section.id
+					});
+					container.removeChild(section);
+				}
+			},
+			
+			deleteValidator: function(selections) {
+				var me = this;
+				var isValid = true;
+				for(var i = 0; i < selections.length; i++) {
+					var selection = selections[i];
+					
+					if(selection.id === "basic") {
+						UT.alert("STD.SURV0007"); // 기본정보는 삭제할 수 없습니다.
+						isValid = false;
+						break;
+					}
+				}
+				return isValid;
+			},
+			
+			onAddSectionForm: function() {
+				var me = this;
+				var newSection = {
+					id: UT.generateUUID()
+				};
+				var container = me.$.container;
+				
+				var section = me.addSectionForm(container, newSection);
+				me.fire("add-section-form", newSection);
+				me.selectForm({
+					target: section
+				});
+				section.scrollIntoView({behavior: 'smooth', block: 'center'});
+			},
+			
+			onAddQuestionForm: function() {
+				var me = this;
+				var newQuestion = {
+					id: UT.generateUUID()
+				};
+				var container = me.$.container;
+				var selections = me.getSelection();
+				
+				if(selections.length === 0) {
+					UT.alert("STD.N1600");
+					return;
+				} else if(selections.length > 1) {
+					UT.alert("STD.N3700");
+					return;
+				}
+				
+				var selection = selections[0];
+				var sectionId = selection.type === "section" ? selection.id : selection.type === "question" ? selection.getAttribute("sectionid") : null;
+				if(!sectionId) {
+					UT.alert("섹션 선택 후 추가하시기 바랍니다.");
+					return;
+				}
+				var section = container.querySelector('[id="' + sectionId + '"]');
+				var sectionQuestions = this.findChildrenQuestions(section);
+				var afterElement;
+				if(sectionQuestions.length > 0) {
+					afterElement = sectionQuestions[sectionQuestions.length - 1].nextElementSibling;
+				}
+				
+				var question = me.addQuestionForm(container, {
+					id: sectionId
+				}, newQuestion, afterElement);
+				me.fire("add-question-form", newQuestion);
+				me.selectForm({
+					target: question
+				});
+				question.scrollIntoView({behavior: 'smooth', block: 'center'});
+			},
+			
+			onCopyForm: function() {
+				var me = this;
+				var container = me.$.container;
+				var selections = me.getSelection();
+				
+				if(selections.length === 0) {
+					UT.alert("STD.N1600");
+					return;
+				} else if(selections.length > 1) {
+					UT.alert("STD.N3700");
+					return;
+				}
+				
+				var selection = selections[0];
+				var type = selection.type;
+				if(type !== "section" && type !== "question") {
+					UT.alert("섹션이나 질문을 선택 시 복사 가능합니다.");
+					return;
+				}
+				if(type === "question") {
+					me.fire("sync-value", {
+						id: selection.id
+					});
+					var questionData = selection.data;
+					var sectionId = selection.getAttribute("sectionid");
+					var copyQuestion = JSON.parse(JSON.stringify(questionData));
+					copyQuestion.id = UT.generateUUID();
+					
+					var copyQuestionForm = me.addQuestionForm(container, {
+						id: sectionId
+					}, copyQuestion, selection.nextElementSibling);
+					me.fire("add-question-form", copyQuestion);
+					me.selectForm({
+						target: copyQuestionForm
+					});
+				} else {
+					var questions = me.findChildrenQuestions(selection);
+					var lastQuestion;
+					for(var i = 0; i < questions.length; i++) {
+						me.fire("sync-value", {
+							id: questions[i].id
+						});
+						if(i === questions.length - 1) {
+							lastQuestion = questions[i];
+						}
+					}
+					var sectionData = selection.data;
+					var copySection = JSON.parse(JSON.stringify(sectionData));
+					copySection.id = UT.generateUUID();
+					var container = me.$.container;
+					
+					var nextElement = lastQuestion.nextElementSibling;
+					var copySectionForm = me.addSectionForm(container, copySection, nextElement);
+					me.fire("add-section-form", copySection);
+					me.selectForm({
+						target: copySectionForm
+					});
+					
+					for(var i = 0; i < questions.length; i++) {
+						var question = questions[i];
+						var questionData = question.data;
+						var copyQuestion = JSON.parse(JSON.stringify(questionData));
+						copyQuestion.id = UT.generateUUID();
+						var copyQuestionForm = me.addQuestionForm(container, {
+							id: copySection.id
+						}, copyQuestion, nextElement);
+						me.fire("add-question-form", copyQuestion);
+						me.selectForm({
+							target: copyQuestionForm
+						});
+					}
+				}
+			},
+			
+			allLoaded: function(pages) {
+				var me = this;
+				var container = me.$.container;
+				var childrens = container.children;
+				
+				for(var i = 0; i < childrens.length; i++) {
+					var children = childrens[i];
+					
+					var page = pages.querySelector('[id="' + children.id + '"]');
+					if(!page.loadCompleted) {
+						continue;
+					}
+					pages.selectItem(page);
+				}
+			},
+			
+			validate: function(pages) {
+				var me = this;
+				var container = me.$.container;
+				var childrens = container.children;
+				
+				var isValid = true;
+				for(var i = 0; i < childrens.length; i++) {
+					var children = childrens[i];
+					
+					var page = pages.querySelector('[id="' + children.id + '"]');
+					if(!page.loadCompleted) {
+						continue;
+					}
+					me.removeSelection();
+					me.targetSelection(children);
+					pages.selectItem(page);
+					if(!page.validator()) {
+						children.classList.add('invalid');
+						children.scrollIntoView({behavior: 'smooth', block: 'center'});
+						isValid = false;
+						break;
+					} else {
+						children.classList.remove('invalid');
+					}
+				}
+				
+				if(isValid) {
+					var children = container.querySelector('[id="basic"]');
+					me.selectForm({
+						target: children
+					});
+					children.scrollIntoView({behavior: 'smooth', block: 'center'});
+				}
+				return isValid;
+			},
+			
+			getData: function(pages) {
+				var me = this;
+				var container = me.$.container;
+				var childrens = container.children;
+				
+				var survey;
+				var subjects;
+				var sectionForms = [];
+				for(var i = 0; i < childrens.length; i++) {
+					var children = childrens[i];
+					
+					var page = pages.querySelector('[id="' + children.id + '"]');
+					if(children.id === "basic") {
+						survey = children.data;
+						subjects = page.getSubjects;
+						continue;
+					}
+					
+					if(children.type === "section") {
+						sectionForms.push(children);
+					}
+					if(!page.loadCompleted) {
+						continue;
+					}
+					
+					if(children.type === "front" || children.type === "back") {
+						var content = page.syncValue;
+						survey[page.type + "_cover_cont"] = content;
+						continue;
+					}
+					
+					if(children.type === "section" || children.type === "question") {
+						page.syncValue;
+					}
+				}
+				
+				if(survey.front_cover_yn === "N") {
+					survey.front_cover_cont = null;
+				}
+				if(survey.back_cover_yn === "N") {
+					survey.back_cover_cont = null;
+				}
+				
+				var sections = [];
+				for(var i = 0; i < sectionForms.length; i++) {
+					var sectionForm = sectionForms[i];
+					var section = sectionForm.data;
+					var questionForms = me.findChildrenQuestions(sectionForm);
+					var questions = [];
+					for(var j = 0; j < questionForms.length; j++) {
+						var questionForm = questionForms[j];
+						var question = questionForm.data;
+						questions.push(question);
+					}
+					section.questions = questions;
+					sections.push(section);
+				}
+				return {
+					survey: UT.convertDayHourMinToDt(survey),
+					subjects: subjects,
+					sections: sections
+				}
+			},
+			
+			onLoadTemplate: function() {
+				var me = this;
+				var popup = UT.popup("ep-survey-template-detail-selector", me, "90%", "90%", {
+					'select-template': function(popup, e) {
+						me.onLoadSelectAllIndex(e.detail);
+						popup.close();
+					},
+					'select-index': function(popup, e) {
+						me.onLoadSelectIndex(e.detail);
+						popup.close();
+					},
+					'close': function(popup, e) {
+						popup.close();
+					}
+				}, {maximizable: true, titleText: "설문 템플릿", modal: true});
+				popup.show();
+				popup.getWindowContent().load(me.survey.surv_tmpl_uuid);
+			},
+			
+			editableChanged: function(value) {
+				this.applyFormula();
+			},
+			
+			onAllSelectIndex: function() {
+				var me = this;
+				var survey = me.survey;
+				
+				if(UT.isEmpty(survey.surv_tmpl_uuid)) {
+					UT.alert("STD.SURV0004"); // 설문 템플릿이 지정되지 않았습니다.
+					return;
+				}
+				
+				UT.confirm("STD.SURV0005", function() { // 설문 템플릿 선택 시 기존 작성은 모두 초기화됩니다.<br>진행하시겠습니까?
+					var container = me.$.container;
+					var results = me.getSelectionData(container.children);
+					me.fire("select-template", results);
+				});
+			},
+			
+			onSelectIndex: function() {
+				var me = this;
+				var container = me.$.container;
+				var selectionChildrens = container.querySelectorAll('[class*="selection"]');
+				if(selectionChildrens.length === 0) {
+					UT.alert("STD.SURV0003"); // 선택한 목차가 없습니다.
+					return;
+				}
+				
+				UT.confirm("STD.SURV0006", function() { // 목차 선택 시 기존 작성내역 하단에 추가됩니다.<br>진행하시겠습니까?
+					var results = me.getSelectionData(selectionChildrens);
+					me.fire("select-index", results);
+				});
+			},
+			
+			getSelectionData: function(selectionChildrens) {
+				var me = this;
+				var results = [];
+				var selectFrontCover = false;
+				var selectBackCover = false;
+				for(var i = 0; i < selectionChildrens.length; i++) {
+					var selection = selectionChildrens[i];
+					if(selection.type === "front") {
+						selectFrontCover = true;
+					} else if(selection.type === "back") {
+						selectBackCover = true;
+					}
+					results.push({
+						type: selection.type,
+						data: selection.data
+					})
+				}
+				for(var i = 0; i < results.length; i++) {
+					var result = results[i];
+					if(result.type === "basic") {
+						delete result.data.surv_tmpl_uuid;
+						if(!selectFrontCover) {
+							delete result.data.front_cover_cont;
+						}
+						if(!selectBackCover) {
+							delete result.data.back_cover_cont;
+						}
+					}
+				}
+				return results;
+			},
+			
+			onLoadSelectAllIndex: function(detail) {
+				var me = this;
+				var container = me.$.container;
+				var childrens = container.children;
+				
+				var deleteChildrens = [];
+				for(var i = 0; i < childrens.length; i++) {
+					var children = childrens[i];
+					if(children.type !== "basic") {
+						deleteChildrens.push(children);
+					}
+				}
+				if(deleteChildrens.length > 0) {
+					me.delete(deleteChildrens);
+				}
+				me.onLoadSelectIndex(detail);
+			},
+			
+			// 템플릿 불러오기 한 경우
+			onLoadSelectIndex: function(detail) {
+				var me = this;
+				var container = me.$.container;
+				
+				var existSection = me.existTypeChildren(container, "section");
+				var sectionAndQuestionIndexes = [];
+				me.set("stopChangeCover", true);
+				for(var i = 0; i < detail.length; i++) {
+					var index = detail[i];
+					if(index.type === "basic") {
+						me.loadBasicForm(index.data);
+					} else if(index.type === "front" || index.type === "back") {
+						me.loadCoverForm(index.data, index.type);
+					} else {
+						sectionAndQuestionIndexes.push(index);
+					}
+				}
+				me.set("stopChangeCover", false);
+				var children = container.querySelector('[id="basic"]');
+				if(sectionAndQuestionIndexes.length === 0) {
+					me.fireSelect(children);
+					return;
+				}
+				
+				// 만약 불러온 목차에서 질문의 시작이 섹션이 아니고 기존 목차에 섹션이 존재하지 않는 경우 신규 섹션을 생성한다.
+				var firstIndex = sectionAndQuestionIndexes[0];
+				var sectionForm;
+				if(firstIndex.type !== "section" && !existSection) {
+					var newSection = {
+						id: UT.generateUUID()
+					};
+					
+					sectionForm = me.addSectionForm(container, newSection);
+					me.fire("add-section-form", newSection);
+				}
+				for(var i = 0; i < sectionAndQuestionIndexes.length; i++) {
+					var index = sectionAndQuestionIndexes[i];
+					if(index.type === "section") {
+						sectionForm = me.loadSectionForm(index.data);
+					} else if(index.type === "question") {
+						me.loadQuestionForm(sectionForm, index.data);
+					}
+				}
+				
+				me.fireSelect(children);
+			},
+			
+			loadBasicForm: function(data) {
+				var me = this;
+				var container = me.$.container;
+				var children = container.querySelector('[id="basic"]');
+				var survey = children.data;
+				
+				for(var key in data) {
+					survey[key] = data[key];
+					if(key === "surv_tmpl_nm") {
+						survey.surv_nm = survey.surv_tmpl_nm;
+					}
+				}
+				if(UT.isNotEmpty(data.elem_pd_val) && UT.isNotEmpty(data.elem_pd_typ_ccd)) {
+					var elemPdVal = data.elem_pd_val;
+					var elemPdTypCcd = data.elem_pd_typ_ccd;
+					
+					var now = new Date();
+					var nextWeek = new Date(now);
+					if(elemPdTypCcd === "DAY") {
+						nextWeek.setDate(now.getDate() + Number(elemPdVal));
+					} else if(elemPdTypCcd === "MONTH") {
+						nextWeek.setMonth(now.getMonth() + Number(elemPdVal));
+					}
+					nextWeek.setHours(12, 0, 0, 0);
+					survey.surv_ed_dttm = nextWeek;
+					survey = UT.convertDtToDayHourMin(survey);
+				}
+				me.fireSelect(children, true);
+			},
+			
+			loadCoverForm: function(data, type) {
+				var me = this;
+				var container = me.$.container;
+				var children = container.querySelector('[id="basic"]');
+				var survey = children.data;
+				
+				if(type === "front") {
+					survey.front_cover_cont = data;
+				} else if(type === "back") {
+					survey.back_cover_cont = data;
+				}
+				
+				var existCover = me.existTypeChildren(container, type);
+				if(!existCover) {
+					me.addCoverFormDiv(survey, type);
+					me.fire("add-cover-form", {
+						id: "basic-" + type,
+						data: survey[type + "_cover_cont"],
+						type: type
+					});
+				} else {
+					var coverForm = me.getTypeChildrens(container, type)[0];
+					coverForm.data = data;
+					me.fireSelect(coverForm, true);
+				}
+			},
+			
+			loadSectionForm: function(section) {
+				var me = this;
+				var container = me.$.container;
+				
+				section.id = UT.generateUUID();
+				var sectionForm = me.addSectionForm(container, section, null);
+				me.fire("add-section-form", section);
+				return sectionForm;
+			},
+			
+			loadQuestionForm: function(sectionForm, question) {
+				var me = this;
+				var container = me.$.container;
+				
+				question.id = UT.generateUUID();
+				me.addQuestionForm(container, sectionForm, question, null);
+				me.fire("add-question-form", question);
+			}
+		})
+	</script>
+</dom-module>

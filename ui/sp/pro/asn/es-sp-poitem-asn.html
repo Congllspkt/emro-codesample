@@ -1,0 +1,829 @@
+<sc-link rel="import" href="ep-sp-dlvy-sched.html"></sc-link>
+<sc-link rel="import" href="../../../bp/pro/shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="es-sp-poitem-asn">
+	<!--
+		******************************************************************************************
+		** @Program-name 	: 발주품목현황(납품예정 화면)
+		** @Description		: 계약및발주관리
+		** @Author 			: jeKim
+		** @Create Date 	: 2016.05.30
+		** @History 		: 2016.05.30 jeKim 최초작성
+		******************************************************************************************
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		-->
+		<!-- 임시 저장 -->
+		<sc-ajax id="saveDraftAsn"
+				 url="saveDraftAsn.do"
+				 on-response="completeSaveDrafteAsn">
+		</sc-ajax>
+
+		<!-- 납품예정 삭제 -->
+		<sc-ajax id="deleteAsn"
+				 url="deleteAsn.do"
+				 body="{{asnHdInfo}}"
+				 on-response="completeDeleteAsn">
+		</sc-ajax>
+
+		<!-- 신규 납품예정 조회 -->
+		<sc-ajax id="findInitAsnByPoItem"
+				 url="findInitAsnByPoItem.do"
+				 body="{{asnReqSearchParam}}"
+				 on-response="completeFindInitAsnByPoItem">
+		</sc-ajax>
+
+		<!-- 상세정보 조회 -->
+		<sc-ajax id="findAsn"
+				 url="findAsn.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindAsn">
+		</sc-ajax>
+
+		<!-- 납품예정 저장 -->
+		<sc-ajax id="submitAsn"
+				 url="submitAsn.do"
+				 on-response="completeSubmitAsn">
+		</sc-ajax>
+
+		<!-- 출력정보 조회 -->
+		<sc-ajax id="findInfoDocumentOutputSpAsn"
+				 url="findInfoDocumentOutputSpAsn.do">
+		</sc-ajax>
+
+		<!-- 코드 -->
+		<sc-code-group>
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>       <!-- UOM -->
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>       <!-- 통화 -->
+		</sc-code-group>
+
+		<cc-auth-checker check-list="auth-s, auth-p"></cc-auth-checker>
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar title-text="납품예정">
+			<sc-button text="저장" on-click="onSaveDraft" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="납품예정" on-click="onSaveSubmit" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			<sc-button text="삭제" on-click="onDelete" hidden="[[!formula('deleteBtnSts')]]" auth-s></sc-button>
+			<sc-button text="인쇄" on-click="onDocumentOutput" hidden="[[formula('isNew')]]" auth-p></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+
+		<div class="flex page">
+			<cc-form-panel title-text="반려 사유"  hidden="[[!formula('isReject')]]" column="1">
+				<cc-fieldset>
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{asnHdInfo.asn_opn}}" readonly="true" max-length="500"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+
+			<cc-form-panel title-text="납품예정 정보" validation-group="asnData">
+				<cc-fieldset column-span="2">
+					<sc-label text="운영조직"></sc-label>
+					<cc-sp-operorg-combobox-field id="operorgcombobox" oper-unit-cd="PO"
+												  placeholder="선택" required="true" readonly="true"
+												  value="{{asnHdInfo.oorg_cd}}">
+					</cc-sp-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품예정 번호"></sc-label>
+					<sc-text-field value="{{asnHdInfo.asn_no}}" class="w-150" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{asnHdInfo.asn_tit}}" required="true" readonly="[[!formula('editable')]]" max-length="200"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 코드"></sc-label>
+					<sc-text-field value="{{asnHdInfo.vd_cd}}" class="w-150" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 명"></sc-label>
+					<sc-text-field value="{{asnHdInfo.disp_vd_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="입고 담당자 명"></sc-label>
+					<sc-text-field value="{{asnHdInfo.gr_pic_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품 일시"></sc-label>
+					<div class="field-box">
+						<sc-date-field value="{{asnHdInfo.asn_day}}" class="date" string-date="true"
+									   required="true" readonly="[[!formula('editable')]]"
+									   validator="asnDtValidator"
+									   validation-group="asnDt">
+						</sc-date-field>
+						<span style="margin-right:5px"></span>
+						<sc-number-field class="w-50" min-value="0" max-value="23" max-length="2" input-cover="true" format-type="disp_time"
+										 value="{{asnHdInfo.dlvy_dttm_hh}}"
+										 regex="/^([0-1]?[0-9]|2[0-3])$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="asnDtValidator"
+										 validation-group="asnDt">
+						</sc-number-field>
+						<span style="margin:0 2px">:</span>
+						<sc-number-field class="w-50" min-value="0" max-value="59" max-length="2" input-cover="true" format-type="disp_time"
+										 value="{{asnHdInfo.dlvy_dttm_mi}}"
+										 regex="/^[0-5]?[0-9]$/"
+										 readonly="[[!formula('editable')]]"
+										 validator="asnDtValidator"
+										 validation-group="asnDt">
+						</sc-number-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<cc-cur-search value="{{asnHdInfo.cur_ccd}}" readonly="true" hide-trigger="true" result-hidden="true"></cc-cur-search>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품예정 금액"></sc-label>
+					<sc-number-field class="w-150 align-right" value="{{asnHdInfo.asn_amt}}" input-cover="true" format-type="amt" readonly="true"></sc-number-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="배송자 명"></sc-label>
+					<sc-text-field value="{{asnHdInfo.shpr_nm}}" readonly="[[!formula('editable')]]" max-length="50"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="배송 전화"></sc-label>
+					<sc-text-field value="{{asnHdInfo.shpg_tel}}" readonly="[[!formula('editable')]]" max-length="18" strip-chars-re="/[ㄱ-힣]/" mask-re="/[0-9\-]/"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="배송 차량번호"></sc-label>
+					<sc-text-field value="{{asnHdInfo.shpg_vehno}}" readonly="[[!formula('editable')]]" max-length="20"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="배송 비고"></sc-label>
+					<sc-textarea-field value="{{asnHdInfo.shpg_rmk}}" readonly="[[!formula('editable')]]" max-length="1000"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<div class="upload-wrapper">
+						<sc-upload id="upload" class="h-200" value="{{asnHdInfo.athg_uuid}}" editable="[[formula('editable')]]"></sc-upload>
+					</div>
+				</cc-fieldset>
+			</cc-form-panel>
+
+
+
+			<sc-grid id="gridPanel" class="h-400" use-state="[[formula('editable')]]" aggregate="true"
+					 use-selection="[[!formula('isCompleted')]]"
+					 calc-footer-include-invisible="true"
+					 editable="[[formula('editable')]]"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar>
+					<sc-button text="납품 일정" on-click="onRegSched"></sc-button>
+					<sc-button text="삭제" on-click="onDeleteItem" hidden="[[!formula('editable')]]"></sc-button>
+				</cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="170"
+										display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+					<sc-data-column data-field="po_no" header-text="발주 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="po_lno" header-text="발주 항번" width="70" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100"></sc-data-column>
+					<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="250" text-align="left"></sc-data-column>
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left"></sc-data-column>
+					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="90" image-change-function="onImageChangeFn" visible="[[formula('hasNoCdItem')]]"></sc-image-column>
+					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="60"
+										display-field="data" value-field="data" items="{{codes.uomCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="gr_qty" header-text="입고 수량" width="80" text-align="right"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="remain_qty" header-text="발주 잔량" width="80" text-align="right"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="asn_able_qty_sum" header-text="납품예정 생성가능 수량" width="80" text-align="right"
+									data-type="number" format-type="qty" visible="[[formula('editable')]]" ></sc-data-column>
+					<sc-data-column data-field="asn_qty" header-text="납품예정 수량" width="90" text-align="right" editable="true"
+									max-length="8" editor-regex-function="onRegexFn" validate-on-cell-paste="true"
+									required="true" validator-function="gridValidatorFn"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="gr_apvd_qty" header-text="납품예정 승인 수량" width="110" text-align="right" visible="[[formula('isRequested')]]"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="gr_ret_qty" header-text="납품예정 반품 수량" width="110" text-align="right" visible="[[formula('isRequested')]]"
+									data-type="number" format-type="qty"></sc-data-column>
+					<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70"
+										display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="po_uprc" header-text="발주 단가" width="100" text-align="right"
+									data-type="number" format-type="price"></sc-data-column>
+					<sc-data-column data-field="asn_amt" header-text="납품예정 금액" width="140" text-align="right" editable="false" converter="onAsnAmtConvert"
+									data-type="number" format-type="amt"
+									aggregate-function="onAmtAggregateFn" aggregate-format="amt" sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-date-column data-field="po_crn_dt" header-text="발주 등록 일자" width="100"></sc-date-column>
+					<sc-date-column data-field="req_dlvy_dt" header-text="요청 납품 일자" width="100"></sc-date-column>
+					<sc-date-column	data-field="dlvy_dt"	 header-text="납품 일자"		width="80"	editable="false"></sc-date-column>
+					<sc-data-column data-field="dlvy_plc" header-text="납품 장소" width="150" text-align="left"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="asn_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="asn_uuid"></sc-grid-field>
+					<sc-grid-field data-field="asn_no"></sc-grid-field>
+					<sc-grid-field data-field="asn_ordn"></sc-grid-field>
+					<sc-grid-field data-field="asn_lno"></sc-grid-field>
+					<sc-grid-field data-field="po_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="po_revno"></sc-grid-field>
+					<sc-grid-field data-field="pr_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="pr_no"></sc-grid-field>
+					<sc-grid-field data-field="pr_lno"></sc-grid-field>
+					<sc-grid-field data-field="cur_ccd"></sc-grid-field>
+					<sc-grid-field data-field="vd_cd"></sc-grid-field>
+					<sc-grid-field data-field="asn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="purc_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+					<sc-grid-field data-field="item_nm"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en"></sc-grid-field>
+					<sc-grid-field data-field="asn_req_qty"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-sp-poitem-asn",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							uomCcd: [],	// UOM
+							curCcd: [],	// 통화
+							oorgCd: []
+						}
+					},
+					reset: false
+				},
+
+				// 납품예정 헤더
+				asnHdInfo: {
+					type: Object,
+					value: function() {
+						return {
+							param: {}
+						}
+					}
+				},
+
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+
+				// 신규 납품예정 조회조건
+				asnReqSearchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+
+			},
+			formulas: {
+				/* 납품예정 진행상태에 따른 화면 제어 */
+				editable: function() {
+					// 납품예정 진행상태 (CRNG:작성중, WTG:대기중, PRGSG:진행중, RET:반려, CNCL:취소, CMPLD:완료)
+					return this.get("asnHdInfo.asn_sts_ccd") == "CRNG";
+				},
+				deleteBtnSts: function() {
+					return !this.formula('isNew') && this.formula("editable");
+				},
+				isNew: function() {
+					return UT.isEmpty(this.get("asnHdInfo.asn_uuid"));
+				},
+				isReject: function() {
+					// 납품예정 진행상태
+					return this.get("asnHdInfo.asn_sts_ccd") === "RET";
+				},
+				hasNoCdItem: function() {
+					return this.get("asnHdInfo.has_no_cd_item") === "Y";
+				},
+				isRequested: function() {
+					var asnStsCcd = this.get("asnHdInfo.asn_sts_ccd"); // 납품예정 진행상태 (CRNG:작성중, WTG:대기중, PRGSG:진행중, RET:반려, CNCL:취소, COMPLD:완료)
+
+					return ["WTG", "PRGSG", "CMPLD"].indexOf(asnStsCcd) > -1;
+				},
+				isCompleted: function() {
+					var asnStsCcd = this.get("asnHdInfo.asn_sts_ccd"); // 납품예정 진행상태 (CRNG:작성중, WTG:대기중, PRGSG:진행중, RET:반려, CNCL:취소, COMPLD:완료)
+
+					return ["RET", "CNCL", "COMPLD"].indexOf(asnStsCcd) > -1;
+				}
+			},
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+				me.set("codes.oorgCd", me.$.operorgcombobox.codes.operOrgCd)
+			},
+			//그리드 데이타 convert
+			onAsnAmtConvert: function(rowIndex, fieldName, data) {
+				var me = this;
+				var itemPrice = new BigNumber(data["po_uprc"] || 0), 	// 발주단가
+					asnQty    = new BigNumber(data["asn_qty"] || 0), 		// 요청수량
+					itemAmt   = itemPrice.mul(asnQty).toFixed(),				// itemPrice * asnQty
+					curCcd    = this.get("asnHdInfo.cur_ccd");
+
+				//통화 별 금액 소수점 처리
+				return CCPrecManager.format("amt", itemAmt, curCcd);
+			},
+			// grid item edit end 이벤트
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+
+				if(item.dataField === "asn_qty") {
+					var qty    = new BigNumber(newValue || 0),
+						price  = new BigNumber(data["po_uprc"] || 0),
+						curCcd = me.get("asnHdInfo.cur_ccd");
+
+					// 금액 계산 소수점처리
+					var amt = CCPrecManager.format("amt", qty.mul(price).toFixed(), curCcd);
+
+					provider.setItemAt(item.rowIndex, {"asn_amt": amt});
+				}
+			},
+			// grid item-click event
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item;
+
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			// grid column editor-regex-function
+			onRegexFn: function(data, item) {
+				var me = this;
+				switch(item.dataField) {
+					case "asn_qty":
+						return CCPrecManager.regex("qty", data["uom_ccd"]);
+					default:
+						return null;
+				}
+			},
+
+			//그리드  validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me = this;
+				if(dataField === "asn_qty") {
+					var value = new BigNumber(data[dataField] || 0);
+					var compareValue = new BigNumber(data['asn_able_qty_sum'] || 0);
+
+					if(value.isZero()) {
+						return me.translate("STD.E1008", null, me.translate(headerText), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+
+						// value > compareValue
+					} else if(value.gt(compareValue)) {
+						// {0}은(는) {1}이하 값으로 입력하십시오
+						return me.translate("STD.E1011", null, me.translate("납품예정 수량"), me.translate("납품예정 생성가능 수량"));
+					}
+				}
+				return true;
+			},
+			//품목 삭제 버튼 클릭 시
+			onDeleteItem: function() {
+				var me = this;
+
+				var provider = me.$.gridPanel.getDataProvider();
+				var checked = provider.selectionCheckedItems();
+				if(checked.length === 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				} else {
+					UT.confirm("STD.N1300", function() {	// "삭제 하시겠습니까?"
+						provider.removeItems(true);	// 그리드에서 체크된 데이터를 지워준다. getRemoveItems에서 지워진 데이터를 가져올 수 있다.
+					});
+				}
+			},
+
+			onRegSched: function() {
+				var me = this;
+
+				var provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				var param = {};
+
+				var dlvySchedRegPopup = UT.popup("ep-sp-dlvy-sched", me, "90%", "90%", null, {titleText: I18N.translate("납품 일정")});
+				dlvySchedRegPopup.show();
+				param = me.preparePopUpParam(provider.getItems())
+				dlvySchedRegPopup.getWindowContent().load(param);
+
+			},
+			//load
+			load: function(param) {
+				var me = this;
+
+				if(UT.isNotEmpty(param.asn_uuid)) {
+					me.findAsn(param);
+				} else if(UT.isNotEmpty(param.po_item_uuids)) {
+					me.findInitAsnByPoItem(param);
+				}
+			},
+			preparePopUpParam : function(data) {
+				var me = this;
+
+				var poItemIdList = [];
+
+				for(var i = 0; i < data.length; i++) {
+					poItemIdList.push(data[i].po_item_uuid);
+				}
+				return {
+					"po_item_uuids": poItemIdList,
+					"is_completed":  ["RET", "CNCL", "COMPLD"].indexOf(me.get("asnHdInfo.asn_sts_ccd")) > -1,
+					"asnHdInfo" : me.get("asnHdInfo")
+				};
+			},
+
+			/**
+			 * 납품예정 헤더&상세 데이터 조회
+			 */
+			findAsn: function(param) {
+				var me = this;
+
+				me.set("searchParam", param);
+				UT.request(me.$.findAsn);
+			},
+
+			// 조회 callback
+			completeFindAsn: function(e, res) {
+				var me = this;
+
+				var result    = res.response.resultData,
+					asnHdInfo = result.asnHdInfo,
+					asnDtList = result.asnDtList;
+				me.set("asnHdInfo", asnHdInfo);
+
+				var asnDt = asnHdInfo.dlvy_dttm; // 납품일시
+				if(UT.isString(asnDt) && asnDt.length === 12) {
+					me.set("asnHdInfo.asn_day", asnDt.substring(0, 8));
+					me.set("asnHdInfo.dlvy_dttm_hh", parseInt(asnDt.substring(8, 10)));
+					me.set("asnHdInfo.dlvy_dttm_mi", parseInt(asnDt.substring(10, 12)));
+				}
+
+				me.$.gridPanel.setDataProvider(asnDtList);
+				me.applyFormula();
+			},
+
+			// 신규 납품예정 을 위한 발주품목 데이터 조회
+			findInitAsnByPoItem: function(param) {
+				var me = this;
+
+				me.set("asnReqSearchParam", param);
+
+				UT.request(me.$.findInitAsnByPoItem);
+			},
+
+			completeFindInitAsnByPoItem: function(e, res) {
+				var me = this;
+
+				var result    = res.response.resultData,
+					asnHdInfo = result.asnHdInfo,
+					asnDtList = result.asnDtList;
+
+				me.set("asnHdInfo", asnHdInfo);
+				me.set("asnHdInfo.is_new", true);
+
+				if(asnDtList.length === 1) {
+					me.set("asnHdInfo.asn_tit", me.translate("STD.AR1003", null, asnDtList[0].disp_item_nm));
+				} else if(asnDtList.length > 1) {
+					me.set("asnHdInfo.asn_tit", me.translate("STD.AR1004", null, asnDtList[0].disp_item_nm, asnDtList.length - 1));
+				}
+
+				me.$.gridPanel.getDataProvider().addItems(asnDtList);
+				me.applyFormula();
+			},
+
+
+			//납품일시 validator
+			asnDtValidator: function(value) {
+				var me = this;
+				var asnHdInfo = me.get("asnHdInfo");
+
+				var day  = moment(asnHdInfo.asn_day, "YYYYMMDDHHmmss").toDate(),
+					hour = asnHdInfo.dlvy_dttm_hh,
+					min  = asnHdInfo.dlvy_dttm_mi;
+
+				if(UT.isDate(day) && !UT.isObject(hour) && !UT.isObject(min)) {
+					var date = new Date(day);
+					date.setHours(!!hour ? hour : 0, !!min ? min : 0, 0, 0);
+
+					var delyDayTime = UT.toTime(date);
+					var nowDate = new Date();
+
+					if(delyDayTime !== null && delyDayTime >= nowDate.getTime()) {
+						return true;
+					}
+				}
+				// "'{0}'은(는) '{1}'이후 날짜를 입력해야 합니다."
+				return me.translate("STD.E1013", null, me.translate("납품예정 일시"), me.translate("현재 일시"));
+			},
+
+			/**
+			 * 임시저장 버튼 클릭
+			 */
+			onSaveDraft: function() {
+				var me = this;
+
+				me.doSave(me.$.saveDraftAsn, "STD.N1200");
+			},
+
+			onDelete: function() {
+				var me = this;
+
+				UT.confirm("STD.N1300", function() { // 삭제하시겠습니까?
+					UT.request(me.$.deleteAsn);
+				});
+			},
+
+			completeDeleteAsn: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+
+				if(status === "S") {
+					UT.completeAlert();	// 요청을 완료 하였습니다
+					me.onClose();
+
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+
+					if(UT.isNotEmpty(me.get("asnHdInfo.asn_uuid"))) {
+						me.findAsn(me.get("asnHdInfo.asn_uuid"));
+					}
+
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+
+			/**
+			 * 납품예정 데이터 저장
+			 */
+			doSave: function(ajax, message) {
+				var me = this, provider = me.$.gridPanel.getDataProvider();
+
+				if(!me.validate('asnData')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+
+				var provider = me.$.gridPanel.getDataProvider();
+				if(!provider || provider.getItemSize() === 0) {
+					UT.alert("STD.PR1002"); //"품목 정보가 없습니다."
+					return;
+				}
+
+				if(!me.$.gridPanel.validate()) {
+					UT.alert("STD.N1102");
+					return;
+				}
+
+				var asnDt   = me.get("asnHdInfo.asn_day"),
+					asnDtHh = me.get("asnHdInfo.dlvy_dttm_hh") || 0,
+					asnDtMi = me.get("asnHdInfo.dlvy_dttm_mi") || 0;
+
+				if(asnDt) {
+					var asnDtHhMi = asnDt + ((asnDtHh < 10) ? ("0" + asnDtHh) : asnDtHh) + ((asnDtMi < 10) ? ("0" + asnDtMi) : asnDtMi);
+
+					me.set("asnHdInfo.dlvy_dttm", asnDtHhMi);
+				}
+
+				UT.confirm(message, function() {
+					me.$.upload.upload().then(function() {
+						ajax.body = {
+							asnHdInfo: me.get("asnHdInfo"),
+							insertItems: provider.getNewItems(),		// 신규 추가된 데이터들을 가져온다.
+							updateItems: provider.getUpdateItems(),	// 수정된 데이터들을 가져온다.
+							removeItems: provider.getRemoveItems(),	// 삭제된 데이터들을 가져온다.
+							checkItems: provider.getItems()
+						};
+						UT.request(ajax);
+					});
+				});
+			},
+
+			// 검수 요청 데이터 저장 callback
+			completeSaveDrafteAsn: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+
+				if(status === "S") {
+					UT.completeAlert(); // 요청을 완료 하였습니다
+					var asnUuid = result.resultData.asnUuid;
+					var param = {
+						asn_uuid: asnUuid
+					};
+					me.findAsn(param);
+				} else if(status == "ASN_QTY_ERR") {
+					var invalidList = result.resultList;
+					var invalidPos = [];
+					for(var i = 0; i < invalidList.length; i++) {
+						var invalid = invalidList[i];
+						var errText = "[" + me.translate("발주 번호/차수") + " : " + invalid.po_no + " / " + invalid.po_lno + "]";
+						invalidPos.push(errText);
+					}
+
+					UT.alert(me.translate("STD.AR1001", null, invalidPos.toString()), null, true);
+					//"납품예정 수량은 발주잔량을 초과할 수 없습니다.<br/>재 조회 후 진행하세요.<br/>{0}"
+					return;
+				} else if(status == "PO_STATE_ERR") {
+					var invalidList = result.resultList, msg = "";
+
+					for(var i = 0; i < invalidList.length; i++) {
+						if(UT.isNotEmpty(msg)) msg += '<br/>';
+
+						var invalidPoItem = invalidList[i];
+						if(invalidPoItem.check_result === "PO_COMPLETE") {				//발주종료
+							msg += me.translate("STD.PO1033", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						} else if(invalidPoItem.check_result === "PO_TERMINATE") {		//발주해지
+							msg += me.translate("STD.PO1048", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						} else if(invalidPoItem.check_result === "PO_CHANGE_PROGRESS") {	//발주변경 진행중
+							msg += me.translate("STD.PO1034", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						} else if(invalidPoItem.check_result === "HAS_GR_ITEM") {			//납품예정/검수진행중인 품목 존재
+							msg += me.translate("STD.PO1041", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						}
+					}
+					if(UT.isNotEmpty(msg)) {
+						UT.alert(msg, function() {
+							if(UT.isNotEmpty(me.get("searchParam.asn_uuid"))) {
+								me.findAsn(me.get("searchParam"));
+							}
+						}, true);
+					}
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+
+					if(UT.isNotEmpty(me.get("searchParam.asn_uuid"))) {
+						me.findAsn(me.get("searchParam"));
+					}
+				} else if(status === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					me.onClose();
+
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+
+			/**
+			 * 납품예정 버튼 클릭
+			 */
+			onSaveSubmit: function() {
+				var me = this;
+
+				me.doSave(me.$.submitAsn, "STD.AR1000");
+			},
+
+			// 납품예정 callback
+			completeSubmitAsn: function(e, res) {
+				var me = this;
+				var result = res.response,
+					status = result.resultStatus;
+
+				if(status === "S") {
+					UT.completeAlert(); // 요청을 완료 하였습니다
+					me.onClose();
+				} else if(status == "ASN_QTY_ERR") {		//납품예정 수량 오류(발주 잔량 보다 클 경우 -> 납품예정 불가)
+					var invalidList = result.resultList;
+					var invalidPos = [];
+					for(var i = 0; i < invalidList.length; i++) {
+						var invalid = invalidList[i];
+						var errText = "[" + me.translate("발주 번호/차수") + " : " + invalid.po_no + " / " + invalid.po_lno + "]";
+						invalidPos.push(errText);
+					}
+
+					UT.alert(me.translate("STD.AR1001", null, invalidPos.toString()), null, true);
+					//"납품예정 수량은 발주잔량을 초과할 수 없습니다.<br/>재 조회 후 진행하세요.<br/>{0}"
+					return;
+				} else if(status == "PO_STATE_ERR") {	//발주 상태 공통코드 오류
+					var invalidList = result.resultList, msg = "";
+
+					for(var i = 0; i < invalidList.length; i++) {
+						if(UT.isNotEmpty(msg)) msg += '<br/>';
+
+						var invalidPoItem = invalidList[i];
+						if(invalidPoItem.check_result === "PO_COMPLETE") {				//발주종료
+							msg += me.translate("STD.PO1033", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						} else if(invalidPoItem.check_result === "PO_TERMINATE") {		//발주해지
+							msg += me.translate("STD.PO1048", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						} else if(invalidPoItem.check_result === "PO_CHANGE_PROGRESS") {	//발주변경 진행중
+							msg += me.translate("STD.PO1034", null, invalidPoItem.po_no, invalidPoItem.po_lno);
+						}
+					}
+					if(UT.isNotEmpty(msg)) {
+						UT.alert(msg, function() {
+							if(UT.isNotEmpty(me.get("searchParam.asn_uuid"))) {
+								me.findAsn(me.get("searchParam"));
+							}
+						}, true);
+					}
+				} else if(status === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+
+					if(UT.isNotEmpty(me.get("searchParam.asn_uuid"))) {
+						me.findAsn(me.get("searchParam"));
+					}
+				} else if(status === "N") {
+					UT.alert("STD.E9300");	// 삭제되었거나 존재하지 않는 데이터입니다.
+					me.onClose();
+
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+
+			/**
+			 * 인쇄 버튼 클릭
+			 */
+			onDocumentOutput: function(){
+            	var me = this;
+            	me.$.findInfoDocumentOutputSpAsn.body = {
+            			asn_uuid: me.get("asnHdInfo.asn_uuid")
+	                };
+            	UT.request(me.$.findInfoDocumentOutputSpAsn, function(e, res){
+            		var result = res.response;
+
+            		me.set("docOutpInfo", result.resultData);
+
+            		var datasetList = me.get("docOutpInfo.datasetList");
+            		var projectName = me.get("docOutpInfo.param.projectName");
+            		var formName = me.get("docOutpInfo.param.formName");
+            		var url = me.get("docOutpInfo.param.url");
+                	// UBIFORM 호출
+                	UT.openUBIFORM(projectName, formName, datasetList, url);
+            	});
+            },
+
+			/**
+			 * 닫기
+			 */
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			},
+			//합계
+			onAmtAggregateFn: function(dataField, datas) {
+				var me = this;
+				var result = new BigNumber('0');
+
+				for(var i = 0; i < datas.length; ++i) {
+					result = result.plus(new BigNumber(datas[i][dataField] || 0));
+				}
+
+				var curCcd = me.get("asnHdInfo.cur_ccd"),
+					value  = result.toFixed();
+
+				// 금액 소수점처리(value)
+				me.set("asnHdInfo.asn_amt", CCPrecManager.format("amt", value, curCcd));
+
+				return value;
+			},
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber
+
+		});
+	</script>
+
+</dom-module>

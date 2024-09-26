@@ -1,0 +1,1640 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="ingp">
+    <!-- 평가시트 목록 조회 -->
+    <select id="findListEvalSheet" resultType="Map">
+    /* ingp.findListEvalSheet : 평가시트 목록 조회 */
+        SELECT ES.SYS_ID                 /* 시스템 아이디 */
+             , ES.ES_ID                  /* 평가시트 아이디 */
+             , ES.EVAL_TYP_ID            /* 평가업무구분 아이디 */
+             , ES.ES_HD_ID               /* 평가시트 헤더 아이디 */
+             , ES.ORGN_ES_ID             /* 원본 평가시트 아이디 */
+             , ES.OPER_ORG_CD            /* 운영 조직 코드 */
+             , ES.EVAL_TYP_CD            /* 평가업무구분 코드 */
+             , ES.EVAL_KIND_CD           /* 평가 종류 코드 */
+             , ES.ES_HD_CD               /* 평가시트 헤더 코드 */
+             , ES.ES_CD                  /* 평가시트 코드 */
+             , ES.ORGN_ES_CD             /* 원본 평가시트 코드 */
+             , ES.ES_NM                  /* 평가시트 명 */
+             , CASE WHEN ES.USE_YN IS NULL OR ES.USE_YN = '' THEN 'N'
+                    ELSE ES.USE_YN 
+               END  AS USE_YN            /* 사용여부 - 확정여부 */
+             , ES.TMP_YN                 /* 템플릿 여부 */
+             , ET.EVAL_KIND_NM           /* 평가 종류 명 */
+             , ET.EVAL_TARG_CLS          /* 피평가단위 구분 */
+             , ET.EVAL_BAS_CD            /* 평가시트 적용 단위 코드 */
+             , ET.CHR_MGT_CLS            /* 담당자 관리 구분 */
+             , ( SELECT CASE WHEN COUNT(EF.EF_ID) &gt; 0 THEN 'Y' ELSE 'N' END
+                  FROM ESREFMA EF
+                       INNER JOIN ESRESEF SF
+                          ON EF.SYS_ID      = SF.SYS_ID
+                         AND EF.EF_ID       = SF.EF_ID
+                         AND EF.OPER_ORG_CD = SF.OPER_ORG_CD 
+                 WHERE EF.SYS_ID    = ES.SYS_ID 
+                   AND SF.ES_ID     = ES.ES_ID 
+                   AND SF.ES_HD_CD  = ES.ES_HD_CD 
+                   AND EF.QTT_SRV_CLS = 'R'
+               ) AS INCL_QTT    /* 정량항목 포함여부 */
+             , ( SELECT CASE WHEN COUNT(EF.EF_ID) &gt; 0 THEN 'Y' ELSE 'N' END
+                  FROM ESREFMA EF
+                       INNER JOIN ESRESEF SF
+                          ON EF.SYS_ID      = SF.SYS_ID
+                         AND EF.EF_ID       = SF.EF_ID
+                         AND EF.OPER_ORG_CD = SF.OPER_ORG_CD 
+                 WHERE EF.SYS_ID    = ES.SYS_ID 
+                   AND SF.ES_ID     = ES.ES_ID 
+                   AND SF.ES_HD_CD  = ES.ES_HD_CD 
+                   AND EF.QTT_SRV_CLS IN ('S', 'M', 'D')
+               ) AS INCL_QLT    /* 정성항목 포함여부 */
+          FROM ESRESMA ES 
+         INNER JOIN 
+               ESREVTP ET
+            ON (    ES.SYS_ID = ET.SYS_ID
+                AND ES.EVAL_TYP_ID  = ET.EVAL_TYP_ID
+                AND ES.OPER_ORG_CD  = ET.OPER_ORG_CD
+                AND ES.EVAL_TYP_CD  = ET.EVAL_TYP_CD
+                AND ES.EVAL_KIND_CD = ET.EVAL_KIND_CD
+                AND ET.STS         != 'D'
+               )
+         WHERE ES.SYS_ID        = #{g.tenant}
+           AND ES.OPER_ORG_CD   IN (
+                                    SELECT TARG_OPER_ORG_CD 
+                                      FROM ESAOOLM 
+                                     WHERE SYS_ID = #{g.tenant}
+                                       AND SRC_OPER_ORG_CD = #{p.oper_org_cd}
+                                       AND LINK_TYP = #{p.link_typ}
+                                    )
+           AND ES.TMP_YN        = 'Y'
+           AND ES.STS          != 'D'
+           AND ES.EVAL_TYP_CD   = #{p.eval_typ_cd}
+           AND EXISTS ( SELECT 1 
+                          FROM ESRESTG TG
+                         WHERE TG.SYS_ID        = ES.SYS_ID
+                           AND TG.ES_ID         = ES.ES_ID
+                           AND TG.EVAL_TARG_ID  = #{p.insp_grp_id}
+                           AND TG.EVAL_TARG_CD  = #{p.insp_grp_cd}
+                      )
+        <if test="p.es_nm != null and p.es_nm != ''">
+            <bind name="evalShtNmPattern" value="'%' + p.es_nm + '%'"/>
+           AND UPPER(ES.ES_NM) LIKE UPPER(#{evalShtNmPattern})
+        </if>
+        <if test="p.use_yn != null and p.use_yn != ''">
+           AND ES.USE_YN = #{p.use_yn}
+        </if>
+         ORDER BY ES.EVAL_TYP_CD, ES.REG_DT DESC
+    </select>
+    <!-- 의존심사절차목록조회 -->
+    <select id="findListDependIngpStep" resultType="Map">
+    /* ingp.findListDependIngpStep : 의존심사절차목록조회 목록 조회 */
+        SELECT 
+            X.INSP_GRP_EVAL_STP_ID    AS DP_TARG_EVAL_STP_ID, 
+            #{p.insp_grp_eval_stp_id} AS INSP_GRP_EVAL_STP_ID,
+            X.OPER_ORG_CD,
+            ( 
+                CASE WHEN EXISTS ( SELECT 'Y' 
+                                     FROM ESSCEST M 
+                                    WHERE M.SYS_ID = X.SYS_ID 
+                                      AND M.DP_TARG_EVAL_STP_ID  = X.INSP_GRP_EVAL_STP_ID 
+                                      AND M.INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id}
+                                 ) 
+                          THEN 'Y' 
+                     ELSE 'N' 
+                END 
+            ) AS CHK_YN,
+            X.INSP_GRP_CD    AS DP_INSP_GRP_CD,  
+            X.INSP_STP_CD    AS DP_INSP_STP_CD,
+            #{p.insp_grp_cd} AS INSP_GRP_CD,  
+            #{p.insp_stp_cd} AS INSP_STP_CD,
+            X.INSP_GRP_NM,
+            X.NEW_NM,
+            X.OLD_NM,
+            X.CD, 
+            CASE WHEN X.UP_INSP_STP_CD = 'ROOT'
+                      THEN X.UP_INSP_STP_CD
+                 ELSE X.UP_CD
+            END AS UP_CD,
+            X.UP_INSP_STP_CD
+       FROM (
+                SELECT A.SYS_ID,
+                    A.INSP_GRP_ID,  
+                    A.INSP_GRP_CD,  
+                    A.INSP_STP_ID,
+                    A.INSP_STP_CD,
+                    A.OPER_ORG_CD,
+                    INSP_GRP_NM,
+                    A.INSP_STP_NM                     AS NEW_NM,
+                    C.INSP_STP_NM                     AS OLD_NM,
+                    INSP_GRP_EVAL_STP_ID,
+                    CONCAT(A.INSP_GRP_CD, A.INSP_STP_CD)        AS CD,
+                    CONCAT(A.INSP_GRP_CD, A.UP_INSP_STP_CD)     AS UP_CD,
+                    A.UP_INSP_STP_CD
+                FROM ESSGPES A
+                     INNER JOIN ESSINGP B ON B.SYS_ID = A.SYS_ID AND B.INSP_GRP_ID = A.INSP_GRP_ID
+                     INNER JOIN ESSINST C ON C.SYS_ID = A.SYS_ID AND C.INSP_STP_ID = A.INSP_STP_ID
+               WHERE A.SYS_ID       = #{g.tenant} 
+                 AND A.INSP_GRP_ID != #{p.insp_grp_id} 
+                 AND A.STS         != 'D' 
+                 AND B.USE_YN       = 'Y'
+                 AND B.STS         != 'D' 
+                 AND C.STS         != 'D'
+            ) X
+      ORDER BY X.CD
+    </select>
+    <!-- 의존심사절차 삭제 -->    
+    <delete id="deleteListDependIngpStep">
+    /* ingp.deleteListDependIngpStep : 의존심사절차 삭제 */
+        DELETE FROM ESSCEST
+         WHERE SYS_ID       = #{g.tenant}
+           AND INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id}
+    </delete>
+    <!-- 의존심사절차 생성 -->
+    <insert id="insertListDependIngpStep">
+    /* ingp.insertListDependIngpStep : 의존심사절차 생성 */
+        INSERT INTO ESSCEST(
+            SYS_ID,
+            DP_EVAL_STP_ID,
+            INSP_GRP_EVAL_STP_ID,
+            DP_TARG_EVAL_STP_ID,
+            OPER_ORG_CD,
+            INSP_GRP_CD,
+            INSP_STP_CD,
+            DP_INSP_GRP_CD,
+            DP_INSP_STP_CD,
+            STS,
+            REM,
+            REG_ID,
+            REG_DT,
+            MOD_ID,
+            MOD_DT
+        )VALUES(
+            #{g.tenant},
+            #{g.uuid},
+            #{p.insp_grp_eval_stp_id},
+            #{p.dp_targ_eval_stp_id},
+            #{p.oper_org_cd},
+            #{p.insp_grp_cd},
+            #{p.insp_stp_cd},
+            #{p.dp_insp_grp_cd},
+            #{p.dp_insp_stp_cd},
+            'C',
+            #{p.rem},
+            #{g.username},
+            #{g.now},
+            #{g.username},
+            #{g.now}
+        )
+    </insert>
+    <!-- 심사절차목록조회 -->
+    <select id="findListIngpStep" resultType="map">
+    /* ingp.findListIngpStep : 심사 기준절차 조회 */
+      SELECT SYS_ID                                 /* 시스템 아이디 */
+           , INSP_STP_ID                            /* 심사 절차 아이디*/
+           , OPER_ORG_CD                            /* 운영 조직 코드 */
+           , INSP_STP_CD                            /* 심사 절차 코드 */
+           , UP_INSP_STP_CD                         /* 상위 심사절차 코드 */
+           , INSP_STP_NM                            /* 심사 절차 명 */
+           , WGT                                    /* 가중치 */
+           , EVALTR_TYP                             /* 평가자 유형 */
+           , USE_YN                                 /* 사용여부 */
+           , AUTO_PROG_YN                           /* 자동 진행 여부 */
+           , AUTO_PS_YN                             /* 자동 패스 여부 */
+           , PRE_CRC_PS_RCN_YN                      /* 이전 강제 패스 인정 여부 */
+           , EFF_START_DATE                         /* 유효 시작 일 */
+           , EFF_MN_CNT                             /* 유효 월 수 */
+           , APRV_SCO                               /* 승인점수 */
+           , RE_EVAL_D_MN                           /* 재평가 D MN*/
+           , REM                                    /* 비고 */
+           , STS                                    /* 상태 */
+           , CASE WHEN EXISTS ( SELECT 1
+                                  FROM ESSGPES 
+                                 WHERE SYS_ID = INST.SYS_ID
+                                   AND INSP_STP_ID = INST.INSP_STP_ID
+                                   AND OPER_ORG_CD = INST.OPER_ORG_CD
+                                   AND INSP_STP_CD = INST.INSP_STP_CD) 
+                       THEN 'Y' 
+                  ELSE 'N' 
+             END    AS INGP_USED_YN                      /* 절차 사용 여부 */
+        FROM ESSINST    INST   /* 심사절차 */
+       WHERE SYS_ID      = #{g.tenant}
+         AND STS        != 'D'
+    	<if test="p.oper_org_cd != null and p.oper_org_cd != ''">
+         AND OPER_ORG_CD = #{p.oper_org_cd}
+    	</if>
+    	<if test="p.use_yn != null and p.use_yn != ''">
+         AND USE_YN      = #{p.use_yn}
+    	</if>
+       ORDER BY INSP_STP_CD
+    </select>
+    <select id="findListInspGrpByIngpStep" resultType="map">
+    /* ingp.findListInspGrpByIngpStep : 기준절차가 매핑된 심사그룹 목록 조회 */
+        SELECT GPES.SYS_ID
+             , GPES.OPER_ORG_CD
+             , GPES.INSP_STP_ID
+             , GPES.INSP_STP_CD
+             , GPES.INSP_GRP_ID
+             , GPES.INSP_GRP_CD
+             , ( SELECT INSP_GRP_NM 
+                   FROM ESSINGP INGP
+                  WHERE INGP.SYS_ID      = GPES.SYS_ID
+                    AND INGP.INSP_GRP_ID = GPES.INSP_GRP_ID
+                    AND INGP.OPER_ORG_CD = GPES.OPER_ORG_CD
+                    AND INGP.INSP_GRP_CD = GPES.INSP_GRP_CD
+               ) AS INSP_GRP_NM
+          FROM ESSGPES GPES      
+         WHERE GPES.SYS_ID      = #{g.tenant}
+           AND GPES.OPER_ORG_CD = #{p.oper_org_cd}
+           AND GPES.INSP_STP_ID = #{p.insp_stp_id}
+           AND GPES.INSP_STP_CD = #{p.insp_stp_cd}
+           AND GPES.STS        != 'D'
+    </select>
+    <!-- 심사그룹 기준절차 생성 -->
+    <insert id="insertListIngpStep">
+    /* ingp.insertListIngpStep : 심사그룹 기준절차 생성*/
+        INSERT INTO ESSINST         /*심사 절차*/
+        <trim prefix="(" prefixOverrides="," suffix=")">
+                  SYS_ID                                     /* 시스템 아이디 */
+                , REG_ID                                     /* 등록자 아이디 */
+                , REG_DT                                     /* 등록일시 */
+                , MOD_ID                                     /* 수정자 아이디 */
+                , MOD_DT                                     /* 수정일시 */
+                , INSP_STP_ID                                /* 심사 절차 아이디 */
+                , INSP_STP_CD                                /* 심사 절차 코드 */
+                , UP_INSP_STP_CD                             /* 상위 심사절차 코드 */
+                , USE_YN                                     /* 사용여부 */
+                , OPER_ORG_CD                                /* 운영 조직 코드 */
+                , INSP_STP_NM                                /* 심사 절차 명 */
+                , WGT                                        /* 가중치 */
+                , EVALTR_TYP                                 /* 평가자 유형 */
+                , AUTO_PROG_YN                               /* 자동 진행 여부 */
+                , AUTO_PS_YN                                 /* 자동 패스 여부 */
+                , PRE_CRC_PS_RCN_YN                          /* 이전 강제 패스 인정 여부 */
+                , EFF_START_DATE                             /* 유효 시작 일 */
+                , EFF_MN_CNT                                 /* 유효 월 수 */
+                , APRV_SCO                                   /* 승인점수 */
+                , RE_EVAL_D_MN                               /* 재평가 D MN*/
+                , REM                                        /* 비고 */
+                , STS                                        /* 상태 */ 
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+                  #{g.tenant}                   /* 시스템 아이디 */
+                , #{g.username}                 /* 등록자 아이디 */
+                , #{g.now}                      /* 등록일시 */
+                , #{g.username}                 /* 수정자 아이디 */
+                , #{g.now}                      /* 수정일시 */
+                , #{g.uuid}                     /* 심사 절차 아이디 */
+                , #{p.insp_stp_cd}              /* 심사 절차 코드 */
+                , #{p.up_insp_stp_cd}           /* 상위 심사 절차 코드 */
+                , #{p.use_yn}                   /* 사용여부 */ 
+                , #{p.oper_org_cd}              /* 운영 조직 코드*/
+                , #{p.insp_stp_nm}              /* 심사 절차 명 */
+                , #{p.wgt}                   /* 가중치 */
+                , #{p.evaltr_typ}               /* 평가자유형 */
+                , #{p.auto_prog_yn}             /* 자동진행 여부 */
+                , #{p.auto_ps_yn}               /* 자동 Pass 여부 */
+                , #{p.pre_crc_ps_rcn_yn}        /* 이전 강제 Pass 인정 여부 */
+                , #{p.eff_start_date}           /* 유효 시작 일 */
+                , #{p.eff_mn_cnt}               /* 유효 월 수 */
+                , #{p.aprv_sco}                 /* 승인점수 */
+                , #{p.re_eval_d_mn}             /* 재평가 D MN */
+                , #{p.rem}                      /* 비고 */
+                , 'C'                           /* 상태 */
+        </trim>
+    </insert>
+    <!-- 심사그룹 기준절차 수정 -->
+    <update id="updateListIngpStep">
+    /* ingp.updateListIngpStep : 심사절차 수정*/
+        UPDATE ESSINST     /* 심사절차 */
+        <trim prefix="SET" prefixOverrides=",">
+                    INSP_STP_NM           = #{p.insp_stp_nm}          /* 심사 절차 명 */
+                  , WGT                   = CAST(#{p.wgt} AS NUMERIC(6,2))                  /* 가중치 */
+                  , EVALTR_TYP            = #{p.evaltr_typ}           /* 평가자유형 */
+                  , USE_YN                = #{p.use_yn}               /* 사용여부 */ 
+                  , AUTO_PROG_YN          = #{p.auto_prog_yn}         /* 자동진행 여부 */
+                  , AUTO_PS_YN            = #{p.auto_ps_yn}           /* 자동 Pass 여부 */
+                  , PRE_CRC_PS_RCN_YN     = #{p.pre_crc_ps_rcn_yn}    /* 이전 강제 Pass 인정 여부 */
+                  , EFF_START_DATE        = #{p.eff_start_date}       /* 유효 시작 일 */
+                  , EFF_MN_CNT            = CAST(#{p.eff_mn_cnt} AS VARCHAR(18))           /* 유효 월 수 */
+                  , APRV_SCO              = CAST(#{p.aprv_sco} AS NUMERIC(6,2))             /* 승인점수 */
+                  , RE_EVAL_D_MN          = CAST(#{p.re_eval_d_mn} AS NUMERIC)         /* 재평가 D MN */
+                  , STS                   = 'U'                       /* 상태 */
+                  , REM                   = #{p.rem}                  /* 비고 */
+                  , MOD_ID                = #{g.username}             /* 수정자 아이디 */
+                  , MOD_DT                = #{g.now}                  /* 수정일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID              = #{g.tenant}             /* 시스템 아이디 */
+            AND INSP_STP_ID         = #{p.insp_stp_id}        /* 심사 절차 아이디 */
+            AND OPER_ORG_CD         = #{p.oper_org_cd}        /* 운영 조직 코드 */
+            AND INSP_STP_CD         = #{p.insp_stp_cd}        /* 심사 절차 코드 */
+            AND UP_INSP_STP_CD      = #{p.up_insp_stp_cd}     /* 상위 운영 조직 코드 */
+        </trim>
+    </update>
+    <select id="getInspGrpMappingYnByIngpStep" resultType="string">
+    /* ingp.getInspGrpMappingYnByIngpStep : 기준절차-심사그룹 매핑여부 */
+        SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END 
+          FROM ESSGPES 
+         WHERE SYS_ID       = #{g.tenant} 
+           AND INSP_STP_ID  = #{p.insp_stp_id} 
+           AND OPER_ORG_CD  = #{p.oper_org_cd} 
+           AND INSP_STP_CD  = #{p.insp_stp_cd} 
+    </select>
+    <!-- 심사그룹 기준절차 삭제(sts = 'D') -->
+    <update id="deleteListIngpStep">
+    /* ingp.deleteListIngpStep : 심사 절차 삭제*/
+        UPDATE ESSINST /* 심사 절차 */
+        <trim prefix="SET" prefixOverrides=",">
+            , STS        = 'D'            /* 상태 */
+            , MOD_ID     = #{g.username}  /* 수정자 아이디 */
+            , MOD_DT     = #{g.now}       /* 수정일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID             = #{g.tenant}           /* 시스템 아이디 */
+            AND INSP_STP_ID        = #{p.insp_stp_id}      /* 심사 절차 아이디 */
+            AND OPER_ORG_CD        = #{p.oper_org_cd}      /* 운영 조직 코드 */
+            AND INSP_STP_CD        = #{p.insp_stp_cd}      /* 심사 절차 코드 */
+            AND UP_INSP_STP_CD     = #{p.up_insp_stp_cd}   /* 상위 심사 절차 코드 */
+        </trim>
+    </update>
+    <!-- 심사그룹 목록 조회 -->
+    <select id="findListInspGrp" resultType="Map">
+    /* ingp.findListInspGrp : 심사그룹 목록 조회*/
+        SELECT  INGP.SYS_ID                 /* 시스템 아이디 */
+              , INGP.INSP_GRP_ID            /* 심사 그룹 아이디 */
+              , INGP.OPER_ORG_CD            /* 운영 조직 코드 */
+              , INGP.INSP_GRP_CD            /* 심사 그룹 코드 */
+              , INGP.INSP_GRP_NM            /* 심사 그룹 명*/
+              , INGP.INSP_GRP_DESC          /* 심사 그룹 설명*/
+              , INGP.USE_YN                 /* 사용여부 */
+              , CASE WHEN IPMP.TYP_CD IS NULL THEN ''
+                        ELSE IPMP.TYP_CD
+                 END    AS TYP_CD            /* 협력사유형코드 */
+              , CASE WHEN IPMP.TYP_NM IS NULL THEN ''
+                        ELSE IPMP.TYP_NM
+                 END    AS TYP_NM            /* 협력사유형명 */
+              , CASE ( SELECT COUNT(IGSG.INSP_GRP_TARG_GRP_ID)
+                          FROM ESSIGSG IGSG     /* IGSG : 심사그룹 대상그룹 */
+                          WHERE IGSG.SYS_ID = INGP.SYS_ID
+                          AND IGSG.OPER_ORG_CD = INGP.OPER_ORG_CD
+                          AND IGSG.INSP_GRP_CD = INGP.INSP_GRP_CD)
+                         WHEN 0 THEN 'N'
+                         ELSE 'Y'
+                 END    AS TARG_YN            /* 심사그룹 공급대상 매핑여부 */
+              , CASE ( SELECT  COUNT(A.INSP_GRP_EVAL_STP_ID) 
+                       FROM    ESSGPES A     /* A : 심사그룹 절차 */
+                           INNER JOIN 
+                               ESSINST B     /* B : 심사절차 */
+                           ON ( A.SYS_ID = B.SYS_ID
+                               AND A.INSP_STP_ID = B.INSP_STP_ID
+                               AND A.INSP_STP_CD = B.INSP_STP_CD
+                               AND A.OPER_ORG_CD = B.OPER_ORG_CD
+                               AND B.STS != 'D'
+                               AND B.USE_YN ='Y' )
+                       WHERE A.SYS_ID = INGP.SYS_ID
+                       AND   A.STS != 'D'
+                       AND   A.INSP_GRP_ID = INGP.INSP_GRP_ID
+                       AND   A.OPER_ORG_CD = INGP.OPER_ORG_CD
+                       AND   A.INSP_GRP_CD = INGP.INSP_GRP_CD ) 
+                     WHEN 0 THEN 'N' 
+                     ELSE 'Y' 
+                END    AS STP_YN                  /* 심사절차매핑여부 */
+              , CASE WHEN EXISTS ( SELECT 1 
+                                     FROM ESSVDIG VDIG 
+                                    WHERE VDIG.SYS_ID = INGP.SYS_ID 
+                                      AND VDIG.INSP_GRP_ID = INGP.INSP_GRP_ID ) THEN 'Y' 
+                     ELSE 'N' 
+                 END AS REQ_YN /* 심사 요청 여부 */
+        FROM   ESSINGP INGP    /* INGP : 심사 그룹 */
+            LEFT OUTER JOIN
+                ( SELECT  X.SYS_ID
+                        , X.INSP_GRP_ID
+                        , X.INSP_GRP_CD
+                        , X.OPER_ORG_CD
+                        , X.TYP_CD
+                        , CASE #{g.locale} WHEN 'ko_KR' THEN Y.VD_TYP_NM
+                                           ELSE Y.VD_TYP_EN_NM
+                           END    AS TYP_NM
+                  FROM    ESSIPMP X    /* X : 심사그룹매핑정보 */
+                      INNER JOIN 
+                          ESSVDTP Y   /* Y : 협력사 유형 */ 
+                      ON ( X.SYS_ID = Y.SYS_ID
+                          AND X.TYP_CD = Y.TYP_CD) 
+                ) IPMP
+            ON ( INGP.SYS_ID = IPMP.SYS_ID
+                AND INGP.INSP_GRP_ID = IPMP.INSP_GRP_ID
+                AND INGP.INSP_GRP_CD = IPMP.INSP_GRP_CD
+                AND INGP.OPER_ORG_CD = IPMP.OPER_ORG_CD )
+        <trim prefix="WHERE" prefixOverrides="AND">
+                AND INGP.SYS_ID = #{g.tenant}
+                AND INGP.STS != 'D'
+            <if test="p.oper_org_cd != null and p.oper_org_cd != ''">
+                AND INGP.OPER_ORG_CD = #{p.oper_org_cd}
+            </if>
+            <if test="p.use_yn != null and p.use_yn !='' and !(p.use_yn eq 'ALL'.toString())">
+                AND INGP.USE_YN = #{p.use_yn}
+            </if>
+            <if test="p.insp_grp_cd != null and p.insp_grp_cd != ''">
+                <bind name="ingpCodePattern" value="'%' + p.insp_grp_cd+ '%'"/>
+                AND UPPER(INGP.INSP_GRP_CD) LIKE UPPER(#{ingpCodePattern})
+            </if>
+            <if test="p.insp_grp_nm != null and p.insp_grp_nm != ''">
+                <bind name="ingpNamePattern" value="'%' + p.insp_grp_nm + '%'"/>
+                AND UPPER(INGP.INSP_GRP_NM) LIKE UPPER(#{ingpNamePattern})
+            </if>
+         ORDER BY INGP.INSP_GRP_CD
+         </trim>
+    </select>
+    <!-- 심사그룹 매핑정보 목록 삭제 -->
+    <delete id="deleteListInspGrpMapping">
+    /* ingp.deleteListInspGrpMapping 심사그룹 매핑정보 삭제 */
+        DELETE FROM ESSIPMP /* 심사그룹 매핑정보 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_ID         = #{p.insp_grp_id}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+            AND  NOT EXISTS ( SELECT 1 FROM ESSVDIG WHERE SYS_ID = #{g.tenant} AND INSP_GRP_ID = #{p.insp_grp_id})
+        </trim>
+    </delete>
+    <delete id="deleteESRESTGByInspGrp">
+    /* ingp.deleteESRESTGByInspGrp : 심사그룹 - 평가시트 대상 삭제 */
+        DELETE FROM ESRESTG
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  EVAL_TARG_CD        = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD   IN (
+                                    SELECT TARG_OPER_ORG_CD 
+                                      FROM ESAOOLM 
+                                     WHERE SYS_ID = #{g.tenant}
+                                       AND SRC_OPER_ORG_CD = #{p.oper_org_cd}
+                                       AND LINK_TYP = 'EOSO'
+                                    )
+        </trim>
+    </delete>
+    <delete id="deleteESSCESTByInspGrp">
+    /* ingp.deleteESSCESTByInspGrp : 심사그룹 - 의존 심사 절차 삭제 */
+        DELETE FROM ESSCEST
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <delete id="deleteESSIESSByInspGrp">
+    /* ingp.deleteESSIESSByInspGrp : 심사그룹 - 심사그룹 평가절차 시트 삭제 */
+        DELETE FROM ESSIESS
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <delete id="deleteESSSTCHByInspGrp">
+    /* ingp.deleteESSSTCHByInspGrp : 심사그룹 - 절차담당자 삭제 */
+        DELETE FROM ESSSTCH
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <delete id="deleteESSGPESByInspGrp">
+    /* ingp.deleteESSGPESByInspGrp : 심사그룹 - 심사그룹 평가 절차 삭제 */
+        DELETE FROM ESSGPES
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <!-- 심사그룹 대상그룹 목록 삭제 -->
+    <delete id="deleteListSgByInspGrp">
+    /* ingp.deleteListSgByInspGrp : 심사그룹 대상그룹 삭제 */
+        DELETE FROM ESSIGSG /* 심사그룹 대상그룹 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <select id="selectInspGrpReqYn" resultType="String">
+    /* ingp.selectInspGrpReqYn : 심사그룹 심사 요청 여부 조회 */
+        SELECT CASE WHEN COUNT(1) &gt; 0 THEN 'Y' ELSE 'N' END
+          FROM ESSVDIG
+         WHERE SYS_ID = #{g.tenant}
+        <choose>
+            <when test="p.list != null and p.list.size() &gt; 0">
+           AND INSP_GRP_ID IN 
+                <foreach close=")" collection="p.list" item="item" open="(" separator=",">
+                #{item.insp_grp_id}
+                </foreach>
+            </when>
+            <when test="p.insp_grp_id != null and p.insp_grp_id !=''">
+           AND INSP_GRP_ID = #{p.insp_grp_id} 
+            </when>
+            <otherwise>
+           AND 1=0
+            </otherwise>
+        </choose>
+    </select>
+    <!-- 심사그룹 삭제 -->
+    <update id="deleteListInspGrp">
+    /* ingp.deleteListInspGrp : 심사그룹 삭제 */
+        DELETE FROM ESSINGP /* 심사그룹 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}
+            AND  INSP_GRP_ID         = #{p.insp_grp_id}
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}
+        </trim>
+    </update>
+    <!-- 심사그룹 생성 -->
+    <insert id="insertListInspGrp">
+    /* ingp.insertListInspGrp : 심사그룹 생성*/
+        INSERT INTO ESSINGP         /*심사 그룹*/
+        <trim prefix="(" prefixOverrides="," suffix=")">
+                  SYS_ID                                  /* 시스템 아이디 */
+                , REG_ID                                  /* 등록자 아이디 */
+                , REG_DT                                  /* 등록일시 */
+                , MOD_ID                                  /* 수정자 아이디 */
+                , MOD_DT                                  /* 수정일시 */
+                , INSP_GRP_ID                             /* 심사 그룹 아이디 */
+                , INSP_GRP_CD                             /* 심사 그룹 코드 */
+                , OPER_ORG_CD                             /* 운영 조직 코드 */
+                , INSP_GRP_NM                             /* 심사 그룹 명 */
+                , INSP_GRP_DESC                           /* 심사 그룹 설명 */
+                , REM                                     /* 비고 */
+                , USE_YN                                  /* 사용여부 */
+                , STS                                     /* 상태 */ 
+        </trim>
+        <trim prefix="VALUES (" prefixOverrides="," suffix=")">
+                  #{g.tenant}                      /* 시스템 아이디 */
+                , #{g.username}                    /* 등록자 아이디 */
+                , #{g.now}                         /* 등록일시 */
+                , #{g.username}                    /* 수정자 아이디 */
+                , #{g.now}                         /* 수정일시 */
+                , #{g.uuid}                        /* 심사 그룹 아이디 */
+                , #{p.insp_grp_cd}                 /* 심사 그룹 코드 */
+                , #{p.oper_org_cd}                 /* 운영 조직 코드*/
+                , #{p.insp_grp_nm}                 /* 심사 그룹 명 */
+                , #{p.insp_grp_desc}               /* 심사 그룹 설명 */
+                , #{p.rem}                         /* 비고 */
+                , #{p.use_yn}                      /* 사용여부 */ 
+                , 'C'                              /* 상태 */
+        </trim>
+    </insert>
+    <!-- 심사그룹 수정 -->
+    <update id="updateListInspGrp">
+    /* ingp.updateListInspGrp : 심사그룹 수정*/
+        UPDATE ESSINGP     /* 심사그룹 */
+        <trim prefix="SET" prefixOverrides=",">
+                    INSP_GRP_NM              = #{p.insp_grp_nm}            /* 심사 그룹 명 */
+                  , INSP_GRP_DESC            = #{p.insp_grp_desc}          /* 심사 그룹 설명 */
+                  , USE_YN                   = #{p.use_yn}                 /* 사용여부 */ 
+                  , STS                      = 'U'                         /* 상태 */
+                  , REM                      = #{p.rem}                    /* 비고 */
+                  , MOD_ID                   = #{g.username}               /* 수정자 아이디 */
+                  , MOD_DT                   = #{g.now}                    /* 수정일시 */
+        </trim>
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID              = #{g.tenant}                 /* 시스템 아이디 */
+            AND  INSP_GRP_ID         = #{p.insp_grp_id}            /* 심사 그룹 아이디 */
+            AND  INSP_GRP_CD         = #{p.insp_grp_cd}            /* 심사 그룹 코드 */
+            AND  OPER_ORG_CD         = #{p.oper_org_cd}            /* 운영 조직 코드 */
+        </trim>
+    </update>
+    <!-- 운영조직 협력사 유형 콤보 목록 조회 -->
+    <select id="findListOperOrgVendorType" resultType="Map">
+    /* ingp.findListOperOrgVendorType : 운영조직 협력사 유형 콤보 목록 조회*/
+        SELECT A.TYP_CD  AS DATA
+             , CASE #{g.locale} WHEN 'ko_KR' THEN A.VD_TYP_NM
+                                ELSE A.VD_TYP_EN_NM 
+                END  AS LABEL
+             , A.TYP_CD AS VD_TYP_CD
+             , CASE #{g.locale} WHEN 'ko_KR' THEN A.VD_TYP_NM
+                                ELSE A.VD_TYP_EN_NM 
+                END  AS VD_TYP_NM
+             , A.EVAL_BAS_CD
+             , CASE WHEN C.DTL_CD_NM IS NULL THEN ''
+                    ELSE C.DTL_CD_NM 
+                END AS EVAL_BAS_NM
+          FROM ESSVDTP A    /* 협력사 유형 */
+         INNER JOIN  
+               ESSOGVT B
+            ON (    A.SYS_ID = B.SYS_ID
+                AND A.TYP_CD = B.TYP_CD 
+               )
+          LEFT OUTER JOIN
+               ESACDDL C
+            ON (    C.SYS_ID  = A.SYS_ID
+                AND C.DTL_CD  = A.EVAL_BAS_CD
+                AND C.LANG_CD = #{g.locale}
+                AND C.GRP_CD  = 'E901'
+               )
+        <trim prefix="WHERE" prefixOverrides="AND">
+                AND A.SYS_ID            = #{g.tenant}
+                AND A.REG_EVAL_TARG_YN  = 'Y'   /* 등록평가대상인 협력사유형 */
+                AND A.USE_YN            = 'Y'
+                AND A.STS               != 'D'
+                AND B.USE_YN            = 'Y'
+                AND B.STS               != 'D'
+            <if test="p.oper_org_cd != null and p.oper_org_cd != ''">
+                AND B.OPER_ORG_CD = #{p.oper_org_cd}
+            </if>
+         </trim>
+    </select>
+    <!-- 심사그룹 대상 소싱그룹 검색 팝업 목록 조회 -->
+    <select id="findListIngpSg" resultType="Map">
+    /*ingp.findListIngpSg : 소싱그룹 검색 팝업 목록 조회*/
+        SELECT  SYS_ID                  /* 시스템아이디 */
+              , SG_ID                   /* 소싱그룹아이디*/
+              , UP_SG_ID                /* 상위소싱그룹아이디*/
+              , OPER_ORG_CD             /* 운영조직코드 */
+              , SG_CD                   /* 소싱그룹코드 */
+              , UP_SG_CD                /* 상위소싱그룹코드 */
+              , SG_STD_NM               /* 소싱그룹기준명 */
+              , SG_STD_EN_NM            /* 소싱그룹영문기준명 */
+              , SG_OPER_NM  AS SG_NM    /* 소싱그룹운영조직명 */
+              , LVL                     /* 레벨 */
+              , SORT_ORD                /* 정렬 */
+              , USE_YN                  /* 사용여부 */
+        FROM    ESRVMSG A
+    <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID = #{g.tenant}
+            AND STS != 'D'
+            AND LVL = 3
+            AND EXISTS ( SELECT  *
+                         FROM    ESAOOLM OOLM
+                         WHERE OOLM.SYS_ID           = A.SYS_ID
+                         AND   OOLM.TARG_OPER_ORG_CD = A.OPER_ORG_CD
+                         AND   OOLM.SRC_OPER_ORG_CD  = #{p.oper_org_cd}
+                         AND   OOLM.LINK_TYP         = 'EOGO'
+                         AND   OOLM.LINK_YN          = 'Y')
+            AND NOT EXISTS ( SELECT 1 
+                             FROM    ESSIGSG 
+                             WHERE SYS_ID      = A.SYS_ID 
+                             AND   OPER_ORG_CD = #{p.oper_org_cd}
+                             AND   TARG_GRP_ID = A.SG_ID
+                             AND   TARG_GRP_CD = A.SG_CD
+                             AND   LINK_TYP    = 'EOGO' 
+                             AND   TARG_GRP_TYP_CD = 'IS')
+        <if test="p.sg_oper_org_cd != null and p.sg_oper_org_cd != ''">
+            AND A.OPER_ORG_CD = #{p.sg_oper_org_cd}
+        </if>
+        <if test="p.sg_cd != null and p.sg_cd != ''">
+            <bind name="sgCodePattern" value="'%' + p.sg_cd + '%'"/>
+            AND UPPER(A.SG_CD) LIKE UPPER(#{sgCodePattern})
+        </if>
+        <if test="p.sg_nm != null and p.sg_nm != ''">
+            <bind name="sgNamePattern" value="'%' + p.sg_nm + '%'"/>
+            AND UPPER(A.SG_OPER_NM) LIKE UPPER(#{sgNamePattern})
+        </if>
+        </trim>
+        ORDER BY A.OPER_ORG_CD, A.SG_CD
+    </select>
+    <!-- 심사그룹 대상그룹 대상 목록 조회 -->
+    <select id="findListIngpRgstTarget" resultType="Map">
+    /* ingp.findListIngpRgstTarget */
+        SELECT  A.SYS_ID                        /* 시스템아이디 */
+              , A.INSP_GRP_TARG_GRP_ID          /* 심사그룹대상그룹아이디 */
+              , A.INSP_GRP_MAP_ID               /* 심사그룹매핑아이디 */
+              , A.TARG_GRP_ID                   /* 대상그룹아이디 */
+              , A.LINK_TYP                      /* 연결유형 */
+              , A.OPER_ORG_CD                   /* 운영조직코드 */
+              , A.INSP_GRP_CD                   /* 심사그룹코드 */
+              , A.TARG_GRP_CD                   /* 대상그룹코드 */
+              , A.TYP_CD                        /* 협력사유형 */
+              , B.SG_OPER_NM  AS TARG_GRP_NM    /* 대상그룹명 */
+              , B.LVL                           /* 레벨 */
+              , B.SORT_ORD                      /* 정렬 */
+              , A.USE_YN                        /* 사용여부 */
+              , B.REM                           /* 비고 */    
+        FROM    ESSIGSG A    /* A : 심사그룹 대상그룹 */
+            INNER JOIN 
+                ESRVMSG B    /* B : 소싱그룹마스터 */
+            ON ( A.SYS_ID = B.SYS_ID 
+                AND A.TARG_GRP_ID = B.SG_ID
+                AND A.TARG_GRP_CD = B.SG_CD)
+        <trim prefix="WHERE" prefixOverrides="AND">
+                AND A.SYS_ID       = #{g.tenant}
+                AND A.OPER_ORG_CD  = #{p.oper_org_cd}
+                AND A.INSP_GRP_CD  = #{p.insp_grp_cd}
+                AND A.TYP_CD       = #{p.typ_cd}
+                AND A.TARG_GRP_TYP_CD = 'IS'
+            <if test="p.link_typ != null and p.link_typ != ''">
+                AND A.LINK_TYP     = #{p.link_typ}
+            </if>    
+                AND A.STS         != 'D'
+                AND B.LVL          = 3
+                AND EXISTS ( SELECT *
+                             FROM   ESAOOLM OOLM
+                             WHERE  OOLM.SYS_ID           = A.SYS_ID
+                             AND    OOLM.TARG_OPER_ORG_CD = B.OPER_ORG_CD
+                             AND    OOLM.SRC_OPER_ORG_CD  = #{p.oper_org_cd}
+                             AND    OOLM.LINK_TYP         = A.LINK_TYP
+                             AND    OOLM.LINK_YN          = 'Y')
+        </trim>
+        ORDER BY A.OPER_ORG_CD, A.TARG_GRP_CD
+    </select>
+    <!-- 심사그룹 대상그룹 대상 목록 삭제 -->
+    <delete id="deleteListIngpRgstTarget">
+    /* ingp.deleteListIngpRgstTarget : 심사그룹 대상그룹 목록 삭제 */
+        DELETE FROM ESSIGSG        /* 심사그룹 대상그룹 */
+         WHERE SYS_ID               = #{g.tenant}
+           AND INSP_GRP_TARG_GRP_ID = #{p.insp_grp_targ_grp_id}
+           AND INSP_GRP_MAP_ID      = #{p.insp_grp_map_id}
+           AND OPER_ORG_CD          = #{p.oper_org_cd}
+           AND INSP_GRP_CD          = #{p.insp_grp_cd}
+           AND TARG_GRP_CD          = #{p.targ_grp_cd}
+           AND TYP_CD               = #{p.typ_cd}
+    </delete>
+    <select id="selectInfpRgstTargetCnt" resultType="int">
+    /* ingp.selectInfpRgstTargetCnt : 심사그룹 대상그룹 수 조회 */
+        SELECT COUNT(INSP_GRP_TARG_GRP_ID)
+          FROM ESSIGSG  /* 심사그룹 대상그룹 */
+         WHERE SYS_ID          = #{g.tenant}
+           AND OPER_ORG_CD     = #{p.oper_org_cd}
+           AND INSP_GRP_CD     = #{p.insp_grp_cd}
+           AND TYP_CD          = #{p.typ_cd}
+    </select>
+    <delete id="deleteInspGrpMappingByTyp">
+    /* ingp.deleteInspGrpMappingByTyp : 심사그룹 매핑정보 삭제 */
+        DELETE FROM ESSIPMP      /* 심사그룹매핑정보 */
+         WHERE SYS_ID       = #{g.tenant}
+           AND OPER_ORG_CD  = #{p.oper_org_cd}
+           AND INSP_GRP_ID  = #{p.insp_grp_id}
+           AND INSP_GRP_CD  = #{p.insp_grp_cd}
+           AND TYP_CD      != #{p.typ_cd}
+    </delete>
+    <delete id="deleteIngpRgstTargetByTyp">
+    /* ingp.deleteIngpRgstTargetByTyp : 심사그룹 대상그룹 삭제 */
+        DELETE FROM ESSIGSG      /* 심사그룹대상그룹 */
+         WHERE SYS_ID       = #{g.tenant}
+           AND OPER_ORG_CD  = #{p.oper_org_cd}
+           AND INSP_GRP_CD  = #{p.insp_grp_cd}
+           AND TYP_CD      != #{p.typ_cd}
+    </delete>
+    <!-- 심사그룹 매핑정보 조회 -->
+    <select id="findInspGrpMappingCnt" resultType="int">
+    /*ingp.findInspGrpMapping : 심사그룹 매핑정보 조회*/
+        SELECT COUNT(1)
+          FROM ESSIPMP    /* 심사그룹매핑정보 */
+         WHERE SYS_ID =#{g.tenant}
+           AND OPER_ORG_CD = #{p.oper_org_cd}
+           AND INSP_GRP_ID = #{p.insp_grp_id}
+           AND INSP_GRP_CD = #{p.insp_grp_cd}
+           AND TYP_CD = #{p.typ_cd}
+    </select>
+    <!-- 심사그룹 매핑정보 저장 -->
+    <insert id="insertInspGrpMapping">
+    /*ingp.insertInspGrpMapping : 심사그룹 매핑정보 저장*/
+        INSERT INTO ESSIPMP /* 심사그룹매핑정보 */
+            ( 
+                  SYS_ID
+                , INSP_GRP_MAP_ID
+                , OPER_ORG_CD
+                , INSP_GRP_ID
+                , INSP_GRP_CD
+                , TYP_CD
+                , REG_ID
+                , REG_DT
+                , MOD_ID
+                , MOD_DT
+            )  
+            VALUES 
+            ( 
+              #{g.tenant}
+            , #{g.uuid}
+            , #{p.oper_org_cd}
+            , #{p.insp_grp_id}
+            , #{p.insp_grp_cd}
+            , #{p.typ_cd}
+            , #{g.username}
+            , #{g.now}
+            , #{g.username}
+            , #{g.now}
+            )
+    </insert>
+    <!-- 심사그룹 대상그룹 목록 저장 -->
+    <insert id="insertListIngpRgstTarget">
+    /*ingp.insertListIngpRgstTarget : 심사그룹 대상그룹 대상 목록 저장*/
+        INSERT INTO ESSIGSG 
+        (         
+                  SYS_ID                         /* 시스템 아이디 */
+                , INSP_GRP_TARG_GRP_ID           /* 심사그룹 대상그룹 아이디*/
+                , INSP_GRP_MAP_ID                /* 심사그룹 매핑 아이디 */
+                , OPER_ORG_CD                    /* 운영조직코드 */
+                , TARG_GRP_ID                    /* 대상그룹아이디 */
+                , LINK_TYP                       /* 연결유형 */
+                , TARG_GRP_CD                    /* 대상그룹코드 */
+                , TARG_GRP_TYP_CD                /* 대상그룹유형코드 */
+                , TYP_CD                         /* 협력사유형 */
+                , INSP_GRP_CD                    /* 심사그룹코드 */
+                , USE_YN                         /* 사용여부 */
+                , STS                            /* 상태 */
+                , REM                            /* 비고 */
+                , REG_ID                         /* 등록자 */
+                , REG_DT                         /* 등록일시 */
+                , MOD_ID                         /* 수정자 */
+                , MOD_DT                         /* 수정일시 */
+        )
+        SELECT 
+                  B.SYS_ID                 /* 시스템 아이디 */
+                , #{g.uuid}
+                , B.INSP_GRP_MAP_ID        /* 심사그룹매핑아이디 */
+                , B.OPER_ORG_CD            /* 운영조직코드 */
+                , #{p.targ_grp_id}
+                , #{p.link_typ}
+                , #{p.targ_grp_cd}
+                , #{p.targ_grp_typ_cd}
+                , B.TYP_CD                 /* 협력사유형코드 */
+                , B.INSP_GRP_CD            /* 심사그룹코드 */
+                , 'Y'
+                , 'C'
+                , #{p.rem}
+                , #{g.username}
+                , #{g.now}
+                , #{g.username}
+                , #{g.now} 
+        FROM    ESSIPMP B     /* 심사그룹 매핑정보 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND B.SYS_ID = #{g.tenant}
+            AND B.OPER_ORG_CD = #{p.oper_org_cd}
+            AND B.TYP_CD = #{p.typ_cd}
+            AND B.INSP_GRP_ID = #{p.insp_grp_id}
+            AND B.INSP_GRP_CD = #{p.insp_grp_cd}
+        </trim>
+    </insert>
+    <!-- 심사그룹 대상그룹 목록 저장 (IG)-->
+    <insert id="mergeIngpRgstTarget">
+    /* ingp.mergeIngpRgstTarget : 심사그룹 대상그룹 대상 목록 저장 */
+        MERGE INTO ESSIGSG A
+        USING ( SELECT B.SYS_ID                 /* 시스템 아이디 */
+                     , #{g.uuid} AS INSP_GRP_TARG_GRP_ID
+                     , B.INSP_GRP_MAP_ID        /* 심사그룹매핑아이디 */
+                     , B.OPER_ORG_CD            /* 운영조직코드 */
+                     , #{p.targ_grp_id} AS TARG_GRP_ID
+                     , #{p.link_typ} AS LINK_TYP
+                     , #{p.targ_grp_cd} AS TARG_GRP_CD
+                     , #{p.targ_grp_typ_cd} AS TARG_GRP_TYP_CD
+                     , B.TYP_CD                 /* 협력사유형코드 */
+                     , B.INSP_GRP_CD            /* 심사그룹코드 */
+                     , 'Y' AS USE_YN
+                     , 'C' AS STS
+                     , #{p.rem} AS REM
+                     , #{g.username} AS REG_ID
+                     , #{g.now} AS REG_DT
+                  FROM ESSIPMP B     /* 심사그룹 매핑정보 */
+               <trim prefix="WHERE" prefixOverrides="AND">
+                   AND B.SYS_ID = #{g.tenant}
+                   AND B.OPER_ORG_CD = #{p.oper_org_cd}
+                   AND B.TYP_CD = #{p.typ_cd}
+                   AND B.INSP_GRP_ID = #{p.insp_grp_id}
+                   AND B.INSP_GRP_CD = #{p.insp_grp_cd}
+               </trim>
+              ) B
+           ON (    A.SYS_ID          = B.SYS_ID
+               AND A.OPER_ORG_CD     = B.OPER_ORG_CD
+               AND A.INSP_GRP_MAP_ID = B.INSP_GRP_MAP_ID
+               AND A.TARG_GRP_ID     = B.TARG_GRP_ID
+               AND A.TARG_GRP_CD     = B.TARG_GRP_CD
+               AND A.TARG_GRP_TYP_CD = B.TARG_GRP_TYP_CD
+               AND A.TYP_CD          = B.TYP_CD
+               AND A.INSP_GRP_CD     = B.INSP_GRP_CD
+               AND A.LINK_TYP        = B.LINK_TYP
+              )
+         WHEN NOT MATCHED THEN
+              INSERT
+              (
+                   SYS_ID                         /* 시스템 아이디 */
+                 , INSP_GRP_TARG_GRP_ID           /* 심사그룹 대상그룹 아이디*/
+                 , INSP_GRP_MAP_ID                /* 심사그룹 매핑 아이디 */
+                 , OPER_ORG_CD                    /* 운영조직코드 */
+                 , TARG_GRP_ID                    /* 대상그룹아이디 */
+                 , LINK_TYP                       /* 연결유형 */
+                 , TARG_GRP_CD                    /* 대상그룹코드 */
+                 , TARG_GRP_TYP_CD                /* 대상그룹유형코드 */
+                 , TYP_CD                         /* 협력사유형 */
+                 , INSP_GRP_CD                    /* 심사그룹코드 */
+                 , USE_YN                         /* 사용여부 */
+                 , STS                            /* 상태 */
+                 , REM                            /* 비고 */
+                 , REG_ID                         /* 등록자 */
+                 , REG_DT                         /* 등록일시 */
+                 , MOD_ID                         /* 수정자 */
+                 , MOD_DT                         /* 수정일시 */
+              )
+              VALUES
+              (
+                   B.SYS_ID                         /* 시스템 아이디 */
+                 , B.INSP_GRP_TARG_GRP_ID           /* 심사그룹 대상그룹 아이디*/
+                 , B.INSP_GRP_MAP_ID                /* 심사그룹 매핑 아이디 */
+                 , B.OPER_ORG_CD                    /* 운영조직코드 */
+                 , B.TARG_GRP_ID                    /* 대상그룹아이디 */
+                 , B.LINK_TYP                       /* 연결유형 */
+                 , B.TARG_GRP_CD                    /* 대상그룹코드 */
+                 , B.TARG_GRP_TYP_CD                /* 대상그룹유형코드 */
+                 , B.TYP_CD                         /* 협력사유형 */
+                 , B.INSP_GRP_CD                    /* 심사그룹코드 */
+                 , B.USE_YN                         /* 사용여부 */
+                 , B.STS                            /* 상태 */
+                 , B.REM                            /* 비고 */
+                 , B.REG_ID                         /* 등록자 */
+                 , B.REG_DT                         /* 등록일시 */
+                 , B.REG_ID                         /* 수정자 */
+                 , B.REG_DT                         /* 수정일시 */
+              )
+    </insert>
+    <!-- 심사그룹 매핑정보 목록 조회 -->
+    <select id="findListInspGrpMapping" resultType="Map">
+    /*ingp.findListInspGrpMapping : 심사그룹 매핑정보 목록 조회*/
+        SELECT INGP.SYS_ID                      /* 시스템아이디 */
+                 , INGP.INSP_GRP_ID             /* 심사그룹아이디 */
+                 , INGP.INSP_GRP_CD             /* 심사그룹코드 */
+                 , INGP.INSP_GRP_NM             /* 심사그룹명 */
+                 , INGP.INSP_GRP_DESC           /* 심사그룹설명 */
+                 , INGP.USE_YN                  /* 심사그룹사용여부 */
+                 , INGP.OPER_ORG_CD             /* 운영조직코드 */
+                 , CASE ( SELECT COUNT(A.INSP_GRP_EVAL_STP_ID)
+                             FROM    ESSGPES A    /* 심사그룹 평가 절차*/
+                                 INNER JOIN
+                                     ESSINST B    /* 심사절차 */
+                                 ON ( A.SYS_ID = B.SYS_ID
+                                        AND A.INSP_STP_ID = B.INSP_STP_ID
+                                        AND A.OPER_ORG_CD = B.OPER_ORG_CD
+                                        AND A.INSP_STP_CD = B.INSP_STP_CD )
+                             WHERE A.SYS_ID = INGP.SYS_ID
+                             AND A.STS != 'D'
+                             AND A.INSP_GRP_ID = INGP.INSP_GRP_ID
+                             AND A.OPER_ORG_CD = INGP.OPER_ORG_CD
+                             AND A.INSP_GRP_CD = INGP.INSP_GRP_CD
+                             AND B.STS != 'D'
+                             AND B.USE_YN ='Y') 
+                           WHEN 0 THEN 'N'
+                           ELSE   'Y'
+                   END  AS INSP_SET_YN          /* 절차매핑여부 */
+                 , 'N' AS INSP_SET_YN_TEMP           /* 절차매핑여부 (임시) */
+                 , CASE WHEN IPMP.TYP_CD IS NULL THEN ''
+                           ELSE IPMP.TYP_CD 
+                    END  AS TYP_CD              /* 협력사 유형 */
+                 , CASE WHEN IPMP.VD_TYP_NM IS NULL THEN '' 
+                             ELSE IPMP.VD_TYP_NM
+                    END  AS VD_TYP_NM           /* 협력사 유형 명 */
+                 , CASE WHEN IPMP.TYP_CD IS NULL OR IPMP.TYP_CD = '' THEN 'N'
+                           ELSE 'Y'
+                   END  AS IPMP_SET_YN          /* 운영조직매핑여부 */
+        FROM    ESSINGP INGP
+            LEFT OUTER JOIN 
+                  ( SELECT A.TYP_CD                  
+                           , CASE #{g.locale} WHEN 'ko_KR' THEN T.VD_TYP_NM
+                                                      ELSE T.VD_TYP_EN_NM
+                               END  AS VD_TYP_NM
+                           , A.SYS_ID
+                           , D.INSP_GRP_ID
+                           , D.INSP_GRP_CD
+                           , D.OPER_ORG_CD
+                  FROM    ESSVDTP T
+                      INNER JOIN 
+                          ESSOGVT A
+                      ON ( T.SYS_ID = A.SYS_ID 
+                              AND T.TYP_CD = A.TYP_CD )
+                      INNER JOIN 
+                          ESAOOMG B
+                      ON ( A.SYS_ID = B.SYS_ID
+                             AND A.OPER_ORG_CD = B.OPER_ORG_CD )
+                      INNER JOIN 
+                          ESAOGMG C
+                      ON ( A.SYS_ID = C.SYS_ID
+                             AND B.ORG_TYP_CD = C.ORG_TYP_CD
+                             AND B.ORG_CD = C.ORG_CD )
+                      INNER JOIN 
+                          ESSIPMP D
+                      ON ( A.SYS_ID = D.SYS_ID
+                             AND A.TYP_CD = D.TYP_CD
+                             /*AND B.ORG_TYP_CD = D.JOB_TYP_CD*/
+                             AND B.OPER_ORG_CD = D.OPER_ORG_CD )
+                  <trim prefix="WHERE" prefixOverrides="AND">
+                       AND T.SYS_ID = #{g.tenant}
+                       AND A.USE_YN = 'Y'
+                       AND A.STS != 'D'
+                       AND B.OPER_ORG_CD = #{p.oper_org_cd}
+                       AND B.USE_YN = 'Y'
+                       AND B.STS != 'D'
+                       AND C.USE_YN = 'Y'
+                       AND C.STS != 'D'
+                   </trim>    
+                 ) IPMP
+            ON ( INGP.SYS_ID = IPMP.SYS_ID
+                   AND INGP.INSP_GRP_ID = IPMP.INSP_GRP_ID
+                      AND INGP.OPER_ORG_CD = IPMP.OPER_ORG_CD
+                      AND INGP.INSP_GRP_CD = IPMP.INSP_GRP_CD )
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND INGP.STS != 'D'
+            AND INGP.USE_YN = 'Y'
+            AND INGP.SYS_ID = #{g.tenant}
+            AND INGP.OPER_ORG_CD = #{p.oper_org_cd}
+            <if test="p.insp_grp_cd != null and p.insp_grp_cd != ''">
+                <bind name="ingpCodePattern" value="'%' + p.insp_grp_cd + '%'"/>
+                AND UPPER(INGP.INSP_GRP_CD) LIKE UPPER(#{ingpCodePattern})
+            </if>
+            <if test="p.insp_grp_nm != null and p.insp_grp_nm != ''">
+                <bind name="ingpNamePattern" value="'%' + p.insp_grp_nm + '%'"/>
+                AND UPPER(INGP.INSP_GRP_NM) LIKE UPPER(#{ingpNamePattern})
+            </if>
+        </trim>
+        ORDER BY INGP.INSP_GRP_CD, IPMP.TYP_CD
+    </select>
+    <resultMap id="ingpStepMappingMap" type="java.util.HashMap">
+        <id column="SYS_ID" property="sys_id"/>
+        <id column="INSP_GRP_EVAL_STP_ID" property="insp_grp_eval_stp_id"/>
+        <result column="TYP_CD" property="typ_cd"/>
+        <result column="OPER_ORG_CD" property="oper_org_cd"/>
+        <result column="INSP_STP_ID" property="insp_stp_id"/>
+        <result column="INSP_STP_CD" property="insp_stp_cd"/>
+        <result column="INSP_STP_NM" property="insp_stp_nm"/>
+        <result column="INSP_GRP_ID" property="insp_grp_id"/>
+        <result column="INSP_GRP_CD" property="insp_grp_cd"/>
+        <result column="INSP_GRP_NM" property="insp_grp_nm"/>
+        <result column="PROG_REV" property="prog_rev"/>
+        <result column="WGT" property="wgt"/>
+        <result column="POT_VD_BAS_YN" property="pot_vd_bas_yn"/>
+        <result column="UP_INSP_STP_CD" property="up_insp_stp_cd"/>
+        <result column="EVALTR_TYP" property="evaltr_typ"/>
+        <result column="AUTO_PROG_YN" property="auto_prog_yn"/>
+        <result column="AUTO_PS_YN" property="auto_ps_yn"/>
+        <result column="PRE_CRC_PS_RCN_YN" property="pre_crc_ps_rcn_yn"/>
+        <result column="EFF_START_DATE" property="eff_start_date"/>
+        <result column="EFF_MN_CNT" property="eff_mn_cnt"/>
+        <result column="APRV_SCO" property="aprv_sco"/>
+        <result column="RE_EVAL_D_MN" property="re_eval_d_mn"/>
+        <result column="REM" property="rem"/>
+        <result column="STS" property="sts"/>
+        <result column="INSP_GRP_EVAL_STP_EVAL_SHT_ID" property="insp_grp_eval_stp_eval_sht_id"/>
+        <result column="ES_ID" property="es_id"/>
+        <result column="ES_HD_ID" property="es_hd_id"/>
+        <result column="EVAL_TYP_CD" property="eval_typ_cd"/>
+        <result column="ES_HD_CD" property="es_hd_cd"/>
+        <result column="ES_CD" property="es_cd"/>
+        <result column="ES_NM" property="es_nm"/>
+        <result column="chr_mgt_cls" property="chr_mgt_cls"/>
+        <result column="INCL_QTT" property="incl_qtt"/>
+        <result column="INCL_QLT" property="incl_qlt"/>
+        <result column="STP_ORD" property="stp_ord"/>
+        <collection javaType="list" property="chr_list" resultMap="ingpStepChrNames"/>
+    </resultMap>
+    <resultMap id="ingpStepChrNames" type="java.util.HashMap">
+        <id column="STP_CHR_ID" property="stp_chr_id"/>
+        <result column="CHR_ID" property="chr_id"/>
+        <result column="EVALTR_GRP_CD" property="evaltr_grp_cd"/>
+        <result column="CHR_NM" property="chr_nm"/>
+    </resultMap>
+    <!-- 심사그룹 심사절차 매핑정보 조회 -->
+    <select id="findListIngpStepMapping" resultMap="ingpStepMappingMap" resultType="Map">
+    /*ingp.findListIngpStepMapping 심사그룹 심사절차 매핑정보 조회*/
+        SELECT 
+              A.INSP_GRP_EVAL_STP_ID                     /* 심사그룹평가절차아이디 */
+            , A.SYS_ID                                   /* 시스템아이디 */
+            , CASE WHEN C.TYP_CD IS NULL THEN ''
+                      ELSE C.TYP_CD 
+               END  AS TYP_CD                            /* 협력사유형코드 */
+            , A.OPER_ORG_CD                              /* 운영조직코드 */
+            , A.INSP_STP_ID                              /*  심사절차아이디 */
+            , A.INSP_STP_CD                              /* 심사절차코드 */
+            , A.INSP_STP_NM                              /* 심사절차명 */
+            , A.INSP_GRP_ID                              /* 심사그룹아이디 */
+            , A.INSP_GRP_CD                              /* 심사그룹코드 */
+            , ( SELECT INSP_GRP_NM
+                 FROM    ESSINGP B    /* 심사 그룹 */
+                WHERE B.SYS_ID       = A.SYS_ID      /* 시스템아이디 */
+                  AND B.INSP_GRP_ID  = A.INSP_GRP_ID /* 심사그룹아이디 */
+                  AND B.OPER_ORG_CD  = A.OPER_ORG_CD /* 운영조직코드 */
+                  AND B.INSP_GRP_CD  = A.INSP_GRP_CD /* 심사그룹코드 */
+              )  AS INSP_GRP_NM                          /* 심사그룹명 */
+            , A.PROG_REV                                 /* 진행차수 */
+            , CASE WHEN A.WGT IS NULL OR CAST(A.WGT AS NVARCHAR2(18)) = '' THEN 100
+                   ELSE A.WGT
+              END  AS WGT                                /* 가중치 */
+            , A.POT_VD_BAS_YN                            /* 잠재 협력사 기준 여부 */
+            , A.UP_INSP_STP_CD                           /* 상위심사절차코드 */
+            , A.EVALTR_TYP                               /* 평가자유형 */
+            , A.AUTO_PROG_YN                             /* 자동진행여부 */
+            , A.AUTO_PS_YN                               /*자동PASS여부 */
+            , A.PRE_CRC_PS_RCN_YN                        /* 이전강제PASS인정여부 */
+            , A.EFF_START_DATE                           /* 유효시작일 */
+            , A.EFF_MN_CNT                               /* 유효월수 */
+            , A.APRV_SCO                                 /* 승인점수 */
+            , A.RE_EVAL_D_MN                             /*재평가 D MN*/
+            , A.REM                                      /* 비고 */   
+            , A.STS                                      /* 상태 */
+            , B.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+            , B.ES_ID                                    /* 평가시트아이디 */
+            , B.ES_HD_ID                  /* 평가시트헤더아이디 */
+            , B.EVAL_TYP_CD               /* 평가업무구분코드 */
+            , B.ES_HD_CD                  /* 평가시트헤더코드 */
+            , B.ES_CD                     /* 평가시트코드*/
+            , ES.ES_NM AS ES_NM                        /* 평가시트명 */
+            , ( SELECT TP.CHR_MGT_CLS
+                  FROM ESREVTP TP
+                 WHERE TP.SYS_ID = ES.SYS_ID
+                   AND TP.EVAL_TYP_ID = ES.EVAL_TYP_ID )
+                AS CHR_MGT_CLS                        /* 담당자 관리 구분 */
+            , ( SELECT CASE WHEN COUNT(EF.EF_ID) &gt; 0 THEN 'Y' ELSE 'N' END
+                  FROM ESREFMA EF
+                       INNER JOIN ESRESEF SF
+                          ON EF.SYS_ID = SF.SYS_ID
+                         AND EF.EF_ID = SF.EF_ID
+                         AND EF.OPER_ORG_CD = SF.OPER_ORG_CD 
+                 WHERE EF.SYS_ID = B.SYS_ID 
+                   AND SF.ES_ID = B.ES_ID 
+                   AND SF.ES_HD_CD = B.ES_HD_CD 
+                   AND EF.QTT_SRV_CLS = 'R'
+               ) AS INCL_QTT    /* 정량항목 포함여부 */
+             , ( SELECT CASE WHEN COUNT(EF.EF_ID) &gt; 0 THEN 'Y' ELSE 'N' END
+                  FROM ESREFMA EF
+                       INNER JOIN ESRESEF SF
+                          ON EF.SYS_ID = SF.SYS_ID
+                         AND EF.EF_ID = SF.EF_ID
+                         AND EF.OPER_ORG_CD = SF.OPER_ORG_CD 
+                 WHERE EF.SYS_ID = B.SYS_ID 
+                   AND SF.ES_ID = B.ES_ID 
+                   AND SF.ES_HD_CD = B.ES_HD_CD 
+                   AND EF.QTT_SRV_CLS IN ('S', 'M', 'D')
+               ) AS INCL_QLT    /* 정성항목 포함여부 */
+             , A.STP_ORD                 /* 절차 순서 */
+             , D.STP_CHR_ID     AS STP_CHR_ID 
+             , D.CHR_ID         AS CHR_ID
+             , D.EVALTR_GRP_CD  AS EVALTR_GRP_CD
+             , ( SELECT USR.USR_NM
+                   FROM ESAUSER USR
+                  WHERE USR.SYS_ID = D.SYS_ID
+                    AND USR.USR_ID = D.CHR_ID) AS CHR_NM
+         FROM    ESSGPES A    /* 심사 그룹 평가 절차 */
+             LEFT OUTER JOIN
+                 ESSIESS B /* 심사그룹 평가절차 평가시트 */
+             ON ( A.SYS_ID                  = B.SYS_ID
+                 AND A.INSP_GRP_EVAL_STP_ID = B.INSP_GRP_EVAL_STP_ID )
+             LEFT OUTER JOIN
+                 ESSIPMP C /* 심사그룹 매핑정보 */
+             ON ( A.SYS_ID         = C.SYS_ID
+                 AND A.OPER_ORG_CD = C.OPER_ORG_CD
+                 AND C.TYP_CD      = #{p.typ_cd}
+                 AND A.INSP_GRP_ID = C.INSP_GRP_ID
+                 AND A.INSP_GRP_CD = C.INSP_GRP_CD )
+             LEFT OUTER JOIN
+                ESSSTCH D /* 심사그룹절차담당자 */
+             ON ( D.SYS_ID                  = B.SYS_ID
+                 AND D.INSP_GRP_EVAL_STP_EVAL_SHT_ID = B.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+                 AND D.OPER_ORG_CD          = B.OPER_ORG_CD
+                 AND D.INSP_GRP_CD          = B.INSP_GRP_CD
+                 AND D.INSP_STP_CD          = B.INSP_STP_CD )
+             LEFT OUTER JOIN
+                  ESRESMA ES
+               ON ( ES.SYS_ID = B.SYS_ID
+                   AND ES.ES_ID = B.ES_ID
+                   AND ES.ES_HD_ID = B.ES_HD_ID )
+       WHERE A.SYS_ID = #{g.tenant}
+           AND A.STS != 'D'
+           AND A.OPER_ORG_CD = #{p.oper_org_cd}
+           AND A.INSP_GRP_CD = #{p.insp_grp_cd}
+       ORDER BY A.STP_ORD, A.REG_DT, A.INSP_STP_CD, D.EVALTR_GRP_CD, D.CHR_ID
+    </select>
+    <!-- 심사그룹 심사절차 매핑정보 삭제 -->
+    <delete id="deleteListIngpStepMapping">
+        /* ingp.deleteListIngpStepMapping : 심사그룹 심사절차 매핑정보 삭제 */
+        DELETE FROM ESSGPES        /* 심사그룹 평가절차 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND  SYS_ID               = #{g.tenant}
+            AND  INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id} 
+            AND  INSP_GRP_ID          = #{p.insp_grp_id}
+            AND  INSP_STP_ID          = #{p.insp_stp_id}
+            AND  INSP_GRP_CD          = #{p.insp_grp_cd}
+            AND  INSP_STP_CD          = #{p.insp_stp_cd}
+            AND  OPER_ORG_CD          = #{p.oper_org_cd}
+        </trim>
+    </delete>
+    <!-- 심사그룹 절차 담당자 삭제 -->
+    <delete id="deleteListIngpStepChrByIngpStep">
+    /* ingp.deleteListIngpStepChrByIngpStep : 심사그룹 절차 담당자 삭제 */
+        DELETE FROM ESSSTCH /* 절차 담당자 */
+         WHERE SYS_ID               = #{g.tenant}
+           AND INSP_GRP_EVAL_STP_EVAL_SHT_ID IN ( SELECT INSP_GRP_EVAL_STP_EVAL_SHT_ID
+                                                 FROM ESSIESS
+                                                WHERE SYS_ID               = #{g.tenant}
+                                                  AND INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id} 
+                                                  AND OPER_ORG_CD          = #{p.oper_org_cd}
+                                                  AND INSP_GRP_CD          = #{p.insp_grp_cd}
+                                                  AND INSP_STP_CD          = #{p.insp_stp_cd} )
+    </delete>
+    <!-- 심사그룹 심사절차 매핑정보 insert -->
+    <insert id="insertListIngpStepMapping">
+    /* ingp.insertListIngpStepMapping : 심사그룹 심사절차 매핑정보 insert*/
+    INSERT INTO ESSGPES        /* 심사그룹 평가절차 */  
+    (
+             INSP_GRP_EVAL_STP_ID    /* 심사그룹평가절차아이디 */
+           , SYS_ID                  /* 시스템아이디 */
+           , OPER_ORG_CD             /* 운영조직코드 */
+           , INSP_STP_ID             /* 심사절차아이디 */
+           , INSP_STP_CD             /* 심사절차코드 */
+           , INSP_STP_NM             /* 심사절차명 */
+           , INSP_GRP_ID             /* 심사그룹아이디 */
+           , INSP_GRP_CD             /* 심사그룹코드 */
+           , PROG_REV                /* 진행차수 */
+           , WGT                     /* 가중치 */
+           , POT_VD_BAS_YN           /* 잠재협력사기준여부 */
+           , UP_INSP_STP_CD          /* 상위심사절차코드 */
+           , EVALTR_TYP              /* 평가자유형 */
+           , AUTO_PROG_YN            /* 자동진행여부 */
+           , AUTO_PS_YN              /*자동PASS여부 */
+           , PRE_CRC_PS_RCN_YN       /* 이전강제PASS인정여부 */
+           , EFF_START_DATE          /* 유효시작일 */
+           , EFF_MN_CNT              /* 유효월수 */
+           , APRV_SCO                /* 승인점수 */
+           , RE_EVAL_D_MN            /*재평가 D MN*/
+           , STP_ORD                
+           , REM                     /* 비고 */
+           , STS                     /* 상태 */
+           , REG_ID                  /* 작성자아아디 */
+           , REG_DT                  /* 작성일시 */
+           , MOD_ID                  /* 수정자아이디 */
+           , MOD_DT                  /* 수정일시 */
+    ) 
+    VALUES 
+    (
+             #{p.insp_grp_eval_stp_id}
+           , #{g.tenant}
+           , #{p.oper_org_cd}
+           , #{p.insp_stp_id}
+           , #{p.insp_stp_cd}
+           , #{p.insp_stp_nm}
+           , #{p.insp_grp_id}
+           , #{p.insp_grp_cd}
+       <choose>
+           <when test="p.prog_rev != null">
+           , CAST(#{p.prog_rev} AS NVARCHAR2(18))
+           </when>
+           <otherwise>
+           , '1'
+           </otherwise>
+       </choose>
+           , CAST(#{p.wgt} AS NUMERIC(6,2))
+           , #{p.pot_vd_bas_yn}
+           , #{p.up_insp_stp_cd}
+           , #{p.evaltr_typ}
+           , #{p.auto_prog_yn}
+           , #{p.auto_ps_yn}
+           , #{p.pre_crc_ps_rcn_yn}
+           , #{p.eff_start_date}
+           , CAST(#{p.eff_mn_cnt} AS NVARCHAR2(18))
+           , CAST(#{p.aprv_sco} AS NUMERIC(6,2))
+           , CAST(#{p.re_eval_d_mn} AS NUMERIC)
+           , #{p.stp_ord}
+           , #{p.rem}
+           , 'C'
+           , #{g.username}
+           , #{g.now}
+           , #{g.username}
+           , #{g.now}
+    )
+    </insert>
+    <!-- 심사그룹 심사절차 매핑정보 수정 -->
+    <update id="updateListIngpStepMapping">
+    /* ingp.updateListIngpStepMapping : 심사그룹 심사절차 매핑정보 수정 */
+        UPDATE ESSGPES        /* 심사그룹 평가절차 */ 
+        SET    INSP_STP_NM         = #{p.insp_stp_nm}
+             , PROG_REV          = CAST(#{p.prog_rev} AS NVARCHAR2(18))
+             , AUTO_PROG_YN      = #{p.auto_prog_yn}
+             , AUTO_PS_YN        = #{p.auto_ps_yn}
+             , PRE_CRC_PS_RCN_YN = #{p.pre_crc_ps_rcn_yn}
+             , EFF_START_DATE    = #{p.eff_start_date}
+             , EFF_MN_CNT        = CAST(#{p.eff_mn_cnt} AS NVARCHAR2(18))
+             , APRV_SCO          = #{p.aprv_sco}
+             , WGT               = #{p.wgt}
+             , POT_VD_BAS_YN     = #{p.pot_vd_bas_yn}
+             , UP_INSP_STP_CD    = #{p.up_insp_stp_cd}
+             , RE_EVAL_D_MN      = #{p.re_eval_d_mn}
+             , EVALTR_TYP        = #{p.evaltr_typ}
+             , STP_ORD           = #{p.stp_ord}
+             , STS               = 'U'
+             , REM               = #{p.rem}
+             , MOD_ID            = #{g.username} 
+             , MOD_DT            = #{g.now}
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID               = #{g.tenant}
+            AND INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id}
+            AND OPER_ORG_CD          = #{p.oper_org_cd}
+            AND INSP_GRP_ID          = #{p.insp_grp_id}
+            AND INSP_GRP_CD          = #{p.insp_grp_cd}
+            AND INSP_STP_ID          = #{p.insp_stp_id}
+            AND INSP_STP_CD          = #{p.insp_stp_cd}
+        </trim>
+    </update>
+    <!-- 심사그룹 평가시트 매핑정보 삭제 -->
+    <delete id="deleteListIngpStepSheet">
+    /* ingp.deleteListIngpStepSheet : 심사그룹 평가시트 매핑정보 삭제*/
+        DELETE FROM ESSIESS        /* 심사그룹 평가절차 평가시트 */
+        <trim prefix="WHERE" prefixOverrides="AND">
+            AND SYS_ID = #{g.tenant}
+            AND INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id}
+        </trim>
+    </delete>
+    <!-- 호출하는 곳이 없음
+    <update id="mergeIngpStepChr">
+    /* ingp.mergeIngpStepChr : 심사그룹 절차매핑 담당자 저장 */
+        MERGE INTO ESSSTCH A
+        USING ( SELECT #{g.tenant}                  AS SYS_ID                 /* 시스템아이디 */
+                     , #{p.insp_grp_eval_stp_id}    AS INSP_GRP_EVAL_STP_ID   /* 심사그룹 평가절차 아이디 */
+                     , #{p.oper_org_cd}             AS OPER_ORG_CD            /* 운영조직코드 */
+                     , #{p.insp_grp_cd}             AS INSP_GRP_CD            /* 심사그룹코드 */
+                     , #{p.insp_stp_cd}             AS INSP_STP_CD            /* 심사절차코드 */
+                     , #{p.chr_id}                  AS CHR_ID                 /* 담당자 아이디 */
+                     , #{p.chr_dept}                AS CHR_DEPT               /* 담당자 부서 */
+                     , #{p.chr_nm}                  AS CHR_NM                 /* 담당자명 */
+                  FROM ESMBLNK
+              ) B
+           ON (    A.SYS_ID                  = B.SYS_ID
+               AND A.INSP_GRP_EVAL_STP_ID    = B.INSP_GRP_EVAL_STP_ID
+              )
+         WHEN MATCHED THEN 
+              UPDATE 
+                 SET CHR_ID     = B.CHR_ID
+                   , CHR_DEPT   = B.CHR_DEPT
+                   , CHR_NM     = B.CHR_NM
+                   , STS        = 'U'
+                   , MOD_ID     = #{g.username}
+                   , MOD_DT     = #{g.now}
+         WHEN NOT MATCHED THEN
+              INSERT
+              (
+                    STP_CHR_ID            /* 심사그룹 절차 담당자 아이디 */
+                  , SYS_ID                /* 시스템아이디 */
+                  , INSP_GRP_EVAL_STP_ID  /* 심사그룹 평가절차 아이디 */
+                  , OPER_ORG_CD           /* 운영조직코드 */
+                  , INSP_GRP_CD           /* 심사그룹코드 */
+                  , INSP_STP_CD           /* 심사절차코드 */
+                  , CHR_ID                /* 담당자 아이디 */
+                  , CHR_DEPT              /* 담당자 부서 */
+                  , CHR_NM                /* 담당자명 */
+                  , STS                   /* 상태 */
+                  , REM                   /* 비고 */
+                  , REG_ID                /* 작성자아이디 */
+                  , REG_DT                /* 작성일시 */
+                  , MOD_ID                /* 수정자아이디 */
+                  , MOD_DT                /* 수정일시  */
+              ) 
+              VALUES 
+              (
+                    #{g.uuid}
+                  , #{g.tenant}
+                  , B.INSP_GRP_EVAL_STP_ID
+                  , B.OPER_ORG_CD
+                  , B.INSP_GRP_CD
+                  , B.INSP_STP_CD
+                  , B.CHR_ID
+                  , B.CHR_DEPT
+                  , B.CHR_NM
+                  , 'C'
+                  , #{p.rem}
+                  , #{g.username}
+                  , #{g.now}
+                  , #{g.username}
+                  , #{g.now}
+              )
+    </update> -->
+    <insert id="insertIngpStepSheet">
+    /* ingp.insertIngpStepSheet : 심사그룹 절차 매핑 평가시트 신규저장 */
+        INSERT INTO ESSIESS
+        (
+               SYS_ID                            /* 시스템아이디 */
+             , INSP_GRP_EVAL_STP_EVAL_SHT_ID     /* 심사그룹 평가절차 평가시트 아이디 */
+             , INSP_GRP_EVAL_STP_ID              /* 심사그룹 심사절차 아이디 */
+             , OPER_ORG_CD                       /* 운영조직코드 */
+             , ES_HD_ID                          /* 평가시트헤더아이디 */
+             , EVAL_TYP_CD                       /* 평가업무구분코드 */
+             , INSP_GRP_CD                       /* 심사그룹코드 */
+             , INSP_STP_CD                       /* 심사절차코드 */
+             , ES_HD_CD                          /* 평가시트헤더코드 */
+             , ES_ID                             /* 평가시트아이디*/
+             , ES_CD                             /* 평가시트코드*/
+             , STS                               /* 상태 */
+             , REM                               /* 비고 */
+             , REG_ID                            /* 작성자아이디 */
+             , REG_DT                            /* 작성일시 */
+             , MOD_ID                            /* 수정자아이디 */
+             , MOD_DT                            /* 수정일시 */
+        ) 
+        VALUES 
+        (
+               #{g.tenant}
+             , #{g.uuid}
+             , #{p.insp_grp_eval_stp_id}
+             , #{p.oper_org_cd}
+             , #{p.es_hd_id}
+             , #{p.eval_typ_cd}
+             , #{p.insp_grp_cd}
+             , #{p.insp_stp_cd}
+             , #{p.es_hd_cd}
+             , #{p.es_id}
+             , #{p.es_cd}
+             , 'C'
+             , #{p.rem}
+             , #{g.username}
+             , #{g.now}
+             , #{g.username}
+             , #{g.now}
+        )
+    </insert>
+    <select id="findIngpStepSheetCnt" resultType="int">
+    /* ingp.mergeIngpStepSheet : 심사그룹 절차 매핑 평가시트 조회 */
+        SELECT COUNT(1)
+          FROM ESSIESS
+         WHERE SYS_ID                    = #{g.tenant}
+           AND INSP_GRP_EVAL_STP_ID    = #{p.insp_grp_eval_stp_id}
+    </select>
+    <update id="updateIngpStepSheet">
+    /* ingp.updateIngpStepSheet : 심사그룹 절차 매핑 평가시트 수정 */
+        UPDATE ESSIESS
+           SET ES_HD_ID   = #{p.es_hd_id}
+             , ES_HD_CD   = #{p.es_hd_cd}
+             , ES_ID      = #{p.es_id}
+             , ES_CD      = #{p.es_cd}
+                   , STS        = 'U'
+                   , MOD_ID     = #{g.username}
+                   , MOD_DT     = #{g.now}
+        WHERE SYS_ID                  = #{g.tenant}
+          AND INSP_GRP_EVAL_STP_ID    = #{p.insp_grp_eval_stp_id}
+    </update>
+    <select id="selectListIngpStepChrGroup" resultType="map">
+    /* ingp.selectListIngpStepChrGroup : 심사절차평가담장자 그룹 목록 조회 */
+        SELECT SS.SYS_ID
+             , SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+             , SS.INSP_GRP_EVAL_STP_ID
+             , SS.OPER_ORG_CD
+             , SS.INSP_GRP_CD
+             , SS.INSP_STP_CD
+             , SS.ES_ID
+             , SS.ES_HD_ID
+             , SF.EVALTR_GRP_CD
+             , ( SELECT CHR_MGT_CLS FROM ESREVTP TP WHERE TP.SYS_ID = SS.SYS_ID AND TP.EVAL_TYP_ID = ES.EVAL_TYP_ID ) AS CHR_MGT_CLS
+             , ( SELECT COUNT(1) 
+                   FROM ESSSTCH CH
+                  WHERE CH.SYS_ID = SS.SYS_ID 
+                    AND CH.OPER_ORG_CD = SS.OPER_ORG_CD
+                    AND CH.INSP_GRP_CD = SS.INSP_GRP_CD
+                    AND CH.INSP_STP_CD = SS.INSP_STP_CD
+                    AND CH.EVALTR_GRP_CD = SF.EVALTR_GRP_CD
+               ) AS EVALTR_CNT
+          FROM ESSIESS SS
+         INNER JOIN
+               ESRESMA ES
+            ON (    ES.SYS_ID   = SS.SYS_ID
+                AND ES.ES_ID    = SS.ES_ID
+                AND ES.ES_HD_ID = SS.ES_HD_ID
+               )
+         INNER JOIN
+               ESRESEF SF
+            ON (    SF.SYS_ID   = ES.SYS_ID
+                AND SF.ES_ID    = ES.ES_ID
+                AND SF.ES_HD_ID = ES.ES_HD_ID
+               )
+         WHERE SS.SYS_ID = #{g.tenant}
+        <choose>
+            <when test="p.insp_grp_eval_stp_eval_sht_id != null and p.insp_grp_eval_stp_eval_sht_id != ''">
+           AND SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID = #{p.insp_grp_eval_stp_eval_sht_id}
+            </when>
+            <otherwise>
+           AND SS.INSP_GRP_EVAL_STP_ID = #{p.insp_grp_eval_stp_id}
+           AND SS.ES_ID = #{p.es_id}
+           AND SS.ES_HD_ID = #{p.es_hd_id}
+            </otherwise>
+        </choose>
+           AND EXISTS ( SELECT EF_ID
+                          FROM ESREFMA EF
+                         WHERE EF.SYS_ID    = SF.SYS_ID
+                           AND EF.EF_ID     = SF.EF_ID
+                           AND EF.EF_GRP_CD != 'ROOT' )
+         GROUP BY SS.SYS_ID, SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID, SS.INSP_GRP_EVAL_STP_ID, SS.OPER_ORG_CD
+                , SS.INSP_GRP_CD, SS.INSP_STP_CD, SS.ES_ID, SS.ES_HD_ID, ES.EVAL_TYP_ID, SF.EVALTR_GRP_CD
+    </select>
+    <select id="selectListIngpStepChr" resultType="map">
+    /* ingp.selectListIngpStepChr : 심사절차 평가 담당자 조회 */
+        SELECT CH.SYS_ID
+             , CH.STP_CHR_ID
+             , CH.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+             , CH.OPER_ORG_CD
+             , CH.INSP_GRP_CD
+             , CH.INSP_STP_CD
+             , CH.CHR_ID
+             , CH.EVALTR_GRP_CD
+             , US.USR_NM    AS CHR_NM
+             , US.DEPT_CD   AS CHR_DEPT
+             , ( SELECT CASE WHEN #{g.locale} = 'ko_KR' THEN DP.DEPT_NM ELSE DP.DEPT_EN_NM END
+                   FROM ESAOGDP DP
+                  WHERE DP.SYS_ID = US.SYS_ID 
+                    AND DP.ORG_CD = US.COMP_CD
+                    AND DP.ORG_TYP_CD = 'COMPANY'
+                    AND DP.DEPT_CD = US.DEPT_CD
+               ) AS CHR_DEPT_NM
+          FROM ESSSTCH CH
+         INNER JOIN
+               ESAUSER US
+            ON (    US.SYS_ID = CH.SYS_ID
+                AND US.USR_ID = CH.CHR_ID 
+               ) 
+         WHERE CH.SYS_ID = #{g.tenant}
+           AND CH.INSP_GRP_EVAL_STP_EVAL_SHT_ID = #{p.insp_grp_eval_stp_eval_sht_id}
+         ORDER BY CH.EVALTR_GRP_CD, CH.CHR_ID
+    </select>
+    <select id="selectListIngpStepFactChr" resultType="map">
+    /* ingp.selectListIngpStepFactChr : 심사절차 항목 담당 그룹 평가 담당자 조회 */
+        SELECT SS.SYS_ID
+             , SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+             , SS.OPER_ORG_CD
+             , SS.INSP_GRP_CD
+             , SS.INSP_STP_CD
+             , FU.EVALTR_GRP_CD
+             , FU.EVALTR_ID    AS CHR_ID
+             , US.USR_NM       AS CHR_NM
+             , US.DEPT_CD      AS CHR_DEPT
+             , ( SELECT CASE WHEN #{g.locale} = 'ko_KR' THEN DP.DEPT_NM ELSE DP.DEPT_EN_NM END
+                   FROM ESAOGDP DP
+                  WHERE DP.SYS_ID = US.SYS_ID 
+                    AND DP.ORG_CD = US.COMP_CD
+                    AND DP.ORG_TYP_CD = 'COMPANY'
+                    AND DP.DEPT_CD = US.DEPT_CD
+               ) AS CHR_DEPT_NM
+             , CH.STP_CHR_ID
+             , CASE WHEN CH.STP_CHR_ID IS NOT NULL THEN 'Y' ELSE 'N' END AS EVALTR_YN
+          FROM ESSIESS SS
+         INNER JOIN
+               ESRESMA ES
+            ON (    SS.SYS_ID = ES.SYS_ID
+                AND SS.ES_ID = ES.ES_ID
+                AND SS.ES_HD_ID = ES.ES_HD_ID )
+         INNER JOIN
+               ESREFUS FU
+            ON (    FU.SYS_ID = ES.SYS_ID
+                AND FU.OPER_ORG_CD = ES.OPER_ORG_CD
+                AND FU.EVAL_TYP_CD = ES.EVAL_TYP_CD
+                AND FU.EVAL_KIND_CD = ES.EVAL_KIND_CD )
+         INNER JOIN
+               ESAUSER US
+            ON (    US.SYS_ID = FU.SYS_ID
+                AND US.USR_ID = FU.EVALTR_ID 
+               )
+          LEFT OUTER JOIN
+               ESSSTCH CH 
+             ON (    CH.SYS_ID = SS.SYS_ID 
+                 AND CH.INSP_GRP_EVAL_STP_EVAL_SHT_ID = SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID
+                 AND CH.EVALTR_GRP_CD = FU.EVALTR_GRP_CD
+                 AND CH.CHR_ID = FU.EVALTR_ID
+                )
+         WHERE SS.SYS_ID = #{g.tenant}
+           AND SS.INSP_GRP_EVAL_STP_EVAL_SHT_ID = #{p.insp_grp_eval_stp_eval_sht_id}
+           AND FU.EVALTR_GRP_CD = #{p.evaltr_grp_cd}
+    </select>
+    <insert id="insertIngpStepChr">
+    /* ingp.insertIngpStepChr : 심사절차 평가담당자 저장 */
+        INSERT INTO ESSSTCH
+        (
+               SYS_ID
+             , STP_CHR_ID
+             , INSP_GRP_EVAL_STP_EVAL_SHT_ID
+             , OPER_ORG_CD
+             , INSP_GRP_CD
+             , INSP_STP_CD
+             , CHR_ID
+             , EVALTR_GRP_CD
+             , CHR_DEPT
+             , CHR_NM
+             , STS
+             , REM
+             , REG_ID
+             , REG_DT
+             , MOD_ID
+             , MOD_DT
+        ) VALUES (
+               #{g.tenant}          /* 시스템 아이디  */
+             , #{g.uuid}            /* 절차 담당자 아이디  */
+             , #{p.insp_grp_eval_stp_eval_sht_id}    /* 심사 그룹 평가 절차 평가 시트 아이디 */
+             , #{p.oper_org_cd}     /* 운영 조직 코드  */
+             , #{p.insp_grp_cd}     /* 심사 그룹 코드  */
+             , #{p.insp_stp_cd}     /* 심사 절차 코드  */
+             , #{p.chr_id}          /* 담당자 아이디  */
+             , #{p.evaltr_grp_cd}   /* 평가자그룹코드 */
+             , #{p.chr_dept}        /* 담당자 부서  */
+             , #{p.chr_nm}          /* 담당자 명 */
+             , 'C'                  /* 상태 */
+             , #{p.rem}             /* 비고 */
+             , #{g.username}        /* 등록자 아이디 */
+             , #{g.now}             /* 등록 일시 */
+             , #{g.username}        /* 수정자 아이디 */
+             , #{g.now}             /* 수정 일시 */
+        )
+    </insert>
+    <delete id="deleteIngpStepChr">
+    /* ingp.deleteIngpStepChr : 심사절차 평가 담당자 삭제 */
+        DELETE FROM ESSSTCH
+         WHERE SYS_ID = #{g.tenant}
+           AND STP_CHR_ID = #{p.stp_chr_id}
+    </delete>
+</mapper>

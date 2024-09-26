@@ -1,0 +1,474 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+<sc-link rel="import" href="ep-dlvy-sched-list.html"></sc-link>
+
+<dom-module id="es-asn-detail">
+	<!--
+	/**
+	 *
+	 *	@description : 납품예정 품목 상세
+	 *  <pre>
+	 * </pre>
+	 * @FileName : es-asn-detail.html
+	 * @Since 2017. 01. 04. renew 9.1
+	 *        2023. 03. 21. renew 9.2
+	 */
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		
+		<!-- 상세정보 조회 -->
+		<sc-ajax id="findInfo" url="findAsn.do" body="{{findInfo.param}}" on-response="completeFindInfo"></sc-ajax>
+		<!-- 기성반려 저장 -->
+		<sc-ajax id="rejectAsn" url="updateAsnReject.do" on-response="completeRejectAsn"></sc-ajax>
+		<!-- 출력 정보 조회 -->
+		<sc-ajax id="findInfoDocumentOutputAsn" url="findInfoDocumentOutputAsn.do"></sc-ajax>
+		
+		<!-- 코드 -->
+		<sc-code-group>
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>  <!-- 통화 공통코드 -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>  <!-- UOM 공통코드 -->
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s, auth-p"></cc-auth-checker>
+		
+		<cc-page-title-bar title-text="납품예정 상세">
+			<sc-button text="입고 작성" on-click="onCreateGr" auth-s hidden="[[!formula('createGrBtn')]]"></sc-button>
+			<sc-button text="반려" on-click="onShowRejectAsnDialog" auth-s hidden="[[!formula('rejectAsnBtn')]]"></sc-button>
+			<sc-button text="인쇄" on-click="onDocumentOutput"	auth-p></sc-button>	
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-link-document param="{{asnData}}" app-type="ASN"></cc-link-document>
+		
+		<div class="flex page">
+			<cc-form-panel title-text="반려 사유" hidden="[[!formula('isReject')]]" column="1">
+				<cc-fieldset>
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field value="{{asnData.asn_opn}}" readonly="true" max-length="500"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+			
+			<cc-form-panel title-text="납품예정 정보">
+				<cc-fieldset column-span="2">
+					<sc-label text="운영조직"></sc-label>
+					<cc-operorg-combobox-field value="{{asnData.oorg_cd}}" oper-unit-cd="PO" id="operorgcombobox" disabled="true"></cc-operorg-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품예정 번호"></sc-label>
+					<sc-text-field value="{{asnData.asn_no}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="제목"></sc-label>
+					<sc-text-field value="{{asnData.asn_tit}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="ERP 협력사 코드"></sc-label>
+					<sc-text-field value="{{asnData.erp_vd_cd}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="협력사 명"></sc-label>
+					<sc-text-field value="{{asnData.disp_vd_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="납품 일시"></sc-label>
+					<div class="field-box" style="width:100%">
+						<sc-text-field value="{{asnData.dlvy_dttm_ymd}}" class="w-100" readonly="true"></sc-text-field>
+						<span style="margin-right:5px"></span>
+						<sc-text-field value="{{asnData.dlvy_dttm_hh}}" class="w-60" readonly="true"></sc-text-field>
+						<span style="margin:0 2px">:</span>
+						<sc-text-field value="{{asnData.dlvy_dttm_mm}}" class="w-60" readonly="true"></sc-text-field>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="통화"></sc-label>
+					<div class="field-box" style="width:100%">
+						<cc-cur-search value="{{asnData.cur_ccd}}" readonly="true" hide-trigger="true" result-hidden="true"></cc-cur-search>
+					</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="배송자 명"></sc-label>
+					<sc-text-field value="{{asnData.shpr_nm}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="배송 전화"></sc-label>
+					<sc-text-field value="{{asnData.shpg_tel}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="배송 차량번호"></sc-label>
+					<sc-text-field value="{{asnData.shpg_vehno}}" readonly="true"></sc-text-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="배송 비고"></sc-label>
+					<sc-textarea-field value="{{asnData.shpg_rmk}}" readonly="true"></sc-textarea-field>
+				</cc-fieldset>
+				<cc-fieldset column-span="2">
+					<sc-label text="첨부파일"></sc-label>
+					<div class="upload-wrapper">
+						<sc-upload id="upload" class="h-200" value="{{asnData.athg_uuid}}" editable="false"></sc-upload>
+					</div>
+				</cc-fieldset>
+			</cc-form-panel>
+
+			<cc-page-title-bar>
+				<sc-button text="납품 일정" hidden="[[formula('hiddenAsnSched')]]" on-click="onShowAsnSched" ></sc-button>
+			</cc-page-title-bar>
+
+			<sc-grid id="gridPanel" class="h-400" collapsible="true" editable="false" use-state="false" use-selection="false" on-item-click="onItemClick">
+				<sc-grid-columns>
+					<sc-data-column data-field="asn_lno" header-text="항번" width="50" data-type="number"></sc-data-column>
+					<sc-data-column data-field="po_no" header-text="발주 번호" width="120"></sc-data-column>
+					<sc-data-column data-field="po_lno" header-text="발주 항번" width="70" data-type="number"></sc-data-column>
+					<sc-data-column data-field="disp_item_cd" header-text="품목 코드" width="100"></sc-data-column>
+					<sc-data-column data-field="disp_item_nm" header-text="품목 명" width="250" text-align="left"></sc-data-column>
+					<sc-data-column data-field="item_spec" header-text="품목 규격" width="250" text-align="left"></sc-data-column>
+					<sc-image-column data-field="img_dtl_spec" header-text="품목 규격 상세" width="90" image-change-function="onImageChangeFn" visible="[[formula('hasNoCdItem')]]"></sc-image-column>
+					<sc-combobox-column data-field="uom_ccd" header-text="UOM" width="60" display-field="data" value-field="data" items="{{codes.uomCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="disp_purc_grp_nm" header-text="구매 그룹 명" width="100"></sc-data-column>
+					<sc-data-column data-field="po_uprc" header-text="발주 단가" width="100" text-align="right" data-type="number" format-type="price"></sc-data-column>
+					<sc-data-column data-field="po_qty" header-text="발주 수량" width="80" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="po_gr_qty" header-text="입고 수량" width="80" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="remain_qty" header-text="발주 잔량" width="80" text-align="right" converter="onRemainQtyConvert" data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="asn_qty" header-text="납품예정 수량" width="90" text-align="right" data-type="number" format-type="qty"></sc-data-column>
+					<sc-data-column data-field="asn_amt" header-text="납품예정 금액" width="140" text-align="right" data-type="number" format-type="amt"></sc-data-column>
+					<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70" display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+					<sc-date-column data-field="po_crn_dt" header-text="발주 등록 일자" width="100"></sc-date-column>
+					<sc-date-column data-field="req_dlvy_dt" header-text="요청 납품 일자" width="120"></sc-date-column>
+					<sc-date-column data-field="dlvy_dt" header-text="납품 일자" width="100"></sc-date-column>
+					<sc-data-column data-field="dlvy_plc" header-text="납품 장소" width="150" text-align="left"></sc-data-column>
+					<sc-checkbox-column data-field="po_ery_ed_yn" header-text="발주 조기 종료 여부" width="130" display-checkbox="false"></sc-checkbox-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="asn_item_uuid" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="asn_no" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="asn_ordn" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="asn_uuid" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="oorg_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="vd_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="plt_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_oorg_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_nm" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_nm_en" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_spec" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="itemcat_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="uom_ccd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_qty" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="po_uprc" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="po_amt" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="asn_qty" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="asn_ro" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="asn_amt" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="pr_no" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="pr_lno" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="pr_item_uuid" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_no" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_lno" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_item_uuid" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_gr_qty" data-type="number"></sc-grid-field>
+					<sc-grid-field data-field="cur_ccd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="dlvy_plc" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="purc_grp_cd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="purc_typ_ccd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="pymtmeth_ccd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="dfrm_ro" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="po_ery_ed_yn" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd" data-type="text"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl" data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+		
+		<sc-dialog id="dialog" title-text="납품예정 반려" title-align="left" style="width:550px; height:300px" modal="true">
+			<cc-page-title-bar>
+				<sc-button text="반려" on-click="onRejectAsn" auth-s></sc-button>
+			</cc-page-title-bar>
+			<cc-form-panel column="1">
+				<cc-fieldset>
+					<sc-label text="반려 사유"></sc-label>
+					<sc-textarea-field class="h-100" value="{{dialogData.asn_opn}}" required="true" max-length="1000" min-length="1" validation-group="dialogData"></sc-textarea-field>
+				</cc-fieldset>
+			</cc-form-panel>
+		</sc-dialog>
+	
+	</template>
+	
+	<script>
+		Polymer({
+			is: "es-asn-detail",
+			properties: {
+				asnData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				asnScheds: {
+					type: Array,
+					value: function() {
+						return []
+					}
+				},
+				dialogData: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				findInfo: {
+					type: Object,
+					value: function() {
+						return {
+							param: {}
+						}
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							curCcd: [],
+							uomCcd: []  // UOM
+						}
+					},
+					reset: false
+				}
+			},
+			
+			formulas: {
+				createGrBtn: function() {
+					var me = this;
+					var asnStsCcd = me.get("asnData.asn_sts_ccd");
+					var grChrId = me.get("asnData.gr_pic_id");
+					return (asnStsCcd === "WTG" && (SCSessionManager.currentUser.usr_id === grChrId || UT.isEmpty(grChrId)));
+				},
+				rejectAsnBtn: function() {
+					var me = this;
+					return me.formula('createGrBtn');
+				},
+				isReject: function() {
+					var me = this;
+					var asnStsCcd = me.get("asnData.asn_sts_ccd");
+					return (asnStsCcd === "RET"); // 기성반려상태
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					return me.get("asnData.has_no_cd_item") === "Y";
+				},
+				hiddenAsnSched: function() {
+					var me = this;
+					return me.get("hiddenAsnSched");
+				}
+			},
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+				me.set("codes.oorgCd", me.$.operorgcombobox.codes.operOrgCd);
+			},
+			// 기본 파라미터 설정
+			load: function(param) {
+				var me = this;
+				me.set("findInfo.param", UT.copy(param));
+				me.onFindInfo();
+			},
+			
+			// 상세정보 조회
+			onFindInfo: function() {
+				var me = this;
+				UT.request(me.$.findInfo);
+			},
+			
+			// 상세정보 조회 완료
+			completeFindInfo: function(e, res) {
+				var me = this;
+				var data = res.response;
+				if(data) {
+					me.set("asnData", data || {});
+					me.applyFormula();
+					me.setUiBind();
+					me.$.gridPanel.setDataProvider(data.items);
+					me.set("hiddenAsnSched", data.hiddenAsnSched);
+					me.applyFormula();
+				}
+			},
+			
+			// grid item-click event
+			onItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item;
+				
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 상세규격 팝업
+			showDetailSpec: function(data) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+			
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_dtl_spec" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 상세규격(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			//그리드 remain_qty converter
+			onRemainQtyConvert: function(rowIndex, dataField, data) {
+				var itemQty = new BigNumber(data["po_qty"] || 0);
+				var grQty = new BigNumber(data["po_gr_qty"] || 0);
+				
+				// itemQty - grQty
+				var remainQty = itemQty.minus(grQty).toFixed();
+				
+				return Math.max(0, remainQty); // 잔량 = 발주수량 - 입고수량
+			},
+			// 검수등록
+			onCreateGr: function() {
+				var me = this;
+				
+				var asnData = me.get("asnData");
+				var provider = me.$.gridPanel.getDataProvider();
+				var data = {
+					is_new: true,
+					asn_uuid: asnData.asn_uuid,
+				};
+				
+				me.fire("create-gr", data);
+			},
+			
+			// 납품예정 반려 dialog
+			onShowRejectAsnDialog: function() {
+				var me = this;
+				me.set("dialogData", me.getPropertyInfo('dialogData').value());
+				
+				me.$.dialog.show();
+			},
+			
+			// 납품예정 반려 dialog 닫기
+			onCloseRejectAsnDialog: function() {
+				var me = this;
+				me.$.dialog.close();
+			},
+			
+			// 납품예정 반려
+			onRejectAsn: function() {
+				var me = this;
+				if(!me.validate("dialogData")) {
+					UT.alert("STD.E0000");
+					return false;
+				}
+				me.$.rejectAsn.body = {
+					asn_uuid: me.get("asnData.asn_uuid"),
+					asn_opn: me.get("dialogData.asn_opn")
+				};
+				UT.confirm("STD.GR1027", function() {
+					UT.request(me.$.rejectAsn);
+				});
+			},
+			
+			// 납품예정 반려 완료
+			completeRejectAsn: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.resultStatus === "S") {
+					UT.completeAlert();
+					
+					me.onCloseRejectAsnDialog();
+					me.onClose();
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+					var invalidAsn = result.resultData;
+					
+					if(invalidAsn.asn_sts_ccd === "RET") {	// 기성반려
+						UT.alert("STD.GR1028");				//"이미 납품예정이 반려되었습니다."
+					} else {							// 기성등록 임시저장/완료
+						UT.alert("STD.GR1029");				//"이미 해당 납품예정에 대한 납품예정등록이 진행되어 반려할 수 없습니다."
+					}
+					me.onFindInfo();
+					me.onCloseRejectAsnDialog();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// ui visible 설정
+			setUiBind: function() {
+				var me = this;
+				
+				var delyDt = me.get("asnData.dlvy_dttm"); // 납품예정 일시
+				if(UT.isString(delyDt) && delyDt.length >= 12) {
+					if(delyDt.length === 12) {
+						delyDt += "00";
+					}
+					var date = UT.toDate(delyDt, "yyyyMMddHHmmSS");
+					me.set("asnData.dlvy_dttm_ymd", UT.formatDate(date, "yyyy/MM/dd"));
+					me.set("asnData.dlvy_dttm_hh", UT.formatDate(date, "HH"));
+					me.set("asnData.dlvy_dttm_mm", UT.formatDate(date, "mm"));
+				}
+			},
+			// 닫기
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.fire("close");
+			},
+			
+			// 인쇄 버튼 클릭 시	
+            onDocumentOutput: function(){
+            	var me = this;
+            	me.$.findInfoDocumentOutputAsn.body = {
+            			asn_uuid: me.get("asnData.asn_uuid")
+	                };
+            	UT.request(me.$.findInfoDocumentOutputAsn, function(e, res){
+            		var result = res.response;
+            		
+            		me.set("documentOutputDataInfo", result.resultData);
+            		
+            		var datasetList = me.get("documentOutputDataInfo.datasetList");
+            		var projectName = me.get("documentOutputDataInfo.param.projectName");
+            		var formName = me.get("documentOutputDataInfo.param.formName");
+            		var url = me.get("documentOutputDataInfo.param.url");
+                	// UBIFORM 호출
+                	UT.openUBIFORM(projectName, formName, datasetList, url);
+            	});
+            },
+
+			// 납품 일정
+			onShowAsnSched: function() {
+				var me = this;
+				var provider = me.$.gridPanel.getDataProvider();
+
+				var dlvySchedListPopUp = UT.popup("ep-dlvy-sched-list", me, "75%", "75%", null, {titleText: I18N.translate("납품 일정")});
+				dlvySchedListPopUp.show();
+				dlvySchedListPopUp.getWindowContent().load(me.preparePopUpParam(provider.getItems()));
+			},
+
+			preparePopUpParam : function(items) {
+				var me = this;
+
+				var poItemIdList = [];
+				for(var i = 0; i < items.length; i++) {
+					poItemIdList.push(items[i].po_item_uuid);
+				}
+				return {
+					"po_item_uuids" : poItemIdList,
+					"asnData" : me.asnData
+				};
+			}
+
+
+		});
+	</script>
+
+</dom-module>

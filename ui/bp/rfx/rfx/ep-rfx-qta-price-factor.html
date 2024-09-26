@@ -1,0 +1,279 @@
+<sc-link rel="import" href="../shared/ep-item-detail-spec.html"></sc-link>
+
+<dom-module id="ep-rfx-qta-price-factor">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-code-group>
+			<!-- UOM -->
+			<sc-code code="C007" value="{{codes.uomCcd}}"></sc-code>
+		</sc-code-group>
+		
+		<sc-ajax id="findListPriceFactor"
+				 url="findListRfxBidItemPriceFactor.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar title-text="CostStructure(RFX) 작성 내역">
+				<sc-button text="적용" on-click="onApply" hidden="[[!formula('editable')]]"></sc-button>
+			</cc-page-title-bar>
+			
+			<sc-grid id="gridPanel" collapsible="false" class="flex" use-dummy="false"
+					 aggregate="false"
+					 aggregate-group="true" aggregate-group-columns='["rfx_lno"]'
+					 editable="[[formula('editable')]]"
+					 use-state="[[formula('editable')]]"
+					 use-selection="false"
+					 on-item-click="onItemClick"
+					 on-item-edit-end="onItemEditEnd">
+				<cc-grid-toolbar></cc-grid-toolbar>
+				<sc-grid-columns>
+					<sc-data-column		data-field="rfx_lno"	header-text="RFX 항번"			width="90"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="disp_item_cd"	header-text="품목 코드"		width="100"	text-align="center"	editable="false"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+					<sc-data-column		data-field="item_nm"		header-text="품목 명"		width="150"	text-align="left"	editable="false"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+					<sc-data-column		data-field="item_spec"			header-text="품목 규격"			width="200"	text-align="left"	editable="false"	mergeable="true"	merge-based-field="rfx_lno"></sc-data-column>
+					<sc-image-column	data-field="img_item_spec_dtl"	header-text="품목 규격 상세"		width="100"	text-align="center"	editable="false"	mergeable="true"	merge-based-field="rfx_lno"	visible="[[formula('hasNoCdItem')]]"
+										image-change-function="onImageChangeFn"></sc-image-column>
+					<sc-combobox-column	data-field="costfact_uom_ccd"		header-text="CostFactor UOM"			width="160"	text-align="center"	editable="false"	mergeable="true"	merge-based-field="rfx_lno"
+										display-field="data"		value-field="data"			items="{{codes.uomCcd}}"></sc-combobox-column>
+					<sc-data-column		data-field="costfact_nm"		header-text="CostFactor 명"	width="150"	text-align="center"	editable="false"></sc-data-column>
+					<sc-data-column		data-field="costfact_subm_qty"		header-text="CostFactor 제출 수량"			width="180"	text-align="right"	item-editable-function="onItemEditableFn"
+										data-type="number"			format-type="qty"
+										max-length="8"				editor-regex-function="onRegexFn"		validate-on-cell-paste="true"></sc-data-column>
+					<sc-data-column		data-field="costfact_subm_uprc"			header-text="CostFactor 제출 단가"			width="180"	text-align="right"	item-editable-function="onItemEditableFn"
+										max-length="13"				editor-regex-function="onRegexFn"		validate-on-cell-paste="true"
+										data-type="number"			format-type="price"			validator-function="gridValidatorFn"	aggregate-title="합계"></sc-data-column>
+					<sc-data-column		data-field="costfact_subm_amt"		header-text="RFX 품목 제출 금액"			width="160"	text-align="right"	editable="false"
+										format-type="amt"			aggregate-function="onAmtAggregateFn"	aggregate-format="amt"
+										sort-compare-function="onSortCompareFn"></sc-data-column>
+					<sc-data-column		data-field="rmk"			header-text="비고"			width="150"	text-align="left"	item-editable-function="onItemEditableFn"
+										max-length="100"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="rfx_bid_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_bid_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_item_uuid"></sc-grid-field>
+					<sc-grid-field data-field="rfx_lno"></sc-grid-field>
+					<sc-grid-field data-field="rfx_uuid"></sc-grid-field>
+					<sc-grid-field data-field="costfact_cd"></sc-grid-field>
+					<sc-grid-field data-field="costfact_uom_ccd"></sc-grid-field>
+					<sc-grid-field data-field="prc_yn"></sc-grid-field>
+					<sc-grid-field data-field="item_cd"></sc-grid-field>
+					<sc-grid-field data-field="item_cd_crn_typ_ccd"></sc-grid-field>
+					<sc-grid-field data-field="item_spec"></sc-grid-field>
+					<sc-grid-field data-field="item_spec_dtl"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is: 'ep-rfx-qta-price-factor',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				rfxCur: {
+					type: Object,
+					value: function() {
+						return null;
+					}
+				},
+				partBidYn: {
+					type: Object,
+					value: function() {
+						return null;
+					}
+				},
+				readOnly: {
+					type: Boolean,
+					value: function() {
+						return false;
+					}
+				},
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							uomCcd: []
+						}
+					},
+					reset: false
+				}
+			},
+			formulas: {
+				editable: function() {
+					return !this.readOnly;
+				},
+				isPartBid: function() {
+					return this.partBidYn === "Y";
+				},
+				hasNoCdItem: function() {
+					var me = this;
+					if(UT.isEmpty(me.get("searchParam.has_no_cd_item"))) {
+						return true;
+					}
+					return this.searchParam.has_no_cd_item === "Y";
+				}
+			},
+			initialized: function() {
+			
+			},
+			load: function(param) {
+				var me = this;
+				
+				me.set("readOnly", param.readOnly);
+				me.set("rfxCur", param.cur_ccd);
+				me.set("partBidYn", param.prtl_bid_perm_yn);
+				me.set("searchParam.has_no_cd_item", param.has_no_cd_item);
+				
+				if(UT.isNotEmpty(param.qtaPriceFactors)) {
+					me.$.gridPanel.setDataProvider(UT.copy(param.qtaPriceFactors));
+				} else {
+					me.set("searchParam.rfx_uuid", param.rfx_uuid);
+					me.set("searchParam.rfx_bid_uuid", param.rfx_bid_uuid);
+					me.set("searchParam.vd_cd", param.vd_cd);
+					
+					me.findPriceFactors();
+				}
+				me.applyFormula();
+			},
+			findPriceFactors: function() {
+				var me = this;
+				
+				UT.request(me.$.findListPriceFactor, function(e, res) {
+					var factors = res.response;
+					me.$.gridPanel.setDataProvider(factors);
+				});
+			},
+			// 그리드 item-edit-end 이벤트
+			onItemEditEnd: function(event) {
+				var me = this, e = event.detail,
+					data         = e.data,
+					item         = e.item,
+					newValue     = e.newValue,
+					oldValue     = e.oldValue,
+					provider     = e.provider;
+				
+				//단가나 수량 변경 시 금액 계산
+				if(item.dataField === "costfact_subm_uprc" || item.dataField === "costfact_subm_qty") {
+					var costfact_subm_uprc, qty;
+					
+					if(item.dataField === "costfact_subm_uprc") {
+						costfact_subm_uprc = newValue || 0;
+						qty = data["costfact_subm_qty"] || 0;
+					} else if(item.dataField === "costfact_subm_qty") {
+						costfact_subm_uprc = data["costfact_subm_uprc"] || 0;
+						qty = newValue || 0;
+					}
+					
+					// 금액 계산 소수점처리
+					var amt = CCPrecManager.format("amt", (new BigNumber(qty)).mul(new BigNumber(costfact_subm_uprc)).toFixed(), me.get("rfxCur"));
+					
+					provider.setItemAt(item.rowIndex, {"costfact_subm_amt": amt});
+				}
+			},
+			// 그리드 컬럼 item-editable-function
+			onItemEditableFn: function(data, item) {
+				// aggregateGroup 때문에 data가 undefined인 경우가 있음
+				if(data) {
+					// 수량, 단가 컬럼 : 가격여부 "Y"인 경우 수정가능
+					if(item.dataField === "costfact_subm_qty" || item.dataField === "costfact_subm_uprc") {
+						return data["prc_yn"] === "Y";
+						// 비고 컬럼 : 가격여부 "N"인 경우 수정가능
+					} else if(item.dataField === "rmk") {
+						return data["prc_yn"] === "N";
+					}
+				}
+				return false;
+			},
+			// 적용 버튼 클릭
+			onApply: function() {
+				var me = this;
+				
+				//그리드 유효성검사
+				if(!me.$.gridPanel.validate()) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				var provider = me.$.gridPanel.getDataProvider();
+				me.fire('apply-qta-price-factors', UT.copy(provider.getItems()));
+			},
+			// 금액 합계
+			onAmtAggregateFn: UT.plusBigNumber,
+			// 금액 정렬
+			onSortCompareFn: UT.sortBigNumber,
+			// grid column editor-regex-function
+			onRegexFn: function(data, item) {
+				var me        = this,
+					dataField = item.dataField;
+				
+				// 수량
+				if(dataField === "costfact_subm_qty") {
+					return CCPrecManager.regex("qty");
+					
+					// 단가
+				} else if(dataField === "costfact_subm_uprc") {
+					return CCPrecManager.regex("price", me.get("rfxCur"));
+				}
+			},
+			// grid validator-function
+			gridValidatorFn: function(headerText, dataField, data) {
+				var me    = this,
+					value = data[dataField];
+				
+				// 가격항목일 때, 수량/단가
+				if((data["prc_yn"] === "Y") && ["costfact_subm_qty", "costfact_subm_uprc"].indexOf(dataField) > -1) {
+					// 부분입찰이 아니고, 입력값이 없거나 0인 경우
+					if(!me.formula("isPartBid") && (new BigNumber(value || 0)).isZero()) {
+						return me.translate("STD.E1008", null, me.translate(headerText), 0);	// '{0}'은(는) '{1}'보다 큰값을 입력해야 합니다.
+					}
+					
+					// 단가 소수점 체크
+					if(dataField === "costfact_subm_uprc") {
+						var curCcd = me.get("rfxCur");
+						if(!CCPrecManager.validate("price", value, curCcd)) {
+							return me.translate("STD.E1021", null, CCPrecManager.validateInfo("amt", curCcd).decimalprecision);	// 이 필드는 소수점 '{0}' 자리까지 입력 가능합니다.
+						}
+					}
+				}
+				return true;
+			},
+			// 그리드 item-click event
+			onItemClick: function(event) {
+				var me   = this,
+					data = event.detail.data,
+					item = event.detail.item;
+				
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					me.showDetailSpec(data);
+				}
+			},
+			// 그리드 image-change-function
+			onImageChangeFn: function(data, item) {
+				if(item.dataField === "img_item_spec_dtl" && data["item_cd_crn_typ_ccd"] === "CDLS") {	// 품목 규격 상세(미등록 품목인 경우)
+					return "link";
+				}
+				return null;
+			},
+			// 품목 규격 상세 팝업
+			showDetailSpec: function(data, provider) {
+				var me = this;
+				
+				var popup = UT.popup('ep-item-detail-spec', me, 400, 260);
+				popup.show();
+				popup.getWindowContent().load(data);
+			},
+		});
+	</script>
+</dom-module>

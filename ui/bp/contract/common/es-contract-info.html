@@ -1,0 +1,223 @@
+<sc-link rel="import" href="../contractcnd/es-purc-cntr-cnd.html"></sc-link>
+<sc-link rel="import" href="../contractcnd/es-otrs-cntr-cnd.html"></sc-link>
+<sc-link rel="import" href="/ui/bp/vendorMaster/vendorInfo/es-vendor-approval-history-detail.html"></sc-link>
+
+<dom-module id="es-contract-info">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		
+		
+		<!-- 공통코드 조회 -->
+		
+		
+		<!-- 화면 -->
+		<sc-pages id="pages" class="fit">
+			<div id="blank"></div>
+			<template>
+				<es-purc-cntr-cnd id="purcCntrCnd" internal-button="false"></es-purc-cntr-cnd>
+			</template>
+			<template>
+				<es-vendor-approval-history-detail id="onboardingCnd" is-popup="true"></es-vendor-approval-history-detail>
+			</template>
+			<template>
+				<es-otrs-cntr-cnd id="otrsCntrCnd" internal-button="false"></es-otrs-cntr-cnd>
+			</template>
+		</sc-pages>
+	</template>
+
+	<script>
+		Polymer({
+			is: "es-contract-info",
+			properties: {
+				readonly: {
+					type: Boolean,
+					value: false
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			formulas: {
+			
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("cntrInfo", data);
+				me.loadDetail();
+			},
+			
+			loadDetail: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				var cntrdocTypCcd = cntrInfo.cntrdoc_typ_ccd;
+				
+				if(cntrdocTypCcd === "PO_CNTRDOC" || cntrdocTypCcd === "UPRC_AGT") {
+					me.loadPurcCntrCnd();
+					
+				} else if(cntrdocTypCcd === "GEN_CNTRDOC") {
+					me.loadOtrsCntrCnd();
+					
+				} else if(cntrdocTypCcd === "ELEM_CNTRDOC" && UT.isNotEmpty(cntrInfo.cntr_req_uuid)) {
+					me.$.pages.selectItem(me.$.onboardingCnd);
+					me.$.onboardingCnd.load({
+						oorg_cd: cntrInfo.oorg_cd,
+						vd_mst_chg_histrec_uuid: cntrInfo.cntr_req_uuid
+					});
+					
+				}
+			},
+			
+			loadPurcCntrCnd: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				var cntrCndId = cntrInfo.cntr_cnd_uuid;
+				var cntrTypCcd = cntrInfo.cntr_typ_ccd;
+				
+				me.$.pages.selectItem(me.$.purcCntrCnd);
+				me.$.purcCntrCnd.viewMode = true;
+				
+				if(cntrTypCcd === "NEW") {
+					if(!this.get("readonly") && UT.isEmpty(cntrInfo.cntr_req_rcpt_uuid)) {
+						me.$.purcCntrCnd.viewMode = false; //전체 editable
+						me.$.purcCntrCnd.purcTypSelection = true; //구매 유형 조작 여부
+						me.$.purcCntrCnd.cntrTermsSelection = true; //계약 기간 조작 여부
+						me.$.purcCntrCnd.reqDlvyDtSelection = true; //납품 요청 일자 조작 여부
+						me.$.purcCntrCnd.dlvyDtSelection = false; //납품 일자 조작 여부
+						me.$.purcCntrCnd.shipperTypSelection = true; //내외자 조건 조작 여부
+						me.$.purcCntrCnd.curSelection = true; //통화 조작 여부
+						me.$.purcCntrCnd.cntrInfoSelection = true; //계약 조건 조작 여부 (지불조건 포함)
+						me.$.purcCntrCnd.itemAddRemove = true; //품목 추가/삭제 조작 여부
+						me.$.purcCntrCnd.itemUomSelection = true; //품목 UOM 조작 여부
+						me.$.purcCntrCnd.itemQtySelection = true; //품목 수량 조작 여부
+						me.$.purcCntrCnd.itemUprcSelection = true; //품목 단가 조작 여부
+						me.$.purcCntrCnd.dlvySelection = true; //납품 장소 조작 여부
+						me.$.purcCntrCnd.stampTaxSelection = true; //인지세 조작 여부
+					}
+					
+					if(UT.isEmpty(cntrCndId)) {
+						var purcCntrData = UT.copy(cntrInfo);
+						purcCntrData.cnd_typ_ccd = cntrInfo.cntrdoc_typ_ccd === "PO_CNTRDOC" ? "CNTR" : "UPRCCNTR";
+						purcCntrData.disp_vd_nm = cntrInfo.vd_nm;
+						purcCntrData.purc_typ_ccd = "QTY";
+						
+						me.$.purcCntrCnd.load({
+							purcCntrData: purcCntrData,
+							purcCntrInfoData: {}
+						});
+					} else {
+						me.$.purcCntrCnd.load(cntrCndId);
+					}
+					
+				} else if(cntrTypCcd === "CHG") {
+					if(!this.get("readonly")) {
+						me.$.purcCntrCnd.viewMode = false; //전체 editable
+						me.$.purcCntrCnd.dlvyDtSelection = true; //납품 일자 조작 여부
+					}
+					me.$.purcCntrCnd.load(cntrCndId);
+					
+				} else {
+					me.$.purcCntrCnd.load(cntrInfo.orgn_cntr_cnd_uuid);
+				}
+			},
+			
+			loadOtrsCntrCnd: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				var cntrCndId = cntrInfo.cntr_cnd_uuid;
+				var cntrTypCcd = cntrInfo.cntr_typ_ccd;
+				
+				me.$.pages.selectItem(me.$.otrsCntrCnd);
+				me.$.otrsCntrCnd.viewMode = true;
+				
+				if(cntrTypCcd === "NEW") {
+					if(!this.get("readonly")) {
+						me.$.otrsCntrCnd.viewMode = false; //전체 editable
+						me.$.otrsCntrCnd.shipperTypSelection = true; //내외자 조건 조작 여부
+						me.$.otrsCntrCnd.curSelection = true; //통화 조작 여부
+						me.$.otrsCntrCnd.cntrInfoSelection = true; //계약 조건 조작 여부 (지불조건 포함)
+					}
+					
+					if(UT.isEmpty(cntrCndId)) {
+						var otrsCntrData = UT.copy(cntrInfo);
+						otrsCntrData.disp_vd_nm = cntrInfo.vd_nm;
+						
+						me.$.otrsCntrCnd.load({
+							otrsCntrData: otrsCntrData,
+							otrsCntrInfoData: {}
+						});
+					} else {
+						me.$.otrsCntrCnd.load(cntrCndId);
+					}
+					
+				} else if(cntrTypCcd === "CHG") {
+					if(!this.get("readonly")) {
+						me.$.otrsCntrCnd.viewMode = false; //전체 editable
+						me.$.otrsCntrCnd.cntrInfoSelection = true; //계약 조건 조작 여부 (지불조건 포함)
+					}
+					
+					if(UT.isEmpty(cntrCndId)) {
+						me.$.otrsCntrCnd.load(cntrInfo.cntrCndInfo);
+					} else {
+						me.$.otrsCntrCnd.load(cntrCndId);
+					}
+					
+				} else {
+					me.$.otrsCntrCnd.load(cntrInfo.orgn_cntr_cnd_uuid);
+				}
+			},
+			
+			// 계약 저장 유효성 검사
+			validateOnSave: function() {
+				var me = this;
+				var cntrdocTypCcd =  me.get("cntrInfo.cntrdoc_typ_ccd");
+				
+				if(cntrdocTypCcd === "PO_CNTRDOC" || cntrdocTypCcd === "UPRC_AGT") {
+					return me.$.purcCntrCnd.saveValidate();
+				} else if(cntrdocTypCcd === "GEN_CNTRDOC") {
+					return me.$.otrsCntrCnd.saveValidate();
+				} else {
+					return true;
+				}
+			},
+			
+			// 계약서 생성 유효성 검사
+			validateOnCreateDocument: function() {
+				var me = this;
+				var cntrdocTypCcd =  me.get("cntrInfo.cntrdoc_typ_ccd");
+				
+				if(cntrdocTypCcd === "PO_CNTRDOC" || cntrdocTypCcd === "UPRC_AGT") {
+					return me.$.purcCntrCnd.confirmValidate();
+				} else if(cntrdocTypCcd === "GEN_CNTRDOC") {
+					return me.$.otrsCntrCnd.confirmValidate();
+				} else {
+					return true;
+				}
+			},
+			
+			// 저장할 계약 정보 반환
+			saveParameter: function() {
+				var me = this;
+				var cntrdocTypCcd =  me.get("cntrInfo.cntrdoc_typ_ccd");
+				
+				if(cntrdocTypCcd === "PO_CNTRDOC" || cntrdocTypCcd === "UPRC_AGT") {
+					return me.$.purcCntrCnd.saveParameter();
+				} else if(cntrdocTypCcd === "GEN_CNTRDOC") {
+					return me.$.otrsCntrCnd.saveParameter();
+				} else {
+					return null;
+				}
+			}
+		});
+	</script>
+</dom-module>

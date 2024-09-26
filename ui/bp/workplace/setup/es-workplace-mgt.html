@@ -1,0 +1,782 @@
+<sc-link rel="import" href="popup/ep-menu-func-list.html"></sc-link>
+<sc-link rel="import" href="popup/ep-sts-code-list.html"></sc-link>
+
+<dom-module id="es-workplace-mgt">
+	<style>
+		:host{
+			@apply(--vbox-layout);
+		}
+	</style>
+	<template>
+	
+		<sc-ajax id="saveWork"
+				url="saveWork.do"
+				body="{{work}}"
+				on-response="completeSaveWork">
+		</sc-ajax>
+		
+		<sc-ajax id="deleteWork"
+				url="deleteWork.do"
+				on-response="completeDeleteWork">
+		</sc-ajax>
+		
+		<!-- work 조회 -->
+		<sc-ajax id="findListWork"
+				url="findListWork.do"
+				on-response="completeFindList">
+		</sc-ajax>
+		
+		<!-- work 상세 조회 -->
+		<sc-ajax id="findWorkDetail"
+				url="findWorkDetail.do"
+				on-response="completeFindDetail">
+		</sc-ajax>
+		
+		<!-- Ticket 마이그레이션 -->
+		<sc-ajax id="reqTicketMig"
+				 url="requestTaskMigration.do"
+				 on-response="completeReqTicketMig">
+		</sc-ajax>
+		
+		<sc-code-group>
+			<sc-code code="WRK001" value="{{codes.usrCls}}"></sc-code> <!-- WRK001 : 적용대상 -->
+			<sc-code code="WRK002" value="{{codes.mailTransCyclCd}}"></sc-code> <!-- WRK002 : 메일전송주기 -->
+			<sc-code code="WRK003" value="{{codes.chrTypCd}}"></sc-code> <!-- WRK003 : 담당유형 -->
+			<sc-code code="WRK004" value="{{codes.mngTypCd}}"></sc-code> <!-- WRK004 : 관리자유형 -->
+			<sc-code code="WRK006" value="{{codes.flowTypCd}}"></sc-code> <!-- WRK006 : Flow유형 -->
+		</sc-code-group>
+	
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-3">
+				<sc-grid id="workLisGrid" is-tree="true" on-selection-checked="onSelectionChecked"
+						on-item-click="onWorkClick" reset="false">
+					<cc-grid-toolbar>
+						<sc-button text="Main Work 추가"	on-click="onAddMainWork"	auth-s></sc-button>
+						<sc-button text="Sub Work 추가"		on-click="onAddSubWork"		auth-s></sc-button>
+						<!-- <sc-button text="전체 VIEW" auth-r></sc-button> -->
+						<sc-button text="삭제"				on-click="onDelete"			auth-s></sc-button>
+						<sc-button text="Ticket Migration"	on-click="onTicketMig"		auth-s></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column data-field="work_nm"  header-text="업무명" width="200" text-align="left" item-style-function="onWorkNmStyle"></sc-data-column>
+						<sc-combobox-column data-field="usr_cls" header-text="적용대상" width="70"
+												display-field="label" value-field="data" items="{{codes.usrCls}}"></sc-combobox-column>
+						<sc-data-column data-field="work_ord" header-text="순서"   width="40" text-align="center"></sc-data-column>
+                    </sc-grid-columns>
+				</sc-grid>
+			</div>
+			
+			<sc-splitter split-type="vertical"></sc-splitter>
+			
+			<div class="fit flex-7">
+				<sc-container>
+					<cc-sub-title-bar title-text="Sub Work 상세 정보">
+						<sc-button text="저장"		on-click="onSave"	auth-s></sc-button>
+					</cc-sub-title-bar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="Main Work"></sc-label></th>
+							<td>
+								<div class="field-box">
+									<sc-text-field value="{{work.main_work_cd}}" class="w-150" readonly></sc-text-field>
+									<div class="hspace-5"></div>
+									<sc-text-field value="{{work.main_work_nm}}" readonly="[[!formula('mainWorkTextView')]]" required max-length="50"></sc-text-field>
+								</div>
+							</td>
+							<th><sc-label text="적용대상"></sc-label></th>
+							<td>
+								<sc-combobox-field placeholder="선택" value="{{work.usr_cls}}" readonly="[[!formula('mainWorkTextView')]]" required value-field="data" display-field="label" items="{{codes.usrCls}}"></sc-combobox-field>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="Sub Work"></sc-label></th>
+							<td>
+								<div class="field-box">
+									<sc-text-field value="{{work.sub_work_cd}}" class="w-150" readonly></sc-text-field>
+									<div class="hspace-5"></div>
+									<sc-text-field value="{{work.sub_work_nm}}" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]"  max-length="50"></sc-text-field>
+								</div>
+							</td>
+							<th><sc-label text="연계 메뉴"></sc-label></th>
+							<td>
+								<div class="field-box">
+									<sc-text-field value="{{work.menu_cd}}" class="w-120" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+									<div class="hspace-5"></div>
+									<sc-text-field value="{{work.menu_nm}}" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+								</div>
+							</td>
+						</tr>
+						<tr>
+							<th ><sc-label text="순서"></sc-label></th>
+							<td>
+								<sc-number-field value="{{work.work_ord}}" class="w-80" min-value="0" max-value="99" max-length="2" decimal-precision="0" readonly="[[!formula('ordTextEditable')]]" required="[[formula('ordTextEditable')]]"></sc-number-field>
+							</td>
+							<th rowspan="2"><sc-label text="권한 기능"></sc-label></th>
+							<td rowspan="2">
+								<sc-grid class="h-150" id="funcGrid" data-provider="{{work.funcList}}">
+									<cc-grid-toolbar>
+										<sc-button text="추가" on-click="onShowFuncPopup" auth-s hidden="[[formula('isMainSave')]]"></sc-button>
+										<sc-button text="삭제" on-click="onRemoveFuncRow" auth-s hidden="[[formula('isMainSave')]]"></sc-button>
+									</cc-grid-toolbar>
+									<sc-grid-columns>
+										<sc-data-column data-field="menu_nm" width="130" header-text="메뉴명"></sc-data-column>
+										<sc-data-column data-field="func_nm" header-text="기능명"></sc-data-column>
+									</sc-grid-columns>
+									<sc-grid-fields>
+										<sc-grid-field data-field="menu_cd"></sc-grid-field>
+										<sc-grid-field data-field="func_cd"></sc-grid-field>
+										<sc-grid-field data-field="map_id"></sc-grid-field>
+									</sc-grid-fields>
+								</sc-grid>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="비고"></sc-label></th>
+							<td>
+								<sc-textarea-field value="{{work.work_desc}}" class="h-100" max-length="1000" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]"></sc-textarea-field>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="지연 기준일"></sc-label></th>
+							<td colspan="3">
+								<sc-number-field value="{{work.close_bas_day}}" class="w-100" min-value="0" max-value="999" max-length="3" decimal-precision="0" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]"></sc-number-field>
+								<sc-checkbox-field input-value="{{work.close_mail_targ_yn}}" checked-value="Y" un-checked-value="N" readonly="[[formula('isMainSave')]]"></sc-checkbox-field>
+								<sc-label text="메일 알람 여부"></sc-label>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="도래 기준일"></sc-label></th>
+							<td colspan="3">
+								<sc-number-field value="{{work.arr_bas_day}}" class="w-100" min-value="0" max-value="999" max-length="3" decimal-precision="0" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]"></sc-number-field>
+								<sc-checkbox-field input-value="{{work.arr_mail_targ_yn}}" checked-value="Y" un-checked-value="N" readonly="[[formula('isMainSave')]]"></sc-checkbox-field>
+								<sc-label text="메일 알람 여부"></sc-label>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="신규 기준일"></sc-label></th>
+							<td colspan="3">
+								<sc-number-field value="{{work.new_bas_day}}" class="w-100" min-value="0" max-value="999" max-length="3" decimal-precision="0" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]"></sc-number-field>
+								<sc-checkbox-field input-value="{{work.new_mail_targ_yn}}" checked-value="Y" un-checked-value="N" readonly="[[formula('isMainSave')]]"></sc-checkbox-field>
+								<sc-label text="메일 알람 여부"></sc-label>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="예외 여부 체크"></sc-label></th>
+							<td colspan="3">
+							<div class="field-box">
+								<sc-checkbox-field input-value="{{work.tit_set_apply_yn}}"   checked-value="Y" un-checked-value="N"  readonly="[[formula('isMainSave')]]" on-checkchange="onApplicationCheckChange" data-args="tit"></sc-checkbox-field><sc-label text="제목 설정 적용 여부"></sc-label>
+								<sc-checkbox-field input-value="{{work.close_set_apply_yn}}" checked-value="Y" un-checked-value="N"  readonly="[[formula('isMainSave')]]" on-checkchange="onApplicationCheckChange" data-args="close"></sc-checkbox-field><sc-label text="마감일 설정 적용 여부"></sc-label>
+								<sc-checkbox-field input-value="{{work.chr_set_apply_yn}}"   checked-value="Y" un-checked-value="N"  readonly="[[formula('isMainSave')]]" on-checkchange="onApplicationCheckChange" data-args="chr"></sc-checkbox-field><sc-label text="담당 설정 적용 여부"></sc-label>
+								<sc-checkbox-field input-value="{{work.mng_set_apply_yn}}"   checked-value="Y" un-checked-value="N"  readonly="[[formula('isMainSave')]]" on-checkchange="onApplicationCheckChange" data-args="mng"></sc-checkbox-field><sc-label text="관리자 설정 적용 여부"></sc-label>
+								</div>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="Flow 유형"></sc-label></th>
+							<td colspan="3">
+								<sc-radio-group-field value="{{work.flow_typ_cd}}" display-field="label" value-field="data" items="{{codes.flowTypCd}}"></sc-radio-group-field>
+							</td>
+						</tr>
+					</table>
+				</sc-container>
+				<div class="vspace-5"></div>
+				<sc-container validation-group="tableInfo">
+					<sc-toolbar>
+						<sc-label text="Ticket 발행 대상 정보"></sc-label>
+					</sc-toolbar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:140px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="발행 테이블"></sc-label></th>
+							<td><sc-text-field value="{{work.tick_tb}}" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]" max-length="200"  mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="수집 상태 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.tick_sts_col}}" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="APP ID 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.tick_app_col}}" readonly="[[formula('isMainSave')]]" required="[[!formula('isMainSave')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+						</tr>
+						<tr>
+							<th><sc-label text="상태 적용 그룹"></sc-label></th>
+							<td colspan="5">
+								<div class="field-box">
+									<sc-text-field value="{{work.grp_cd}}" class="w-100" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+									<div class="hspace-5"></div>
+									<sc-trigger-field trigger-cls="field-search" on-trigger-click="onShowPopupFindStsCode" disabled="[[formula('isMainSave')]]"></sc-trigger-field>
+									<div class="hspace-5"></div>
+									<sc-text-field value="{{work.grp_cd_nm}}" class="w-150" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+								</div>
+							</td>
+						</tr>
+						<tr>
+							<th><sc-label text="상태 적용 코드"></sc-label></th>
+							<td colspan="5">
+								<div class="field-box">
+									<sc-text-field value="{{work.dtl_cd}}" class="w-100" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+									<div class="hspace-5"></div>
+									<sc-text-field value="{{work.dtl_cd_nm}}" class="w-150" readonly required="[[!formula('isMainSave')]]"></sc-text-field>
+								</div>
+							</td>
+						</tr>
+					</table>
+					<div class="vspace-5"></div>
+					<sc-toolbar>
+						<sc-label text="Ticket 제목 설정"></sc-label>
+					</sc-toolbar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:140px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="제목 테이블"></sc-label></th>
+							<td><sc-text-field value="{{work.tit_tb}}" readonly="[[!formula('titleTextEditable')]]" required="[[formula('titleTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="제목 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.tit_col}}" readonly="[[!formula('titleTextEditable')]]" required="[[formula('titleTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="제목 연결 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.tit_link_col}}" readonly="[[!formula('titleTextEditable')]]" required="[[formula('titleTextEditable')]]" max-length="50" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+						</tr>
+						</table>
+					<div class="vspace-5"></div>
+					<sc-toolbar>
+						<sc-label text="Ticket 마감일자 설정"></sc-label>
+					</sc-toolbar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:140px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="마감일자 테이블"></sc-label></th>
+							<td><sc-text-field value="{{work.close_tb}}" readonly="[[!formula('closeTextEditable')]]" required="[[formula('closeTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="마감일자 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.close_col}}" readonly="[[!formula('closeTextEditable')]]" required="[[formula('closeTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="마감일자 연결 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.close_link_col}}" readonly="[[!formula('closeTextEditable')]]" required="[[formula('closeTextEditable')]]" max-length="50" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+						</tr>
+					</table>
+					<div class="vspace-5"></div>
+					<sc-toolbar>
+						<sc-label text="Ticket 담당 설정"></sc-label>
+					</sc-toolbar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:140px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="담당 유형"></sc-label></th>
+							<td><sc-combobox-field value="{{work.chr_typ_cd}}" items="{{codes.chrTypCd}}" placeholder="선택" value-field="data" display-field="label" readonly="[[!formula('chrTextEditable')]]" required="[[formula('chrTextEditable')]]"></sc-combobox-field></td>
+							<th><sc-label text="담당 테이블"></sc-label></th>
+							<td><sc-text-field value="{{work.chr_tb}}" readonly="[[!formula('chrTextEditable')]]" required="[[formula('chrTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="담당 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.chr_col}}" readonly="[[!formula('chrTextEditable')]]" required="[[formula('chrTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+						</tr>
+					</table>
+					<div class="vspace-5"></div>
+					<sc-toolbar>
+						<sc-label text="관리자 설정"></sc-label>
+					</sc-toolbar>
+					<table class="tb-form">
+						<colgroup>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:120px"></col>
+							<col></col>
+							<col style="width:140px"></col>
+							<col></col>
+						</colgroup>
+						<tr>
+							<th><sc-label text="관리자 유형"></sc-label></th>
+							<td><sc-combobox-field value="{{work.mng_typ_cd}}" items="{{codes.mngTypCd}}" placeholder="선택" value-field="data" display-field="label" readonly="[[!formula('mngTextEditable')]]" required="[[formula('mngTextEditable')]]"></sc-combobox-field></td>
+							<th><sc-label text="괸라자 테이블"></sc-label></th>
+							<td><sc-text-field value="{{work.mng_tb}}" readonly="[[!formula('mngTextEditable')]]" required="[[formula('mngTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+							<th><sc-label text="관리자 컬럼"></sc-label></th>
+							<td><sc-text-field value="{{work.mng_col}}" readonly="[[!formula('mngTextEditable')]]" required="[[formula('mngTextEditable')]]" max-length="200" mask-re="/[a-zA-Z0-9-_]/" strip-chars-re="/[ㄱ-힣]/"></sc-text-field></td>
+						</tr>
+					</table>
+				</sc-container>
+			</div>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is : "es-workplace-mgt",
+			
+			properties : {
+				isMainSave : {
+					type : Boolean,
+					value : true
+				},
+				
+				mainWorkTextEditable : {
+					type : Boolean,
+					value : false
+				},
+				
+				work : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				},
+				
+				codes : {
+					type : Object,
+					value : function(){
+						return {
+							usrCls         : [],
+							mailTransCyclCd: [],
+							chrTypCd       : [],
+							mngTypCd       : [],
+							flowTypCd      : []
+						};
+					},
+					reset : false
+				},
+				// 메뉴권한기능 1건 설정제한 여부
+				singleMenuFunc: {
+					type: Boolean,
+					value: true
+				}
+			},
+			formulas : {
+				isMainSave : function(){
+					return (this.isMainSave == true);
+				},
+				mainWorkTextView : function(){
+					return (this.mainWorkTextEditable == true);
+				},
+				ordTextEditable : function(){
+					return (this.mainWorkTextEditable == this.isMainSave);
+				},
+				titleTextEditable : function(){
+					// 제목 설정 
+					return (!this.isMainSave && this.work.tit_set_apply_yn == "Y");
+				},
+				closeTextEditable : function(){
+					// 마감일 설정
+					return (!this.isMainSave && this.work.close_set_apply_yn == "Y");
+				},
+				chrTextEditable : function(){
+					// 담당 설정
+					return (!this.isMainSave && this.work.chr_set_apply_yn == "Y");
+				},
+				mngTextEditable : function(){
+					// 관리자 설정
+					return (!this.isMainSave && this.work.mng_set_apply_yn == "Y");
+				}
+			},
+			
+			initialized : function(){
+				this.set("mainWorkTextView", true);
+				this.applyFormula();
+				
+				// Main Work, Sub Work 조회
+				UT.request(this.$.findListWork);
+			},
+			
+			onAddMainWork : function(){
+				this.reset();
+				this.setMainConfig();
+			},
+			
+			onAddSubWork : function(){
+				var me = this;
+				var grid = me.$.workLisGrid;
+				var provider = grid.getDataProvider();
+				
+				cell = grid.getCurrentCell();
+				
+				if(cell == null){
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                	return;
+				}
+				
+				var parentIndex = cell.nodeIndex;
+				var parentItem = {};
+				if(parentIndex > -1){
+					parentItem = provider.getItemAt(parentIndex);
+				}
+				
+				if (parentIndex < 0) { // 현재 노드가 없으면 하위 노드 추가를 할 수 없다.
+                	UT.alert("STD.N1600");
+                    return;
+                }
+				
+				if(parentItem.up_work_id != "ROOT"){
+					UT.alert("STD.WRK1000"); // Sub Work는 Main Work 하위에만 추가할 수 있습니다.
+					return;
+				}
+				
+				me.reset();
+				me.set("work.main_work_cd", parentItem.work_id);
+				me.set("work.main_work_nm", parentItem.work_nm);
+				me.set("work.usr_cls"  , parentItem.usr_cls);
+				me.setSubConfig();
+			},
+			
+			setMainConfig : function(){
+				this.set("isMainSave", true);
+				this.set("mainWorkTextEditable", true);
+				this.applyFormula();
+			},
+			
+			setSubConfig : function(){
+				this.set("isMainSave", false);
+				this.set("mainWorkTextEditable", false);
+				this.applyFormula();
+			},
+			
+			onSave: function(){
+				var me = this;
+				if(!me.validate()){
+					UT.alert("STD.E0000");
+					return;
+				}
+				
+				UT.confirm("STD.N1200", function(){ // 저장 하시겠습니까?
+					if(me.isMainSave){
+						// Main
+						if(UT.isEmpty(me.work.main_work_cd)){
+							me.set("work.initData", true); // insert
+						}else{
+							me.set("work.initData", false);// update
+						}
+					}else{
+						// Sub
+						if(UT.isEmpty(me.work.sub_work_cd)){
+							me.set("work.initData", true); // insert
+						}else{
+							me.set("work.initData", false);// update
+						}
+						
+						// Grid(FuncCd)
+						var provider = me.$.funcGrid.getDataProvider();
+						me.set("work.insertFuncList", provider.getNewItems());
+						me.set("work.deleteFuncList", provider.getRemoveItems());
+					}
+					
+					me.set("work.isMainSave", me.isMainSave);
+					UT.request(me.$.saveWork);
+				});
+			},
+			
+			completeSaveWork : function(e, res){
+				var me = this;
+				var result = res.response;
+				if(result.result_status == "S"){
+					UT.alert("STD.N2400", function(){ // 저장 하였습니다.
+						UT.request(me.$.findListWork);
+						me.clear();
+					});
+				}else{
+					me.alertVerificationMsg(result);
+				}
+			},
+			
+			completeFindList : function(e, res){
+				var me = this;
+				var result = res.response;
+				
+				var hier = new SCHierachicalData();
+				var hierachiDatas = hier.HierachyTransformByKey(result, "work_id", "up_work_id", "children", "ROOT", "work_ord", true);
+				me.$.workLisGrid.setHierachyDataProvider(hierachiDatas);
+			},
+			
+			onWorkClick : function(e){
+				var me = this;
+				var data = e.detail.data;
+                var item = e.detail.item;
+                var provider = e.detail.provider;
+                
+                if(item.dataField === "work_nm"){
+	                me.$.findWorkDetail.body = {"work_id" : data.work_id};
+	                UT.request(me.$.findWorkDetail);
+                }
+			},
+			
+			completeFindDetail : function(e, res){
+				var me = this;
+				var result = res.response;
+				me.reset();
+				me.set("work", result);
+				
+				if(result.up_work_id == "ROOT"){
+					me.setMainConfig();
+				}else{
+					me.setSubConfig();
+				}
+			},
+			
+			onSelectionChecked : function (event){
+				var me = this,detail = event.detail,
+                checked = detail.checked,  //체크하여 변경된값
+                nodeIndex = detail.nodeIndex;
+            	if(checked){
+                	me.$.workLisGrid.selectionChild(nodeIndex, checked, true);
+            	}
+			},
+			
+			onDelete : function(){
+				var me = this;
+				var workProvider = me.$.workLisGrid.getDataProvider();
+				var checked = workProvider.selectionCheckedIndexes();
+				if (checked && checked.length > 0) {
+					UT.confirm("STD.N1300", function(){ // 삭제 하시겠습니까?
+						me.$.deleteWork.body = {
+							deleteList : workProvider.removeItems()
+							//deleteList : checked
+						};
+						UT.request(me.$.deleteWork);
+					});
+				}else{
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			
+			completeDeleteWork : function(e, res){
+				var me = this;
+				var result = res.response;
+				if(result.result_status == "S"){
+					UT.alert("STD.N2400", function(){ // 저장 하였습니다.
+						UT.request(me.$.findListWork);
+						me.clear();
+					});
+				}else{
+					UT.alert("STD.E9999"); // 오류가 발생하였습니다.<br/>관리자에게 문의하세요.
+				}
+			},
+			
+			// 메뉴-기능이 매핑된 팝업을 생성
+			onShowFuncPopup : function(){
+				var me = this;
+				
+				var showPopup = function(param) {
+					var popup = UT.popup("ep-menu-func-list", me, "40%", "50%", {
+						"selected-items" : function(popup, e){
+							var selectedList = e.detail;
+							me.onAddList(selectedList);
+							popup.close();
+						}
+					});
+					popup.show();
+					popup.getWindowContent().load(param, me.singleMenuFunc);
+				};
+				
+				var param = {"usr_cls": me.get("work.usr_cls")};
+				var itemSize = me.$.funcGrid.getDataProvider().getItemSize();
+				
+				if(me.singleMenuFunc && itemSize == 1) {
+					// 1개의 권한만 설정이 가능합니다.<br>기존에 추가된 권한을 삭제하고 새로운 권한을 설정하시겠습니까?
+					UT.confirm("STD.WRK1010", function() {
+						showPopup(param);
+					});
+				} else if(!me.singleMenuFunc && itemSize > 0) {
+					// 기존에 선택된 메뉴와 동일한 메뉴 내에서 권한 추가가 가능합니다.<br>계속 진행하시려면 '예' 버튼, 기존 데이터를 삭제하고 새로운 메뉴를 선택하시려면 '아니오' 버튼을 눌러주십시오. 
+					UT.confirm("STD.WRK1001", function() {
+						param["menu_cd"] = me.get("work.menu_cd");
+						param["menu_nm"] = me.get("work.menu_nm");
+						
+						showPopup(param);
+					}, function() {
+						showPopup(param);
+					});
+				} else {
+					showPopup(param);
+				}
+			},
+			
+			onAddList : function(selectedList){
+				var me = this,
+					provider = me.$.funcGrid.getDataProvider(),
+					gridItems = provider.getItems();
+				
+				var dupCnt = 0;
+				var newItems = [];
+				
+				for(var i=0; i<selectedList.length; i++){
+					var selectedItem = selectedList[i];
+					if(provider.filterItem({"func_cd": selectedItem["func_cd"], "menu_cd": selectedItem["menu_cd"]}) == null) {
+						newItems.push(selectedItem);
+					} else {
+						dupCnt++;
+					}
+				}
+				
+				// 모두 중복되어 신규 추가된 데이터가 없을 경우
+				if(newItems.length === 0) {
+					UT.alert("STD.E9100");	// 중복된 데이터가 존재합니다.
+					return;
+				}
+				
+				var originMenuCd = me.get("work.menu_cd"),
+					newMenu = newItems[0];
+				
+				// 기존 메뉴코드와 동일하지 않거나 권한설정이 1건만 가능한 경우
+				if(UT.isNotEmpty(originMenuCd) && (me.singleMenuFunc || (originMenuCd != newMenu["menu_cd"]))) {
+					// 기존 추가된 데이터들을 삭제
+					provider.removeAll();
+				}
+				// 신규 추가
+				provider.addItems(newItems);
+				
+				// 메뉴 정보 설정
+				me.set("work.menu_cd", newMenu["menu_cd"]);
+				me.set("work.menu_nm", newMenu["menu_nm"]);
+				
+				// 중복 건 존재 시
+				if(dupCnt > 0) {
+					UT.alert(me.translate("STD.N2010",null,dupCnt),null,true); // 중복 데이터 {0}건 제외 후 추가하였습니다.
+				}
+			},
+			
+			onShowPopupFindStsCode : function(){
+				var me = this;
+				var popup = UT.popup("ep-sts-code-list", me, "40%", "50%", {
+					"selected-items" : function(popup, e){
+						var item = e.detail[0];
+						me.set("work.grp_cd"   , item.grp_cd);
+						me.set("work.grp_cd_nm", item.grp_cd_nm);
+						me.set("work.dtl_cd"   , item.dtl_cd);
+						me.set("work.dtl_cd_nm", item.dtl_cd_nm);
+						
+						popup.close();
+					}
+				});
+				popup.show();
+				popup.getWindowContent().load();
+			},
+			
+			alertVerificationMsg : function(result){
+				var tableType = result.result_data;
+				
+				if(tableType == "TICKET"){
+					UT.alert("STD.WRK1005"); // Ticket 발행 대상 정보 설정 검증에 실패하였습니다.<br>테이블과 컬럼명을 확인해주세요.
+				}else if(tableType == "TITLE"){
+					UT.alert("STD.WRK1006"); // Ticket 제목 설정 검증에 실패하였습니다.<br>테이블과 컬럼명을 확인해주세요.
+				}else if(tableType == "CLOSE"){
+					UT.alert("STD.WRK1007"); // Ticket 마감일 설정 검증에 실패하였습니다.<br>테이블과 컬럼명을 확인해주세요.
+				}else if(tableType == "CHR"){
+					UT.alert("STD.WRK1008"); // Ticket 담당 설정 검증에 실패하였습니다.<br>테이블과 컬럼명을 확인해주세요.
+				}else if(tableType =="MNG"){
+					UT.alert("STD.WRK1009"); // Ticket 관리자 설정 검증에 실패하였습니다.<br>테이블과 컬럼명을 확인해주세요.
+				}else if(tableType =="SPECIALCHAR"){
+					UT.alert("테이블 명, 컬럼 명에는 특수문자를 삽입할 수 없습니다.");
+				}else{
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onTicketMig: function() {
+				var me = this;
+				
+				// Ticket Migration을 진행하시겠습니까?
+				UT.confirm("STD.WRK1030", function() {
+					UT.request(me.$.reqTicketMig);
+				});
+			},
+			
+			completeReqTicketMig: function(e, res) {
+				var me = this,
+					result = res.response;
+				if(result.result_status == "S") {
+					UT.alert("STD.WRK1031"); // Ticket Migration을 요청하였습니다.<br/>시스템 배치에 의해 Ticket 생성이 진행됩니다.
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			onRemoveFuncRow : function(){
+				var me = this;
+				var provider = me.$.funcGrid.getDataProvider();
+				var checked = provider.selectionCheckedIndexes();
+				
+				if (checked.length === 0) {
+                    UT.alert("STD.N1600");	// 선택된 항목이 없습니다.
+                }else{
+					provider.removeItems(true);
+                	
+                	if(provider.getItems().length == 0){
+                		me.set("work.menu_cd", "");
+                		me.set("work.menu_nm", "");
+                	}
+                }
+			},
+			
+			onApplicationCheckChange : function(e){
+				var me = this;
+				var delim = e.target.dataset.args;
+				var chekable = e.detail;
+				
+				if(delim == "tit" && !chekable){
+					// 제목 설정 초기화
+					me.set("work.tit_tb", "");
+					me.set("work.tit_col", "");
+					me.set("work.tit_link_col", "");
+				}else if(delim == "close" && !chekable){
+					// 마감일 설정 초기화
+					me.set("work.close_tb", "");
+					me.set("work.close_col", "");
+					me.set("work.close_link_col", "");
+				}else if(delim == "chr" && !chekable){
+					// 담당 설정 초기화
+					me.set("work.chr_typ_cd", "");
+					me.set("work.chr_tb", "");
+					me.set("work.chr_col", "");
+				}else if(delim == "mng" && !chekable){
+					// 관리자 설정 초기화
+					me.set("work.mng_typ_cd", "");
+					me.set("work.mng_tb", "");
+					me.set("work.mng_col", "");
+				}
+				
+				me.applyFormula();
+			},
+			
+			onWorkNmStyle : function(data, item){
+				return {
+					fontWeight: "bold",
+					fontColor: "#0e006f"
+				};
+			},
+			
+			clear : function(){
+				var me = this;
+				me.reset();
+				me.set("mainWorkTextEditable", false);
+				me.set("isMainSave", true);
+				me.applyFormula();
+			}
+		});
+	</script>
+</dom-module>

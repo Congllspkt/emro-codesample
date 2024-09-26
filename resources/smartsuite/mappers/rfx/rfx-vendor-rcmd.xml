@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 그룹코드 'P089' 로 정의한 추천업체 유형 코드 별 추천대상 조회 -->
+<mapper namespace="rfx-vendor-rcmd">
+	<select id="findListRfxRcmdOption" resultType="map">
+		/* rfx-vendor-rcmd.findListRfxRcmdOption */
+		SELECT DTLCD.DTLCD              AS RCMD_VD_TYP_CCD
+		     , DTLCD_MULTLANG.DTLCD_NM  AS RCMD_NM
+		     , CASE WHEN CCD_CSTR_CND_VAL.CSTR_CND_VAL IS NULL OR CCD_CSTR_CND_VAL.CSTR_CND_VAL = '' THEN 'N'
+		            ELSE CCD_CSTR_CND_VAL.CSTR_CND_VAL
+		        END AS TARG_YN
+		     , DTLCD.DTLCD_SORT AS SORT_ORD
+		  FROM DTLCD DTLCD
+		 INNER JOIN DTLCD_MULTLANG DTLCD_MULTLANG
+		    ON DTLCD_MULTLANG.TEN_ID = DTLCD.TEN_ID
+		   AND DTLCD_MULTLANG.CCD    = DTLCD.CCD
+		   AND DTLCD_MULTLANG.DTLCD  = DTLCD.DTLCD
+		  LEFT OUTER JOIN CCD_CSTR_CND_VAL CCD_CSTR_CND_VAL
+		    ON CCD_CSTR_CND_VAL.TEN_ID       = DTLCD.TEN_ID
+		   AND CCD_CSTR_CND_VAL.CCD          = DTLCD.CCD
+		   AND CCD_CSTR_CND_VAL.DTLCD        = DTLCD.DTLCD
+		   AND CCD_CSTR_CND_VAL.CSTR_CND_CD  = 'DFLT_RCMD_SUBJ_YN'
+		   AND CCD_CSTR_CND_VAL.CSTR_CND_VAL = 'Y'
+		 WHERE DTLCD.TEN_ID   = #{g.tenant}
+		   AND DTLCD.CCD      = 'P089'
+		   AND DTLCD.USE_YN   = 'Y'
+		   AND DTLCD.STS     != 'D'
+		   AND DTLCD_MULTLANG.LANG_CCD = #{g.locale}
+		 ORDER BY DTLCD.DTLCD_SORT
+	</select>
+	<resultMap id="rfxVendorMap" type="java.util.HashMap">
+		<result column="RFX_UUID" property="rfx_uuid"/>
+		<result column="RFX_NO" property="rfx_no"/>
+		<result column="RFX_RND" property="rfx_rnd"/>
+		<result column="VD_CD" property="vd_cd"/>
+		<result column="ERP_VD_CD" property="erp_vd_cd"/>
+		<result column="DISP_VD_CD" property="disp_vd_cd"/>
+		<result column="VD_NM" property="vd_nm"/>
+		<result column="VD_DSGN_TYP" property="vd_dsgn_typ"/>
+		<result column="OBD_TYP_CCD" property="obd_typ_ccd"/>
+		<result column="RFX_BID_UUID" property="rfx_bid_uuid"/>
+		<result column="VD_PIC_UUID" property="vd_pic_uuid"/>
+		<result column="VD_PIC_NM" property="vd_pic_nm"/>
+		<result column="VD_PIC_EML" property="vd_pic_eml"/>
+		<result column="VD_PIC_TEL" property="vd_pic_tel"/>
+		<result column="AUTO_RCMD_VD_YN" property="auto_rcmd_vd_yn"/>
+	</resultMap>
+	<select id="findListRfxRcmdTargVendor" resultMap="rfxVendorMap">
+		/* rfx-vendor-rcmd.findListRfxRcmdTargVendor: 추천업체 대상 조회 */
+		SELECT T.VD_CD
+		     , T.ERP_VD_CD
+		     , T.DISP_VD_CD
+		     , T.VD_NM
+		     , T.OBD_TYP_CCD
+		     , T.VD_PIC_UUID
+		     , T.VD_PIC_NM
+		     , T.VD_PIC_EML
+		     , T.VD_PIC_TEL
+		     , T.MULTRND_SUBJ_XCEPT_YN
+		     , T.AUTO_RCMD_VD_YN
+		  FROM (
+		        SELECT VD.VD_CD                           AS VD_CD
+		             , VD.ERP_VD_CD                       AS ERP_VD_CD
+		             , CASE WHEN VD.ERP_VD_CD IS NULL OR VD.ERP_VD_CD = '' THEN VD.VD_CD
+		                    ELSE VD.ERP_VD_CD
+		                END                               AS DISP_VD_CD
+		             , CASE WHEN 'en_US' = #{g.locale} THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END AS VD_NM
+		             , VD_OORG.OBD_TYP_CCD                AS OBD_TYP_CCD
+		             , USR.USR_ID                         AS VD_PIC_UUID
+		             , CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+		                    ELSE USR.USR_NM
+		                END AS VD_PIC_NM
+		             , USR.EML                            AS VD_PIC_EML
+		             , USR.MOB                            AS VD_PIC_TEL
+		             , 'N'                                AS MULTRND_SUBJ_XCEPT_YN
+		             , 'Y'                                AS AUTO_RCMD_VD_YN
+		             , RANK() OVER(PARTITION BY VD.TEN_ID, VD.VD_CD ORDER BY CASE WHEN ROLE_USR.ROLE_CD = 'V300' THEN 1 ELSE 2 END, USR.REG_DTTM DESC) AS RK_CHR
+		          FROM TEMP_TBL
+		         INNER JOIN VD VD
+		            ON VD.TEN_ID = #{g.tenant}
+		           AND VD.VD_CD  = TEMP_TBL.TASK_ID
+		           AND VD.STS   != 'D'
+		         INNER JOIN OORG_MAPG OOLM
+		            ON OOLM.TEN_ID          = #{g.tenant}
+		           AND OOLM.CONNSRC_OORG_CD = #{p.oorg_cd}
+		           AND OOLM.CONN_TYP_CCD    = 'POEO'
+		           AND OOLM.CONN_YN         = 'Y'
+		         INNER JOIN VD_OORG VD_OORG
+		            ON VD_OORG.TEN_ID   = VD.TEN_ID
+		           AND VD_OORG.VD_CD    = VD.VD_CD
+		           AND VD_OORG.OORG_CD  = OOLM.CONNSUBJ_OORG_CD
+		           AND VD_OORG.PO_POSS_YN = 'Y'
+		           AND VD_OORG.STS != 'D'
+		          LEFT OUTER JOIN USR
+		            ON USR.TEN_ID = VD.TEN_ID
+		           AND USR.VD_CD = VD.VD_CD
+		           AND USR.STS != 'D'
+		           AND USR.USE_YN = 'Y'
+		          LEFT OUTER JOIN ROLE_USR
+		            ON ROLE_USR.TEN_ID = USR.TEN_ID
+		           AND ROLE_USR.USR_ID = USR.USR_ID
+		           AND ROLE_USR.ROLE_CD = 'V300'
+		         WHERE TEMP_TBL.TEN_ID = #{g.tenant}
+		           AND TEMP_TBL.USR_ID = #{g.username}
+		       ) T
+		 WHERE T.RK_CHR = 1
+		 ORDER BY T.VD_CD
+	</select>
+	<select id="findListVendorByQtaItem" resultType="string">
+		/* 동일 ITEM 견적 업체 */
+		SELECT QTHD.VD_CD
+		  FROM RFX RQHD
+		 INNER JOIN RFX_ITEM RQDT
+		    ON RQDT.TEN_ID = RQHD.TEN_ID
+		   AND RQDT.RFX_UUID = RQHD.RFX_UUID
+		   AND RQDT.STS   != 'D'
+		 INNER JOIN RFX_BID QTHD
+		    ON QTHD.TEN_ID   = RQHD.TEN_ID
+		   AND QTHD.RFX_NO   = RQHD.RFX_NO
+		   AND QTHD.RFX_RND  = RQHD.RFX_RND
+		   AND QTHD.RFX_BID_EFCT_YN = 'Y' -- 유효여부
+		   AND QTHD.RFX_BID_STS_CCD = 'SUBM' -- 제출
+		   AND QTHD.STS     != 'D'
+		 INNER JOIN RFX_BID_ITEM QTDT
+		    ON QTDT.TEN_ID        = QTHD.TEN_ID
+		   AND QTDT.RFX_BID_UUID  = QTHD.RFX_BID_UUID
+		   AND QTDT.RFX_ITEM_UUID = RQDT.RFX_ITEM_UUID
+		 WHERE RQHD.TEN_ID  = #{g.tenant}
+		   AND RQHD.OORG_CD = #{p.oorg_cd}
+		   AND RQHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   AND RQHD.RFX_STS_CCD IN ('PRGSG', 'CLSG', 'SLCTN_APVL_PRGSG', 'ED')  -- RFX 진행상태: 진행중,마감,선정품의중,종료
+		   <choose>
+		       <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+		           AND RQDT.ITEM_CD     IN
+		           <foreach close=")" collection="p.item_cds" item="itemCd" open="(" separator=",">
+		               #{itemCd}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND 1 = 0
+		       </otherwise>
+		   </choose>
+	</select>
+	<select id="findListVendorByStlItem" resultType="string">
+		/* 동일 ITEM 낙찰 업체 */
+		SELECT QTHD.VD_CD
+		  FROM RFX RQHD
+		 INNER JOIN RFX_ITEM RQDT
+		    ON RQDT.TEN_ID = RQHD.TEN_ID
+		   AND RQDT.RFX_UUID = RQHD.RFX_UUID
+		   AND RQDT.SLCTN_YN = 'Y' -- 견적요청품목 선정 여부
+		   AND RQDT.STS != 'D'
+		 INNER JOIN RFX_BID QTHD
+		    ON QTHD.TEN_ID   = RQHD.TEN_ID
+		   AND QTHD.RFX_NO   = RQHD.RFX_NO
+		   AND QTHD.RFX_RND  = RQHD.RFX_RND
+		   AND QTHD.RFX_BID_EFCT_YN = 'Y' -- 유효여부
+		   AND QTHD.RFX_BID_STS_CCD = 'SUBM' -- 제출
+		   AND QTHD.SLCTN_YN = 'Y' -- 업체 선정 여부
+		   AND QTHD.STS     != 'D'
+		 INNER JOIN RFX_BID_ITEM QTDT
+		    ON QTDT.TEN_ID      = QTHD.TEN_ID
+		   AND QTDT.RFX_BID_UUID  = QTHD.RFX_BID_UUID
+		   AND QTDT.RFX_ITEM_UUID = RQDT.RFX_ITEM_UUID
+		   AND QTDT.SLCTN_YN      = 'Y' -- 업체견적품목 선정 여부
+		 WHERE RQHD.TEN_ID       = #{g.tenant}
+		   AND RQHD.OORG_CD      = #{p.oorg_cd}
+		   AND RQHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   AND RQHD.RFX_STS_CCD  = 'ED'  -- RFX 진행상태: 종료
+		   AND RQHD.RFX_RES_STS_CCD  = 'VD_SLCTN'  -- RFX 종료상태: 업체선정
+		   <choose>
+		       <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+		           AND RQDT.ITEM_CD     IN
+		           <foreach close=")" collection="p.item_cds" item="itemCd" open="(" separator=",">
+		               #{itemCd}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND 1 = 0
+		       </otherwise>
+		   </choose>
+	</select>
+	<select id="findListVendorByQtaSG" resultType="string">
+		/* 동일 SG 견적 업체 */
+		SELECT QTHD.VD_CD
+		  FROM RFX RQHD
+		 INNER JOIN RFX_ITEM RQDT
+		    ON RQDT.TEN_ID = RQHD.TEN_ID
+		   AND RQDT.RFX_UUID = RQHD.RFX_UUID
+		   AND RQDT.STS   != 'D'
+		 INNER JOIN RFX_BID QTHD
+		    ON QTHD.TEN_ID   = RQHD.TEN_ID
+		   AND QTHD.RFX_NO   = RQHD.RFX_NO
+		   AND QTHD.RFX_RND  = RQHD.RFX_RND
+		   AND QTHD.RFX_BID_EFCT_YN = 'Y' -- 유효여부
+		   AND QTHD.RFX_BID_STS_CCD = 'SUBM' -- 제출
+		   AND QTHD.STS     != 'D'
+		 INNER JOIN RFX_BID_ITEM QTDT
+		    ON QTDT.TEN_ID        = QTHD.TEN_ID
+		   AND QTDT.RFX_BID_UUID  = QTHD.RFX_BID_UUID
+		   AND QTDT.RFX_ITEM_UUID = RQDT.RFX_ITEM_UUID
+		 WHERE RQHD.TEN_ID       = #{g.tenant}
+		   AND RQHD.OORG_CD      = #{p.oorg_cd}
+		   AND RQHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+		   AND RQHD.RFX_STS_CCD IN ('PRGSG', 'CLSG', 'SLCTN_APVL_PRGSG', 'ED')  -- RFX 진행상태: 진행중,마감,선정품의중,종료
+		   <choose>
+		       <when test="p.sg_cds != null and p.sg_cds.size() &gt; 0">
+		           AND RQDT.SG_CD IN
+		           <foreach close=")" collection="p.sg_cds" item="sgCd" open="(" separator=",">
+		               #{sgCd}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND 1 = 0
+		       </otherwise>
+		   </choose>
+	</select>
+	<select id="findListVendorByStlSG" resultType="string">
+		/* 동일 SG 낙찰 업체 */
+		SELECT RFX_BID.VD_CD
+		  FROM RFX RFX
+		 INNER JOIN RFX_ITEM RFX_ITEM
+		    ON RFX_ITEM.TEN_ID = RFX.TEN_ID
+		   AND RFX_ITEM.RFX_UUID = RFX.RFX_UUID
+		   AND RFX_ITEM.SLCTN_YN = 'Y' -- 견적요청품목 선정 여부
+		   AND RFX_ITEM.STS   != 'D'
+		 INNER JOIN RFX_BID RFX_BID
+		    ON RFX_BID.TEN_ID   = RFX.TEN_ID
+		   AND RFX_BID.RFX_NO   = RFX.RFX_NO
+		   AND RFX_BID.RFX_RND  = RFX.RFX_RND
+		   AND RFX_BID.RFX_BID_EFCT_YN = 'Y' -- 유효여부
+		   AND RFX_BID.RFX_BID_STS_CCD = 'SUBM' -- 제출
+		   AND RFX_BID.SLCTN_YN   = 'Y' -- 업체 선정 여부
+		   AND RFX_BID.STS     != 'D'
+		 INNER JOIN RFX_BID_ITEM RFX_BID_ITEM
+		    ON RFX_BID_ITEM.TEN_ID        = RFX_BID.TEN_ID
+		   AND RFX_BID_ITEM.RFX_BID_UUID  = RFX_BID.RFX_BID_UUID
+		   AND RFX_BID_ITEM.RFX_ITEM_UUID = RFX_ITEM.RFX_ITEM_UUID
+		   AND RFX_BID_ITEM.SLCTN_YN      = 'Y' -- 업체견적품목 선정 여부
+		 WHERE RFX.TEN_ID       = #{g.tenant}
+		   AND RFX.OORG_CD  = #{p.oorg_cd}
+		   AND RFX.PURC_TYP_CCD     = #{p.purc_typ_ccd}
+		   AND RFX.RFX_STS_CCD = 'ED'  -- RFX 진행상태: 종료
+		   AND RFX.RFX_RES_STS_CCD  = 'VD_SLCTN'  -- RFX 종료상태: 업체선정
+		   <choose>
+		       <when test="p.sg_cds != null and p.sg_cds.size() &gt; 0">
+		           AND RFX_ITEM.SG_CD IN
+		           <foreach close=")" collection="p.sg_cds" item="sgCd" open="(" separator=",">
+		               #{sgCd}
+		           </foreach>
+		       </when>
+		       <otherwise>
+		           AND 1 = 0
+		       </otherwise>
+		   </choose>
+	</select>
+	<select id="searchRfxVendorRcmdByRfx" resultType="map">
+		SELECT RFX_VD_UUID
+		     , VD_CD
+		     , RCMD_VD_TYP_CCD
+		  FROM RFX_VD_AUTO_RCMD
+		 WHERE TEN_ID = #{g.tenant}
+		   AND RFX_UUID = #{p.rfx_uuid}
+		   AND STS != 'D'
+	</select>
+</mapper>

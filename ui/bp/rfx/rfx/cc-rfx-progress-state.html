@@ -1,0 +1,102 @@
+<dom-module id="cc-rfx-progress-state">
+<!-- 
+/**
+ *
+ *	@description : RFX 상태바
+ *  <pre>
+ * </pre>
+ * @author : Yeon-u Kim
+ * @FileName : 
+ * @Since 2016. 6. 29.
+ * @변경이력 : [2016. 6. 29.] Yeon-u Kim 최초작성
+ */
+-->
+	<style>
+		#container {
+			width: 80%;
+			margin: 0 auto;
+		}
+	</style>
+
+	<template>
+		<!-- ajax 선언 부 -->
+		<!--  progress bar 상태 조회 -->
+		<sc-ajax id="findListProStatus"
+				 url="../shared/findListProStatus.do"
+				 last-response="{{progressState}}">
+		</sc-ajax>
+		<div class="vspace-10"></div>
+		<div id="container">
+			<gp-progress-state id="rfxProgress" data="{{progressState}}"></gp-progress-state>
+		</div>
+	</template>
+
+	<script>
+		Polymer({
+			is: 'cc-rfx-progress-state',
+			properties: {
+				rfxData: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				progressState: {
+					type: Array
+				}
+			},
+			observers: [
+				'findListProStatus(rfxData.rfx_sts_ccd)'
+			],
+			//최초 호출
+			attached: function() {
+				if(!this._attachedCalled) {
+					this._attachedCalled = true;
+					//한번만 호출되도록 로직작성
+					//상태바의 상태에 따라 화면 표시 처리
+					this.listen(this.$.rfxProgress, 'state-tap', '_onStateTap');
+				}
+			},
+
+			_destroy: function() {
+				this.unlisten(this.$.rfxProgress, 'state-tap', '_onStateTap');
+			},
+
+			_onStateTap: function(event) {
+				var mainProgSts = event.detail.main_work_cd;
+				var canShowResultDetailSts = ['CLSG','SLCTN_APVL_PRGSG','ED'];
+				//결과화면이 표시 가능한 상태는 마감과 종료
+				if(canShowResultDetailSts.indexOf(mainProgSts) > -1) {
+					this.fire("show-contest-detail", {rfx_uuid: this.rfxData.rfx_uuid});
+				} else {
+					this.fire("show-detail", {rfx_uuid: this.rfxData.rfx_uuid});
+				}
+			},
+			findListProStatus: function() {
+				var me = this;
+				var rfxData = me.rfxData;
+
+				me.set("progressState", []);
+
+				if(!UT.isEmpty(rfxData.rfx_sts_ccd)) {
+					var rfxStsCcd = rfxData.rfx_sts_ccd;
+					// 진행품의시 결재상태 (미사용)
+					var subWorkCd = rfxData.rfx_apvl_sts_ccd;
+
+					if(["CLSG", "ED"].indexOf(rfxStsCcd) > -1) {	// 마감 or 종료 시 RFx 종료상태
+						subWorkCd = rfxData.rfx_res_sts_ccd;
+					} else if(rfxStsCcd === "SLCTN_APVL_PRGSG") {			// 선정품의시 결재 상태 (미사용)
+						subWorkCd = rfxData.rfx_slctn_apvl_sts_ccd;
+					}
+
+					me.$.findListProStatus.body = {
+						'task_typ': 'RFX',
+						'main_task_dtlcd': rfxStsCcd,
+						'sub_task_dtlcd': subWorkCd
+					}
+					UT.request(me.$.findListProStatus);
+				}
+			}
+		});
+	</script>
+</dom-module>

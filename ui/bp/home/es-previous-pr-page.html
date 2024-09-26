@@ -1,0 +1,323 @@
+
+<dom-module id="es-previous-pr-page">
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+
+    </style>
+
+    <template>
+        <sc-request-group init>
+            <sc-ajax url="findListOperationOrganizationByUser.do" body="PO" content-type="text/plain" last-response="{{codes.operorgPO}}" auth-disabled></sc-ajax>
+            <sc-code-group>
+                <sc-code code="C004" value="{{codes.cur}}" ></sc-code>          <!-- 통화 -->
+                <sc-code code="P045"	value="{{codes.purcTypCcd}}"></sc-code> <!-- 구매코드 : 구매 유형 공통코드 -->
+                <sc-code code="P071"	value="{{codes.prProgStsGrpCd}}"></sc-code> <!-- 구매코드 : 구매 진행 상태 -->
+            </sc-code-group>
+        </sc-request-group>
+
+
+        <sc-ajax id="findListPrePrItemList" url="findListPrePrItemList.do" body="{{indexParam}}">
+        </sc-ajax>
+
+
+        <cc-auth-checker check-list="auth-s"></cc-auth-checker>
+
+        <div class="catalog-result-page catalog">
+            <div class="catalog-page-toolbar">
+                <div class="period_container">
+                    <div class="period_title">[[translate('기간')]]</div>
+                    <!--<ul class="period_selector">
+                        <li><button><span>전체</span></button></li>
+                        <li><button><span>1일</span></button></li>
+                        <li><button><span>1주</span></button></li>
+                        <li><button><span>1개월</span></button></li>
+                        <li><button><span>3개월</span></button></li>
+                        <li><button><span>1년</span></button></li>
+                    </ul>-->
+                    <sc-button-group name="c2" active-value="{{indexParam.period}}" on-change="onSetPeriod" class="period_selector">
+                        <sc-button text="전체"  value="AL" class="sort_date_button" on-click="onSetPeriod" active></sc-button>
+                        <sc-button text="1일"   value="1D" class="sort_date_button" on-click="onSetPeriod"></sc-button>
+                        <sc-button text="1주"   value="1W" class="sort_date_button" on-click="onSetPeriod"></sc-button>
+                        <sc-button text="1달" value="1M" class="sort_date_button" on-click="onSetPeriod"></sc-button>
+                        <sc-button text="3달" value="3M" class="sort_date_button" on-click="onSetPeriod"></sc-button>
+                        <sc-button text="1년"   value="1Y" class="sort_date_button" on-click="onSetPeriod"></sc-button>
+                    </sc-button-group>
+                    <sc-period-date-field from-value="{{indexParam.fromDate}}" to-value="{{indexParam.toDate}}"
+                                          default-from-value="-1M" default-to-value="0d" string-date="false" trigger-only >
+                    </sc-period-date-field>
+                </div>
+            </div>
+            <div class="catalog-page-cont">
+                <sc-grid id="grid_pr_item" data-provider="[[prItemList]]" class="h-500" use-state="false" use-selection="false" on-item-click="onItemClick" data-args="pr" show-number-line="false" sortable="false">
+                    <sc-grid-columns>
+                        <sc-combobox-column data-field="oorg_cd"    header-text="운영조직" width="120" items="{{codes.operorgPO}}" display-field="logic_org_nm" value-field="oorg_cd"></sc-combobox-column>
+                        <sc-combobox-column data-field="purc_typ_ccd" 			header-text="구매 유형" 	width="60" 	text-align="center" display-field="label"	value-field="data"			items="{{codes.purcTypCcd}}"></sc-combobox-column>
+                        <sc-date-column data-field="pr_req_dt" 	    header-text="요청 일자" 		width="100" text-align="center"></sc-date-column>
+                        <sc-data-column data-field="pr_tit"         header-text="구매요청 제목" width="200" text-align="left" style-name="link"></sc-data-column>
+                        <sc-data-column data-field="item_cd"        header-text="품목 코드"     width="120" text-align="center"></sc-data-column>
+                        <sc-data-column data-field="item_nm"        header-text="품목 명"     width="180" text-align="left"></sc-data-column>
+                        <sc-combobox-column data-field="pr_item_sts_ccd"	header-text="진행 상태"	width="60" text-align="center" display-field="label"	value-field="data"	items="{{codes.prProgStsGrpCd}}"></sc-combobox-column>
+                        <sc-data-column data-field="pr_req_dept_nm" header-text="작성자 부서"   width="100" text-align="left"></sc-data-column>
+                    </sc-grid-columns>
+                    <sc-grid-fields>
+                        <sc-grid-field data-field="pr_uuid" data-type="text"></sc-grid-field>
+                        <sc-grid-field data-field="pr_revno" data-type="text"></sc-grid-field>
+                    </sc-grid-fields>
+                </sc-grid>
+            </div>
+            <div class="catalog-page-selector">
+                <div class="prev-container">
+                    <button class="first" on-click="goFirstPage"></button>
+                    <button class="prev" on-click="goPreviousPage"></button>
+                </div>
+                <div class="num-container" id="pagination">
+                    <!-- drawn by script -->
+                </div>
+                <div class="next-container">
+                    <button class="next" on-click="goNextPage"></button>
+                    <button class="last" on-click="goLastPage"></button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-previous-pr-page",
+
+            properties: {
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            operorgPO: [], // 구매운영조직
+                            cur: [],
+                            prProgStsGrpCd: [], // 구매 진행 상태
+                            purcTypCcd: [] // 구매 유형
+                        };
+                    }
+                },
+                prItemList: {
+                    type: Array,
+                    value: function() {
+                        return [];
+                    }
+                },
+                indexParam:{
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                totalCount: {
+                    type: Number,
+                    value: 0
+                }
+            },
+
+            formulas: {},
+
+            load: function (data, total) {
+                var me = this;
+                me.set("prItemList", data);
+                me.set("totalCount", total);
+            },
+            displayPagination: function(btnHtml) {
+                var me = this;
+                var container = Polymer.dom(me.$.pagination);
+                //me.clearElement(container, "._pg_", "click", "onFindPaging");
+
+                Polymer.dom(me.$$("#pagination")).innerHTML = btnHtml.join("");
+                me.bindListener(container, "._pg_", "click", "onFindPaging");
+            },
+            clearElement: function(container, selector, eventName, listener) {
+                var me = this;
+
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.unlisten(elements[i], eventName, listener);
+                    }
+                }
+
+                // 하위 노드 모두 지우기
+                var child = Polymer.dom(container).childNodes;
+                if (UT.isNotEmpty(child)) {
+                    for (var i = 0, len = child.length; i < len; i++) {
+                        Polymer.dom(container).removeChild(child[i]);
+                    }
+                }
+            },
+
+            // selector 의 event listener 를 등록한다
+            bindListener: function(container, selector, eventName, listener) {
+                var me = this;
+                var elements = Polymer.dom(container).querySelectorAll(selector);
+                if (UT.isNotEmpty(elements)) {
+                    for (var i = 0, len = elements.length; i < len; i++) {
+                        me.listen(elements[i], eventName, listener);
+                    }
+                }
+            },
+            // 페이징 클릭 - 해당탭 & 검색어유지 & 품목분류유지 & X페이지변경 & 소팅유지 & 페이지당개수 유지
+            onFindPaging: function(event) {
+                var me = this;
+                var tab = me.getDataset(event, "tab");
+                var page = me.getDataset(event, "page");
+
+                if (UT.isEmpty(page) || UT.isEmpty(tab) || !me.hasData()) {
+                    return;
+                }
+                var param = me.get("indexParam");
+                param.from = param.size * (page - 1);
+
+                me.saveIndexParam(param);
+                //me.saveSearchParams(param);
+                // console.log("onFindPaging", me.get("searchParam"));
+                me.onFindList();
+            },
+
+            hasData: function(){
+                var me = this;
+                var count = me.get("prItemList").length;
+                return UT.isNumber(count) && count > 0 ? true : false;
+            },
+
+            // 클릭 이벤트의 파라미터
+            getDataset: function(event, name) {
+                var target = UT.isEmpty(event.target.dataset[name]) ? UT.closest(event.target, "button") : event.target;
+                return target.dataset[name];
+            },
+
+            saveIndexParam: function(param) {
+                var me = this;
+                me.set("indexParam", param);
+            },
+
+            onFindList: function(){
+                var me = this;
+                UT.request(me.$.findListPrePrItemList, function(e,res){
+                    me.set("prItemList",res.response);
+                    me.displayPagination(me.getPagingHtml());
+                });
+            },
+
+            getPagingHtml: function() {
+                var me = this;
+                var html = [];
+                var size = me.get("indexParam.size") || 2;
+                var from = me.get("indexParam.from") || 0;
+                var current = parseInt(from / size, 10) + 1;
+                var pages = parseInt(me.totalCount / size, 10) + (me.totalCount % size === 0 ? 0 : 1);
+                var start = Math.max(current - 5, 1);
+                var end = Math.min(start + 9, pages);
+                var prev = Math.max(current - 1, 1);
+                var next = Math.min(current + 1, pages);
+                var tab = "pr_item_list";
+
+                for (var i = start; i <= end; i++) {
+                    html.push((current === i) ? "<button class='active'><span>" + i + "</span></button>" : "<button class='_pg_' data-tab='" + tab + "' data-page='" + i + "'><span>" + i + "</span></button>");
+                }
+                return html;
+            },
+            goFirstPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = 0;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goPreviousPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                if(param.from == 0){
+                    return;
+                }
+                param.from = param.from - param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goNextPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.from + param.size;
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            goLastPage: function(){
+                var me = this;
+                var param = me.get("indexParam");
+                var lastPageNumber = Math.ceil(me.totalCount / param.size);
+                if(param.from >= me.totalCount - param.size){
+                    return;
+                }
+                param.from = param.size * (lastPageNumber-1);
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+            // 기간 설정
+            onSetPeriod: function(event) {
+                var me = this;
+                var days = event.target.value;
+                var today = new Date();
+                today.setHours(0);
+                today.setMinutes(0);
+                today.setSeconds(0);
+                var from;
+                var to = today;
+                switch (days) {
+                    case "1D":
+                        from = today;
+                        break;
+                    case "1W":
+                        from = moment(today).add(-1, "w").add(1, "d").toDate();
+                        break;
+                    case "1M":
+                        from = moment(today).add(-1, "M").add(1, "d").toDate();
+                        break;
+                    case "3M":
+                        from = moment(today).add(-3, "M").add(1, "d").toDate();
+                        break;
+                    case "1Y":
+                        from = moment(today).add(-1, "y").add(1, "d").toDate();
+                        break;
+                    case "AL":
+                    default:
+                        to = null;
+                        from = null;
+                        break;
+                }
+
+                me.set("indexParam.fromDate", from);
+                me.set("indexParam.toDate", to);
+
+                var param = me.get("indexParam");
+                param.from = 0; // set 1st page
+                me.saveIndexParam(param);
+                me.onFindList();
+            },
+
+            onItemClick: function(event) {
+                var me = this;
+                var detail = event.detail;
+                var data = detail.data;
+                var fieldName = detail.item.dataField;
+
+                if (fieldName === "pr_tit") {
+                    me.fire('go-pr-page', {menu_cd : "PRO10040", param: data, param2:{} });
+                }
+            },
+
+        });
+    </script>
+</dom-module>

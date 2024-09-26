@@ -1,0 +1,274 @@
+<dom-module id="ep-sg-vendor-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--  코드 조회 code group-->
+		<sc-request-group init>
+			<sc-code-group id="codes">
+				<!--  거래유형-->
+				<sc-code code="E902" value="{{codes.obdTypCcd}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<!-- srm 운영조직과 연결된 협력사 운영조직 조회 -->
+		<sc-ajax id="findListOperationOrganizationByOperationOrganizationLink"
+				 url="findListOperationOrganizationByOperationOrganizationLink.do"
+				 on-response="completeFindListOperationOrganizationByOperationOrganizationLink">
+		</sc-ajax>
+		
+		<!-- 협력사 운영조직과 연결된 협력사 유형 조회 -->
+		<sc-ajax
+				id="findListOrgVendorType"
+				url="shared/findListOrgVendorType.do"
+				last-response="{{codes.type_cd}}">
+		</sc-ajax>
+		
+		<!-- 협력사 소싱그룹 조회 -->
+		<sc-ajax id="findListSgVendorInfo"
+				 url="findListSgVendorInfo.do"
+				 body="{{searchParam}}"
+				 last-response="{{sgVendorList}}">
+		</sc-ajax>
+		
+		<cc-auth-checker check-list="auth-r" ></cc-auth-checker>
+		
+		<div class="vbox flex">
+			<cc-search-condition-panel on-search="onSearch" validation-group="search">
+				<cc-fieldset>
+					<sc-label text="운영조직"></sc-label>
+					<sc-combobox-field id="operOrgCd" display-field="logic_org_nm" value-field="oorg_cd" selected-index="0" required="true" reset="false"
+									   items="{{codes.operOrgCd}}" value="{{searchParam.oorg_cd}}" placeholder="선택" on-change="onChangeOperOrg"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="거래 유형"></sc-label>
+					<sc-combobox-field value="{{searchParam.obd_typ_ccd}}" display-field="label" value-field="data" items="{{codes.obdTypCcd}}" placeholder="전체"></sc-combobox-field>
+				</cc-fieldset>
+				<cc-fieldset>
+					<th><sc-label text="협력사"></sc-label>
+						<div class="field-box">
+							<sc-text-field value="{{searchParam.erp_vd_cd}}" class="w-100" on-enter="onSearch" placeholder="코드"></sc-text-field>
+							<div class="hspace-2"></div>
+							<sc-text-field value="{{searchParam.vd_nm}}" on-enter="onSearch" placeholder="협력사 명"></sc-text-field>
+						</div>
+				</cc-fieldset>
+				<cc-fieldset>
+					<sc-label text="사업자등록번호"></sc-label>
+					<sc-text-field value="{{searchParam.bizregno}}" on-enter="onSearch"></sc-text-field>
+				</cc-fieldset>
+			</cc-search-condition-panel>
+			
+			<sc-grid id="gridPanel" class="flex" data-provider="{{sgVendorList}}" editable="false" use-state="false"
+					 use-selection="[[!singleSelect]]" selection-mode="[[formula('selectionMode')]]" on-item-click="onDataCellClicked">
+				<cc-grid-toolbar>
+					<sc-button text="선택" on-click="onClickSelectBtn" hidden="[[singleSelect]]" auth-r></sc-button>
+				</cc-grid-toolbar>
+				
+				<sc-grid-columns>
+					<sc-data-column	data-field="sg_top_nm" 		header-text="대분류" 	width="150" text-align="left" 	visible="[[formula('isSg')]]"></sc-data-column>
+					<sc-data-column data-field="sg_mid_nm" 		header-text="중분류" 	width="150" text-align="left" 	visible="[[formula('isSg')]]"></sc-data-column>
+					<sc-group-column hide-child-headers="true" 	header-text="소싱그룹" 	width="240" text-align="center" visible="[[formula('isSg')]]">
+						<sc-data-column data-field="display_sg_nm" 		header-text="명" 		width="150" text-align="left"></sc-data-column>
+						<sc-data-column data-field="sg_cd" 		header-text="코드" 		width="80"></sc-data-column>
+					</sc-group-column>
+					<sc-group-column hide-child-headers="true" 	header-text="협력사 명" 	width="210" text-align="center">
+						<sc-data-column data-field="display_vd_nm" 		header-text="협력사 명" 	width="180" text-align="left"></sc-data-column>
+						<sc-image-column data-field="btn_select" width="30" 			text-align="center" visible="[[singleSelect]]" singular-source="ui/assets/img/grid/ico_grd_select.png"></sc-image-column>
+					</sc-group-column>
+					<sc-data-column data-field="erp_vd_cd" 			header-text="협력사 코드" 	width="120"></sc-data-column>
+					<sc-data-column data-field="bizregno" 			header-text="사업자등록번호" width="120"></sc-data-column>
+					<sc-combobox-column data-field="obd_typ_ccd" 	header-text="거래 유형" 		width="80" 	display-field="label" value-field="data" items="{{codes.obdTypCcd}}"></sc-combobox-column>
+					<sc-data-column data-field="vd_typ_nm" 			header-text="협력사 유형" 	width="120" visible="false"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="sg_id"></sc-grid-field>
+					<sc-grid-field data-field="oorg_cd"></sc-grid-field>
+					<sc-grid-field data-field="up_sg_id"></sc-grid-field>
+					<sc-grid-field data-field="up_sg_cd"></sc-grid-field>
+					<sc-grid-field data-field="sg_std_nm"></sc-grid-field>
+					<sc-grid-field data-field="sg_std_en_nm"></sc-grid-field>
+					<sc-grid-field data-field="sg_nm"></sc-grid-field>
+					<sc-grid-field data-field="sg_cd"></sc-grid-field>
+					<sc-grid-field data-field="vd_nm"></sc-grid-field>
+					<sc-grid-field data-field="typ_cd"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	
+	<script>
+		Polymer({
+			is : 'ep-sg-vendor-list',
+			
+			properties : {
+				titleText : {
+					type : String,
+					value: "소싱그룹-협력사 검색"
+				},
+				
+				searchParam : {
+					type : Object,
+					value : function() {
+						return {
+							vendor_type : "SG"
+						};
+					}
+				},
+				
+				sgVendorList : {
+					type : Array,
+					value : function() {
+						return [];
+					}
+				},
+				
+				codes : {
+					type : Object,
+					value : function() {
+						return {
+							operOrgCd : [],
+							type_cd : []
+						};
+					},
+					reset : false
+				},
+				
+				// 단일 선택 여부
+				singleSelect : {
+					type : Boolean,
+					value : false
+				},
+				
+				linkProfile : {
+					type : Boolean,
+					value : true
+				}
+			},
+			
+			formulas : {
+				selectionMode : function() {
+					var me = this;
+					return (me.get("singleSelect") ? "radio" : "check");
+				},
+				isSg : function() {
+					var me = this;
+					return me.searchParam.isSg;
+				}
+			},
+			
+			initialized : function() {},
+			
+			/**
+			 * 옵션 설정
+			 */
+			setOptions : function(options) {
+				var me = this;
+				var options = options || {};
+				me.set("singleSelect", UT.isBoolean(options.singleSelect) ? options.singleSelect : false);
+				me.set("autoComplete", UT.isBoolean(options.autoComplete) ? options.autoComplete : false);
+				me.applyFormula();
+				
+				if(UT.isObject(options.defaultParam)) {
+					for(var key in options.defaultParam) {
+						me.set("searchParam." + key, options.defaultParam[key]);
+					}
+				}
+				if(UT.isNotEmpty(options.defaultParam.so_oper_org_cd)) {
+					me.onFindEoOperOrgCds();
+					// me.findListOrgVendorType();
+				}
+				if(UT.isArray(options.dataRows)) { // 배열 데이터
+					var provider = me.$.gridPanel.getDataProvider();
+					provider.addItems(options.dataRows);
+				}
+				me.applyFormula();
+			},
+			// 협력사 운영조직 콤보박스 조회
+			onFindEoOperOrgCds : function() {
+				var me = this;
+				me.$.findListOperationOrganizationByOperationOrganizationLink.set("body", {
+					conn_typ_ccd: 'SOEO',
+					oorg_cd : me.searchParam.so_oper_org_cd
+				});
+				UT.request(me.$.findListOperationOrganizationByOperationOrganizationLink);
+			},
+			// 협력사 운영조직 콤보박스 조회 완료 시
+			completeFindListOperationOrganizationByOperationOrganizationLink : function(e, res) {
+				var me = this,
+					result = res.response;
+				
+				me.set("codes.operOrgCd", result);
+				me.$.operOrgCd.selectedIndex = 0;
+				
+			},
+			onChangeOperOrg : function() {
+				var me = this;
+				// me.findListOrgVendorType();
+			},
+			findListOrgVendorType : function() {
+				var me = this;
+				me.$.findListOrgVendorType.set("body", {
+					oorg_cd : me.searchParam.oorg_cd
+				});
+				UT.request(me.$.findListOrgVendorType);
+			},
+			load : function(options) {
+				var me = this;
+				me.setOptions(options);
+			},
+			//그리드 클릭 이벤트
+			onDataCellClicked : function(e) {
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item;
+				
+				if(me.singleSelect && item.dataField === "btn_select") {
+					//바로선택
+					me.fire("selected-items", [data]);
+				}
+			},
+			
+			/**
+			 * 조회
+			 */
+			onSearch : function() {
+				var me = this;
+
+				if(!me.validate("search")) {
+					UT.alert("STD.E0000"); // 입력하신 정보를 다시 확인하여 주세요
+					return;
+				}
+
+				UT.request(me.$.findListSgVendorInfo);
+			},
+			
+			/**
+			 * 선택 버튼 클릭
+			 */
+			onClickSelectBtn : function() {
+				var me = this;
+				var grid = me.$.gridPanel;
+				var provider = me.$.gridPanel.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				if(selected.length > 0) {
+					me.fire('selected-items', selected);
+				} else {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+				}
+			},
+			
+			// find list url
+			getAjaxUrl: function() {
+				var me = this;
+				return me.$.findListSgVendorInfo.url;
+			},
+			
+			behaviors:[
+				Polymer.CCAutocompleteBehavior
+			]
+		});
+	</script>
+</dom-module>

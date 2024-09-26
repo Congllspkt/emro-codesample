@@ -1,0 +1,208 @@
+<dom-module id="ep-appx-template-list">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 그리드 : 첨부서식 조회 -->
+		<sc-ajax id="findListEpAppForm"
+				 url="findListEpAppForm.do"
+				 body="{{findListEpAppForm.param}}"
+				 last-response="{{findListEpAppForm.result}}">
+		</sc-ajax>
+
+		<!-- 첨부서식 내용조회 -->
+		<sc-ajax id="displayCntrAppFormCont"
+				 url="findAppformCont.do"
+				 on-response="completeDisplayCntrAppFormCont">
+		</sc-ajax>
+		
+		<!-- 첨부서 내용조회 -->
+		<sc-ajax id="findCntrAppCont"
+				 url="findCntrAppCont.do"
+				 on-response="completeFindCntrAppCont">
+		</sc-ajax>
+
+		<!-- 공통코드 조회 -->
+		<sc-code-group>
+			<sc-code code="D004" value="{{codes.paperClsCd}}"></sc-code><!-- D004:문서구분 -->
+			<sc-code code="C009" value="{{codes.useYnCcd}}"></sc-code><!-- C009:사용 여부 -->
+			<sc-code code="D005" value="{{codes.attTypeCd}}"></sc-code><!-- D005:첨부자구분 -->
+		</sc-code-group>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+		
+		<div class="hbox flex">
+			<div class="vbox flex-4">
+				<cc-search-condition-panel on-search="onSearchAppForm" on-enter="onSearchAppForm" auth-r>
+					<cc-fieldset>
+						<sc-label text="부속서류 명"></sc-label>
+						<sc-text-field value="{{findListEpAppForm.param.appx_tmpl_nm}}" max-length="60"></sc-text-field>
+					</cc-fieldset>
+				</cc-search-condition-panel>
+				<!-- 첨부서식 그리드 -->
+				<sc-grid id="gridView" class="flex" selection-mode="radio" use-state="false" data-provider="{{findListEpAppForm.result}}" on-selection-checked="onSelectionChecked">
+					<cc-grid-toolbar>
+						<sc-button text="선택" on-click="onSelectedList"></sc-button>
+					</cc-grid-toolbar>
+					<sc-grid-columns>
+						<sc-data-column 	data-field="appx_tmpl_nm" 	header-text="부속서류 명" 	width="200" text-align="left"></sc-data-column>
+						<sc-combobox-column data-field="appx_typ_ccd" 	header-text="유형" 			width="100" text-align="center" display-field="label" value-field="data" items="{{codes.paperClsCd}}"></sc-combobox-column>
+						<sc-combobox-column data-field="mand_yn" 		header-text="필수 여부"		width="100" text-align="center" display-field="label" value-field="data" items="{{codes.useYnCcd}}"></sc-combobox-column>
+						<sc-combobox-column data-field="appx_crtr_typ_ccd" 	header-text="작성자 유형" 	width="100" text-align="center" display-field="label" value-field="data" items="{{codes.attTypeCd}}"></sc-combobox-column><!--첨부대상-->
+					</sc-grid-columns>
+					<sc-grid-fields>
+						<sc-grid-field data-field="appx_tmpl_uuid"></sc-grid-field>
+						<sc-grid-field data-field="use_yn"></sc-grid-field>
+						<sc-grid-field data-field="inp_fld_eyn"></sc-grid-field>
+						<sc-grid-field data-field="athg_uuid"></sc-grid-field>
+					</sc-grid-fields>
+				</sc-grid>
+			</div>
+			<div class="flex-6 box">
+				<!-- 첨부서식 내용(TEXT) -->
+				<iframe id="contHtml" class="fit"></iframe>
+			</div>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is: 'ep-appx-template-list',
+
+			properties: {
+				titleText:{
+					type: String,
+					value: "부속서류 템플릿 목록"
+				},
+				// 공통코드
+				codes: {
+					type: Object,
+					reset: false,
+					value: function() {
+						return {
+							paperClsCd: [],
+							useYnCcd: [],
+							attTypeCd: []
+						};
+					}
+				},
+				// 첨부서식 조회 결과
+				findListEpAppForm: {
+					type: Object,
+					value: function () {
+						return {
+							param: {},
+							result: {}
+						};
+					}
+				}
+			},
+
+			initialized: function () {
+
+			},
+
+			load: function (data) {
+				var me = this;
+				me.set("findListEpAppForm.param", data);
+				me.onSearchAppForm();
+			},
+			
+			//첨부서식 검색(조회)
+			onSearchAppForm: function () {
+				UT.request(this.$.findListEpAppForm);
+			},
+
+			//선택 목록 반환
+			onSelectedList: function () {
+				var me = this;
+				var provider = me.$.gridView.getDataProvider();
+				var selected = provider.selectionCheckedItems();
+				var parentData = me.get("findListEpAppForm.param");
+				
+				if(selected.length == 0) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다
+					return;
+				}
+				
+				if(selected[0].appx_typ_ccd === "TXT" && UT.isEmpty(me.$.contHtml.contentDocument.body.innerHTML)) {
+					UT.alert("STD.EDO1064"); // 템플릿의 내용이 없습니다. 관리자에게 문의하시기 바랍니다.
+					return;
+				}
+				
+				me.fire('selected-items', selected);
+			},
+
+			//체크박스를 클릭하였을때 호출
+			onSelectionChecked: function (e) {
+				var me = this;
+				var provider = this.$.gridView.getDataProvider();
+				var rowIndex = e.detail.rowIndex;
+
+				var data = provider.getItemAt(rowIndex);
+				if (data.appx_typ_ccd === "TXT") {
+					
+					if(UT.isNotEmpty(me.get("findListEpAppForm.param.ecntr_uuid"))){
+						me.displayCntrAppCont(data);
+					}else{
+						me.displayCntrAppFormCont(data);
+					}
+				} else {
+					// 오른쪽 html content 초기화
+					me.$.contHtml.contentDocument.body.innerHTML = '';
+				}
+			},
+
+			//Text첨부서식에 해당하는 내용을 보여준다.
+			displayCntrAppFormCont: function (data) {
+				var me = this;
+				
+				me.$.displayCntrAppFormCont.body = {appx_tmpl_uuid: data.appx_tmpl_uuid};
+				UT.request(me.$.displayCntrAppFormCont);
+			},
+
+			//첨부서식 내용 후 callback
+			completeDisplayCntrAppFormCont: function (e, res) {
+				var me = this;
+				var contHtmlDiv = me.$.contHtml;
+				var lastResponse = res.response;
+				
+				if(lastResponse == null){
+					UT.alert("STD.EDO1064"); //템플릿의 내용이 없습니다. 관리자에게 문의하시기 바랍니다.
+					return;
+				}
+				
+				if ( UT.isNotEmpty(lastResponse.appx_tmpl_cont) ) {
+					contHtmlDiv.contentDocument.body.innerHTML = lastResponse.appx_tmpl_cont;
+				}
+			},
+			displayCntrAppCont: function (data) {
+				var me = this;
+				
+				me.$.findCntrAppCont.body = {
+					appx_tmpl_uuid: data.appx_tmpl_uuid,
+					ecntr_uuid : me.get("findListEpAppForm.param.ecntr_uuid")
+				};
+				UT.request(me.$.findCntrAppCont);
+			},
+			completeFindCntrAppCont: function(e,res){
+				var me = this;
+				
+				var contHtmlDiv = me.$.contHtml;
+				var lastResponse = res.response;
+	
+				if(lastResponse.result_status == "N"){
+					UT.alert("STD.EDO1064"); //템플릿의 내용이 없습니다. 관리자에게 문의하시기 바랍니다.
+ 					return;
+				}
+				 
+				if ( UT.isNotEmpty(lastResponse.cntr_appx_crng_cont) ) {
+					contHtmlDiv.contentDocument.body.innerHTML = lastResponse.cntr_appx_crng_cont;
+				} 
+			}
+		});
+	</script>
+</dom-module>

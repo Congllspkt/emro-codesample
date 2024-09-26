@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="inv-item">
+    <select id="searchInvoiceItemRequestTarget" resultType="map">
+    /* inv-item.searchInvoiceItemRequestTarget : 송장처리대상 품목 조회 */
+    SELECT GRHD.OORG_CD
+         , GRHD.PURC_TYP_CCD
+         , PODT.PURC_GRP_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN JOB.PURC_GRP_NM_EN
+                 ELSE JOB.PURC_GRP_NM
+             END) AS DISP_PURC_GRP_NM
+         , POHD.TAX_TYP_CCD
+         , POHD.PYMTMETH_CCD
+         , GRHD.VD_CD
+         , VDGL.ERP_VD_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN
+                 ELSE VDGL.VD_NM
+            END) AS DISP_VD_NM
+         , POHD.PO_CRN_DT
+         , POHD.PO_NO
+         , POHD.PO_REVNO
+         , PODT.PO_LNO
+         , GRHD.GR_NO
+        , GRDT.GR_ORDN
+        , GRDT.GR_ITEM_UUID
+         , GRDT.ITEM_CD_CRN_TYP_CCD
+         , CASE WHEN GRDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'  -- 구매품목유형: 미등록(무코드품목)
+                     THEN NULL
+                ELSE GRDT.ITEM_CD
+           END  AS DISP_ITEM_CD
+         , GRDT.ITEM_CD
+         , (CASE WHEN 'en_US' = #{g.locale} THEN GRDT.ITEM_NM_EN
+                 ELSE GRDT.ITEM_NM
+            END) AS DISP_ITEM_NM
+         , GRDT.ITEM_SPEC
+         , GRDT.UOM_CCD
+         , GRDT.ITEM_SPEC_DTL
+         , GRDT.CUR_CCD
+         , PODT.PO_UPRC
+         , GRDT.GR_QTY
+         , GRDT.GR_AMT
+         , GRHD.GR_DT
+      FROM GR GRHD
+     INNER JOIN GR_ITEM GRDT
+        ON GRDT.TEN_ID = GRHD.TEN_ID
+       AND GRDT.GR_UUID  = GRHD.GR_UUID
+       AND GRDT.STS   <![CDATA[<>]]> 'D'
+     INNER JOIN PO_ITEM PODT
+        ON PODT.TEN_ID     = GRDT.TEN_ID
+       AND PODT.PO_ITEM_UUID = GRDT.PO_ITEM_UUID
+     INNER JOIN PO POHD
+        ON POHD.TEN_ID = PODT.TEN_ID
+       AND POHD.PO_UUID  = PODT.PO_UUID
+     INNER JOIN VD VDGL
+        ON VDGL.TEN_ID = GRHD.TEN_ID
+       AND VDGL.VD_CD  = GRHD.VD_CD
+      LEFT OUTER JOIN PURC_GRP JOB               /* JOB : 직무(그룹) */
+        ON JOB.TEN_ID       = PODT.TEN_ID
+       AND JOB.PURC_GRP_TYP_CCD = 'PURC'
+       AND JOB.PURC_GRP_CD  = PODT.PURC_GRP_CD
+       AND JOB.CO_CD      = #{g.comp_cd}
+       AND JOB.USE_YN       = 'Y'
+     WHERE GRHD.TEN_ID = #{g.tenant}
+     <choose>
+       <when test="p.oorg_cds != null and p.oorg_cds.size() &gt; 0">
+       AND GRHD.OORG_CD IN
+         <foreach close=")" collection="p.oorg_cds" item="oorgCd" open="(" separator=",">
+           #{oorgCd}
+         </foreach>
+       </when>
+       <otherwise>
+       AND GRHD.OORG_CD = '0'
+       </otherwise>
+     </choose>
+     <choose>
+         <when test="p.purc_grp_cd != null and p.purc_grp_cd != ''">
+         AND PODT.PURC_GRP_CD = #{p.purc_grp_cd}
+         </when>
+         <otherwise>
+           <if test="p.purc_grp_nm != null and p.purc_grp_nm != ''">
+             <bind name="purcGrpNmPattern" value="'%' + p.purc_grp_nm + '%'"/>
+         AND (UPPER(JOB.PURC_GRP_NM) LIKE UPPER(#{purcGrpNmPattern}) OR UPPER(JOB.PURC_GRP_NM_EN) LIKE UPPER(#{purcGrpNmPattern}))
+           </if>
+         </otherwise>
+     </choose>
+     <if test="p.from_gr_dt != null and p.from_gr_dt != ''">
+       AND GRHD.GR_DT <![CDATA[>=]]> #{p.from_gr_dt}
+     </if>
+     <if test="p.to_gr_dt != null and p.to_gr_dt != ''">
+       AND GRHD.GR_DT <![CDATA[<=]]> #{p.to_gr_dt}
+     </if>
+     <if test="p.purc_typ_ccd != null and p.purc_typ_ccd != ''">
+       AND GRHD.PURC_TYP_CCD = #{p.purc_typ_ccd}
+     </if>
+     <if test="p.from_po_crn_dt != null and p.from_po_crn_dt != ''">
+       AND POHD.PO_CRN_DT <![CDATA[>=]]> #{p.from_po_crn_dt}
+     </if>
+     <if test="p.to_po_crn_dt != null and p.to_po_crn_dt != ''">
+       AND POHD.PO_CRN_DT <![CDATA[<=]]> #{p.to_po_crn_dt}
+     </if>
+     <choose>
+       <when test="p.po_nos != null and p.po_nos.size() != 0">
+       AND POHD.PO_NO IN
+         <foreach close=")" collection="p.po_nos" item="poNo" open="(" separator=",">
+           #{poNo}
+         </foreach>
+       </when>
+       <otherwise>
+         <if test="p.po_no != null and p.po_no != ''">
+           <bind name="poNoPattern" value="'%' + p.po_no + '%'"/>
+       AND POHD.PO_NO LIKE UPPER(#{poNoPattern})
+         </if>
+       </otherwise>
+     </choose>
+     <if test="p.tax_typ_ccd != null and p.tax_typ_ccd != ''">
+       AND POHD.TAX_TYP_CCD = #{p.tax_typ_ccd}
+     </if>
+     <if test="p.pymtmeth_ccd != null and p.pymtmeth_ccd != ''">
+       AND POHD.PYMTMETH_CCD = #{p.pymtmeth_ccd}
+     </if>
+     <if test="p.erp_vd_cd != null and p.erp_vd_cd != ''">
+       <bind name="erpVdCd" value="'%' + p.erp_vd_cd + '%'"/>
+       AND VDGL.ERP_VD_CD LIKE UPPER(#{erpVdCd})
+     </if>
+     <if test="p.vd_nm != null and p.vd_nm != ''">
+       <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+       AND (UPPER(VDGL.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VDGL.VD_NM_EN) LIKE UPPER(#{vdNm})) /* 협력사 명 검색조건*/
+     </if>
+       AND (GRHD.GR_STS_CCD = 'GR_CMPLD' OR GRHD.GR_STS_CCD = 'PP_CMPLD')  -- 검수/기성 승인
+       AND GRHD.STS <![CDATA[<>]]> 'D'
+       AND NOT EXISTS ( SELECT 'X'
+                          FROM INV_ITEM IVDT
+                         INNER JOIN INV IVHD
+                            ON IVHD.TEN_ID = IVDT.TEN_ID
+                           AND IVHD.INV_UUID = IVDT.INV_UUID
+                         WHERE IVDT.TEN_ID        = GRDT.TEN_ID
+                           AND IVDT.GR_ITEM_UUID    = GRDT.GR_ITEM_UUID
+                           AND IVDT.STS          <![CDATA[<>]]> 'D'
+                           AND IVHD.STS          <![CDATA[<>]]> 'D'
+                           AND IVHD.INV_STS_CCD <![CDATA[<>]]> 'CNFD_CNCL'  -- 확정취소(D)
+                      )
+     ORDER BY GRHD.GR_DT DESC, POHD.PO_NO DESC, POHD.PO_REVNO DESC, PODT.PO_LNO
+    </select>
+    <select id="searchInvoiceItem" resultType="map">
+        /* inv-item.searchInvoiceItem :송장 품목 조회 */
+        SELECT IVDT.INV_ITEM_UUID
+             , IVDT.INV_UUID
+             , IVDT.INV_LNO
+             , IVDT.GR_ITEM_UUID
+             , IVDT.GR_NO
+             , IVDT.GR_ORDN
+             , IVDT.GR_LNO
+             , IVDT.ASN_ITEM_UUID
+             , IVDT.PO_ITEM_UUID
+             , IVDT.PO_NO
+             , IVDT.PO_REVNO
+             , IVDT.PO_LNO
+             , IVDT.ITEM_CD_CRN_TYP_CCD
+             , IVDT.ITEM_CD
+             , CASE WHEN IVDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'  -- 구매품목유형: 미등록(무코드품목)
+                        THEN NULL
+                    ELSE IVDT.ITEM_CD
+                END  AS DISP_ITEM_CD
+             , IVDT.ITEM_NM
+             , IVDT.ITEM_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN IVDT.ITEM_NM_EN
+                     ELSE IVDT.ITEM_NM
+                 END) AS DISP_ITEM_NM
+             , IVDT.UOM_CCD
+             , IVDT.ITEM_SPEC
+             , IVDT.ITEM_SPEC_DTL
+             , IVDT.CUR_CCD
+             , IVDT.PO_UPRC
+             , IVDT.GR_QTY
+             , IVDT.GR_AMT
+             , IVDT.GR_DT
+          FROM INV_ITEM IVDT
+         WHERE IVDT.TEN_ID = #{g.tenant}
+           AND IVDT.INV_UUID = #{p.inv_uuid}
+         ORDER BY CAST(IVDT.INV_LNO AS INT)
+    </select>
+    <select id="searchInvoiceTargetItemByGrItemUuid" resultType="map">
+        /* inv-item.searchInvoiceTargetItemByGrItemUuid: 검수 아이템 아이디로 송장처리대상 품목 조회 */
+        SELECT GRHD.OORG_CD
+             , GRHD.PURC_TYP_CCD
+             , POHD.TAX_TYP_CCD
+             , POHD.PYMTMETH_CCD
+             , PODT.PURC_GRP_CD
+             , GRHD.VD_CD
+             , VDGL.ERP_VD_CD
+             , VDGL.VD_NM
+             , VDGL.VD_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN
+                     ELSE VDGL.VD_NM
+                 END) AS DISP_VD_NM
+             , GRDT.CUR_CCD
+             , GRHD.GR_DT
+             , GRDT.GR_AMT
+             , GRDT.PO_UPRC
+             , GRDT.GR_QTY
+             , GRDT.GR_ITEM_UUID
+             , GRHD.GR_NO
+             , GRHD.GR_ORDN
+             , GRDT.GR_LNO
+             , GRDT.ASN_ITEM_UUID
+             , PODT.PO_ITEM_UUID
+             , POHD.PO_NO
+             , POHD.PO_REVNO
+             , PODT.PO_LNO
+             , GRDT.ITEM_CD_CRN_TYP_CCD
+             , GRDT.ITEM_CD
+             , CASE WHEN GRDT.ITEM_CD_CRN_TYP_CCD = 'CDLS'
+                    THEN NULL
+                    ELSE GRDT.ITEM_CD
+                END AS DISP_ITEM_CD
+             , GRDT.ITEM_NM
+             , GRDT.ITEM_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN GRDT.ITEM_NM_EN
+                     ELSE GRDT.ITEM_NM
+                 END) AS DISP_ITEM_NM
+             , GRDT.UOM_CCD
+             , GRDT.ITEM_SPEC
+             , GRDT.ITEM_SPEC_DTL
+          FROM GR_ITEM GRDT
+         INNER JOIN GR GRHD
+            ON GRHD.TEN_ID = GRDT.TEN_ID
+           AND GRHD.GR_UUID  = GRDT.GR_UUID
+         INNER JOIN PO_ITEM PODT
+            ON PODT.TEN_ID     = GRDT.TEN_ID
+           AND PODT.PO_ITEM_UUID = GRDT.PO_ITEM_UUID
+         INNER JOIN PO POHD
+            ON POHD.TEN_ID = PODT.TEN_ID
+           AND POHD.PO_UUID  = PODT.PO_UUID
+         INNER JOIN VD VDGL
+            ON VDGL.TEN_ID = GRHD.TEN_ID
+           AND VDGL.VD_CD  = GRHD.VD_CD
+         WHERE GRDT.TEN_ID = #{g.tenant}
+           AND GRDT.GR_ITEM_UUID IN
+        <foreach close=")" collection="p.gr_item_uuids" item="grItemUuid" open="(" separator=",">
+            #{grItemUuid}
+        </foreach>
+        ORDER BY POHD.PO_NO, CAST(PODT.PO_LNO AS INT), GRHD.GR_NO
+    </select>
+    <insert id="insertInvoiceItem">
+        /* inv-item.insertInvoiceItem : 송장 품목 생성 */
+        INSERT INTO INV_ITEM (
+            TEN_ID
+            , INV_ITEM_UUID
+            , INV_UUID
+            , INV_LNO
+            , PO_ITEM_UUID
+            , PO_NO
+            , PO_REVNO
+            , PO_LNO
+            , ASN_ITEM_UUID
+            , GR_ITEM_UUID
+            , GR_NO
+            , GR_ORDN
+            , GR_LNO
+            , ITEM_CD_CRN_TYP_CCD
+            , ITEM_CD
+            , ITEM_NM
+            , ITEM_NM_EN
+            , UOM_CCD
+            , ITEM_SPEC
+            , ITEM_SPEC_DTL
+            , CUR_CCD
+            , PO_UPRC
+            , GR_QTY
+            , GR_AMT
+            , SUP_AMT
+            , VAT_AMT
+            , GR_DT
+            , RMK
+            , STS
+            , REGR_ID
+            , REG_DTTM
+            , MODR_ID
+            , MOD_DTTM
+        )
+        VALUES (
+                   #{g.tenant}
+                   , #{p.inv_item_uuid}
+                   , #{p.inv_uuid}
+                   , TO_CHAR(#{p.inv_lno})  , #{p.po_item_uuid}
+                   , #{p.po_no}
+                   , CAST(#{p.po_revno} AS INT)
+                   , TO_CHAR(#{p.po_lno})  , #{p.asn_item_uuid}
+                   , #{p.gr_item_uuid}
+                   , #{p.gr_no}
+                   , CAST(#{p.gr_ordn} AS INT)
+                   , #{p.gr_lno}
+                   , #{p.item_cd_crn_typ_ccd}
+                   , #{p.item_cd}
+                   , #{p.item_nm}
+                   , #{p.item_nm_en}
+                   , #{p.uom_ccd}
+                   , #{p.item_spec}
+                   , #{p.item_spec_dtl}
+                   , #{p.cur_ccd}
+                   , CAST(#{p.po_uprc} AS FLOAT  )
+                   , CAST(#{p.gr_qty} AS FLOAT  )
+                   , CAST(#{p.gr_amt} AS FLOAT  )
+                   , CAST(#{p.gr_amt} AS FLOAT  )  /* sup_amt: 공급가액을 승인금액(gr_amt)으로 */
+                   , CAST(#{p.vat_amt} AS FLOAT  )
+                   , #{p.gr_dt}
+                   , #{p.rmk}
+                   , 'C'
+                   , #{g.username}
+                   , #{g.now}
+                   , #{g.username}
+                   , #{g.now}
+               )
+    </insert>
+    <update id="updateInvoiceItem">
+        /* inv-item.updateInvoiceItem : 송장 품목 수정 */
+        UPDATE INV_ITEM
+           SET INV_LNO = TO_CHAR(#{p.inv_lno})  , VAT_AMT = CAST(#{p.vat_amt} AS FLOAT  )
+             , STS     = 'U'
+             , MODR_ID  = #{g.username}
+             , MOD_DTTM  = #{g.now}
+         WHERE TEN_ID      = #{g.tenant}
+           AND INV_ITEM_UUID = #{p.inv_item_uuid}
+    </update>
+    <delete id="deleteInvoiceItem">
+        /* inv-item.deleteInvoiceItem : 송장 품목 삭제 */
+        DELETE FROM INV_ITEM
+         WHERE TEN_ID      = #{g.tenant}
+           AND INV_ITEM_UUID = #{p.inv_item_uuid}
+    </delete>
+    <delete id="deleteInvoiceItemByInvoice">
+        /* inv-item.deleteInvoiceItemByInvoice : 송장 아이디로 송장 품목 삭제 */
+        DELETE FROM INV_ITEM
+         WHERE TEN_ID = #{g.tenant}
+           AND INV_UUID = #{p.inv_uuid}
+    </delete>
+    <select id="searchTaxBillRequestTargetItem" resultType="map">
+        /* inv-item.searchTaxBillRequestTargetItem : 세금계산서 발행대상 품목 조회 */
+        SELECT IVHD.OORG_CD
+             , IVHD.PURC_TYP_CCD
+             , IVHD.PURC_GRP_CD
+             , IVHD.TAX_TYP_CCD
+             , IVHD.PYMTMETH_CCD
+             , IVHD.INV_UUID
+             , IVHD.INV_NO
+             , IVHD.CNFDINV_PIC_ID
+             , (CASE WHEN 'en_US' = #{g.locale} THEN USR.USR_NM_EN
+                     ELSE USR.USR_NM
+                END) AS CNFDINV_PIC_NM
+             , IVDT.INV_ITEM_UUID
+             , IVDT.INV_LNO
+             , IVDT.ITEM_CD_CRN_TYP_CCD
+             , CASE WHEN IVDT.ITEM_CD_CRN_TYP_CCD = 'CDLS' THEN NULL ELSE IVDT.ITEM_CD END AS DISP_ITEM_CD
+             , IVDT.ITEM_CD
+             , IVDT.ITEM_NM
+             , IVDT.ITEM_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN IVDT.ITEM_NM_EN
+                     ELSE IVDT.ITEM_NM
+                 END) AS DISP_ITEM_NM
+             , IVDT.ITEM_SPEC
+             , IVDT.ITEM_SPEC_DTL
+             , IVDT.UOM_CCD
+             , IVHD.FNL_GR_DT AS PSTGDT
+             , CASE WHEN IVHD.PURC_TYP_CCD = 'QTY' THEN IVDT.PO_UPRC ELSE IVDT.GR_AMT END AS INV_UPRC
+             , CASE WHEN IVHD.PURC_TYP_CCD = 'QTY' THEN IVDT.GR_QTY ELSE 1 END AS INV_QTY
+             , IVDT.SUP_AMT
+             , IVDT.VAT_AMT
+             , IVDT.SUP_AMT + IVDT.VAT_AMT AS TTL_AMT
+             , IVHD.VD_CD
+             , VDGL.ERP_VD_CD
+             , VDGL.BIZREGNO AS VD_BIZREGNO
+             , VDGL.VD_NM
+             , VDGL.VD_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN
+                     ELSE VDGL.VD_NM
+                 END) AS DISP_VD_NM
+             ,VDGL.CEO_NM      AS VD_CEO_NM
+             ,VDGL.CEO_NM_EN   AS VD_CEO_NM_EN
+             , (CASE WHEN 'en_US' = #{g.locale} THEN VDGL.CEO_NM_EN
+                     ELSE VDGL.CEO_NM
+                 END) AS DISP_VD_CEO_NM
+             , CASE WHEN VDGL.DTL_ADDR_2 IS NOT NULL  THEN CONCAT(CONCAT(VDGL.DTL_ADDR_1, ' '), VDGL.DTL_ADDR_2)
+                    ELSE VDGL.DTL_ADDR_1
+                END AS VD_ADDR
+             , CASE WHEN VDGL.DTL_ADDR_EN_2 IS NOT NULL  THEN CONCAT(CONCAT(VDGL.DTL_ADDR_EN_1, ' '), VDGL.DTL_ADDR_EN_2)
+                    ELSE VDGL.DTL_ADDR_EN_1
+                END AS VD_ADDR_EN
+             , CASE WHEN 'en_US' = #{g.locale} THEN
+                        CASE WHEN VDGL.DTL_ADDR_EN_2 IS NOT NULL  THEN CONCAT(CONCAT(VDGL.DTL_ADDR_EN_1, ' '), VDGL.DTL_ADDR_EN_2)
+                             ELSE VDGL.DTL_ADDR_EN_1
+                         END
+                    ELSE CASE WHEN VDGL.DTL_ADDR_2 IS NOT NULL  THEN CONCAT(CONCAT(VDGL.DTL_ADDR_1, ' '), VDGL.DTL_ADDR_2)
+                              ELSE VDGL.DTL_ADDR_1
+                          END
+                END AS DISP_VD_ADDR
+             , VDGL.BIZTYP AS VD_BIZTYP
+             , VDGL.IND AS VD_IND
+          FROM INV IVHD
+         INNER JOIN INV_ITEM IVDT
+            ON IVDT.TEN_ID = IVHD.TEN_ID
+           AND IVDT.INV_UUID = IVHD.INV_UUID
+         INNER JOIN VD VDGL
+            ON VDGL.TEN_ID = IVHD.TEN_ID
+           AND VDGL.VD_CD = IVHD.VD_CD
+         INNER JOIN USR USR
+            ON USR.TEN_ID = IVHD.TEN_ID
+           AND USR.USR_ID = IVHD.CNFDINV_PIC_ID
+           AND USR.STS   <![CDATA[<>]]> 'D'
+         WHERE IVHD.TEN_ID = #{g.tenant}
+           AND IVHD.INV_UUID IN
+             <foreach close=")" collection="p.inv_uuids" item="invId" open="(" separator=",">
+                 #{invId}
+             </foreach>
+         ORDER BY IVHD.INV_NO, CAST(IVDT.INV_LNO AS INT)
+    </select>
+</mapper>

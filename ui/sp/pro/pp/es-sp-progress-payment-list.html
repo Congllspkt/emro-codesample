@@ -1,0 +1,445 @@
+<dom-module id="es-sp-progress-payment-list">
+	<!--
+		******************************************************************************************
+		** @Program-name 	: 기성현황(공사/용역)
+		** @Description		: 검수관리
+		** @Author 			: jeKim
+		** @Create Date 	: 2016.06.01
+		** @History 		: 2016.06.01 jeKim 최초작성
+		******************************************************************************************
+	-->
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<!--
+			************************************************************************************************************
+			* Service Area
+			************************************************************************************************************
+		-->
+		<!-- 공통코드 -->
+		<sc-code-group>
+			<sc-code code="C004" value="{{codes.curCcd}}"></sc-code>            <!-- 통화 -->
+			<sc-code code="P012" value="{{codes.vdPoStsCcd}}"></sc-code>    <!-- 구매요청 접수 상태 -->
+			<sc-code code="P080" value="{{codes.poGrStsCcd}}"></sc-code>   <!-- 기성 상태(발주 관점) -->
+			<sc-code code="P081" value="{{codes.asnStsCcd}}"></sc-code>    <!-- 협력사 기성요청 상태 -->
+			<sc-code code="P083" value="{{codes.vdGrStsCcd}}"></sc-code>    <!-- 협력사 기성 진행상태-PO -->
+			<sc-code code="P091" value="{{codes.P091}}"></sc-code>   <!-- 기성 유형 -->
+			<sc-code code="P082" value="{{codes.grStsCcd}}"></sc-code>   <!-- 기성 상태 -->
+		</sc-code-group>
+		
+		<cc-auth-checker check-list="auth-s,auth-r"></cc-auth-checker>
+		
+		<!-- 기성요청 가능여부 체크 -->
+		<sc-ajax id="validateProgressPaymentRequestStatus"
+				 url="validateProgressPaymentRequestStatus.do"
+				 body="{{searchCheckParam}}"
+				 on-response="completeFindInfoAsnReqCheck">
+		</sc-ajax>
+		
+		<!-- 기성 현황 목록 조회 -->
+		<sc-ajax id="findListPoForProgressPaymentAsn"
+				 url="searchPoForProgressPayment.do"
+				 body="{{searchParam}}">
+		</sc-ajax>
+		
+		<!-- 기성 현황 상세 목록 조회 -->
+		<sc-ajax id="findListProgressPaymentAsn"
+				 url="searchProgressPaymentRequest.do"
+				 body="{{searchParam2}}">
+		</sc-ajax>
+		
+		<!--
+			************************************************************************************************************
+			* UI Area
+			************************************************************************************************************
+		-->
+		<cc-page-title-bar></cc-page-title-bar>
+		
+		<cc-search-condition-panel on-search="onFindList" auth-r validation-group="search" column="2">
+			<cc-fieldset>
+				<sc-label text="운영조직"></sc-label>
+				<cc-sp-operorg-multi-combobox-field
+						value="{{searchParam.oorg_cd}}" oper-unit-cd="PO"
+						id="operorgcombobox" placeholder="선택 없음"
+						required="true">
+				</cc-sp-operorg-multi-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="발주 등록 일자"></sc-label>
+				<sc-period-date-field from-value="{{searchParam.from_po_crn_dt}}" to-value="{{searchParam.to_po_crn_dt}}"
+									  default-from-value="-1M" default-to-value="0d" string-date="true">
+				</sc-period-date-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="협력사 기성 상태"></sc-label>
+				<sc-combobox-field placeholder="전체"
+								   items="{{codes.vdGrStsCcd}}" display-field="label" value-field="data"
+								   value="{{searchParam.vd_gr_sts_ccd}}">
+				</sc-combobox-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="발주 번호"></sc-label>
+				<cc-multi-text-field value="{{searchParam.po_no}}" multi-value="{{searchParam.po_nos}}" title="발주 번호" on-enter="onFindList">
+				</cc-multi-text-field>
+			</cc-fieldset>
+			<cc-fieldset>
+				<sc-label text="제목"></sc-label>
+				<sc-text-field value="{{searchParam.po_tit}}" max-length="300" on-enter="onFindList"></sc-text-field>
+			</cc-fieldset>
+		</cc-search-condition-panel>
+		
+		<sc-grid id="poGridPanel" class="flex" use-state="false" use-selection="true" selection-mode="radio"
+				 on-item-click="onPoItemClick">
+			<cc-grid-toolbar>
+				<sc-button text="선급금 요청" auth-s on-click="onAsnRequest" data-args="APYMT"></sc-button>
+				<sc-button text="기성요청" auth-s on-click="onAsnRequest"></sc-button>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="oorg_cd" header-text="운영조직" width="170"
+									display-field="logic_org_nm" value-field="oorg_cd" items="{{codes.oorgCd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="vd_gr_sts_ccd" header-text="협력사 기성 상태" width="110"
+									display-field="label" value-field="data" items="{{codes.vdGrStsCcd}}"></sc-combobox-column>
+				<sc-combobox-column data-field="vd_po_sts_ccd" header-text="협력사 발주 상태" width="130"
+									display-field="label" value-field="data"
+									items="{{codes.vdPoStsCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="po_no" header-text="발주 번호" width="120" style-name="link"></sc-data-column>
+				<sc-data-column data-field="po_revno" header-text="발주 차수" width="70"></sc-data-column>
+				<sc-data-column data-field="po_tit" header-text="제목" width="300" text-align="left"></sc-data-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70"
+									display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="po_amt" header-text="발주 금액" width="140" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="apymt_amt" header-text="선급금(PO기준)" width="160" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="gr_ttl_amt" header-text="기성 합계 금액" width="140" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="gr_ttl_rate" header-text="기성 합계 율" width="100" text-align="right" converter="onGrTotRateConverter"
+								data-type="number" format-type="decimal"></sc-data-column>
+				<sc-data-column data-field="remain_amt" header-text="잔여 금액" width="140" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="remain_rate" header-text="잔여 율" width="100" text-align="right" converter="onRemainTotRateConverter"
+								data-type="number" format-type="decimal"></sc-data-column>
+				<sc-date-column data-field="po_crn_dt" header-text="발주 등록 일자" width="120"></sc-date-column>
+			</sc-grid-columns>
+		</sc-grid>
+		
+		<sc-grid id="asnGridPanel" class="flex" use-state="false" use-selection="false"
+				 on-item-click="onAsnItemClick">
+			<cc-grid-toolbar>
+			</cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-combobox-column data-field="pymt_typ_ccd" header-text="지급 유형" width="100" items="{{codes.P091}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-combobox-column data-field="asn_sts_ccd" header-text="기성요청 상태" width="100" items="{{codes.asnStsCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column data-field="asn_no" header-text="기성요청 번호" width="120" style-name="link"></sc-data-column>
+				<sc-data-column data-field="asn_ordn" header-text="기성요청 회차" width="100"></sc-data-column>
+				<sc-combobox-column data-field="gr_sts_ccd" header-text="기성 상태" width="170" items="{{codes.grStsCcd}}" display-field="label" value-field="data"></sc-combobox-column>
+				<sc-data-column data-field="gr_no" header-text="기성 번호" width="120"></sc-data-column>
+				<sc-data-column data-field="gr_ordn" header-text="기성 회차" width="80"></sc-data-column>
+				<sc-combobox-column data-field="cur_ccd" header-text="통화" width="70"
+									display-field="data" value-field="data" items="{{codes.curCcd}}"></sc-combobox-column>
+				<sc-data-column data-field="asn_amt" header-text="기성요청 금액" width="140" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-data-column data-field="gr_amt" header-text="기성 금액" width="140" text-align="right"
+								data-type="number" format-type="amt"></sc-data-column>
+				<sc-date-column data-field="asn_dt" header-text="기성요청 일자" width="90"></sc-date-column>
+				<sc-date-column data-field="gr_dt" header-text="기성 일자" width="80"></sc-date-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="apymt_yn"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+	
+	<!--
+		************************************************************************************************************
+		* Script Area
+		************************************************************************************************************
+	-->
+	<script>
+		Polymer({
+			is: "es-sp-progress-payment-list",
+			properties: {
+				codes: {
+					type: Object,
+					value: function() {
+						return {
+							oorgCd: [],
+							curCcd: [],		// 통화
+							asnStsCcd: [],	// 납품예정 진행상태
+							poGrStsCcd: [],
+							mapGrStsCcd: {},
+							mapAsnStsCcd: {},
+							vdGrStsCcd: [], // 업체 입고 진행 상태(공사/용역)
+							vdPoStsCcd: [],	// 협력사 접수상태
+							P091: [],
+							grStsCcd: []
+						}
+					},
+					reset: false
+				},
+				
+				// 조회조건
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				searchParam2: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				searchCheckParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				}
+			},
+			
+			// 화면 생성 완료
+			initialized: function() {
+				var me = this;
+				me.initData();
+				me.load();
+			},
+			initData: function() {
+				var me = this;
+				var mapGrStsCcd = {}, mapAsnStsCcd = {};
+				for(var i = 0, len = me.codes.poGrStsCcd.length; i < len; i++) {
+					mapGrStsCcd[me.codes.poGrStsCcd[i].data] = me.codes.poGrStsCcd[i].label;
+				}
+				for(var i = 0, len = me.codes.asnStsCcd.length; i < len; i++) {
+					mapAsnStsCcd[me.codes.asnStsCcd[i].data] = me.codes.asnStsCcd[i].label;
+				}
+				me.set("codes.mapGrStsCcd", mapGrStsCcd);
+				me.set("codes.mapAsnStsCcd", mapAsnStsCcd);
+				me.set("codes.oorgCd", me.$.operorgcombobox.codes.operOrgCd);
+			},
+			//그리드 셀 클릭이벤트
+			onPoItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item,
+					fieldName         = item.dataField,
+					itemIndex         = item.rowIndex;
+				
+				if(fieldName === "po_no") {
+					me.set("searchParam2", data);
+					
+					me.findListProgressPaymentAsn();
+				}
+			},
+			//승인금액(%)
+			onGrTotRateConverter: function(rowIndex, fieldName, data) {
+				var poAmt = new BigNumber(data["po_amt"] || 0); // 발주금액
+				var grTotAmt = new BigNumber(data["gr_ttl_amt"] || 0); // 승인금액
+				
+				// grTotAmt/ poAmt * 100
+				return grTotAmt.div(poAmt).mul(new BigNumber(100)).toFixed(2);
+			},
+			//잔여금액(%)
+			onRemainTotRateConverter: function(rowIndex, fieldName, data) {
+				var poAmt = new BigNumber(data["po_amt"] || 0); // 발주금액
+				var grTotAmt = new BigNumber(data["gr_ttl_amt"] || 0); // 승인금액
+				
+				// (poAmt - grTotAmt) / poAmt * 100
+				return (poAmt.minus(grTotAmt)).div(poAmt).mul(new BigNumber(100)).toFixed(2);
+			},
+			onAsnItemClick: function(event) {
+				var me = this, detail = event.detail,
+					data              = detail.data,
+					item              = detail.item,
+					fieldName         = item.dataField,
+					itemIndex         = item.rowIndex;
+				
+				if(fieldName === "asn_no" && UT.isNotEmpty(data.asn_no)) {
+					if(data["apymt_yn"] === "Y") {
+						me.fire("prepay-show", {asn_uuid: data.asn_uuid});
+					} else {
+						me.fire("asn-show", {asn_uuid: data.asn_uuid});
+					}
+				}
+			},
+			/* 기성요청목록 그리드 이벤트 헨들러 */
+			//기성상태
+			onProgStsConverter: function(rowIndex, fieldName, data) {
+				var me = this;
+				var poGrStsCcd = data["gr_sts_ccd"] || "";
+				var asnStsCcd = data["asn_sts_ccd"] || "";
+				var prePayYn = data["apymt_yn"] || "N";
+				
+				if(prePayYn === "Y" && UT.isEmpty(data["asn_no"])) {
+					return me.get("codes.mapGrStsCcd")[poGrStsCcd];
+				} else {
+					return me.get("codes.mapAsnStsCcd")[asnStsCcd];
+				}
+			},
+			//load
+			load: function() {
+				var me = this;
+				
+				me.findListPo();
+				
+				if(UT.isNotEmpty(me.get("searchParam2.po_uuid"))) {
+					me.findListProgressPaymentAsn();
+				}
+			},
+			/**
+			 * 기성현황 조회
+			 */
+			onFindList: function() {
+				var me = this;
+				
+				me.findListPo();
+				me.onClear();
+			},
+			findListPo: function() {
+				var me = this;
+				
+				// 조회조건 필수값 체크
+				if(!me.validate('search')) {
+					UT.alert("STD.E0000");
+					return;
+				}
+				UT.request(me.$.findListPoForProgressPaymentAsn, function(e, res) {
+					me.$.poGridPanel.setDataProvider(res.response);
+				});
+			},
+			
+			/**
+			 * 데이터 초기화
+			 */
+			onClear: function() {
+				var me = this, provider = me.$.asnGridPanel.getDataProvider();
+				provider.removeAll();
+			},
+			
+			/**
+			 * 기성요청 목록 조회
+			 */
+			findListProgressPaymentAsn: function() {
+				var me = this;
+				
+				UT.request(me.$.findListProgressPaymentAsn, function(e, res) {
+					me.$.asnGridPanel.setDataProvider(res.response);
+				});
+			},
+			
+			/**
+			 * 기성요청 버튼 클릭
+			 */
+			onAsnRequest: function(e) {
+				var me       = this,
+					payCls   = e.target.dataset.args,
+					provider = me.$.poGridPanel.getDataProvider();
+				
+				var selected = provider.selectionCheckedItems();
+				
+				if(UT.isEmpty(selected)) {
+					UT.alert("STD.N1600");
+					return;
+				} else {
+					var selectedRow = selected[0];
+					
+					if(selectedRow.vd_po_sts_ccd === "RCPT_WTG") {			//협력사 발주 접수전
+						UT.alert("STD.PO1045");
+						return;
+					} else if(selectedRow.vd_po_sts_ccd === "RJCT") {	//협력사 발주 거부
+						UT.alert("STD.PO1046");
+						return;
+					}
+					var prePayYn = (payCls === "APYMT") ? "Y" : "N";
+					if(prePayYn === "Y" && (new BigNumber(selectedRow.apymt_amt || 0)).isZero()) {
+						UT.alert("STD.GR1005");	// 선급금이 존재하지 않습니다.
+						return;
+					}
+					
+					var checkParam = UT.copy(selectedRow);
+					checkParam.apymt_yn = prePayYn;
+					me.set("searchCheckParam", checkParam);
+					
+					UT.request(me.$.validateProgressPaymentRequestStatus);
+				}
+			},
+			completeFindInfoAsnReqCheck: function(e, res) {
+				var me = this;
+				var result = res.response;
+				var checkParam = me.get("searchCheckParam");
+				
+				if(result.resultStatus === "S") {
+					var poId = me.get("searchCheckParam.po_uuid");
+					if(checkParam.apymt_yn === "Y") {
+						me.fire("prepay-request", {po_uuid: poId});
+					} else {
+						me.fire("asn-request", {po_uuid: poId});
+					}
+				} else if(result.resultStatus === "PO_STATE_ERR") {
+					var invalidPo = result.resultData,
+						errCode   = invalidPo.check_result,
+						msg       = null,
+						sts       = invalidPo.vd_gr_sts_ccd;
+					
+					if(errCode === "PRE_PAY_REG_INCOMPLETE") {			//선급금 등록 미완료
+						msg = me.translate("STD.GR1014");					//"선급금 완료 후 기성요청이 가능합니다." (기성등록 시 체크)
+						
+					} else if(errCode === "PRE_PAY_REG_PROGRESS") {		//선급금 등록 진행중
+						msg = me.translate("STD.AR1008");					//"담당자가 선급금 등록을 진행중입니다." (선급금등록 시 체크)
+						
+					} else if(errCode === "PRE_PAY_REG_COMPLETE") {		//선급금 등록완료
+						msg = me.translate("STD.AR1009"); 					//"선급금 등록이 이미 완료되었습니다." (선급금등록 시 체크)
+						
+					} else if(errCode === "PRE_PAY_REQ_PROGRESS") {		//선급금 요청 작성중
+						msg = me.translate("STD.AR1010");					//"선급금 요청 임시저장 건이 존재합니다." (선급금등록 시 체크)
+						
+					} else if(errCode === "PRE_PAY_REQ_COMPLETE") {		//선급금 요청 완료
+						msg = me.translate("STD.AR1011");					//"승인대기 상태의 선급금 요청 건이 존재하여 선급금 요청을 하실 수 없습니다."  (선급금등록 시 체크)
+						
+					} else if(errCode === "VD_GR_STS_CCD_ERR") {		//기성요청 상태 오류
+						if(sts === "CRNG") {
+							msg = me.translate("STD.GR1011");				//"기성요청 임시저장 건이 존재합니다."
+						} else if(sts == "PP_WTG") {
+							msg = me.translate("STD.GR1012");				//"기성승인대기 상태의 기성요청 건이 존재하여 기성요청을 하실 수 없습니다."
+						} else if(sts === "PP_PRGSG") {
+							msg = me.translate("STD.GR1013");				//"진행중인 기성요청 건이 존재하여 기성요청을 할 수 없습니다."
+						}
+					} else if(errCode === "PO_COMPLETE") {				//발주종료
+						msg = me.translate("STD.PO1047", null, invalidPo.po_no);
+						
+					} else if(errCode === "PO_TERMINATE") {				//발주해지
+						msg = me.translate("STD.PO1049", null, invalidPo.po_no);
+						
+					} else if(errCode === "PO_CHANGE_PROGRESS") {		//발주변경 진행중
+						msg = me.translate("STD.PO1032", null, invalidPo.po_no);
+					}
+					
+					if(UT.isNotEmpty(msg)) {
+						UT.alert(msg, function() {
+							me.findListPo();
+							
+							me.set("searchParam2", UT.copy(me.get("searchCheckParam")));
+							me.findListProgressPaymentAsn();
+						}, true);
+					}
+					
+				} else if(result.resultStatus === "INVALID_STATUS_ERR") {
+					UT.alert("STD.E9400");	// 유효한 상태가 아니거나 상태가 변경되어 요청을 수행할 수 없습니다.
+					me.findListPo();
+					
+					me.set("searchParam2", UT.copy(me.get("searchCheckParam")));
+					me.findListProgressPaymentAsn();
+					
+				} else {
+					UT.alert("STD.E9999");
+				}
+			}
+		});
+	</script>
+
+</dom-module>

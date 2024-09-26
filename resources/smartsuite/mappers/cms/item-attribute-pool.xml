@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="item-attribute-pool">
+    <select id="findListAttributePool" resultType="map">
+        /* item-attribute-pool.findListAttributePool : 품목 속성 Pool 목록 조회 */
+        SELECT
+            IATTR.TEN_ID /*시스템 아이디 */
+            , IATTR.IATTR_CD /*속성 코드 */
+            , IATTR.IATTR_NM /*속성 명 */
+            , IATTR.IATTR_NM_EN /*속성 영문 명 */
+            , IATTR.IATTR_UOM_USE_YN /*속성 유형 */
+            , IATTR.COMM_YN /*공통 여부 */
+            , IATTR.MAND_YN /*필수 여부 */
+            , IATTR.IATTR_DAT_TYP_CCD /*데이터 유형 */
+            , IATTR.INP_VAL_LEN /*데이터 길이 */
+            , IATTR.DFLT_VAL /*기본 값 */
+            , IATTR.EXPLN_TYP_CCD /*설명 유형 */
+            , IATTR.LIST_SHOW_YN /*목록 VIEW 여부 */
+            , IATTR.LOV_INP_VAL /*입력 값 목록 */
+            , IATTR.INP_VAL_ST /*입력 값 범위 시작 */
+            , IATTR.INP_VAL_ED /*입력 값 범위 종료 */
+            , IATTR.INP_VAL_SAMP /*입력 값 예시 */
+            , IATTR.IATTR_UOM_CLS_CCD /*단위 그룹 코드 */
+            , IATTR.SORT /*정렬 순서 */
+            , IATTR.RMK /*비고 */
+            , IATTR.STS /*상태 */
+            , IATTR.REGR_ID /* 등록자 아이디 */
+            , IATTR.REG_DTTM /*등록 일시 */
+            , IATTR.MODR_ID /*수정자 아이디 */
+            , IATTR.MOD_DTTM /*수정 일시 */
+            , (
+                SELECT
+                    COUNT(1)
+                FROM IATTR_GRPG GRPG
+                WHERE GRPG.TEN_ID  = IATTR.TEN_ID
+                AND GRPG.IATTR_CD = IATTR.IATTR_CD
+                AND GRPG.STS != 'D'
+            ) AS ASGD_IATTR_CNT /* 분류 배정 수 */
+        FROM IATTR IATTR
+        WHERE IATTR.TEN_ID = #{g.tenant}
+        AND IATTR.STS != 'D'
+        <if test="p.iattr_cd != null and p.iattr_cd != &quot;&quot;">
+            <bind name="attrCdPattern" value="'%' + p.iattr_cd + '%'"/>
+            AND UPPER(IATTR.IATTR_CD) LIKE UPPER(#{attrCdPattern})
+        </if>
+        <if test="p.iattr_nm != null and p.iattr_nm != &quot;&quot;">
+            <bind name="attrNmPattern" value="'%' + p.iattr_nm + '%'"/>
+            AND UPPER(IATTR.IATTR_NM) LIKE UPPER(#{attrNmPattern})
+        </if>
+        ORDER BY IATTR.IATTR_CD
+    </select>
+    <delete id="deleteInfoAttributePool">
+        /* item-attribute-pool.deleteInfoAttributePool : 품목 속성 Pool DELETE */
+        DELETE FROM IATTR
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_CD = #{p.iattr_cd}
+    </delete>
+    <select id="findInfoAttributePool" resultType="map">
+        /* item-attribute-pool.findInfoAttributePool : 품목 속성 Pool 상세 조회 */
+        SELECT
+            IATTR_CD /*속성 코드 */
+            , IATTR_NM /*속성 명 */
+            , IATTR_NM_EN
+            , RMK /*비고 */
+            , STS /*상태 */
+            , REGR_ID /*등록자 아이디 */
+            , REG_DTTM /* 등록 일시 */
+            , MODR_ID /*수정자 아이디 */
+            , MOD_DTTM /*수정 일시 */
+            , IATTR_UOM_USE_YN /*속성 유형*/
+            , EXPLN_TYP_CCD /*Description 포함 유형 */
+            , IATTR_UOM_CLS_CCD /*단위 Pool 그룹 코드*/
+            , COMM_YN /*공통 여부*/
+            , MAND_YN /*필수 여부*/
+            , IATTR_DAT_TYP_CCD /*데이터 유형*/
+            , INP_VAL_LEN /*데이터 길이*/
+            , DFLT_VAL /*기본 값*/
+            , LIST_SHOW_YN /* 목록 VIEW 여부*/
+            , LOV_INP_VAL /*입력 값 목록*/
+            , INP_VAL_ST /*입력 값 범위 시작*/
+            , INP_VAL_ED /*입력 값 범위 종료*/
+            , INP_VAL_SAMP /*입력 값 예시*/
+            , SORT /*정렬 순서 */
+            , (
+                SELECT
+                    COUNT(1)
+                FROM IATTR_GRPG GRPG
+                WHERE GRPG.TEN_ID  = IATTR.TEN_ID
+                AND GRPG.IATTR_CD = IATTR.IATTR_CD
+                AND GRPG.STS != 'D'
+            ) AS ASGD_IATTR_CNT    /*분류배정 수*/
+            , (
+                SELECT
+                    CONCAT(CONCAT((CASE WHEN MAX(IIATTR.IATTR_CD) IS NULL  THEN 0
+                        ELSE SUM( CASE WHEN IIATTR.IATTR_INP_VAL IS NULL  THEN 0 ELSE 1 END )
+                    END), '/'), COUNT(1))
+                FROM ITEM_IATTR IIATTR
+                WHERE IIATTR.TEN_ID  = IATTR.TEN_ID
+                AND IIATTR.IATTR_CD = IATTR.IATTR_CD
+                AND IIATTR.STS != 'D'
+            ) AS VALUE_ADDED_CNT  /*값 입력 현황*/
+            , CASE WHEN LOV_INP_VAL IS NOT NULL  THEN 'Y'
+                ELSE 'N'
+            END AS INPUT_CHK
+        FROM IATTR IATTR
+        WHERE IATTR.TEN_ID = #{g.tenant}
+        AND IATTR.IATTR_CD = #{p.iattr_cd}
+        AND IATTR.STS != 'D'
+    </select>
+    <select id="findListAssignedAttributePool" resultType="map">
+        /* item-attribute-pool.findListAssignedAttributePool : 품목 속성 Pool 분류배정현황 조회 */
+        SELECT
+            GRPG.IATTR_GRP_CD      /*속성 그룹*/
+            , GRPG.IATTR_CD          /*속성 코드*/
+            , GRPG.IATTR_UUID          /*속성 일련번호*/
+            , CASE WHEN 'en_US' = #{g.locale} THEN GRPG.ASGD_IATTR_NM_EN
+                    ELSE GRPG.ASGD_IATTR_NM
+                END AS ASGD_IATTR_NM /*배정 속성 명*/
+            , GRPG.IATTR_UOM_USE_YN         /*속성 유형*/
+            , GRPG.MAND_YN          /*필수 여부*/
+            , GRPG.DAT_TYP_CCD         /*데이터 유형*/
+            , GRPG.INP_VAL_LEN         /*데이터 길이*/
+            , GRPG.DFLT_VAL          /*기본  값*/
+            , GRPG.LIST_SHOW_YN     /*목록 VIEW 여부*/
+            , GRPG.REG_DTTM           /*등록 일시*/
+            , (
+                SELECT
+                    CONCAT(CONCAT(SUM(CASE WHEN ITEM_IATTR.IATTR_INP_VAL IS NULL  THEN 0 ELSE 1 END ), '/'), COUNT(1))
+                FROM ITEM_IATTR ITEM_IATTR
+                WHERE ITEM_IATTR.TEN_ID = IIATTR.TEN_ID
+                AND ITEM_IATTR.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+                AND ITEM_IATTR.IATTR_CD = IIATTR.IATTR_CD
+                AND ITEM_IATTR.IATTR_UUID = IIATTR.IATTR_UUID
+                AND ITEM_IATTR.STS != 'D'
+                GROUP BY ITEM_IATTR.TEN_ID, ITEM_IATTR.IATTR_GRP_CD, ITEM_IATTR.IATTR_CD, ITEM_IATTR.IATTR_UUID
+            ) AS USE_CNT
+            , IATTR.IATTR_NM
+            , IATTR.IATTR_NM_EN
+            , IIATTR.SCR_DSPY_ORD
+            , IIATTR.ITEMCAT_CD              /*분류 코드 */
+            , IIATTR.ITEMCAT_LVL             /*분류 레벨 */
+            , IIATTR.RMK                  /*비고 */
+            , IIATTR.IH_ITEMCAT_LVL         /*상속 분류 레벨*/
+            , GRP.IATTR_GRP_NM
+            , IIATTR.USE_YN
+            , IATTR.EXPLN_TYP_CCD             /*Description 포함 유형 */
+            , IATTR.IATTR_UOM_CLS_CCD          /*단위 Pool 그룹 코드*/
+            , IATTR.COMM_YN               /*공통 여부*/
+            , IATTR.LOV_INP_VAL       /*입력 값 목록*/
+            , IATTR.INP_VAL_ST  /*입력 값 범위 시작*/
+            , IATTR.INP_VAL_ED    /*입력 값 범위 종료*/
+            , IATTR.INP_VAL_SAMP        /*입력 값 예시*/
+            , CASE WHEN 'en_US' = #{g.locale} THEN ITEMCAT.ITEMCAT_NM_EN
+                    ELSE ITEMCAT.ITEMCAT_NM
+                END ITEMCAT_NM
+        FROM IATTR_GRPG GRPG
+        INNER JOIN IATTR IATTR
+        ON GRPG.TEN_ID      = IATTR.TEN_ID
+        AND GRPG.IATTR_CD     = IATTR.IATTR_CD
+        AND IATTR.STS != 'D'
+        INNER JOIN IATTR_GRP GRP
+        ON GRPG.TEN_ID      = GRP.TEN_ID
+        AND GRPG.IATTR_GRP_CD = GRP.IATTR_GRP_CD
+        AND GRPG.STS != 'D'
+        INNER JOIN ITEMCAT_IATTR IIATTR
+        ON GRPG.TEN_ID      = IIATTR.TEN_ID
+        AND GRPG.IATTR_GRP_CD = IIATTR.IATTR_GRP_CD
+        AND GRPG.IATTR_CD     = IIATTR.IATTR_CD
+        AND GRPG.IATTR_UUID     = IIATTR.IATTR_UUID
+        AND IIATTR.STS != 'D'
+        INNER JOIN ITEMCAT ITEMCAT
+        ON ITEMCAT.TEN_ID      = IIATTR.TEN_ID
+        AND ITEMCAT.ITEMCAT_CD     = IIATTR.ITEMCAT_CD
+        AND ITEMCAT.STS != 'D'
+        WHERE IIATTR.ITEMCAT_LVL    = IIATTR.IH_ITEMCAT_LVL
+        AND IIATTR.TEN_ID      = #{g.tenant}
+        AND GRPG.IATTR_CD     = #{p.iattr_cd}
+        AND IIATTR.STS != 'D'
+        ORDER BY IIATTR.IH_ITEMCAT_LVL
+    </select>
+    <insert id="insertInfoAttributePool">
+        /* item-attribute-pool.insertInfoAttributePool :품목 속성 Pool INSERT */
+        INSERT INTO IATTR (
+            TEN_ID	                /*시스템 아이디 */
+            , STS	                /*상태 */
+            , REGR_ID	                /*등록자 아이디 */
+            , REG_DTTM	                /*등록 일시 */
+            , IATTR_CD                /*속성 코드 */
+            , IATTR_NM                /*속성 명 */
+            , IATTR_NM_EN             /*속성 영문 명 */
+            , IATTR_UOM_USE_YN               /*속성 유형 */
+            , COMM_YN                 /*공통 여부 */
+            , MAND_YN                /*필수 여부 */
+            , IATTR_DAT_TYP_CCD               /*데이터 유형 */
+            , INP_VAL_LEN               /*데이터 길이 */
+            , DFLT_VAL                /*기본 값 */
+            , EXPLN_TYP_CCD               /*설명 유형 */
+            , LIST_SHOW_YN	        /*목록 VIEW 여부 */
+            , LOV_INP_VAL	        /*입력 값 목록 */
+            , INP_VAL_ST	/*입력 값 범위 시작 */
+            , INP_VAL_ED      /*입력 값 범위 종료 */
+            , INP_VAL_SAMP          /*입력 값 예시 */
+            , IATTR_UOM_CLS_CCD	        /*단위 그룹 코드 */
+            , SORT	            /*정렬 순서 */
+            , RMK	                /*비고 */
+        ) VALUES (
+            #{g.tenant}
+            , 'C'
+            , #{g.username}
+            , #{g.now}
+            , #{p.iattr_cd}
+            , #{p.iattr_nm}
+            , #{p.iattr_nm_en}
+            , #{p.iattr_uom_use_yn}
+            , #{p.comm_yn}
+            , #{p.mand_yn}
+            , #{p.iattr_dat_typ_ccd}
+            , CAST(#{p.inp_val_len} AS FLOAT  )
+            , #{p.dflt_val}
+            , #{p.expln_typ_ccd}
+            , #{p.list_show_yn}
+            , #{p.lov_inp_val}
+            , CAST(#{p.inp_val_st} AS FLOAT  )
+            , CAST(#{p.inp_val_ed} AS FLOAT  )
+            , #{p.inp_val_samp}
+            , #{p.iattr_uom_cls_ccd}
+            , CAST(#{p.sort} AS FLOAT  )
+            , #{p.rmk}
+        )
+    </insert>
+    <update id="updateInfoAttributePool">
+	    /* item-attribute-pool.updateInfoAttributePool : 품목 속성 Pool UPDATE */
+	    UPDATE IATTR
+	    <trim prefix="set" prefixOverrides=",">
+		    STS = 'U' /*상태 */
+		    , MODR_ID = #{g.username} /*수정자 아이디*/
+		    , MOD_DTTM = #{g.now} /*수정 일시*/
+		    , IATTR_NM = #{p.iattr_nm} /*속성 명 */
+		    , IATTR_NM_EN = #{p.iattr_nm_en} /*속성 영문 명 */
+		    , IATTR_UOM_USE_YN = #{p.iattr_uom_use_yn} /*속성 유형 */
+		    , COMM_YN = #{p.comm_yn} /*공통 여부 */
+		    , MAND_YN = #{p.mand_yn} /*필수 여부 */
+		    , IATTR_DAT_TYP_CCD = #{p.iattr_dat_typ_ccd} /*데이터 유형 */
+		    , INP_VAL_LEN = CAST(#{p.inp_val_len} AS FLOAT  )
+            /*데이터 길이 */
+		    , DFLT_VAL = #{p.dflt_val} /*기본 값 */
+		    , EXPLN_TYP_CCD = #{p.expln_typ_ccd} /*설명 유형 */
+		    , LIST_SHOW_YN = #{p.list_show_yn} /*목록 VIEW 여부 */
+		    , LOV_INP_VAL = #{p.lov_inp_val} /*입력 값 목록 */
+		    , INP_VAL_ST =  CAST(#{p.inp_val_st} AS FLOAT  )/*입력 값 범위 시작 */
+		    , INP_VAL_ED =  CAST(#{p.inp_val_ed} AS FLOAT  )
+            /*입력 값 범위 종료 */
+		    , INP_VAL_SAMP = #{p.inp_val_samp} /*입력 값 예시 */
+		    , IATTR_UOM_CLS_CCD = #{p.iattr_uom_cls_ccd} /*단위 그룹 코드 */
+		    , SORT = CAST(#{p.sort} AS FLOAT  )
+                /*정렬 순서 */
+		    , RMK = #{p.rmk} /*비고 */
+	    </trim>
+	    WHERE TEN_ID = #{g.tenant}
+	    AND IATTR_CD = #{p.iattr_cd}
+    </update>
+    <select id="checkCntAttrPool" resultType="int">
+        /* item-attiribute-pool.checkCntAttrPool : 배정된 품목속성 갯수 확인 */
+        SELECT
+            CAST(COUNT(1) AS NUMERIC) AS CNT  FROM IATTR_GRPG
+        WHERE TEN_ID = #{g.tenant}
+        AND IATTR_CD = #{p.iattr_cd}
+        AND STS != 'D'
+    </select>
+</mapper>

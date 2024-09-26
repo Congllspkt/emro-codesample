@@ -1,0 +1,282 @@
+<sc-link rel="import" href="es-sp-contract-master.html"></sc-link>
+<sc-link rel="import" href="es-sp-contract-document.html"></sc-link>
+
+<dom-module id="es-sp-contract-detail">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+
+	<template>
+		<!-- 서비스 -->
+		<!-- 계약 정보 조회 -->
+		<sc-ajax id="findContract"
+				url="findContract.do"
+				body="{{searchParam}}"
+				on-response="completeFindInfo">
+		</sc-ajax>
+		<!-- 반려 -->
+		<sc-ajax id="rejectContract"
+				url="rejectContract.do"
+				body="{{cntrInfo}}"
+				on-response="completeReject">
+		</sc-ajax>
+
+		<cc-auth-checker check-list="auth-r, auth-s"></cc-auth-checker>
+
+		<!-- 화면 -->
+		<cc-page-title-bar title-text="계약">
+			<sc-button text="Docusign Envelope 확인" on-click="onViewDsgnEnvelope" hidden="[[!formula('viewEnvelopeBtn')]]"></sc-button>
+			<sc-button text="부속서류 검토 요청" on-click="onSaveAppendix" hidden="[[!formula('appendixSaveBtn')]]"></sc-button>
+			<sc-button text="서명" on-click="onSign" hidden="[[!formula('signBtn')]]"></sc-button>
+			<sc-button text="반려" on-click="onPopupDialogReject" hidden="[[!formula('rejectBtn')]]"></sc-button>
+			<sc-button text="PDF 미리보기" on-click="onPreviewPdf" hidden="[[!formula('previewPdfBtn')]]"></sc-button>
+			<sc-button text="서명 확인" on-click="onConfirmSign" hidden="[[!formula('confirmSignBtn')]]"></sc-button>
+			<sc-button text="계약서 다운로드" on-click="onDownloadPdf" hidden="[[!formula('downloadPdfBtn')]]"></sc-button>
+			<sc-button text="이력 문서 다운로드" on-click="onDownloadHistPdf" hidden="[[!formula('downloadHistPdfBtn')]]"></sc-button>
+			<sc-button text="닫기" on-click="onClose"></sc-button>
+		</cc-page-title-bar>
+		
+		<div class="hbox flex">
+			<es-sp-contract-master id="master" class="flex-3"></es-sp-contract-master>
+			
+			<div class="hspace-10"></div>
+			
+			<es-sp-contract-document id="document" class="flex-7"
+									on-find-info="onFindInfo"></es-sp-contract-document>
+		</div>
+		
+		<sc-dialog id="dialogReject" title-text="계약 반려 사유 작성" style="width:600px; height:280px" modal="true" draggable="true">
+			<cc-page-title-bar>
+				<sc-button text="반려" on-click="onReject"></sc-button>
+			</cc-page-title-bar>
+			<sc-textarea-field class="h-150" max-length="200" max-height="250" value="{{dialog.cntr_ret_rsn}}"></sc-textarea-field>
+		</sc-dialog>
+	</template>
+
+	<!-- 스크립트  -->
+	<script>
+		Polymer({
+			is: "es-sp-contract-detail",
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				cntrInfo: {
+					type: Object,
+					value: function() {
+						return {};
+					}
+				},
+				dialog: {
+					type: Object,
+					value: function () {
+						return {
+							cntr_ret_rsn: ""
+						};
+					}
+				}
+			},
+			
+			formulas: {
+				existCntrDoc: function() {
+					return SCModuleManager.exist("EDOC") && UT.isNotEmpty(this.get("cntrInfo.ecntr_uuid"));
+				},
+				signBtn: function () {
+					if(this.get("cntrInfo.sign_yn") === "Y") return false;
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					return sts === "SND" || sts === "VD_RCPT_CONFM" || sts === "MULTLT_SGN";
+				},
+				rejectBtn: function () {
+					if(this.get("cntrInfo.sign_yn") === "Y") return false;
+					if(this.get("cntrInfo.cntr_sgnmeth_ccd") === "ADOBESIGN") return false;
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					return sts === "SND" || sts === "VD_RCPT_CONFM" || sts === "MULTLT_SGN";
+				},
+				appendixSaveBtn: function () {
+					if(this.get("cntrInfo.rep_vd_yn") === "N") return false;
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					return sts === "APPX_REQ" || sts === "APPX_RET";
+				},
+				previewPdfBtn: function () {
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					var tmplTypCcd = this.get("cntrInfo.cntr_tmpl_typ_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "PKI" && tmplTypCcd  === "TMPL" 
+						&& !(sts == "RET" || sts == "CNTR_CMPLD" || sts == "CNTR_TRMN");
+				},
+				confirmSignBtn: function () {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return sgnMethCcd === "PKI" && cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN";
+				},
+				downloadPdfBtn: function () {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN" && sgnMethCcd !== "OFFLINE";
+				},
+				downloadHistPdfBtn: function() {
+					var cntrStsCcd = this.get("cntrInfo.cntr_sts_ccd");
+					var cntrTypCcd = this.get("cntrInfo.cntr_typ_ccd");
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					return cntrStsCcd === "CNTR_CMPLD" && cntrTypCcd !== "TRMN" && sgnMethCcd === "EFORM";
+				},
+				viewEnvelopeBtn: function() {
+					var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+					var sts = this.get("cntrInfo").cntr_sts_ccd;
+					return sgnMethCcd === "DOCUSIGN" && sts === "CNTR_CMPLD";
+				}
+			},
+			
+			load: function(data) {
+				var me = this;
+				me.set("searchParam", data);
+				me.onFindInfo();
+			},
+			
+			onFindInfo: function() {
+				var me = this;
+				UT.request(me.$.findContract);
+			},
+			
+			completeFindInfo: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) {
+					me.set("cntrInfo", result.resultData);
+					me.applyFormula();
+					me.loadDetail();
+					
+				} else {
+					UT.alert("STD.E9999");
+					me.onClose();
+				}
+			},
+			
+			loadDetail: function() {
+				var me = this;
+				var cntrInfo = me.get("cntrInfo");
+				
+				me.$.master.load(cntrInfo);
+				if(me.formula("existCntrDoc")) {
+					me.$.document.load(cntrInfo);
+				}
+			},
+			
+			// 부속서류 검토 요청
+			onSaveAppendix: function() {
+				var me = this;
+				me.$.document.onSaveAppendix();
+			},
+			
+			// 서명
+			onSign: function() {
+				var me = this;
+				
+				if(!me.get("cntrInfo.signable")) {
+					UT.alert("STD.EDO1089"); // 이미 서명을 진행 중인 협력사가 존재합니다. 진행 중인 협력사가 서명을 완료한 이후에 서명이 가능합니다.
+					return;
+				}
+				
+				var sgnMethCcd = this.get("cntrInfo.cntr_sgnmeth_ccd");
+				if(sgnMethCcd === "PKI") {
+					me.$.document.onSignPKI();
+				} else if(sgnMethCcd === "DOCUSIGN") {
+					me.$.document.onSignDocusign();
+				} else if(sgnMethCcd === "EFORM") {
+					me.$.document.onSignEFormsign();
+				} else if(sgnMethCcd === "ADOBESIGN") {
+					me.$.document.onSignAdobeSign();
+				}
+			},
+			
+			// 계약 반려 사유 팝업
+			onPopupDialogReject: function() {
+				var me = this;
+				
+				if(!me.get("cntrInfo.signable")) {
+					UT.alert("STD.EDO1089"); // 이미 서명을 진행 중인 협력사가 존재합니다. 진행 중인 협력사가 서명을 완료한 이후에 서명이 가능합니다.
+					return;
+				}
+				
+				me.set("dialog.cntr_ret_rsn", null);
+				me.$.dialogReject.show();
+			},
+			
+			// 반려
+			onReject: function() {
+				var me = this;
+				var cntrRetRsn = me.get("dialog.cntr_ret_rsn");
+				
+				if(UT.isEmpty(cntrRetRsn)) {
+					UT.alert(me.translate("STD.E1001",null,me.translate("계약 반려 사유")),null,true); // '{0}'은(는) 필수 입력 항목입니다.
+					return;
+				}
+				
+				me.$.dialogReject.close();
+				
+				UT.confirm("STD.N1210", function () { // 요청하시겠습니까?
+					me.set("cntrInfo.cntr_ret_rsn", cntrRetRsn);
+					UT.request(me.$.rejectContract);
+				});
+			},
+			
+			completeReject: function(e, res) {
+				var me = this;
+				var result = res.response;
+				
+				if(result.success) { // 성공
+					UT.completeAlert(); // 요청을 완료 하였습니다.
+					me.onClose();
+				} else {
+					UT.alert("STD.E9999");
+				}
+			},
+			
+			// 서명 확인
+			onConfirmSign: function () {
+				var me = this;
+				me.$.document.onConfirmSign();
+			},
+			
+			// PDF 미리보기
+			onPreviewPdf: function() {
+				var me = this;
+				me.$.document.onPreviewPdf();
+			},
+			
+			// 완료 계약서 다운로드
+			onDownloadPdf: function() {
+				var me = this;
+				me.$.document.onDownloadPdf();
+			},
+			
+			// 이력 문서 다운로드
+			onDownloadHistPdf: function() {
+				var me = this;
+				me.$.document.onDownloadHistPdf();
+			},
+			
+			onClose: function() {
+				var me = this;
+				me.reset();
+				me.$.master.reset();
+				me.$.document.reset();
+				me.fire("close-remove");
+			},
+			
+			// docusign envelope 확인
+			onViewDsgnEnvelope: function() {
+				var me = this;
+				me.$.document.findDocusignEnvelope();
+			}
+		});
+	</script>
+</dom-module>

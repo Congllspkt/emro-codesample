@@ -1,0 +1,166 @@
+<dom-module id="ep-vendor-renewed-info">
+	<style>
+		:host {
+            @apply(--vbox-layout);
+        }
+	</style>
+	<template>
+<!--  
+	************************************************************************************************************
+	* Service Area
+	************************************************************************************************************
+--> 	
+		<!-- 담당자 그리드 목록 조회 -->
+		<sc-ajax
+			id="findListVendorPicToRenew"
+			url="../vendorUser/findListVendorPicToRenew.do"
+			on-response="completeFindListVendorPicToRenew"
+			last-response="{{picList}}">
+		</sc-ajax>
+		
+		<sc-ajax 
+			id="infoRenewRequest"
+			url="infoRenewRequest.do">
+		</sc-ajax>
+
+<!--
+	************************************************************************************************************
+	* UI Area
+	************************************************************************************************************
+--> 	
+		<cc-page-title-bar title-text="정보 갱신 요청">
+			<sc-button text="발송" on-click="onSend"></sc-button>
+		</cc-page-title-bar>
+		
+		<cc-form-panel>
+			<cc-fieldset column-span="2">
+				<sc-label text="제목"></sc-label>
+				<sc-text-field></sc-text-field>
+			</cc-fieldset>
+			<cc-fieldset column-span="2">
+				<sc-label text="내용"></sc-label>
+				<sc-textarea-field style="height: 300px" value="{{reqInfo.contents}}" required="true" max-length="2000"></sc-textarea-field>
+			</cc-fieldset>
+		</cc-form-panel>
+		<!-- 그리드 -->
+		<sc-grid id="gridPanel" class="flex" use-state="false" data-provider="{{picList}}">
+			<cc-grid-toolbar title-text="수신자"></cc-grid-toolbar>
+			<sc-grid-columns>
+				<sc-data-column data-field="erp_vd_cd"  header-text="협력사 코드" width="100" mergeable="true" merge-based-field="vd_cd"></sc-data-column>
+				<sc-data-column data-field="vd_nm"      header-text="협력사 명" width="200" mergeable="true" merge-based-field="vd_cd"></sc-data-column>
+				<sc-data-column	data-field="usr_nm"	    header-text="담당자 명"	 width="150"></sc-data-column>
+				<sc-data-column	data-field="eml"	    header-text="이메일"	 width="140"></sc-data-column>
+				<sc-data-column	data-field="tel"	    header-text="전화"	 width="110"></sc-data-column>
+				<sc-data-column	data-field="mob"	    header-text="모바일" width="100"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="vd_cd"></sc-grid-field>
+			</sc-grid-fields>
+		</sc-grid>
+	</template>
+<!--  
+	************************************************************************************************************
+	* Script Area
+	************************************************************************************************************
+--> 
+	<script>
+	Polymer({
+		is: "ep-vendor-renewed-info",
+		properties:{
+			titleText:{
+                type: String,
+				value: "정보 갱신 요청"
+			},
+			
+			// 넘겨받은 파라미터 binding 객체
+			searchParam: {
+				type: Object,
+				value: function(){return{
+					oorg_cd: [],
+					vd_cd: []
+				};}
+			},
+			
+			reqInfo: {
+				type: Object,
+				value: function(){
+					return {};
+				}
+			},
+
+			picList:{
+			    type: Array,
+				value: function(){
+					return [];
+                }
+			}
+		},
+
+		/* 부모창(list)에서 넘겨받은 파라미터 set */
+		load: function(data){
+			var me = this;
+			var vdList = data;
+			me.set("searchParam", vdList);
+			
+			me.onSearch();
+		},
+		
+		/* 담당자 그리드 목록 조회 */
+		onSearch: function(){
+			var me = this;
+			
+			me.$.findListVendorPicToRenew.body = {
+				vendorList : me.searchParam
+			}
+			UT.request(me.$.findListVendorPicToRenew);
+		},
+
+		completeFindListVendorPicToRenew: function(e, res){
+			var me = this;
+			
+			var result = res.response;
+			if(result.resultStatus == "S"){
+				me.set("picList", result.resultData.vendorPicList);
+			} else {
+				UT.alert("STD.E9999");
+				return;
+			}
+		},
+		onSend: function(){
+            var me = this,
+                provider = this.$.gridPanel.getDataProvider();
+			
+            if(!me.validate()){
+            	UT.alert("STD.E0000");
+            	return;
+            }
+			var checkedRows = provider.selectionCheckedItems();
+			
+			if(checkedRows.length > 0){
+				
+				me.$.infoRenewRequest.body = {
+					mailList: checkedRows,
+					mailData : me.reqInfo
+				};
+				
+                UT.confirm("STD.N3500", function() {
+                    UT.request(me.$.infoRenewRequest,function(){
+                    	UT.completeAlert("발송", function(){
+                    	   me.onClose();
+                    	});
+                    });
+                });
+			}else{
+       			UT.alert("STD.N1600");
+			}
+		},
+
+		/* 닫기 */
+        onClose: function(){
+     	   var me = this;
+     	   me.fire("close");
+     	   me.reset();
+        }
+	});
+	</script>
+</dom-module>

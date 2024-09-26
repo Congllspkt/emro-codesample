@@ -1,0 +1,246 @@
+<sc-link rel="import" href="ep-sp-calcfactor-appeal.html"></sc-link>
+<dom-module id="es-sp-appeal-detail-tab">
+	<style>
+		:host {
+			@apply(--vbox-layout);
+		}
+	</style>
+	
+	<template>
+		<sc-request-group init>
+			<!-- 이의제기 통보 상태(SUPPLIER) 공통코드 조회 -->
+			<sc-ajax
+					url="findListCommonCodeAttributeCode.do"
+					body="{{codes.R304.param}}"
+					last-response="{{codes.R304.result}}">
+			</sc-ajax>
+			
+			<sc-code-group>
+				<!-- 이의제기 제출 진행상태 -->
+				<sc-code code="R901" value="{{codes.R901}}"></sc-code>
+			</sc-code-group>
+		</sc-request-group>
+		
+		<!-- 이의제기 제출 목록 조회 -->
+		<sc-ajax id="findAppealSubmList"
+				 url="findAppealSubmList.do"
+				 body="{{peInfo}}"
+				 on-response="completeFindAppealSubmList">
+		</sc-ajax>
+		
+		<!-- 이의제기 제출 취소 -->
+		<sc-ajax id="cancelAppealList"
+				 url="cancelAppealList.do"
+				 on-response="completeCancelAppealList">
+		</sc-ajax>
+		
+		<sc-grid id="gridPanel" use-state="false" data-provider="{{appealList}}" on-item-click="onDataCellClicked"
+				 selection-able-function="selectionAbleFn">
+			
+			<cc-grid-toolbar>
+				<sc-button text="이의제기 제출 취소" on-Click="onCancel" auth-s></sc-button>
+			</cc-grid-toolbar>
+			
+			<sc-grid-columns>
+				<sc-data-column		data-field="display_vmg_nm"				header-text="소싱그룹"			width="200"		text-align="left"></sc-data-column>
+				<sc-data-column		data-field="factor_nm"					header-text="이의제기 평가항목 명"		width="400"		text-align="left" style-name="link"></sc-data-column>
+				<sc-date-column		data-field="appeal_req_dt"			header-text="이의제기 제출 일자"		width="150"		text-align="center"></sc-date-column>
+				<sc-combobox-column	data-field="appeal_sts_ccd"			header-text="이의제기 통보 상태"		width="150"		text-align="center"
+								    display-field="label"					value-field="data"					items="{{codes.R304.result}}"></sc-combobox-column>
+				<sc-combobox-column	data-field="appeal_subm_sts_ccd"		header-text="이의제기 제출 상태"		width="150"		text-align="center"
+									display-field="label"					value-field="data"					items="{{codes.R901}}"></sc-combobox-column>
+				<sc-data-column		data-field="vd_pic_nm"					header-text="이의제기자"				width="100"		text-align="center"></sc-data-column>
+				<sc-data-column		data-field="vd_pic_ctc"					header-text="이의제기자 전화번호"		width="150"		text-align="center"></sc-data-column>
+			</sc-grid-columns>
+			<sc-grid-fields>
+				<sc-grid-field data-field="vd_appeal_quali_evalfact_uuid"></sc-grid-field><!-- 평가항목 이의제기 uuid -->
+				<sc-grid-field data-field="appeal_uuid"></sc-grid-field><!-- 이의제기 uuid -->
+				<sc-grid-field data-field="quali_evalfact_appeal_rsn"></sc-grid-field><!-- 정성항목 이의제기 사유 -->
+				<sc-grid-field data-field="appeal_prcsg_res_athg_uuid"></sc-grid-field><!-- 정성항목 이의제기 사유 -->
+			</sc-grid-fields>
+		
+		</sc-grid>
+	</template>
+	
+	<script>
+		Polymer({
+			is : "es-sp-appeal-detail-tab",
+			properties : {
+				appealList : {
+					type : Array,
+					value: function(){
+						return [];
+					}
+				},
+				peInfo : {
+					type : Object,
+					value : function(){
+						return {};
+					}
+				},
+				codes : {
+					type : Object,
+					value : function() {
+						return {
+							R901 : [],
+							R304: {
+								param: {
+									ccd : "R304",
+									cstr_cnd_cd : "S_VIEW_YN",
+									cstr_cnd_val : "Y"
+								},
+								result: []
+							},
+						};
+					},
+					
+					reset: false
+				}
+			},
+			
+			load : function(data) {
+				var me = this,
+					peInfo = data;
+				
+				me.set("peInfo", peInfo);
+				
+				if(data) {
+					me.onSearch();	// 이의제기 제출 목록 조회
+				}
+			},
+			
+			// 이의제기 제출 목록 조회
+			onSearch: function() {
+				var me = this;
+				UT.request(me.$.findAppealSubmList);
+			},
+			
+			// 이의제기 제출 목록조회 완료
+			completeFindAppealSubmList: function(e, res){
+				var me = this,
+					response = res.response;
+				
+				if(response != null) {
+					me.set("appealList", response);
+				}
+			},
+			
+			// 이의제기 평가항목 선택 가능여부
+			selectionAbleFn:function(data){
+				// 이의제기 제출상태가 제출(이의제기 요청)이고, 이의제기 진행상태가 종료가 아닌 경우에만 선택가능
+				if(data['appeal_subm_sts_ccd'] === 'APPEAL_SUBM' && data['appeal_sts_ccd'] != 'APPEAL_ED') {
+					return true;
+				}
+				return false;
+			},
+			
+			// Grid Click
+			onDataCellClicked: function(e) {
+				var me = this,
+					data = e.detail.data,
+					item = e.detail.item,
+					fieldName = item.dataField,
+					peInfo = me.get("peInfo");
+				
+				if(fieldName === 'factor_nm') {
+					me.onFactorDetail(data, peInfo);
+				}
+			},
+			
+			// 이의제기 상세조회 팝업 호출
+			onFactorDetail : function(data, peInfo) {
+				var me = this,
+					factorType = data.evalfact_typ_ccd;
+				
+				var param;
+				if(factorType === 'QUANT') {
+					// 계산항목
+					param = {
+						quantfactInfo : data,
+						peInfo : peInfo
+					};
+					me.onShowCalcFactorDetailPopup(param);
+				} else {
+					// 정성 평가항목
+					param = {
+						qualifactInfo : data,
+						peInfo : peInfo
+					};
+					me.onShowEvalFactorDetailPopup(param);
+				}
+				
+			},
+			
+			onShowEvalFactorDetailPopup: function(param) {
+				var me = this;
+				
+				var evalFactorDetailPopup = UT.popup('ep-sp-evalfactor-appeal', me, '900', '650', {
+					"complete" : function(popup, e) {
+						popup.close();
+						me.onSearch();
+					}
+				});
+				
+				evalFactorDetailPopup.show();
+				evalFactorDetailPopup.getWindowContent().load(param, {mode : 'read'});
+			},
+			
+			onShowCalcFactorDetailPopup: function(param) {
+				var me = this;
+				
+				var calcFactorDetailPopup = UT.popup('ep-sp-calcfactor-appeal', me, '900', '650', {
+					"complete" : function(popup, e) {
+						popup.close();
+						me.onSearch();
+					}
+				});
+				
+				calcFactorDetailPopup.show();
+				calcFactorDetailPopup.getWindowContent().load(param, {mode : 'read'});
+			},
+			
+			// 이의제기 제출취소 Click
+			onCancel : function() {
+				var me = this,
+					provider = me.$.gridPanel.getDataProvider(),
+					checked = provider.selectionCheckedItems();
+				
+				// 계산항목
+				var quantList = checked.filter(function(item) {
+					return item.evalfact_typ_ccd === 'QUANT';
+				});
+				
+				// 정성 평가항목
+				var qualiList = checked.filter(function(item) {
+					return item.evalfact_typ_ccd != 'QUANT';
+				});
+				
+				if(checked.length < 1) {
+					UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+					return;
+				} else {
+					UT.confirm("STD.SRM1348", function () {	// 이의제기 제출을 취소하시겠습니까?
+						me.$.cancelAppealList.body = {
+							quantList : quantList,
+							qualiList : qualiList
+						};
+						UT.request(me.$.cancelAppealList);
+					});
+				}
+			},
+			
+			// 이의제기 제출취소 완료
+			completeCancelAppealList: function(e, res) {
+				var me = this,
+					response = res.response;
+				
+				if(response.resultStatus === 'S') {
+					UT.alert("STD.N5300");	// 취소하였습니다.
+					me.onSearch();
+				}
+			}
+			
+		});
+	</script>
+
+</dom-module>

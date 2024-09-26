@@ -1,0 +1,134 @@
+<dom-module id="ep-rfx-vd-rcmd-option">
+	<style>
+		:host {
+			@apply(--vbox-layout)
+		}
+	</style>
+	<template>
+		<sc-ajax id="findListRcmdOption"
+				 url="findListRfxRcmdOption.do"
+				 body="{{searchParam}}"
+				 on-response="completeFindList">
+		</sc-ajax>
+		
+		<div class="vbox flex">
+			<cc-page-title-bar>
+				<sc-button text="적용" on-click="onApplyRcmdOption" hidden="[[!formula('editable')]]" auth-s></sc-button>
+			</cc-page-title-bar>
+			<sc-grid id="gridPanel" class="flex" use-dummy="false" column-fit-style="even"
+					 editable="[[formula('editable')]]"
+					 use-state="false"
+					 use-selection="false">
+				<sc-grid-columns>
+					<sc-data-column data-field="rcmd_nm" header-text="자동 추천 협력사 유형" width="220" text-align="left" editable="false"></sc-data-column>
+					<sc-checkbox-column data-field="targ_yn" header-text="대상" width="60" text-align="center" editable="true" visible="[[formula('editable')]]"></sc-checkbox-column>
+					<sc-data-column data-field="rcmd_cnt" header-text="추천 수" width="60" text-align="right" editable="false" data-type="number" visible="[[!formula('editable')]]"></sc-data-column>
+				</sc-grid-columns>
+				<sc-grid-fields>
+					<sc-grid-field data-field="rcmd_vd_typ_ccd" data-type="text"></sc-grid-field>
+				</sc-grid-fields>
+			</sc-grid>
+		</div>
+	</template>
+	<script>
+		Polymer({
+			is: 'ep-rfx-vd-rcmd-option',
+			properties: {
+				searchParam: {
+					type: Object,
+					value: function() {
+						return {}
+					}
+				},
+				readonly: {
+					type: Boolean,
+					value: function() {
+						return false;
+					}
+				},
+				rcmdList: {
+					type: Array,
+					value: function() {
+						return [];
+					}
+				}
+			},
+			formulas: {
+				editable: function() {
+					return !this.readonly;
+				}
+			},
+			initialized: function() {
+			
+			},
+			load: function(param) {
+				var me = this;
+				param = UT.isEmpty(param) ? {} : param;
+				
+				// readonly 여부
+				me.set("readonly", UT.isBoolean(param.readonly) ? param.readonly : false);
+				me.applyFormula();
+				
+				// 특정 vendor 선택 시 해당 vendor의 추천된 유형 내역들을 파라미터로 보내면, 따로 조회하지 않고 해당되는 대상을 보여준다.
+				me.set("rcmdList", param.rcmdList);
+				me.findList();
+			},
+			// 추천옵션 리스트 조회
+			findList: function() {
+				var me = this;
+				
+				UT.request(me.$.findListRcmdOption);
+			},
+			completeFindList: function(e, res) {
+				var me = this;
+				if(me.get("rcmdList") != null && me.get("rcmdList").length > 0) {
+					var rcmdList = me.get("rcmdList");
+					var rcmdMap = {};
+					for(var i = 0; i < rcmdList.length; i++) {
+						if(UT.isEmpty(rcmdMap[rcmdList[i]])) {
+							rcmdMap[rcmdList[i]] = 1;
+						} else {
+							rcmdMap[rcmdList[i]] = rcmdMap[rcmdList[i]] + 1;
+						}
+					}
+					var filterData = res.response.filter(function(item) {
+						if(rcmdList.indexOf(item.rcmd_vd_typ_ccd) >= 0) {
+							return true;
+						} else {
+							return false;
+						}
+					});
+					for(var i = 0; i < filterData.length; i++) {
+						filterData[i].rcmd_cnt = rcmdMap[filterData[i].rcmd_vd_typ_ccd];
+					}
+					me.$.gridPanel.setDataProvider(filterData);
+				} else {
+					me.$.gridPanel.setDataProvider(res.response);
+				}
+			},
+			// 적용 버튼 클릭 시
+			onApplyRcmdOption: function() {
+				var me = this;
+				
+				// 자동추천업체유형 대상
+				var targetRcmdCds = [];
+				var provider = me.$.gridPanel.getDataProvider(),
+					items    = provider.getItems();
+				for(var i = 0, len = items.length; i < len; i++) {
+					var item = items[i];
+					if(item.targ_yn === "Y") {
+						targetRcmdCds.push(item.rcmd_vd_typ_ccd);
+					}
+				}
+				
+				// 선택된 대상이 없는 경우
+				if(targetRcmdCds.length === 0) {
+					UT.alert("STD.RFX1089");	// 자동추천업체유형 대상을 선택하세요.
+					return;
+				}
+				
+				me.fire("apply", targetRcmdCds);
+			}
+		});
+	</script>
+</dom-module>

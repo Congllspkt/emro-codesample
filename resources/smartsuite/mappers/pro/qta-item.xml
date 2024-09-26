@@ -1,0 +1,997 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="qta-item">
+	<select id="findListQtaItem" resultType="map">
+		<bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+		SELECT T.OORG_CD
+		     , T.ITEMCAT_LVL_1_CD
+		     , T.DISP_ITEMCAT_LVL_1_NM
+		     , T.ITEMCAT_LVL_2_CD
+		     , T.DISP_ITEMCAT_LVL_2_NM
+		     , T.ITEMCAT_LVL_3_CD
+		     , T.DISP_ITEMCAT_LVL_3_NM
+		     , T.ITEMCAT_LVL_4_CD
+		     , T.DISP_ITEMCAT_LVL_4_NM
+		     , T.ITEM_CD
+		     , T.ITEM_NM
+		     , T.ITEM_NM_EN
+		     , T.DISP_ITEM_NM
+		     , T.ITEM_SPEC
+		     , T.ITEM_OORG_CD
+		     , T.UOM_CCD
+		     , T.CUR_CCD
+		     , T.UPRCCNTR_UPRC
+		     , T.UPRC_EFCT_ST_DT
+		     , T.UPRC_EFCT_EXP_DT
+		     , T.VD_CD
+		     , T.DISP_VD_NM
+		     , T.TOT_QTARATE
+		     , T.QTARATE
+		     , T.MOQ
+		     , T.CTQ
+		     , T.DLVY_LDTM
+		     , T.APPL_ST_DT
+		     , T.QTA_NO
+		     , T.CNTR_UUID
+		     , T.CNTR_NO
+		     , T.CNTR_REVNO
+		     , T.PURC_CNTR_UUID
+		     , T.PURC_CNTR_INFO_UUID
+		     , T.PURC_CNTR_ITEM_UUID
+		     , T.PURC_CNTR_ITEM_LNO
+		     , T.PO_QTY
+		  FROM (
+		        SELECT ITEM_UPRC_HISTREC.OORG_CD
+		             , ITEM.ITEMCAT_LVL_1_CD
+		             , CASE WHEN #{g.locale} = 'en_US' THEN CAT1.ITEMCAT_NM_EN
+		                    ELSE CAT1.ITEMCAT_NM
+		                END AS DISP_ITEMCAT_LVL_1_NM
+		             , ITEM.ITEMCAT_LVL_2_CD
+		             , CASE WHEN #{g.locale} = 'en_US' THEN CAT2.ITEMCAT_NM_EN
+		                    ELSE CAT2.ITEMCAT_NM
+		                END AS DISP_ITEMCAT_LVL_2_NM
+		             , ITEM.ITEMCAT_LVL_3_CD
+		             , CASE WHEN #{g.locale} = 'en_US' THEN CAT3.ITEMCAT_NM_EN
+		                    ELSE CAT3.ITEMCAT_NM
+		                END AS DISP_ITEMCAT_LVL_3_NM
+		             , ITEM.ITEMCAT_LVL_4_CD
+		             , CASE WHEN #{g.locale} = 'en_US' THEN CAT4.ITEMCAT_NM_EN
+		                    ELSE CAT4.ITEMCAT_NM
+		                END AS DISP_ITEMCAT_LVL_4_NM
+		             , ITEM.ITEM_CD
+		             , ITEM.ITEM_NM
+		             , ITEM.ITEM_NM_EN
+		             , CASE WHEN #{g.locale} = 'en_US' THEN ITEM.ITEM_NM_EN
+		                    ELSE ITEM.ITEM_NM
+		                END AS DISP_ITEM_NM
+		             , ITEM.ITEM_SPEC
+		             , ITEM_UPRC_HISTREC.ITEM_OORG_CD
+		             , ITEM_UPRC_HISTREC.UOM_CCD
+		             , ITEM_UPRC_HISTREC.CUR_CCD
+		             , ITEM_UPRC_HISTREC.UPRCCNTR_UPRC
+		             , ITEM_UPRC_HISTREC.UPRC_EFCT_ST_DT
+		             , ITEM_UPRC_HISTREC.UPRC_EFCT_EXP_DT
+		             , VD.VD_CD
+		             , CASE WHEN #{g.locale} = 'en_US' THEN VD.VD_NM_EN
+		                    ELSE VD.VD_NM
+		                END AS DISP_VD_NM
+		             , SUM(CASE WHEN QTA_ITEM_HISTREC.QTARATE IS NULL THEN 0 ELSE QTA_ITEM_HISTREC.QTARATE END) OVER(PARTITION BY ITEM.ITEM_CD) AS TOT_QTARATE
+		             , QTA_ITEM_HISTREC.QTARATE
+		             , CASE WHEN ITEM_UPRC_HISTREC.MOQ IS NULL THEN 1 ELSE ITEM_UPRC_HISTREC.MOQ END MOQ
+		             , CASE WHEN ITEM_UPRC_HISTREC.CTQ IS NULL THEN 1 ELSE ITEM_UPRC_HISTREC.CTQ END CTQ
+		             , QTA_ITEM_HISTREC.DLVY_LDTM
+		             , QTA_ITEM_HISTREC.APPL_ST_DT
+		             , QTA_ITEM_HISTREC.QTA_NO
+		             , ITEM_UPRC_HISTREC.CNTR_UUID
+		             , ITEM_UPRC_HISTREC.CNTR_NO
+		             , ITEM_UPRC_HISTREC.CNTR_REVNO
+		             , ITEM_UPRC_HISTREC.PURC_CNTR_UUID
+		             , ITEM_UPRC_HISTREC.PURC_CNTR_INFO_UUID
+		             , ITEM_UPRC_HISTREC.PURC_CNTR_ITEM_UUID
+		             , ITEM_UPRC_HISTREC.PURC_CNTR_ITEM_LNO
+		             , (
+		                SELECT SUM(PO_QTY) AS PO_QTY
+		                  FROM PO_ITEM
+		                 INNER JOIN PO
+		                    ON PO.TEN_ID = PO_ITEM.TEN_ID
+		                   AND PO.PO_UUID = PO_ITEM.PO_UUID
+		                 WHERE PO.EFCT_PO_YN = 'Y'
+		                   AND PO_ITEM.TEN_ID = ITEM_UPRC_HISTREC.TEN_ID
+		                   AND PO_ITEM.CNTR_UUID = ITEM_UPRC_HISTREC.CNTR_UUID
+		                   AND PO_ITEM.CNTR_NO = ITEM_UPRC_HISTREC.CNTR_NO
+		                   AND PO_ITEM.CNTR_REVNO = ITEM_UPRC_HISTREC.CNTR_REVNO
+		                   AND PO_ITEM.PURC_CNTR_ITEM_UUID = ITEM_UPRC_HISTREC.PURC_CNTR_ITEM_UUID
+		               ) PO_QTY
+		          FROM ITEM
+		          LEFT OUTER JOIN ITEMCAT CAT1
+		            ON CAT1.TEN_ID = ITEM.TEN_ID
+		           AND CAT1.ITEMCAT_CD = ITEM.ITEMCAT_LVL_1_CD
+		          LEFT OUTER JOIN ITEMCAT CAT2
+		            ON CAT2.TEN_ID = ITEM.TEN_ID
+		           AND CAT2.ITEMCAT_CD = ITEM.ITEMCAT_LVL_2_CD
+		          LEFT OUTER JOIN ITEMCAT CAT3
+		            ON CAT3.TEN_ID = ITEM.TEN_ID
+		           AND CAT3.ITEMCAT_CD = ITEM.ITEMCAT_LVL_3_CD
+		          LEFT OUTER JOIN ITEMCAT CAT4
+		            ON CAT4.TEN_ID = ITEM.TEN_ID
+		           AND CAT4.ITEMCAT_CD = ITEM.ITEMCAT_LVL_4_CD
+		         INNER JOIN ITEM_UPRC_HISTREC
+		            ON ITEM_UPRC_HISTREC.TEN_ID = ITEM.TEN_ID
+		           AND ITEM_UPRC_HISTREC.ITEM_CD = ITEM.ITEM_CD
+		         INNER JOIN VD
+		            ON VD.TEN_ID = ITEM_UPRC_HISTREC.TEN_ID
+		           AND VD.VD_CD = ITEM_UPRC_HISTREC.VD_CD
+		          LEFT OUTER JOIN QTA_ITEM_HISTREC
+		            ON QTA_ITEM_HISTREC.TEN_ID = ITEM_UPRC_HISTREC.TEN_ID
+		           AND QTA_ITEM_HISTREC.OORG_CD = ITEM_UPRC_HISTREC.OORG_CD
+		           AND QTA_ITEM_HISTREC.ITEM_CD = ITEM_UPRC_HISTREC.ITEM_CD
+		           AND QTA_ITEM_HISTREC.CNTR_UUID = ITEM_UPRC_HISTREC.CNTR_UUID
+		           AND QTA_ITEM_HISTREC.CNTR_NO = ITEM_UPRC_HISTREC.CNTR_NO
+		           AND QTA_ITEM_HISTREC.CNTR_REVNO = ITEM_UPRC_HISTREC.CNTR_REVNO
+		           AND QTA_ITEM_HISTREC.PURC_CNTR_UUID = ITEM_UPRC_HISTREC.PURC_CNTR_UUID
+		           AND QTA_ITEM_HISTREC.PURC_CNTR_INFO_UUID = ITEM_UPRC_HISTREC.PURC_CNTR_INFO_UUID
+		           AND QTA_ITEM_HISTREC.PURC_CNTR_ITEM_UUID = ITEM_UPRC_HISTREC.PURC_CNTR_ITEM_UUID
+		           AND QTA_ITEM_HISTREC.APPL_ST_DT <![CDATA[<=]]> #{nowDate}
+		           AND QTA_ITEM_HISTREC.APPL_EXP_DT <![CDATA[>=]]> #{nowDate}
+		           AND QTA_ITEM_HISTREC.STS != 'D'
+		         WHERE ITEM_UPRC_HISTREC.TEN_ID = #{g.tenant}
+		           <if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		               AND UPPER(ITEM_UPRC_HISTREC.OORG_CD) IN
+		               <foreach close=")" collection="p.oorg_cds" item="oorg_cd" open="(" separator=",">
+		                   #{oorg_cd}
+		               </foreach>
+		           </if>
+		           <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+		               AND CAT1.ITEMCAT_CD        = #{p.itemcat_lvl_1_cd}
+		           </if>
+		           <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+		               AND CAT2.ITEMCAT_CD        = #{p.itemcat_lvl_2_cd}
+		           </if>
+		           <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+		               AND CAT3.ITEMCAT_CD        = #{p.itemcat_lvl_3_cd}
+		           </if>
+		           <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+		               AND CAT4.ITEMCAT_CD        = #{p.itemcat_lvl_4_cd}
+		           </if>
+		           <choose>
+		               <when test="p.item_cds != null and p.item_cds.size() &gt; 0">
+		                   AND ITEM.ITEM_CD IN
+		                   <foreach close=")" collection="p.item_cds" item="item_cd" open="(" separator=",">
+		                       #{item_cd}
+		                   </foreach>
+		               </when>
+		               <otherwise>
+		                   <if test="p.item_cd != null and p.item_cd != ''">
+		                       <bind name="cdPattern" value="'%' + g.trim(p.item_cd) + '%'"/>
+		                       AND ITEM.ITEM_CD  LIKE UPPER(#{cdPattern})
+		                   </if>
+		               </otherwise>
+		           </choose>
+		           <if test="p.item_nm != null and p.item_nm != ''">
+		               <bind name="itemNamePattern" value="'%' + g.trim(p.item_nm) + '%'"/>
+		               AND (UPPER(ITEM.ITEM_NM) LIKE UPPER(#{itemNamePattern}) OR UPPER(ITEM.ITEM_NM_EN) LIKE UPPER(#{itemNamePattern}))
+		           </if>
+		           <if test="p.vd_nm != null and p.vd_nm !=''">
+		               <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+		               AND (UPPER(VD.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD.VD_NM_EN) LIKE UPPER(#{vdNm}))      /* 협력사명 검색조건*/
+		           </if>
+		           <if test="p.vd_cd != null and p.vd_cd !=''">
+		               AND VD.VD_CD = #{p.vd_cd}
+		           </if>
+		           AND ITEM_UPRC_HISTREC.UPRC_EFCT_ST_DT <![CDATA[<=]]> #{nowDate}
+		           AND ITEM_UPRC_HISTREC.UPRC_EFCT_EXP_DT <![CDATA[>=]]> #{nowDate}
+		           AND ITEM_UPRC_HISTREC.STS         != 'D'
+		           AND EXISTS (
+		                       SELECT 1
+		                         FROM ITEM_OORG
+		                        WHERE ITEM_OORG.TEN_ID = ITEM_UPRC_HISTREC.TEN_ID
+		                          AND ITEM_OORG.OORG_CD = ITEM_UPRC_HISTREC.ITEM_OORG_CD
+		                          AND ITEM_OORG.ITEM_CD = ITEM_UPRC_HISTREC.ITEM_CD
+		                          AND ITEM_OORG.QTA_YN = 'Y'
+		                      )
+		       ) T
+		 WHERE 1=1
+		   <if test="p.qta_tot_ccd != null and p.qta_tot_ccd != ''">
+		       <choose>
+		           <when test="p.qta_tot_ccd == &quot;100&quot;">
+		               AND T.TOT_QTARATE = 100
+		           </when>
+		           <otherwise>
+		               AND T.TOT_QTARATE <![CDATA[<]]> 100
+		           </otherwise>
+		       </choose>
+		   </if>
+		 ORDER BY T.ITEM_CD, T.QTARATE DESC, T.VD_CD
+	</select>
+    <!--<select id="findListQtaItem"    resultType="map">
+        /* qta.findListAllQtaItem */
+        <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+		SELECT MTOP.TEN_ID                                        AS TEN_ID
+		     , PINFO.OORG_CD                                   AS OORG_CD
+		     , MTOP.OORG_CD AS ITEM_OORG_CD
+		     , MTGL.ITEM_CD                                       AS ITEM_CD
+		     , MTGL.REQ_ITEM_CD                                   AS REQ_ITEM_CD
+		     , MTGL.ITEM_REG_REQ_NO                                    AS ITEM_REG_REQ_NO
+		     , CASE WHEN 'en_US' = #{g.locale}
+                       THEN MTGL.ITEM_NM_EN
+                	   ELSE MTGL.ITEM_NM
+                	    END AS DISP_ITEM_NM
+		     , MTGL.ITEM_NM                                       AS ITEM_NM
+		     , MTGL.ITEM_NM_EN                                    AS ITEM_NM_EN
+		     , MTGL.ITEM_SIMWORD                                       AS ITEM_SIMWORD
+		     , MTGL.ITEM_SPEC                                          AS ITEM_SPEC
+		     , CASE WHEN QTA_ITEM.UOM_CCD IS  NULL THEN
+		         CASE WHEN PINFO.UOM_CCD IS NULL OR PINFO.UOM_CCD = ''
+		                 THEN MTGL.UOM_CCD
+		            ELSE PINFO.UOM_CCD
+		       END
+		         ELSE QTA_ITEM.UOM_CCD END	AS UOM_CCD
+		     , MTGL.SG_CD                                         AS SG_CD
+		     , MTGL.ATHG_UUID                                        AS ATHG_UUID
+		     , MTGL.IMG_ATHG_UUID                                    AS IMG_ATHG_UUID
+		     , MTGL.DWG_NO                                    AS DWG_NO
+		     , MTGL.MFGR_CD                                      AS MFGR_CD
+		     , MTGL.MFGR_NM                                      AS MFGR_NM
+		     , MTGL.MDL_NO                                        AS MDL_NO
+		     , MTGL.HS_NO                                         AS HS_NO
+		     , MTGL.REP_ITEM_CD_YN                                     AS REP_ITEM_CD_YN
+		     , MTGL.USE_YN                                        AS USE_YN
+		     , MTGL.RMK                                           AS RMK
+		     , MTGL.STS                                           AS STS
+		     , MCLS1.ITEMCAT_CD                                      AS ITEMCAT_LVL_1_CD
+		     , MCLS1.ITEMCAT_NM                                      AS ITEMCAT_LVL_1_NM
+		     , MCLS2.ITEMCAT_CD                                      AS ITEMCAT_LVL_2_CD
+		     , MCLS2.ITEMCAT_NM                                      AS ITEMCAT_LVL_2_NM
+		     , MCLS3.ITEMCAT_CD                                      AS ITEMCAT_LVL_3_CD
+		     , MCLS3.ITEMCAT_NM                                      AS ITEMCAT_LVL_3_NM
+		     , MCLS4.ITEMCAT_CD                                      AS ITEMCAT_LVL_4_CD
+		     , MCLS4.ITEMCAT_NM                                      AS ITEMCAT_LVL_4_NM
+		     , PINFO.UPRC_EFCT_ST_DT                                     AS UPRC_EFCT_ST_DT
+		     , PINFO.UPRC_EFCT_EXP_DT                                     AS UPRC_EFCT_EXP_DT
+		     , PINFO.UPRCCNTR_DT                                    AS UPRCCNTR_DT
+		     , CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END AS CUR_CCD
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_QTY
+		       END                                                AS UPRCCNTR_QTY
+		     , CASE WHEN PINFO.UPRCCNTR_UPRC IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_UPRC
+		       END                                                AS UPRCCNTR_UPRC
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NOT NULL
+		             AND PINFO.UPRCCNTR_UPRC IS NOT NULL
+		                 THEN GETPRECFORMAT(#{g.tenant}, 'amt', PINFO.UPRCCNTR_QTY * PINFO.UPRCCNTR_UPRC, CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END)
+		            ELSE 0
+		       END                                                AS UPRCCNTR_AMT
+		    , PINFO.CNTR_UUID
+			, PINFO.CNTR_NO
+			, PINFO.CNTR_REVNO
+			, PINFO.PURC_CNTR_UUID
+			, PINFO.PURC_CNTR_INFO_UUID
+			, PINFO.PURC_CNTR_ITEM_UUID
+			, PINFO.PURC_CNTR_ITEM_LNO
+		     , MTOP.TL_YN
+		     , VDGL.VD_CD                                         AS VD_CD
+		     , VDGL.ERP_VD_CD                                     AS ERP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN ELSE VDGL.VD_NM END    AS DISP_VD_NM
+		     , VDGL.VD_NM                                         AS VD_NM
+		     , VDGL.VD_NM_EN                                      AS VD_NM_EN
+		     , CASE WHEN MYMT.USE_YN IS NULL OR MYMT.USE_YN = ''
+		                 THEN 'N'
+		            ELSE MYMT.USE_YN
+		       END							                      AS MY_ITEM_YN
+		&#45;&#45; 쿼터
+		, QTA_ITEM.QTA_ITEM_UUID
+		, QTA_ITEM.QTA_UUID
+		 , HD.QTA_NO
+		 , HD.APPL_DT
+		 , HD.QTA_TIT
+		, HD.REG_DTTM
+		, SUM_QTA_ITEM.TOT_QTARATE AS TOT_QTARATE
+		, QTA_ITEM.QTARATE
+		, CASE WHEN QTA_ITEM.QTA_ITEM_UUID IS NULL OR QTA_ITEM.QTA_ITEM_UUID = '' THEN 'NEW' ELSE 'REG' END AS CTR_CCD
+		, CASE WHEN QTA_ITEM.MOQ IS NULL THEN PINFO.MOQ ELSE QTA_ITEM.MOQ END AS MOQ
+		, CASE WHEN QTA_ITEM.CTQ IS NULL THEN PINFO.CTQ ELSE QTA_ITEM.CTQ END AS CTQ
+		, CASE WHEN QTA_ITEM.DLVY_LDTM IS NULL THEN PINFO.DLVY_LDTM ELSE QTA_ITEM.DLVY_LDTM END AS DLVY_LDTM
+		, (SELECT SUM(PO_QTY) AS PO_QTY
+		                 FROM PO_ITEM B
+		                 WHERE B.TEN_ID = PINFO.TEN_ID
+		                 AND B.CNTR_UUID = PINFO.CNTR_UUID
+		                 AND B.CNTR_NO	= PINFO.CNTR_NO
+		                 AND B.CNTR_REVNO = PINFO.CNTR_REVNO
+		                 AND B.PURC_CNTR_ITEM_UUID = PINFO.PURC_CNTR_ITEM_UUID
+		                 GROUP BY B.CNTR_UUID, B.CNTR_NO, B.CNTR_REVNO, B.PURC_CNTR_ITEM_UUID
+		                 ) PO_QTY
+FROM ITEM MTGL
+LEFT OUTER JOIN ITEMCAT MCLS1
+	ON MCLS1.TEN_ID = MTGL.TEN_ID
+	AND MCLS1.ITEMCAT_CD = MTGL.ITEMCAT_LVL_1_CD
+LEFT OUTER JOIN ITEMCAT MCLS2
+	ON MCLS2.TEN_ID  = MTGL.TEN_ID
+	AND MCLS2.ITEMCAT_CD = MTGL.ITEMCAT_LVL_2_CD
+LEFT OUTER JOIN ITEMCAT MCLS3
+	ON MCLS3.TEN_ID = MTGL.TEN_ID
+	AND MCLS3.ITEMCAT_CD = MTGL.ITEMCAT_LVL_3_CD
+LEFT OUTER JOIN ITEMCAT MCLS4
+	ON MCLS4.TEN_ID = MTGL.TEN_ID
+	AND MCLS4.ITEMCAT_CD = MTGL.ITEMCAT_LVL_4_CD
+INNER JOIN ITEM_UPRC_HISTREC PINFO                 /* 단가정보 */
+	ON PINFO.TEN_ID      = MTGL.TEN_ID
+	AND PINFO.OORG_CD IN
+		   <foreach collection="p.oorg_cds" item="oorg_cd" open="(" close=")" separator=",">
+	   #{oorg_cd}
+	   </foreach>
+	AND PINFO.ITEM_CD     = MTGL.ITEM_CD
+	AND PINFO.UPRC_EFCT_ST_DT    <![CDATA[<=]]> #{nowDate}
+	AND PINFO.UPRC_EFCT_EXP_DT    <![CDATA[>=]]> #{nowDate}
+	AND PINFO.STS         <![CDATA[<>]]> 'D'
+INNER JOIN ITEM_OORG MTOP
+		ON MTOP.TEN_ID = MTGL.TEN_ID
+		AND MTOP.QTA_YN = 'Y'
+		AND MTOP.OORG_CD IN ( SELECT OOLM.CONNSUBJ_OORG_CD
+		FROM OORG_MAPG OOLM
+		WHERE OOLM.TEN_ID = MTOP.TEN_ID
+		AND OOLM.CONN_TYP_CCD = 'POIO'
+		AND OOLM.CONNSRC_OORG_CD = PINFO.OORG_CD
+		AND OOLM.CONN_YN = 'Y' )
+		AND MTOP.ITEM_CD = MTGL.ITEM_CD
+LEFT OUTER JOIN USR_FAV_ITEM MYMT
+		ON MYMT.TEN_ID = MTOP.TEN_ID
+		AND MYMT.OORG_CD = MTOP.OORG_CD
+		AND MYMT.ITEM_CD = MTOP.ITEM_CD
+		AND MYMT.USR_ID = #{g.username}
+INNER JOIN VD VDGL /* 단가계약 업체 */
+		ON VDGL.TEN_ID = PINFO.TEN_ID
+		AND VDGL.VD_CD = PINFO.VD_CD
+LEFT OUTER JOIN (
+		SELECT QTA_ITEM.*
+		FROM QTA_ITEM QTA_ITEM
+		INNER JOIN QTA_ITEM_HISTREC QTA_ITEM_INFO
+		ON (QTA_ITEM_INFO.TEN_ID = QTA_ITEM.TEN_ID
+		AND QTA_ITEM_INFO.QTA_ITEM_UUID = QTA_ITEM.QTA_ITEM_UUID
+		AND QTA_ITEM_INFO.STS != 'D'
+		AND QTA_ITEM_INFO.APPL_ST_DT    <![CDATA[<=]]> #{nowDate}
+		AND QTA_ITEM_INFO.APPL_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		)
+		) QTA_ITEM
+		ON (QTA_ITEM.TEN_ID = MTGL.TEN_ID
+		AND QTA_ITEM.ITEM_CD = MTGL.ITEM_CD
+		AND QTA_ITEM.CNTR_NO = PINFO.CNTR_NO
+		AND QTA_ITEM.CNTR_REVNO = PINFO.CNTR_REVNO
+		AND QTA_ITEM.PURC_CNTR_UUID = PINFO.PURC_CNTR_UUID
+		AND QTA_ITEM.PURC_CNTR_INFO_UUID = PINFO.PURC_CNTR_INFO_UUID
+		AND QTA_ITEM.PURC_CNTR_ITEM_UUID = PINFO.PURC_CNTR_ITEM_UUID
+		AND QTA_ITEM.PURC_CNTR_ITEM_LNO = PINFO.PURC_CNTR_ITEM_LNO
+		AND QTA_ITEM.STS != 'D')
+LEFT OUTER JOIN QTA HD
+		ON (HD.TEN_ID = QTA_ITEM.TEN_ID
+		AND HD.QTA_UUID = QTA_ITEM.QTA_UUID
+		AND HD.STS != 'D')
+LEFT OUTER JOIN (
+		SELECT A.TEN_ID,A.OORG_CD,A.ITEM_CD, SUM(A.QTARATE) AS TOT_QTARATE
+		FROM QTA_ITEM_HISTREC A
+		    INNER JOIN QTA_ITEM QTA_ITEM
+		    ON QTA_ITEM.TEN_ID = A.TEN_ID
+		    AND QTA_ITEM.QTA_ITEM_UUID = A.QTA_ITEM_UUID
+		 INNER JOIN ITEM_UPRC_HISTREC PINFO                 /* 단가정보 */
+		    ON PINFO.TEN_ID      = QTA_ITEM.TEN_ID
+		    AND PINFO.OORG_CD IN
+		           <foreach collection="p.oorg_cds" item="oorg_cd" open="(" close=")" separator=",">
+			   #{oorg_cd}
+			   </foreach>
+		   AND PINFO.ITEM_CD     = QTA_ITEM.ITEM_CD
+		           AND PINFO.CNTR_UUID = QTA_ITEM.CNTR_UUID
+		   AND PINFO.CNTR_NO = QTA_ITEM.CNTR_NO
+		   AND PINFO.CNTR_REVNO = QTA_ITEM.CNTR_REVNO
+		   AND PINFO.PURC_CNTR_UUID = QTA_ITEM.PURC_CNTR_UUID
+		   AND PINFO.PURC_CNTR_INFO_UUID = QTA_ITEM.PURC_CNTR_INFO_UUID
+		   AND PINFO.PURC_CNTR_ITEM_UUID = QTA_ITEM.PURC_CNTR_ITEM_UUID
+		    AND PINFO.PURC_CNTR_ITEM_LNO = QTA_ITEM.PURC_CNTR_ITEM_LNO
+		   AND PINFO.UPRC_EFCT_ST_DT    <![CDATA[<=]]> #{nowDate}
+		   AND PINFO.UPRC_EFCT_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		AND PINFO.STS         <![CDATA[<>]]> 'D'
+		WHERE A.TEN_ID = #{g.tenant}
+		&#45;&#45; AND A.QTA_ITEM_UUID = QTA_ITEM.QTA_ITEM_UUID
+		AND A.STS != 'D'
+		AND A.APPL_ST_DT    <![CDATA[<=]]> #{nowDate}
+		AND A.APPL_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		GROUP BY A.TEN_ID,A.OORG_CD,A.ITEM_CD
+		) SUM_QTA_ITEM
+		ON (SUM_QTA_ITEM.TEN_ID = QTA_ITEM.TEN_ID
+		AND SUM_QTA_ITEM.ITEM_CD = QTA_ITEM.ITEM_CD
+		AND SUM_QTA_ITEM.OORG_CD = QTA_ITEM.OORG_CD)
+	WHERE MTGL.TEN_ID = #{g.tenant}
+		<if test="p.oorg_cds != null and p.oorg_cds.size() != 0">
+		       AND UPPER(PINFO.OORG_CD) IN
+		       <foreach collection="p.oorg_cds" item="oorg_cd" separator="," open="(" close=")">
+		           #{oorg_cd}
+		       </foreach>
+		   </if>
+		   &#45;&#45; AND ( MCLS1.QTA_USE_YN = 'Y' OR  MCLS2.QTA_USE_YN = 'Y'  OR MCLS3.QTA_USE_YN = 'Y' OR MCLS4.QTA_USE_YN = 'Y' )
+		 <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+		   AND MCLS1.ITEMCAT_CD        = #{p.itemcat_lvl_1_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+		   AND MCLS2.ITEMCAT_CD        = #{p.itemcat_lvl_2_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+		   AND MCLS3.ITEMCAT_CD        = #{p.itemcat_lvl_3_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+		   AND MCLS4.ITEMCAT_CD        = #{p.itemcat_lvl_4_cd}
+		 </if>
+		 <choose>
+		   <when test="p.item_cds != null and p.item_cds.size() > 0">
+		   AND MTGL.ITEM_CD IN
+		       <foreach collection="p.item_cds" item="item_cd" open="(" close=")" separator=",">
+		       #{item_cd}
+		       </foreach>
+		   </when>
+		   <otherwise>
+		     <if test="p.item_cd != null and p.item_cd != ''">
+		       <bind name="cdPattern" value="'%' + g.trim(p.item_cd) + '%'"/>
+		   AND MTGL.ITEM_CD  LIKE UPPER(#{cdPattern})
+		     </if>
+		   </otherwise>
+		 </choose>
+		 <if test="p.item_nm != null and p.item_nm != ''">
+		   <bind name="itemNamePattern" value="'%' + g.trim(p.item_nm) + '%'"/>
+		   AND (UPPER(MTGL.ITEM_NM) LIKE UPPER(#{itemNamePattern}) OR UPPER(MTGL.ITEM_NM_EN) LIKE UPPER(#{itemNamePattern}))
+		 </if>
+		 <if test="p.mfgr_nm != null and p.mfgr_nm != ''">
+		   <bind name="makerNmPattern" value="'%' + p.mfgr_nm + '%'"/>
+		   AND UPPER(MTGL.MFGR_NM) LIKE UPPER(#{makerNmPattern})
+		 </if>
+		   <if test="p.vd_nm != null and p.vd_nm !=''">
+            <bind name="vdNm" value ="'%' + p.vd_nm + '%'"/>
+	       AND    (UPPER(VDGL.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD_NM_EN) LIKE UPPER(#{vdNm}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd !=''">
+           AND VDGL.VD_CD = #{p.vd_cd}
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd !=''">
+            <bind name="erpVdCd" value ="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(VDGL.ERP_VD_CD) LIKE UPPER(#{erpVdCd})                    /*협력사코드 20.04.24 추가*/
+        </if>
+		 <if test="p.item_spec != null and p.item_spec != ''">
+		   <bind name="specPattern" value="'%' + p.item_spec + '%'"/>
+		   AND UPPER(MTGL.ITEM_SPEC) LIKE UPPER(#{specPattern})
+		 </if>
+		 <if test='p.my_item_yn == "Y"'>
+		 	AND MYMT.USE_YN = 'Y'
+		 </if>
+		 <choose>
+		   <when test="p.qta_nos != null and p.qta_nos.size() > 0">
+		   AND QTA_ITEM.QTA_NO IN
+		       <foreach collection="p.qta_nos" item="qta_no" open="(" close=")" separator=",">
+		       #{qta_no}
+		       </foreach>
+		   </when>
+		   <otherwise>
+		     <if test="p.qta_no != null and p.qta_no != ''">
+		       <bind name="noPattern" value="'%' + g.trim(p.qta_no) + '%'"/>
+		   AND QTA_ITEM.QTA_NO  LIKE UPPER(#{noPattern})
+		     </if>
+		   </otherwise>
+		 </choose>
+		 <if test="p.qta_tit != null and p.qta_tit != ''">
+		   <bind name="makerQtaTitPattern" value="'%' + p.qta_tit + '%'"/>
+		   AND UPPER(HD.QTA_TIT) LIKE UPPER(#{makerQtaTitPattern})
+		 </if>
+		 <if test="p.ctr_ccd != null and p.ctr_ccd != ''">
+		   <choose>
+			   <when test='p.ctr_ccd == "NEW"'>
+		   			AND (HD.QTA_UUID IS NULL OR HD.QTA_UUID = '')
+					AND SUM_QTA_ITEM.TOT_QTARATE IS NULL
+			   </when>
+		   		<otherwise>
+			   		AND SUM_QTA_ITEM.TOT_QTARATE IS NOT NULL
+		   		</otherwise>
+		   </choose>
+		   </if>
+		 <if test="p.qta_tot_ccd != null and p.qta_tot_ccd != ''">
+		   <choose>
+			   <when test='p.qta_tot_ccd == "100"'>
+		   			AND (SUM_QTA_ITEM.TOT_QTARATE <![CDATA[=]]> 100)
+			   </when>
+		   		<otherwise>
+			   		AND (SUM_QTA_ITEM.TOT_QTARATE IS NULL OR SUM_QTA_ITEM.TOT_QTARATE <![CDATA[<]]> 100)
+		   		</otherwise>
+		   </choose>
+		   </if>
+		ORDER BY MTGL.ITEM_CD DESC, SUM_QTA_ITEM.TOT_QTARATE ASC, VDGL.ERP_VD_CD DESC
+    </select>-->
+	<select id="findListQtaItemByQta" resultType="map">
+		/* qta-item.findListQtaItemByQta */
+		SELECT QTA.TEN_ID                                        AS TEN_ID
+		     , QTA.OORG_CD                                   AS OORG_CD
+		     , QTA_ITEM.ITEM_OORG_CD
+		     , QTA_ITEM.ITEM_CD                                       AS ITEM_CD
+		     , MTGL.REQ_ITEM_CD                                   AS REQ_ITEM_CD
+		     , MTGL.ITEM_REG_REQ_NO                                    AS ITEM_REG_REQ_NO
+		     , CASE WHEN 'en_US' = #{g.locale}
+                       THEN MTGL.ITEM_NM_EN
+                	   ELSE MTGL.ITEM_NM
+                	    END AS DISP_ITEM_NM
+		     , MTGL.ITEM_NM                                       AS ITEM_NM
+		     , MTGL.ITEM_NM_EN                                    AS ITEM_NM_EN
+		     , MTGL.ITEM_SIMWORD                                       AS ITEM_SIMWORD
+		     , MTGL.ITEM_SPEC                                          AS ITEM_SPEC
+		     , CASE WHEN QTA_ITEM.UOM_CCD IS  NULL THEN
+		         CASE WHEN PINFO.UOM_CCD IS NULL OR PINFO.UOM_CCD = ''
+		                 THEN MTGL.UOM_CCD
+		            ELSE PINFO.UOM_CCD
+		       END
+		         ELSE QTA_ITEM.UOM_CCD END	AS UOM_CCD
+		     , MTGL.SG_CD                                         AS SG_CD
+		     , MTGL.ATHG_UUID                                        AS ATHG_UUID
+		     , MTGL.IMG_ATHG_UUID                                    AS IMG_ATHG_UUID
+		     , MTGL.DWG_NO                                    AS DWG_NO
+		     , MTGL.MFGR_CD                                      AS MFGR_CD
+		     , MTGL.MFGR_NM                                      AS MFGR_NM
+		     , MTGL.MDL_NO                                        AS MDL_NO
+		     , MTGL.HS_NO                                         AS HS_NO
+		     , MTGL.REP_ITEM_CD_YN                                     AS REP_ITEM_CD_YN
+		     , MTGL.USE_YN                                        AS USE_YN
+		     , MTGL.RMK                                           AS RMK
+		     , MTGL.STS                                           AS STS
+		     , MCLS1.ITEMCAT_CD                                      AS ITEMCAT_LVL_1_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN MCLS1.ITEMCAT_NM_EN
+		            ELSE MCLS1.ITEMCAT_NM
+		        END AS DISP_ITEMCAT_LVL_1_NM
+		     , MCLS2.ITEMCAT_CD                                      AS ITEMCAT_LVL_2_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN MCLS2.ITEMCAT_NM_EN
+		            ELSE MCLS2.ITEMCAT_NM
+		        END AS DISP_ITEMCAT_LVL_2_NM
+		     , MCLS3.ITEMCAT_CD                                      AS ITEMCAT_LVL_3_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN MCLS3.ITEMCAT_NM_EN
+		            ELSE MCLS3.ITEMCAT_NM
+		        END AS DISP_ITEMCAT_LVL_3_NM
+		     , MCLS4.ITEMCAT_CD                                      AS ITEMCAT_LVL_4_CD
+		     , CASE WHEN #{g.locale} = 'en_US' THEN MCLS4.ITEMCAT_NM_EN
+		            ELSE MCLS4.ITEMCAT_NM
+		        END AS DISP_ITEMCAT_LVL_4_NM
+		     , PINFO.UPRC_EFCT_ST_DT                                     AS UPRC_EFCT_ST_DT
+		     , PINFO.UPRC_EFCT_EXP_DT                                     AS UPRC_EFCT_EXP_DT
+		     , PINFO.UPRCCNTR_DT                                    AS UPRCCNTR_DT
+		     , CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END AS CUR_CCD
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_QTY
+		       END                                                AS UPRCCNTR_QTY
+		     , CASE WHEN PINFO.UPRCCNTR_UPRC IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_UPRC
+		       END                                                AS UPRCCNTR_UPRC
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NOT NULL
+		             AND PINFO.UPRCCNTR_UPRC IS NOT NULL
+		                 THEN  GETPRECFORMAT(#{g.tenant}, 'amt', PINFO.UPRCCNTR_QTY * PINFO.UPRCCNTR_UPRC, CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END)
+		            ELSE 0
+		       END                                                AS UPRCCNTR_AMT
+			, PINFO.CNTR_UUID
+			, PINFO.CNTR_NO
+			, PINFO.CNTR_REVNO
+			, PINFO.PURC_CNTR_UUID
+			, PINFO.PURC_CNTR_INFO_UUID
+			, PINFO.PURC_CNTR_ITEM_UUID
+			, PINFO.PURC_CNTR_ITEM_LNO
+		     , VDGL.VD_CD                                         AS VD_CD
+		     , VDGL.ERP_VD_CD                                     AS ERP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN ELSE VDGL.VD_NM END    AS DISP_VD_NM
+		     , VDGL.VD_NM                                         AS VD_NM
+		     , VDGL.VD_NM_EN                                      AS VD_NM_EN
+		-- 쿼터
+		, QTA_ITEM.QTA_ITEM_UUID
+		, QTA_ITEM.QTA_UUID
+		 , QTA_ITEM.QTA_NO
+		 , QTA_ITEM.QTA_LNO
+		 , QTA.APPL_DT
+		 , QTA.QTA_TIT
+		, QTA.REG_DTTM
+		, SUM(QTA_ITEM.QTARATE) OVER(PARTITION BY MTGL.ITEM_CD) AS TOT_QTARATE
+		, QTA_ITEM.QTARATE
+		, CASE WHEN PINFO.MOQ IS NULL THEN 1 ELSE PINFO.MOQ END AS MOQ
+		, CASE WHEN PINFO.CTQ IS NULL THEN 1 ELSE PINFO.CTQ END AS CTQ
+		, CASE WHEN QTA_ITEM.DLVY_LDTM IS NULL THEN PINFO.DLVY_LDTM ELSE QTA_ITEM.DLVY_LDTM END AS DLVY_LDTM
+FROM QTA_ITEM
+    INNER JOIN ITEM MTGL
+    ON QTA_ITEM.TEN_ID = MTGL.TEN_ID and QTA_ITEM.ITEM_CD = MTGL.ITEM_CD
+    AND QTA_ITEM.STS != 'D'
+		  LEFT OUTER JOIN ITEMCAT MCLS1
+		    ON MCLS1.TEN_ID = MTGL.TEN_ID
+		   AND MCLS1.ITEMCAT_CD = MTGL.ITEMCAT_LVL_1_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS2
+		    ON MCLS2.TEN_ID  = MTGL.TEN_ID
+		   AND MCLS2.ITEMCAT_CD = MTGL.ITEMCAT_LVL_2_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS3
+		    ON MCLS3.TEN_ID = MTGL.TEN_ID
+		   AND MCLS3.ITEMCAT_CD = MTGL.ITEMCAT_LVL_3_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS4
+		    ON MCLS4.TEN_ID = MTGL.TEN_ID
+		   AND MCLS4.ITEMCAT_CD = MTGL.ITEMCAT_LVL_4_CD
+INNER JOIN QTA
+    ON QTA.TEN_ID = QTA_ITEM.TEN_ID
+    AND QTA.QTA_UUID = QTA_ITEM.QTA_UUID
+    AND QTA.STS != 'D'
+INNER JOIN ITEM_UPRC_HISTREC PINFO                 /* 단가정보 */
+		    ON PINFO.TEN_ID      = MTGL.TEN_ID
+		   AND PINFO.OORG_CD = #{p.oorg_cd}
+		   AND PINFO.ITEM_CD     = MTGL.ITEM_CD
+		   AND PINFO.CNTR_UUID = QTA_ITEM.CNTR_UUID
+		   AND PINFO.CNTR_NO = QTA_ITEM.CNTR_NO
+		   AND PINFO.CNTR_REVNO = QTA_ITEM.CNTR_REVNO
+		   AND PINFO.PURC_CNTR_UUID = QTA_ITEM.PURC_CNTR_UUID
+		   AND PINFO.PURC_CNTR_INFO_UUID = QTA_ITEM.PURC_CNTR_INFO_UUID
+		   AND PINFO.PURC_CNTR_ITEM_UUID = QTA_ITEM.PURC_CNTR_ITEM_UUID
+		    AND PINFO.PURC_CNTR_ITEM_LNO = QTA_ITEM.PURC_CNTR_ITEM_LNO
+		    AND PINFO.STS         != 'D'
+INNER JOIN VD VDGL /* 단가계약 업체 */
+		ON VDGL.TEN_ID = PINFO.TEN_ID
+		AND VDGL.VD_CD = PINFO.VD_CD
+		WHERE QTA_ITEM.TEN_ID = #{g.tenant}
+			AND QTA_ITEM.QTA_UUID = #{p.qta_uuid}
+		ORDER BY QTA_ITEM.ITEM_CD DESC, QTA_ITEM.QTARATE DESC, VDGL.VD_CD
+	</select>
+	<select id="findListQtaItemByItemCd" resultType="map">
+        /* qta.findListQtaItemByItemCd */
+        <bind name="nowDate" value="g.getFormatNow(g.now, 'yyyyMMdd')"/>
+		SELECT MTOP.TEN_ID                                        AS TEN_ID
+		     , QTA_ITEM.OORG_CD
+		     , MTOP.OORG_CD                                   AS ITEM_OORG_CD
+		     , MTGL.ITEM_CD                                       AS ITEM_CD
+		     , MTGL.REQ_ITEM_CD                                   AS REQ_ITEM_CD
+		     , MTGL.ITEM_REG_REQ_NO                                    AS ITEM_REG_REQ_NO
+		     , CASE WHEN 'en_US' = #{g.locale}
+                       THEN MTGL.ITEM_NM_EN
+                	   ELSE MTGL.ITEM_NM
+                	    END AS DISP_ITEM_NM
+		     , MTGL.ITEM_NM                                       AS ITEM_NM
+		     , MTGL.ITEM_NM_EN                                    AS ITEM_NM_EN
+		     , MTGL.ITEM_SIMWORD                                       AS ITEM_SIMWORD
+		     , MTGL.ITEM_SPEC                                          AS ITEM_SPEC
+		     , CASE WHEN QTA_ITEM.UOM_CCD IS  NULL THEN
+		         CASE WHEN PINFO.UOM_CCD IS NULL OR PINFO.UOM_CCD = ''
+		                 THEN MTGL.UOM_CCD
+		            ELSE PINFO.UOM_CCD
+		       END
+		         ELSE QTA_ITEM.UOM_CCD END	AS UOM_CCD
+		     , MTGL.SG_CD                                         AS SG_CD
+		     , MTGL.ATHG_UUID                                        AS ATHG_UUID
+		     , MTGL.IMG_ATHG_UUID                                    AS IMG_ATHG_UUID
+		     , MTGL.DWG_NO                                    AS DWG_NO
+		     , MTGL.MFGR_CD                                      AS MFGR_CD
+		     , MTGL.MFGR_NM                                      AS MFGR_NM
+		     , MTGL.MDL_NO                                        AS MDL_NO
+		     , MTGL.HS_NO                                         AS HS_NO
+		     , MTGL.REP_ITEM_CD_YN                                     AS REP_ITEM_CD_YN
+		     , MTGL.USE_YN                                        AS USE_YN
+		     , MTGL.RMK                                           AS RMK
+		     , MTGL.STS                                           AS STS
+		     , MCLS1.ITEMCAT_CD                                      AS ITEMCAT_LVL_1_CD
+		     , MCLS1.ITEMCAT_NM                                      AS ITEMCAT_LVL_1_NM
+		     , MCLS2.ITEMCAT_CD                                      AS ITEMCAT_LVL_2_CD
+		     , MCLS2.ITEMCAT_NM                                      AS ITEMCAT_LVL_2_NM
+		     , MCLS3.ITEMCAT_CD                                      AS ITEMCAT_LVL_3_CD
+		     , MCLS3.ITEMCAT_NM                                      AS ITEMCAT_LVL_3_NM
+		     , MCLS4.ITEMCAT_CD                                      AS ITEMCAT_LVL_4_CD
+		     , MCLS4.ITEMCAT_NM                                      AS ITEMCAT_LVL_4_NM
+		     , PINFO.UPRC_EFCT_ST_DT                                     AS UPRC_EFCT_ST_DT
+		     , PINFO.UPRC_EFCT_EXP_DT                                     AS UPRC_EFCT_EXP_DT
+		     , PINFO.UPRCCNTR_DT                                    AS UPRCCNTR_DT
+		     , CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END AS CUR_CCD
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_QTY
+		       END                                                AS UPRCCNTR_QTY
+		     , CASE WHEN PINFO.UPRCCNTR_UPRC IS NULL
+		                 THEN 0
+		            ELSE PINFO.UPRCCNTR_UPRC
+		       END                                                AS UPRCCNTR_UPRC
+		     , CASE WHEN PINFO.UPRCCNTR_QTY IS NOT NULL
+		             AND PINFO.UPRCCNTR_UPRC IS NOT NULL
+		                 THEN  GETPRECFORMAT(#{g.tenant}, 'amt', PINFO.UPRCCNTR_QTY * PINFO.UPRCCNTR_UPRC, CASE WHEN QTA_ITEM.CUR_CCD IS NULL OR QTA_ITEM.CUR_CCD = '' THEN PINFO.CUR_CCD ELSE QTA_ITEM.CUR_CCD END)
+		            ELSE 0
+		       END                                                AS UPRCCNTR_AMT
+		     , PINFO.CNTR_UUID
+			, PINFO.CNTR_UUID
+			, PINFO.CNTR_NO
+			, PINFO.CNTR_REVNO
+			, PINFO.PURC_CNTR_UUID
+			, PINFO.PURC_CNTR_INFO_UUID
+			, PINFO.PURC_CNTR_ITEM_UUID
+			, PINFO.PURC_CNTR_ITEM_LNO
+		     , MTOP.TL_YN
+		     , VDGL.VD_CD                                         AS VD_CD
+		     , VDGL.ERP_VD_CD                                     AS ERP_VD_CD
+		     , CASE WHEN 'en_US' = #{g.locale} THEN VDGL.VD_NM_EN ELSE VDGL.VD_NM END    AS DISP_VD_NM
+		     , VDGL.VD_NM                                         AS VD_NM
+		     , VDGL.VD_NM_EN                                      AS VD_NM_EN
+		     , CASE WHEN MYMT.USE_YN IS NULL OR MYMT.USE_YN = ''
+		                 THEN 'N'
+		            ELSE MYMT.USE_YN
+		       END							                      AS MY_ITEM_YN
+		-- 쿼터
+		, QTA_ITEM.QTA_ITEM_UUID
+		, QTA_ITEM.QTA_UUID
+		 , HD.QTA_NO
+		 , HD.APPL_DT
+		 , HD.QTA_TIT
+		, HD.REG_DTTM
+		, SUM_QTA_ITEM.TOT_QTARATE AS TOT_QTARATE
+		, QTA_ITEM.QTARATE
+		, CASE WHEN QTA_ITEM.MOQ IS NULL THEN PINFO.MOQ ELSE QTA_ITEM.MOQ END AS MOQ
+		, CASE WHEN QTA_ITEM.CTQ IS NULL THEN PINFO.CTQ ELSE QTA_ITEM.CTQ END AS CTQ
+		, CASE WHEN QTA_ITEM.DLVY_LDTM IS NULL THEN PINFO.DLVY_LDTM ELSE QTA_ITEM.DLVY_LDTM END AS DLVY_LDTM
+		, (SELECT SUM(PO_QTY) AS PO_QTY
+		                 FROM PO_ITEM B
+		                 WHERE B.TEN_ID = PINFO.TEN_ID
+		                 AND B.CNTR_UUID = PINFO.CNTR_UUID
+		                 AND B.CNTR_NO	= PINFO.CNTR_NO
+		                 AND B.CNTR_REVNO = PINFO.CNTR_REVNO
+		                 AND B.PURC_CNTR_ITEM_UUID = PINFO.PURC_CNTR_ITEM_UUID
+		                 GROUP BY B.CNTR_UUID, B.CNTR_NO, B.CNTR_REVNO, B.PURC_CNTR_ITEM_UUID
+		                 ) PO_QTY
+FROM ITEM MTGL
+		  LEFT OUTER JOIN ITEMCAT MCLS1
+		    ON MCLS1.TEN_ID = MTGL.TEN_ID
+		   AND MCLS1.ITEMCAT_CD = MTGL.ITEMCAT_LVL_1_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS2
+		    ON MCLS2.TEN_ID  = MTGL.TEN_ID
+		   AND MCLS2.ITEMCAT_CD = MTGL.ITEMCAT_LVL_2_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS3
+		    ON MCLS3.TEN_ID = MTGL.TEN_ID
+		   AND MCLS3.ITEMCAT_CD = MTGL.ITEMCAT_LVL_3_CD
+		  LEFT OUTER JOIN ITEMCAT MCLS4
+		    ON MCLS4.TEN_ID = MTGL.TEN_ID
+		   AND MCLS4.ITEMCAT_CD = MTGL.ITEMCAT_LVL_4_CD
+		 INNER JOIN ITEM_UPRC_HISTREC PINFO                 /* 단가정보 */
+		    ON PINFO.TEN_ID      = MTGL.TEN_ID
+		   AND PINFO.OORG_CD = #{p.oorg_cd}
+		   AND PINFO.ITEM_CD     = MTGL.ITEM_CD
+		   AND PINFO.UPRC_EFCT_ST_DT    <![CDATA[<=]]> #{nowDate}
+		   AND PINFO.UPRC_EFCT_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		AND PINFO.STS         <![CDATA[<>]]> 'D'
+		INNER JOIN ITEM_OORG MTOP
+		ON MTOP.TEN_ID = MTGL.TEN_ID
+		AND MTOP.OORG_CD IN ( SELECT OOLM.CONNSUBJ_OORG_CD
+		FROM OORG_MAPG OOLM
+		WHERE OOLM.TEN_ID = MTOP.TEN_ID
+		AND OOLM.CONN_TYP_CCD = 'POIO'
+		AND OOLM.CONNSRC_OORG_CD = PINFO.OORG_CD
+		AND OOLM.CONN_YN = 'Y' )
+		AND MTOP.ITEM_CD = MTGL.ITEM_CD
+		LEFT OUTER JOIN USR_FAV_ITEM MYMT
+		ON MYMT.TEN_ID = MTOP.TEN_ID
+		AND MYMT.OORG_CD = MTOP.OORG_CD
+		AND MYMT.ITEM_CD = MTOP.ITEM_CD
+		AND MYMT.USR_ID = #{g.username}
+		INNER JOIN VD VDGL /* 단가계약 업체 */
+		ON VDGL.TEN_ID = PINFO.TEN_ID
+		AND VDGL.VD_CD = PINFO.VD_CD
+		LEFT OUTER JOIN (
+		SELECT QTA_ITEM.*
+		FROM QTA_ITEM QTA_ITEM
+		INNER JOIN QTA_ITEM_HISTREC QTA_ITEM_INFO
+		ON (QTA_ITEM_INFO.TEN_ID = QTA_ITEM.TEN_ID
+		AND QTA_ITEM_INFO.QTA_ITEM_UUID = QTA_ITEM.QTA_ITEM_UUID
+		AND QTA_ITEM_INFO.STS != 'D'
+		AND QTA_ITEM_INFO.APPL_ST_DT    <![CDATA[<=]]> #{nowDate}
+		AND QTA_ITEM_INFO.APPL_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		)
+		) QTA_ITEM
+		ON (QTA_ITEM.TEN_ID = MTGL.TEN_ID
+		AND QTA_ITEM.ITEM_CD = MTGL.ITEM_CD
+		AND PINFO.CNTR_UUID = QTA_ITEM.CNTR_UUID
+		   AND PINFO.CNTR_NO = QTA_ITEM.CNTR_NO
+		   AND PINFO.CNTR_REVNO = QTA_ITEM.CNTR_REVNO
+		   AND PINFO.PURC_CNTR_UUID = QTA_ITEM.PURC_CNTR_UUID
+		   AND PINFO.PURC_CNTR_INFO_UUID = QTA_ITEM.PURC_CNTR_INFO_UUID
+		   AND PINFO.PURC_CNTR_ITEM_UUID = QTA_ITEM.PURC_CNTR_ITEM_UUID
+		    AND PINFO.PURC_CNTR_ITEM_LNO = QTA_ITEM.PURC_CNTR_ITEM_LNO
+		AND QTA_ITEM.STS != 'D')
+		LEFT OUTER JOIN QTA HD
+		ON (HD.TEN_ID = QTA_ITEM.TEN_ID
+		AND HD.QTA_UUID = QTA_ITEM.QTA_UUID
+		AND HD.STS != 'D')
+		LEFT OUTER JOIN (
+		SELECT A.TEN_ID,A.OORG_CD,A.ITEM_CD, SUM(A.QTARATE) AS TOT_QTARATE
+		FROM QTA_ITEM_HISTREC A
+		    INNER JOIN QTA_ITEM QTA_ITEM
+		    ON QTA_ITEM.TEN_ID = A.TEN_ID
+		    AND QTA_ITEM.QTA_ITEM_UUID = A.QTA_ITEM_UUID
+		 INNER JOIN ITEM_UPRC_HISTREC PINFO                 /* 단가정보 */
+		    ON PINFO.TEN_ID      = QTA_ITEM.TEN_ID
+		   AND PINFO.OORG_CD = #{p.oorg_cd}
+		   AND PINFO.ITEM_CD     = QTA_ITEM.ITEM_CD
+		    AND PINFO.CNTR_UUID = QTA_ITEM.CNTR_UUID
+		   AND PINFO.CNTR_NO = QTA_ITEM.CNTR_NO
+		   AND PINFO.CNTR_REVNO = QTA_ITEM.CNTR_REVNO
+		   AND PINFO.PURC_CNTR_UUID = QTA_ITEM.PURC_CNTR_UUID
+		   AND PINFO.PURC_CNTR_INFO_UUID = QTA_ITEM.PURC_CNTR_INFO_UUID
+		   AND PINFO.PURC_CNTR_ITEM_UUID = QTA_ITEM.PURC_CNTR_ITEM_UUID
+		    AND PINFO.PURC_CNTR_ITEM_LNO = QTA_ITEM.PURC_CNTR_ITEM_LNO
+		   AND PINFO.UPRC_EFCT_ST_DT    <![CDATA[<=]]> #{nowDate}
+		   AND PINFO.UPRC_EFCT_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		AND PINFO.STS         <![CDATA[<>]]> 'D'
+		WHERE A.TEN_ID = #{g.tenant}
+		-- AND A.QTA_ITEM_UUID = QTA_ITEM.QTA_ITEM_UUID
+		AND A.STS != 'D'
+		AND A.APPL_ST_DT    <![CDATA[<=]]> #{nowDate}
+		AND A.APPL_EXP_DT    <![CDATA[>=]]> #{nowDate}
+		GROUP BY A.TEN_ID,A.OORG_CD,A.ITEM_CD
+		) SUM_QTA_ITEM
+		ON (SUM_QTA_ITEM.TEN_ID = QTA_ITEM.TEN_ID
+		AND SUM_QTA_ITEM.ITEM_CD = QTA_ITEM.ITEM_CD
+		AND SUM_QTA_ITEM.OORG_CD = QTA_ITEM.OORG_CD)
+		WHERE MTGL.TEN_ID = #{g.tenant}
+			AND PINFO.OORG_CD = #{p.oorg_cd}
+		   -- AND ( MCLS1.QTA_USE_YN = 'Y' OR  MCLS2.QTA_USE_YN = 'Y'  OR MCLS3.QTA_USE_YN = 'Y' OR MCLS4.QTA_USE_YN = 'Y' )
+		 <if test="p.itemcat_lvl_1_cd != null and p.itemcat_lvl_1_cd != ''">
+		   AND MCLS1.ITEMCAT_CD        = #{p.itemcat_lvl_1_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_2_cd != null and p.itemcat_lvl_2_cd != ''">
+		   AND MCLS2.ITEMCAT_CD        = #{p.itemcat_lvl_2_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_3_cd != null and p.itemcat_lvl_3_cd != ''">
+		   AND MCLS3.ITEMCAT_CD        = #{p.itemcat_lvl_3_cd}
+		 </if>
+		 <if test="p.itemcat_lvl_4_cd != null and p.itemcat_lvl_4_cd != ''">
+		   AND MCLS4.ITEMCAT_CD        = #{p.itemcat_lvl_4_cd}
+		 </if>
+		   AND MTGL.ITEM_CD  = #{p.item_cd}
+		 <if test="p.item_nm != null and p.item_nm != ''">
+		   <bind name="itemNamePattern" value="'%' + g.trim(p.item_nm) + '%'"/>
+		   AND (UPPER(MTGL.ITEM_NM) LIKE UPPER(#{itemNamePattern}) OR UPPER(MTGL.ITEM_NM_EN) LIKE UPPER(#{itemNamePattern}))
+		 </if>
+		 <if test="p.mfgr_nm != null and p.mfgr_nm != ''">
+		   <bind name="makerNmPattern" value="'%' + p.mfgr_nm + '%'"/>
+		   AND UPPER(MTGL.MFGR_NM) LIKE UPPER(#{makerNmPattern})
+		 </if>
+		   <if test="p.vd_nm != null and p.vd_nm !=''">
+            <bind name="vdNm" value="'%' + p.vd_nm + '%'"/>
+	       AND    (UPPER(VDGL.VD_NM) LIKE UPPER(#{vdNm}) OR UPPER(VD_NM_EN) LIKE UPPER(#{vdNm}))      /* 협력사명 검색조건*/
+        </if>
+        <if test="p.vd_cd != null and p.vd_cd !=''">
+           AND VDGL.VD_CD = #{p.vd_cd}
+        </if>
+        <if test="p.erp_vd_cd != null and p.erp_vd_cd !=''">
+            <bind name="erpVdCd" value="'%' + p.erp_vd_cd + '%'"/>
+           AND UPPER(VDGL.ERP_VD_CD) LIKE UPPER(#{erpVdCd})                    /*협력사코드 20.04.24 추가*/
+        </if>
+		 <if test="p.item_spec != null and p.item_spec != ''">
+		   <bind name="specPattern" value="'%' + p.item_spec + '%'"/>
+		   AND UPPER(MTGL.ITEM_SPEC) LIKE UPPER(#{specPattern})
+		 </if>
+		 <if test="p.my_item_yn == &quot;Y&quot;">
+		 	AND MYMT.USE_YN = 'Y'
+		 </if>
+		 <choose>
+		   <when test="p.qta_nos != null and p.qta_nos.size() &gt; 0">
+		   AND QTA_ITEM.QTA_NO IN
+		       <foreach close=")" collection="p.qta_nos" item="qta_no" open="(" separator=",">
+		       #{qta_no}
+		       </foreach>
+		   </when>
+		   <otherwise>
+		     <if test="p.qta_no != null and p.qta_no != ''">
+		       <bind name="noPattern" value="'%' + g.trim(p.qta_no) + '%'"/>
+		   AND QTA_ITEM.QTA_NO  LIKE UPPER(#{noPattern})
+		     </if>
+		   </otherwise>
+		 </choose>
+		 <if test="p.qta_tit != null and p.qta_tit != ''">
+		   <bind name="makerQtaTitPattern" value="'%' + p.qta_tit + '%'"/>
+		   AND UPPER(HD.QTA_TIT) LIKE UPPER(#{makerQtaTitPattern})
+		 </if>
+		 <if test="p.ctr_ccd != null and p.ctr_ccd != ''">
+		   <choose>
+			   <when test="p.ctr_ccd == &quot;NEW&quot;">
+		   			AND (HD.QTA_UUID IS NULL OR HD.QTA_UUID = '')
+					AND SUM_QTA_ITEM.TOT_QTARATE IS NULL
+			   </when>
+		   		<otherwise>
+			   		AND SUM_QTA_ITEM.TOT_QTARATE IS NOT NULL
+		   		</otherwise>
+		   </choose>
+		   </if>
+		 <if test="p.qta_tot_ccd != null and p.qta_tot_ccd != ''">
+		   <choose>
+			   <when test="p.qta_tot_ccd == &quot;100&quot;">
+		   			AND (SUM_QTA_ITEM.TOT_QTARATE <![CDATA[=]]> 100)
+			   </when>
+		   		<otherwise>
+			   		AND (SUM_QTA_ITEM.TOT_QTARATE IS NULL OR SUM_QTA_ITEM.TOT_QTARATE <![CDATA[<]]> 100)
+		   		</otherwise>
+		   </choose>
+		   </if>
+		ORDER BY MTGL.ITEM_CD DESC, SUM_QTA_ITEM.TOT_QTARATE ASC, VDGL.ERP_VD_CD DESC
+    </select>
+	<insert id="insertQtaItem">
+		/* qta-item.insertQtaItem */
+		INSERT INTO QTA_ITEM(
+		 TEN_ID
+		, QTA_ITEM_UUID
+		, QTA_UUID
+		, QTA_NO
+		, QTA_LNO
+		, OORG_CD
+		, ITEM_CD
+		, ITEM_NM
+		, ITEM_NM_EN
+		, ITEM_SPEC
+		, UOM_CCD
+		, VD_CD
+		, QTARATE
+		, CUR_CCD
+		, MOQ
+		, CTQ
+		, DLVY_LDTM
+		, UPRCCNTR_UPRC
+		, RMK
+		, REGR_ID
+		, REG_DTTM
+		, MODR_ID
+		, MOD_DTTM
+		, ITEM_OORG_CD
+		, CNTR_UUID
+		, CNTR_NO
+		, CNTR_REVNO
+		, PURC_CNTR_ITEM_UUID
+		, PURC_CNTR_INFO_UUID
+		, PURC_CNTR_UUID
+		, PURC_CNTR_ITEM_LNO
+		)
+		VALUES (
+		#{g.tenant}
+		, #{p.qta_item_uuid}
+		, #{p.qta_uuid}
+		,#{p.qta_no}
+		, TO_CHAR(#{p.qta_lno})  , #{p.oorg_cd}
+		, #{p.item_cd}
+		, #{p.item_nm}
+		, #{p.item_nm_en}
+		, #{p.item_spec}
+		, #{p.uom_ccd}
+		, #{p.vd_cd}
+		, #{p.qtarate}
+		, #{p.cur_ccd}
+		, #{p.moq}
+		, #{p.ctq}
+		, #{p.dlvy_ldtm}
+		, #{p.uprccntr_uprc}
+		, #{p.rmk}
+		, #{g.username}
+		, #{p.now}
+		, #{g.username}
+		, #{p.now}
+		, #{p.item_oorg_cd}
+		, #{p.cntr_uuid}
+		, #{p.cntr_no}
+		, CAST(#{p.cntr_revno} AS INT)
+		, #{p.purc_cntr_item_uuid}
+		, #{p.purc_cntr_info_uuid}
+		, #{p.purc_cntr_uuid}
+		, #{p.purc_cntr_item_lno}
+		)
+	</insert>
+    <delete id="deleteQtaItems">
+/* qta-item.deleteQtaItems */
+DELETE FROM QTA_ITEM WHERE TEN_ID = #{g.tenant} and QTA_UUID = #{p.qta_uuid}
+    </delete>
+	<delete id="deleteQtaItem">
+		/* qta-item.deleteQtaItem */
+		DELETE FROM QTA_ITEM
+		WHERE TEN_ID = #{g.tenant}
+		AND QTA_ITEM_UUID =  #{p.qta_item_uuid}
+	</delete>
+	<update id="updateQtaItem">
+		/* qta-item.updateQtaItem */
+		UPDATE QTA_ITEM
+		SET QTARATE = #{p.qtarate}
+		, MOQ = #{p.moq}
+		, CTQ = #{p.ctq}
+		, DLVY_LDTM = #{p.dlvy_ldtm}
+		WHERE TEN_ID = #{g.tenant}
+		AND QTA_ITEM_UUID = #{p.qta_item_uuid}
+	</update>
+</mapper>

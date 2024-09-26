@@ -1,0 +1,292 @@
+<sc-link rel="import" href="es-vendor-profile-upload-basicinfo.html"></sc-link>             <!-- 소싱그룹 정의서 탭 -->
+<sc-link rel="import" href="es-vendor-profile-upload-vmg.html"></sc-link>              <!-- 소싱그룹 협력사 탭 -->
+<!--
+	******************************************************************************************
+	** @Program-name 	: 협력사 Master Upload
+	** @Author 			: eslee
+	** @Create Date 	: 2024.07.23
+	******************************************************************************************
+-->
+<dom-module id="ep-vendor-profile-upload-tab">
+	<style>
+        :host {
+            @apply(--vbox-layout);
+        }
+
+    </style>
+    <template>
+		<!-- 공통코드 조회 -->
+		<sc-request-group id="codes" init>
+			<sc-code-group>
+				<sc-code code="C001" value="{{codes.ctry_ccd}}" ></sc-code><!-- 국가 -->
+				<sc-code code="C008" value="{{codes.eu_ctry_ccd}}"></sc-code><!-- EU국가 -->
+				<sc-code code="E902" value="{{codes.obd_typ_ccd}}"></sc-code><!-- 온보딩 유형 -->
+				<sc-code code="E024" value="{{codes.vd_size_ccd}}"></sc-code><!-- 회사 규모 -->
+			</sc-code-group>
+			<sc-ajax
+				url="findListOperationOrganizationByUser.do"
+				body="EO"
+				content-type="text/plain"
+				last-response="{{codes.oorg_cd}}">
+			</sc-ajax><!-- 운영조직 조회 -->
+		</sc-request-group>
+
+		<sc-ajax id="uploadVendorInfo" url="uploadVdMasterList.do" on-response="completeUpload"></sc-ajax>
+   	
+		<cc-auth-checker check-list="auth-p"></cc-auth-checker>
+		
+		<cc-page-title-bar>
+			<sc-button text="양식다운로드" on-click="onExcelDownload"></sc-button>
+			<sc-button text="저장" on-click="onUpload"></sc-button>
+		</cc-page-title-bar>
+
+		<sc-tab-navigation id="tabNavi" class="flex" selected-index="0">
+			<es-vendor-profile-upload-basicinfo id="basicinfo" title-text="Vendor Infomation" on-excel-upload="onExcelUpload"></es-vendor-profile-upload-basicinfo>
+			<es-vendor-profile-upload-vmg id="vmg" title-text="Vendor SG" on-excel-upload="onExcelUpload"></es-vendor-profile-upload-vmg>
+		</sc-tab-navigation>
+    </template>
+	
+    <script>
+        Polymer({
+            is: "ep-vendor-profile-upload-tab",
+
+			behaviors: [ Polymer.CCTabValidateBehavior ],
+			
+            properties: {
+				codes: {
+					type: Object,
+					value:function(){
+						return {
+							oorg_cd:[],
+							ctry_ccd: [],
+							eu_ctry_ccd: [],
+							obd_typ_ccd: [],
+							vd_size_ccd: [],
+						   };
+					},
+					reset:false
+				},
+            },
+
+            initialized: function(){
+            },
+
+			get modules() {
+				const me = this, tab = me.$.tabNavi;
+				return modules = (tab.items || []).concat();
+			},
+
+			load:function() {
+				const me = this;
+
+				me.modules.forEach(module => {
+					if(module.isInitialized) {
+						module.load({codes : me.get("codes")});
+					}
+				});
+			},
+
+			onExcelDownload : function(){
+				const me = this, codes = me.get("codes");
+				const exporter = new Export_MultiSheetExportUtil();
+
+				let excelSheetList = modules.map(module => {
+					// 1.Grid 값 읽어오기
+					const columns = module.$.gridPanel._gridColumns.getColumns()
+							.filter(data => data.visible)
+							.map(data => {
+								let headerObj = { text: data.header.text, key: data.fieldName, width: data.width };
+								if(!UT.isEmpty(codes[data.fieldName])) {
+									headerObj.dropdown = codes[data.fieldName].map(data => data.label || data.logic_org_nm);
+								}
+								return headerObj;
+							});
+
+					const sampleDatas = module.sampleDatas;
+					return {headers : columns, rows: sampleDatas, name: module.getAttribute('title-text') || ("Upload " + module.id)}
+				});
+
+				// 3. 국가유형
+				let ctryHeaders = [
+					{text: "Code", key: "data", width: 120},
+					{text: "Name", key: "label", width: 200}
+				];
+
+				// 4. 협력사 규모
+				let vdSizeHeaders = [
+					{text: "Code", key: "data", width: 120},
+					{text: "Name", key: "label", width: 200}
+				];
+
+				excelSheetList.push({headers:ctryHeaders, rows:codes.ctry_ccd, name: me.translate("국가")});
+				excelSheetList.push({headers:vdSizeHeaders, rows:codes.vd_size_ccd, name: me.translate("협력사 규모")});
+
+				// 엑셀다운로드
+				exporter.doExport(excelSheetList, 'vendor_upload_template.xlsx');
+			},
+
+			onExcelUpload : function(e, data) {
+				const me = this, codes = me.get("codes");
+				const target = e.currentTarget;
+				const grid = target.$.gridPanel;
+
+				// 엑셀 업로드 팝업
+				const popup = UT.popup('cc-excel-import', me, 800, 600, null, {closable: true, titleText: me.translate("엑셀 업로드")});
+				const importer = popup.getContent();
+				importer.autoColumnMapping = true;
+				importer.excludeHiddenColumns = true;
+				importer.doImport(grid, function(rows) {
+
+					const comboFields = Object.keys(rows[0])
+							.filter(field => UT.isNotEmpty(codes[field]));
+
+					rows.forEach(function(row) {
+						comboFields.forEach(field => {
+							const selectedCode = codes[field].find(code => code.label === row[field] || code.logic_org_nm === row[field]);
+							if(UT.isEmpty(selectedCode)){
+								row[field] = null;
+							}else {
+								row[field] = selectedCode.data || selectedCode.oorg_cd;
+							}
+						});
+						const isEU = codes.eu_ctry_ccd.find(code => code.label === row.ctry_ccd);
+						if(row.ctry_ccd === "KR") {
+							row.tax_id = null;
+							row.eu_vat_reg_id = null;
+						} else if (UT.isNotEmpty(isEU)){
+							row.bizregno = null;
+							row.tax_id = null;
+							row.eu_vat_reg_id = row.bizregno;
+						} else {
+							row.bizregno = null;
+							row.eu_vat_reg_id = null;
+							row.tax_id = row.bizregno;
+						}
+
+					});
+					me.setTargetGrid(target, rows, true);
+					grid.validate();
+				}, me);
+
+				// 엑셀 업로드 팝업 열기
+				popup.show();
+			},
+
+			// 업로드 데이터 저장
+			onUpload: function() {
+				const me = this, tabNavi = me.$.tabNavi, modules = me.modules;
+
+				me.validateTabNavigation(tabNavi, modules, me.loadParam, me.validParam, function (isValid, invalidObjs) {
+				    if(isValid) {
+				        UT.confirm("STD.N1200", () => {
+							let saveParam = {};
+							me.modules.forEach(module => {
+								saveParam[module.grid.dataset.args] = module.grid.getDataProvider().getItems();
+							});
+
+							me.$.uploadVendorInfo.body = saveParam;
+							UT.request(me.$.uploadVendorInfo);
+						});
+				    } else {
+						const errTabList = invalidObjs.filter(obj => obj.result !== true);
+						// 에러메세지 연결
+						const errorMessage = errTabList
+								.map(obj => `[${obj.targetTab.getAttribute('title-text')}] ${me.translate(obj.result)}`)
+								.join(", ");
+				        UT.alert(errorMessage, function() {
+							// 첫번째 에러 탭으로 이동
+							me.$.tabNavi.selectItem(errTabList[0].targetTab);
+						}, true);
+				    }
+				});
+			},
+
+			// 업로드 후처리
+			completeUpload: function(e, res) {
+				const me = this
+					, response = res.response;
+
+				if(response.resultStatus === "S"){
+					UT.completeAlert("업로드", function() {
+						me.onClose();
+					});
+				} else {
+					let result = response.resultData;
+					UT.alert("STD.E0000", function() {	// There is an invalid input value. Please check again.
+						let hasErrTab = false;
+						me.modules.forEach(module => {
+							// 결과 목록 세팅
+							let resultList = result[module.grid.dataset.args];
+							// 오류 메세지 설정
+							me.setInvalidMessage(resultList);
+							// 오류 여부
+							const errInfo = resultList.find(result => result.valid_yn === "N");
+							me.setTargetGrid(module, resultList, UT.isEmpty(errInfo));
+
+							// 첫번째 오류탭에 포커스
+							if(UT.isNotEmpty(errInfo) && !hasErrTab){
+								hasErrTab = true;
+								me.$.tabNavi.selectItem(module);
+							}
+						});
+					});
+				}
+			},
+
+			/**
+			 * 오류 메세지 세팅
+			 * @param invalidList
+			 */
+			setInvalidMessage: function(invalidList) {
+				const me = this;
+				invalidList.forEach(result => {
+					if(result.valid_yn === "N") {
+						let invalidMessage = "";
+						if(UT.isNotEmpty(result.not_exists_fields)) {
+							// '{0}'은(는) 필수 입력 항목입니다.
+							invalidMessage += me.translate("STD.E1001", null, result.not_exists_fields.split(',').map(field => me.translate(field)).join(", "));
+						}
+						if(UT.isNotEmpty(result.exists_erp_info) && "SUCCESS" !== result.exists_erp_info){
+							// 중복된 '{0}'(이)가 존재합니다.
+							invalidMessage += me.translate("STD.E1042", null, me.translate("ERP 협력사 코드"));
+						}
+						if(UT.isNotEmpty(result.exists_vd_info) && "SUCCESS" !== result.exists_vd_info){
+							// 중복된 '{0}'(이)가 존재합니다.
+							const targetField = result.exists_vd_info === "EXISTS_KR" ? "사업자등록번호" : "EU Sales No";
+							invalidMessage += me.translate("STD.E1042", null, me.translate(targetField));
+						}
+						if(UT.isNotEmpty(result.not_exists_uld_vd) && "SUCCESS" !== result.not_exists_uld_vd) {
+							// 업로드 데이터가 없습니다. > Vendor Information에 없는 ERP 코드
+							invalidMessage += me.translate("ERP 협력사 코드") + me.translate("AI.PD1046");
+						}
+						if(UT.isNotEmpty(result.invalid_vmg) && "SUCCESS" !== result.invalid_vmg) {
+							// 유효한 상태가 아닌 SG
+							invalidMessage += me.translate("SG 코드") + me.translate("STD.E0000");
+						}
+						result.invalid_message = invalidMessage;
+					}
+				});
+			},
+
+			/**
+			 * 타겟 그리드 데이터 세팅 및 그리드 컬럼 설정
+			 * @param module
+			 * @param resultList
+			 * @param isHidden
+			 */
+			setTargetGrid: function(module, resultList, isHidden){
+				module.hiddenCoumn(isHidden);
+				module.grid.getDataProvider().removeAll();
+				module.grid.setDataProvider(resultList);
+			},
+
+			// 닫기
+			onClose: function() {
+				const me = this;
+				me.reset();
+				me.fire("close");
+			},
+        });
+    </script>
+
+</dom-module>

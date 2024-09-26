@@ -1,0 +1,421 @@
+<sc-link rel="import" href="es-home-search-input.html"></sc-link>
+<sc-link rel="import" href="es-catalog-page.html"></sc-link>
+<sc-link rel="import" href="es-uprc-items-page.html"></sc-link>
+<sc-link rel="import" href="es-previous-pr-page.html"></sc-link>
+<sc-link rel="import" href="es-item-search-page.html"></sc-link>
+<sc-link rel="stylesheet" href="../../assets/css/catalog.purchase.css"></sc-link>
+<dom-module id="es-home-search-requester">
+
+    <style>
+        :host {
+            @apply(--vbox-layout);
+        }
+        .catalog-result-container sc-tabbar {
+            width: 200px;
+        }
+        .catalog-result-container sc-tabbar div.content {
+            height: 36px !important;
+            display: flex;
+            justify-content: space-between;
+        }
+        .catalog-result-container sc-tab:hover, sc-tab[active] {
+            border-top: 5px solid #6449FC;
+            border-bottom-color: #fff;
+            color: #6449FC;
+            line-height: 31px;
+        }
+        .catalog-result-container sc-tab {
+            width: 100%;
+            height: 36px;
+            line-height: 36px;
+            text-align: center;
+            color: #666;
+            border-radius: 5px 5px 0 0;
+            border: 1px solid #d6d6d6;
+            border-left: none;
+            background: #fff;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+    </style>
+
+    <template>
+
+        <sc-request-group init>
+            <sc-ajax url="findListOperationOrganizationByUser.do" body="PO" content-type="text/plain" last-response="{{codes.operorgPO}}" auth-disabled></sc-ajax>
+            <sc-ajax url="findListOperationOrganizationByUser.do" body="IO" content-type="text/plain" last-response="{{codes.operorgIO}}" auth-disabled></sc-ajax>
+            <sc-code-group>
+                <sc-code code="C004" value="{{codes.cur}}" ></sc-code>          <!-- 통화 -->
+                <sc-code code="PAGE_SIZE" value="{{codes.pageSize}}"></sc-code> <!-- 페이징크기 -->
+                <sc-code code="P071"	value="{{codes.prProgStsGrpCd}}"></sc-code> <!-- 구매코드 : 구매 진행 상태 -->
+                <sc-code code="P045"	value="{{codes.purcTypCcd}}"></sc-code> <!-- 구매코드 : 구매 유형 공통코드 -->
+            </sc-code-group>
+        </sc-request-group>
+
+        <sc-ajax id="findList" url="findListSearchRequester.do" body="{{searchParam}}">
+        </sc-ajax>
+        <sc-ajax id="findItemList" url="findItemListSearchRequester.do" body="{{itemSearchParam}}">
+        </sc-ajax>
+
+        <div class="catalog-page">
+
+            <div class="catalog-search-container">
+                <es-home-search-input on-new-search="onNewSearch" id="searchInput"></es-home-search-input>
+            </div>
+            <div class="catalog-search-result" hidden="[[formula('isLocaleEnUs')]]">
+                '<span>[[searchParam.matchText]]</span>'에 대한 <span>[[resultCount.total]]</span>개의 검색결과
+            </div>
+            <div class="catalog-search-result" hidden="[[!formula('isLocaleEnUs')]]">
+                '<span>[[resultCount.total]]</span>' search results for '<span>[[searchParam.matchText]]</span>'
+            </div>
+            <sc-tab-navigation id="catalogTabNavi" selected-index="0" on-item-select="onTabSelect" class="catalog-result-container">
+                <!-- 카탈로그 탭 페이지 시작 -->
+                <es-catalog-page id="catalog" title-text="[[titleText.ctlg_list]]"></es-catalog-page>
+                <es-uprc-items-page id="uprc" title-text="[[titleText.uprc_item_list]]"></es-uprc-items-page>
+                <es-previous-pr-page id="prevPr" title-text="[[titleText.pr_item_list]]" on-go-pr-page="onGoPrPage"></es-previous-pr-page>
+                <es-item-search-page id="item" title-text="품목 검색" on-go-pr-page="onGoPrPage"></es-item-search-page>
+            <!--</div>-->
+            </sc-tab-navigation>
+        </div>
+
+
+    </template>
+
+    <script>
+        Polymer({
+            is: "es-home-search-requester",
+            properties: {
+                codes: {
+                    type: Object,
+                    reset: false,
+                    value: function() {
+                        return {
+                            operorgPO: [], // 구매운영조직
+                            operorgIO: [], // 품목운영조직
+                            cur: [],
+                            pageSize: [],
+                            targetIndex: [],
+                            prProgStsGrpCd: [], // 구매 진행 상태
+                            purcTypCcd: [] // 구매 유형
+                        };
+                    }
+                },
+                searchParam: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                itemSearchParam: {
+                    type: Object,
+                    value: function() {
+                        return {};
+                    }
+                },
+                indexParams: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            item: {},
+                            ctlg_list: {},
+                            uprc_item_list: {},
+                            pr_item: {},
+                            item_cate: {}
+                        };
+                    }
+                },
+                searchedParam: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            matchText: "",
+                            itemCateCd: ""
+                        };
+                    }
+                },
+                resultCount: {
+                    type: Object,
+                    value: function() {
+                        return {
+                            item: 0,
+                            cntr_ctlg: 0,
+                            cntr_item: 0,
+                            pr_item: 0,
+                            item_cate: 0,
+                            total: 0
+                        };
+                    }
+                },
+                resultList: {
+                    type: Object,
+                    value: function() {
+                        return {
+                        };
+                    }
+                },
+                isSearch: {
+                    type: Boolean,
+                    value: false
+                },
+                selectedTab: {
+                    type: String,
+                    value: ""
+                },
+                titleText: {
+                    type: Object,
+                    value: {}
+                },
+                totalCount: {
+                    type: Number,
+                    value: 0
+                },
+                newSearchYn: {
+                    type: String,
+                    value: "N"
+                },
+
+            },
+
+            behaviors: [
+            ],
+
+            observers: [
+            ],
+
+            formulas: {
+                isSearch: function() {
+                    var me = this;
+                    return me.get("isSearch");
+                },
+                isLocaleEnUs: function(){
+                    return SCMdiManager.locale === 'en_US'
+                },
+            },
+
+            // 초기화 완료 후 호출 함수
+            initialized: function() {
+                var me = this;
+
+                me.set("codes.targetIndex", [
+                    {label: me.translate("카탈로그"), data: "ctlg_list"},
+                    {label: me.translate("단가 계약"), data: "uprc_item_list"},
+                    {label: me.translate("이전 구매요청"), data: "pr_item_list"},
+                    {label: me.translate("품목 검색"), data: "item_list"},
+                ]);
+
+                me.parentElement.style.cssText =  me.parentElement.style.cssText + "overflow-y : scroll";
+
+                me.applyFormula();
+            },
+
+            //
+            load: function(param) {
+                var me = this;
+                if (UT.isObject(param) && UT.isNotEmpty(param.matchText)) {
+                    me.set("searchParam.matchText", param.matchText);
+                    me.set("newSearchYn", "Y");
+                    me.onFindAll();
+                    me.$.searchInput.setSearchWord(param.matchText);
+                }
+            },
+
+            onGoPrPage: function(param){
+                var me = this;
+                var detail = param.detail;
+                me.onGotoMenuCd(detail.menu_cd, detail.param, detail.param2);
+            },
+
+            onPrPage: function(){
+                var me = this,
+                    provider = me.$.grid_item.getDataProvider(),
+                    items = provider.selectionCheckedItems();
+
+                if(items.length === 0){
+                    UT.alert("STD.N1600"); // 선택된 항목이 없습니다.
+                    return;
+                }
+
+                UT.confirm("STD.PR1008", function(){
+                    me.onGotoMenuCd("PRO10040", {}, items);
+                });
+            },
+
+            //  메뉴 탭 이동
+            onGotoMenuCd: function(menuCd, param, param2) {
+                var me = this;
+
+                if (UT.isEmpty(menuCd)) {
+                    return;
+                }
+                var menuInfo = me.getMenuInfo(menuCd);
+                if (UT.isEmpty(menuInfo) || UT.isEmpty(menuInfo.menu_nm) || UT.isEmpty(menuInfo.menu_url)) {
+                    return;
+                }
+                MDIUT.createWindow(menuCd, menuInfo.menu_nm, menuInfo.menu_url, function(module) {
+                    if (UT.isFunction(module.createPrItems)) {
+                        module.createPrItems(param || {} , param2 || {});
+                    }
+                });
+            },
+
+            getMenuInfo: function(menuCd) {
+                var mdi = document.querySelector("sc-mdi");
+                var menuInfo = SCMenuManager.getMenuNode(menuCd);
+                return menuInfo;
+            },
+
+            //조회 유효성 검사
+            validateFind: function() {
+                var me = this;
+                var flag = true;
+                var param = me.itemSearchParam;
+                if(UT.isEmpty(param.item_cd) && UT.isEmpty(param.disp_item_nm) && UT.isEmpty(param.item_spec) && UT.isEmpty(param.itemcat_lvl_1_cd)) {
+                    UT.alert("STD.N3200");
+                    flag = false;
+                }
+                return flag;
+            },
+
+            saveIndexParams: function(param, name) {
+                var me = this;
+
+                if (UT.isEmpty(name)) {
+                    var targetIndex = me.get("codes.targetIndex");
+                    for (var i = 0, len = targetIndex.length; i < len; i++) {
+                        me.set("indexParams." + targetIndex[i].data, param);
+                    }
+                } else {
+                    me.set("indexParams." + name, param);
+                }
+            },
+
+            saveSearchParams: function(param) {
+                var me = this;
+                if (UT.isString(param.size)) {
+                    param.size = UT.toNumber(param.size);
+                }
+                me.set("searchParam", param);
+                me.set("itemSearchParam", param);
+            },
+
+            // 해당탭에 검색 데이터가 있는지
+            isEmptyTab: function(tab) {
+                var me = this;
+                var count = me.get("resultCount." + tab);
+                return UT.isNumber(count) && count > 0 ? false : true;
+            },
+
+            onNewSearch: function(e, data) {
+                var me = this;
+
+                me.set("searchParam.matchText", data);
+                me.set("newSearchYn", "Y");
+                me.set("resultCount.total", 0); // 0으로 초기화
+                me.onFindAll();
+            },
+
+            // 새검색 - 모두 초기화
+            onFindAll: function() {
+                var me = this;
+                var matchText = me.get("searchParam.matchText") || "";
+                if (UT.isEmpty(matchText)) {
+                    return;
+                }
+                var param = {
+                    from: 0,
+                    size: "20",
+                    sort: "score",
+                    matchText: matchText,
+                    oorg_cd:me.codes.operorgIO[0].oorg_cd
+                };
+                me.$.prevPr.saveIndexParam(param);
+                me.$.uprc.saveIndexParam(param);
+                me.$.catalog.saveIndexParam(param);
+                me.$.item.saveIndexParam(param);
+                me.saveIndexParams(param);
+                me.saveSearchParams(param);
+                // console.log("onFindAll", me.get("searchParam"), me.get("indexParams"));
+
+                me.set("isSearch", false);
+                me.set("resultList", {});
+                me.applyFormula();
+
+                me.onFindList();
+            },
+
+            // 목록 조회
+            onFindList: function() {
+                var me = this;
+
+                if (me.get("newSearchYn") === "Y") {
+                    me.set("searchParam.newSearchYn", "Y");
+                    me.set("searchParam.index", "");
+                }
+                UT.request(me.$.findList, function(e, res) {
+                    var result = res.response;
+                    var targetIndex = me.get("codes.targetIndex");
+
+                    me.set("newSearchYn", "N");
+                    me.set("searchParam.newSearchYn", "N");
+                    me.set("resultList.ctlg_list", result.ctlg_list);
+                    me.set("searchedParam.matchText", me.get("searchParam.matchText"));
+
+                    for (var i = 0, len = targetIndex.length; i < len; i++) {
+                        var index = targetIndex[i].data;
+                        me.set("indexParams." + index + ".matchText", me.get("searchedParam.matchText"));
+                        me.set("indexParams." + index + ".item_cate_cd", UT.isEmpty(me.get("searchedParam.itemCateCd")) ? "" : me.get("searchedParam.itemCateCd"));
+                        if (UT.isObject(result[index])) {
+                            me.set("resultCount." + index, UT.isEmpty(result[index + "_total_count"][0]) ? 0 : result[index + "_total_count"][0]['cnt']);
+                            me.set("titleText." + index, targetIndex[i].label + "(" + me.get("resultCount." + index) + ")");
+                            if(index === "ctlg_list"){
+                                me.$.catalog.load(result.ctlg_list, result["ctlg_list_total_count"][0].cnt);
+                                me.displayPagination(me.$$("#" + index + "_page"), result[index + "_total_count"][0].cnt, index);
+                            }
+                            if(index === "uprc_item_list"){
+                                me.$.uprc.load(result.uprc_item_list, result["uprc_item_list_total_count"][0].cnt);
+                                me.displayPagination(me.$$("#" + index + "_page"), result[index + "_total_count"][0].cnt, index);
+                            }
+                            if(index === "pr_item_list"){
+                                me.$.prevPr.load(result.pr_item_list, result["pr_item_list_total_count"][0].cnt);
+                                me.displayPagination(me.$$("#" + index + "_page"), result[index + "_total_count"][0].cnt, index);
+                            }
+                            me.set("resultCount.total", me.get("resultCount.total") + me.get("resultCount." + index));
+                        }
+                    }
+                });
+            },
+
+            // pagination 출력
+            displayPagination: function(container, total, tab) {
+                var me = this;
+                var html = [];
+                var size = me.get("indexParams." + tab + ".size") || 2;
+                var from = me.get("indexParams." + tab + ".from") || 0;
+                var current = parseInt(from / size, 10) + 1;
+                var pages = parseInt(total / size, 10) + (total % size === 0 ? 0 : 1);
+                var start = Math.max(current - 5, 1);
+                var end = Math.min(start + 9, pages);
+
+                for (var i = start; i <= end; i++) {
+                    html.push((current === i) ? "<button class='active'><span>" + i + "</span></button>" : "<button class='_pg_' data-tab='" + tab + "' data-page='" + i + "'><span>" + i + "</span></button>");
+                }
+                if(tab === "pr_item_list") {
+                    me.$.prevPr.displayPagination(html);
+                }
+                if(tab === "uprc_item_list") {
+                    me.$.uprc.displayPagination(html);
+                }
+                if(tab === "ctlg_list") {
+                    me.$.catalog.displayPagination(html);
+                }
+            },
+            onTabSelect: function(event) {
+                var me = this;
+                var target = event.detail.item;
+                var tabId = target.id;
+                me.set("selectedTab", tabId);
+            },
+
+        });
+    </script>
+</dom-module>
